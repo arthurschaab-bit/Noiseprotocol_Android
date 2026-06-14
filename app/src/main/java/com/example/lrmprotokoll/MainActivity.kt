@@ -1,0 +1,475 @@
+package com.example.lrmprotokoll
+
+import android.Manifest
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+import java.io.File
+
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    val navController = rememberNavController()
+                    NavHost(navController = navController, startDestination = "main") {
+                        composable("main") {
+                            NoiseProtocolApp(
+                                onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
+                                onNavigateToSettings = { navController.navigate("settings") }
+                            )
+                        }
+                        composable(
+                            "player?path={path}",
+                            arguments = listOf(navArgument("path") { defaultValue = "" })
+                        ) { backStackEntry ->
+                            val path = backStackEntry.arguments?.getString("path") ?: ""
+                            AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
+                        }
+                        composable("settings") {
+                            SettingsScreen(onBack = { navController.popBackStack() })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings: () -> Unit) {
+    val context = LocalContext.current
+    val db = remember { AppDatabase.getDatabase(context) }
+    val dao = db.noiseDao()
+    val records by dao.getAll().collectAsState(initial = emptyList())
+    val references by dao.getAllReferences().collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    val reportManager = remember { ReportManager(context) }
+    val classifier = remember { NoiseClassifier(context) }
+    
+    var reportTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }
+    var deleteTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }
+    var showReferenceDialog by remember { mutableStateOf<NoiseRecord?>(null) }
+    var refName by remember { mutableStateOf("") }
+    
+    val selectedIds = remember { mutableStateListOf<Long>() }
+    val collapsedDays = remember { mutableStateListOf<String>() }
+    val dayFilters = remember { mutableStateMapOf<String, String>() }
+
+    var hasPermissions by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        hasPermissions = permissions[Manifest.permission.RECORD_AUDIO] == true
+    }
+
+    LaunchedEffect(Unit) {
+        val permissionsToRequest = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        permissionLauncher.launch(permissionsToRequest.toTypedArray())
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Lärmprotokoll", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            if (selectedIds.isNotEmpty()) {
+                IconButton(onClick = {
+                    val targets = records.filter { selectedIds.contains(it.id) }
+                    deleteTargetRecords = targets
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+            IconButton(onClick = onNavigateToSettings) {
+                Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ServiceControl(context, hasPermissions)
+
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Anzeige bekannter Geräusche (Datenbank)
+        if (references.isNotEmpty()) {
+            Text("Gelernte Geräusche: ${references.size}", style = MaterialTheme.typography.titleSmall)
+            FlowRow(modifier = Modifier.fillMaxWidth()) {
+                references.forEach { ref ->
+                    AssistChip(
+                        onClick = { /* Optional: Filter by this reference */ },
+                        label = { Text(ref.name) },
+                        trailingIcon = {
+                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp).clickable {
+                                scope.launch { dao.deleteReference(ref.id) }
+                            })
+                        },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        val groupedRecords = remember(records) {
+            records.groupBy { 
+                SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(it.timestamp)) 
+            }
+        }
+
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            groupedRecords.forEach { (date, dailyRecords) ->
+                val currentFilter = dayFilters[date] ?: "Alle"
+                val filteredDailyRecords = if (currentFilter == "Alle") dailyRecords 
+                                           else dailyRecords.filter { it.label == currentFilter || it.detectedLabel == currentFilter }
+                
+                val isCollapsed = collapsedDays.contains(date)
+                
+                item {
+                    Column {
+                        Surface(
+                            onClick = {
+                                if (isCollapsed) collapsedDays.remove(date)
+                                else collapsedDays.add(date)
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(date, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                
+                                IconButton(onClick = { deleteTargetRecords = filteredDailyRecords }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Gefilterte löschen", tint = MaterialTheme.colorScheme.error)
+                                }
+                                
+                                TextButton(onClick = { reportTargetRecords = filteredDailyRecords }) {
+                                    Text("Bericht")
+                                }
+                            }
+                        }
+                        
+                        if (!isCollapsed) {
+                            val allLabels = dailyRecords.flatMap { listOfNotNull(it.label, it.detectedLabel) }.distinct()
+                            var expanded by remember { mutableStateOf(false) }
+                            
+                            Box(modifier = Modifier.padding(start = 32.dp, bottom = 8.dp)) {
+                                TextButton(onClick = { expanded = true }) {
+                                    Icon(Icons.Default.Menu, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Filter: $currentFilter")
+                                }
+                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                    DropdownMenuItem(text = { Text("Alle") }, onClick = { dayFilters[date] = "Alle"; expanded = false })
+                                    allLabels.forEach { label ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = { dayFilters[date] = label; expanded = false })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!isCollapsed) {
+                    items(filteredDailyRecords) { record ->
+                        NoiseRecordItem(
+                            record = record, 
+                            isSelected = selectedIds.contains(record.id),
+                            onPlay = { onNavigateToPlayer(record.filePath) },
+                            onLabel = { label -> scope.launch { dao.update(record.copy(label = label)) } },
+                            onDelete = { deleteTargetRecords = listOf(record) },
+                            onFavorite = { showReferenceDialog = record },
+                            onLongClick = {
+                                if (selectedIds.contains(record.id)) selectedIds.remove(record.id)
+                                else selectedIds.add(record.id)
+                            },
+                            onAiRecognize = {
+                                scope.launch {
+                                    val detected = classifier.classify(File(record.filePath))
+                                    dao.update(record.copy(detectedLabel = detected ?: "Nicht erkannt"))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showReferenceDialog != null) {
+        AlertDialog(
+            onDismissRequest = { showReferenceDialog = null },
+            title = { Text("Geräusch lernen") },
+            text = {
+                Column {
+                    Text("Geben Sie diesem Geräusch-Muster einen Namen für den automatischen Abgleich:")
+                    TextField(value = refName, onValueChange = { refName = it })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val record = showReferenceDialog!!
+                        val detailed = classifier.classifyDetailed(File(record.filePath))
+                        if (detailed != null) {
+                            dao.insertReference(ReferenceSound(name = refName, pattern = detailed.joinToString(",")))
+                        }
+                        showReferenceDialog = null
+                        refName = ""
+                    }
+                }) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReferenceDialog = null }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    if (reportTargetRecords != null) {
+        AlertDialog(
+            onDismissRequest = { reportTargetRecords = null },
+            title = { Text("Tagesbericht") },
+            text = { Text("Was möchten Sie für diesen Tag (gefiltert) tun?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = reportTargetRecords!!
+                    val report = reportManager.generateDailyReport(target)
+                    reportManager.createZipAndShare(target, report)
+                    reportTargetRecords = null
+                }) { Text("Gefilterte teilen (ZIP)") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    val report = reportManager.generateDailyReport(reportTargetRecords!!)
+                    reportManager.shareFile(report)
+                    reportTargetRecords = null
+                }) { Text("Nur Bericht teilen") }
+            }
+        )
+    }
+
+    if (deleteTargetRecords != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTargetRecords = null },
+            title = { Text("Löschen bestätigen") },
+            text = { Text("Möchten Sie die ausgewählten Aufnahmen (${deleteTargetRecords!!.size}) wirklich unwiderruflich löschen?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val targets = deleteTargetRecords!!
+                            targets.forEach { record ->
+                                val file = File(record.filePath)
+                                if (file.exists()) file.delete()
+                            }
+                            dao.deleteMultiple(targets.map { it.id })
+                            selectedIds.clear()
+                            deleteTargetRecords = null
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Löschen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTargetRecords = null }) { Text("Abbrechen") }
+            }
+        )
+    }
+}
+
+@Composable
+fun ServiceControl(context: Context, hasPermissions: Boolean) {
+    var isServiceRunning by remember { mutableStateOf(isServiceRunning(context)) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Monitoring Status:", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                if (isServiceRunning) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color.Red)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("AKTIV", color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    Text("Inaktiv", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        if (!hasPermissions) {
+                            Toast.makeText(context, "Berechtigung erforderlich", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        val intent = Intent(context, AudioRecordingService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                        else context.startService(intent)
+                        isServiceRunning = true
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isServiceRunning,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("Aufnahme starten")
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                Button(
+                    onClick = {
+                        val intent = Intent(context, AudioRecordingService::class.java).apply {
+                            action = "STOP_SERVICE"
+                        }
+                        context.startService(intent)
+                        isServiceRunning = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = isServiceRunning,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Aufnahme beenden")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@Composable
+fun NoiseRecordItem(
+    record: NoiseRecord, 
+    isSelected: Boolean, 
+    onPlay: () -> Unit, 
+    onLabel: (String) -> Unit, 
+    onDelete: () -> Unit,
+    onFavorite: () -> Unit,
+    onLongClick: () -> Unit,
+    onAiRecognize: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = onLongClick
+            ),
+        colors = if (isSelected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer) 
+                 else CardDefaults.cardColors()
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
+                    Text(time)
+                    Text("Amplitude: ${record.amplitude.toInt()}", style = MaterialTheme.typography.bodySmall)
+                    if (record.detectedLabel != null) {
+                        Text("KI Erkannt: ${record.detectedLabel}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (record.label != null) {
+                        Text("Nutzer Label: ${record.label}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                
+                IconButton(onClick = onAiRecognize) {
+                    Icon(Icons.Default.Refresh, contentDescription = "AI Recognition", tint = MaterialTheme.colorScheme.tertiary)
+                }
+                
+                IconButton(onClick = onFavorite) {
+                    Icon(Icons.Default.Star, contentDescription = "Lernen", tint = Color(0xFFFFB300))
+                }
+
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error)
+                }
+
+                IconButton(onClick = onPlay) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Abspielen")
+                }
+            }
+            FlowRow(modifier = Modifier.fillMaxWidth()) {
+                listOf("Bagger", "Bohren", "Hämmern", "Verkehr").forEach { label ->
+                    AssistChip(
+                        onClick = { onLabel(label) },
+                        label = { Text(label) },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun isServiceRunning(context: Context): Boolean {
+    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    @Suppress("DEPRECATION")
+    for (service in manager.getRunningServices(Int.MAX_VALUE)) {
+        if (AudioRecordingService::class.java.name == service.service.className) return true
+    }
+    return false
+}
