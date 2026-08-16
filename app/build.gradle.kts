@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.lrmprotokoll"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.lrmprotokoll"
         minSdk = 29
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
