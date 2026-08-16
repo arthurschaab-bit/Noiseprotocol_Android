@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -49,6 +50,22 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+    sourceSets {
+        // Robolectric liest fuer lokale Unit-Tests die zusammengefuehrten Assets des
+        // debug-Build-Types (nicht die des test-Source-Sets) - daher hier statt in "test".
+        getByName("debug") {
+            assets.srcDirs("$projectDir/schemas")
+        }
+    }
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
@@ -85,6 +102,9 @@ dependencies {
 
     // Testen
     testImplementation(libs.junit)
+    testImplementation("androidx.room:room-testing:2.8.4")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
