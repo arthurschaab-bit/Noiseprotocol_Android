@@ -12,7 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SettingsManager
 import kotlinx.coroutines.*
@@ -41,7 +41,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        settingsManager = SettingsManager(applicationContext)
+        settingsManager = (application as LaermprotokollApp).container.settingsManager
         classifier = NoiseClassifier(applicationContext)
         updateRollingBuffer()
     }
@@ -252,7 +252,7 @@ class AudioRecordingService : LifecycleService() {
             null
         }
 
-        val dao = AppDatabase.getDatabase(applicationContext).noiseDao()
+        val dao = (application as LaermprotokollApp).container.database.noiseDao()
         dao.insert(NoiseRecord(
             timestamp = timestamp, 
             amplitude = amplitude, 
