@@ -454,8 +454,7 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                             return@Button
                         }
                         val intent = Intent(context, AudioRecordingService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-                        else context.startService(intent)
+                        context.startForegroundService(intent)
                         isServiceRunning = true
                     },
                     modifier = Modifier.weight(1f),
