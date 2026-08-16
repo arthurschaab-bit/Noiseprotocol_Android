@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.data
 
 import android.content.Context
 import android.content.SharedPreferences

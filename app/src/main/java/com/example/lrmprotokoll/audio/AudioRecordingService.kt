@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.audio
 
 import android.app.*
 import android.content.Intent
@@ -6,12 +6,14 @@ import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.SettingsManager
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -38,7 +40,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        settingsManager = SettingsManager(applicationContext)
+        settingsManager = (application as LaermprotokollApp).container.settingsManager
         classifier = NoiseClassifier(applicationContext)
         updateRollingBuffer()
     }
@@ -70,15 +72,13 @@ class AudioRecordingService : LifecycleService() {
 
     private fun startForegroundService() {
         val channelId = "noise_monitoring_channel"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Lärm-Monitoring Dienst",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            channelId,
+            "Lärm-Monitoring Dienst",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
 
         val stopIntent = Intent(this, AudioRecordingService::class.java).apply {
             action = "STOP_SERVICE"
@@ -93,11 +93,7 @@ class AudioRecordingService : LifecycleService() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stoppen", stopPendingIntent)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(1, notification)
-        }
+        startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
     private fun startMonitoring() {
@@ -249,7 +245,7 @@ class AudioRecordingService : LifecycleService() {
             null
         }
 
-        val dao = AppDatabase.getDatabase(applicationContext).noiseDao()
+        val dao = (application as LaermprotokollApp).container.database.noiseDao()
         dao.insert(NoiseRecord(
             timestamp = timestamp, 
             amplitude = amplitude, 

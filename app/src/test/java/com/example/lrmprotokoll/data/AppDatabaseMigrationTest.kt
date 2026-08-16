@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.data
 
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper

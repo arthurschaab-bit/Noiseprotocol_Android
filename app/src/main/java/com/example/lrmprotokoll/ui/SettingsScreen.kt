@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -9,13 +9,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.LaermprotokollApp
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val settings = remember { SettingsManager(context) }
+    val settings = remember { (context.applicationContext as LaermprotokollApp).container.settingsManager }
     
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }

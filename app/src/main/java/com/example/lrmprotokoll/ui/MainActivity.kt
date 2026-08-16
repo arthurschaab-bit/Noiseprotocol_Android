@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.ui
 
 import android.Manifest
 import android.app.ActivityManager
@@ -39,6 +39,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.ReferenceSound
+import com.example.lrmprotokoll.report.ReportManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -86,7 +92,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings: () -> Unit) {
     val context = LocalContext.current
-    val db = remember { AppDatabase.getDatabase(context) }
+    val container = remember { (context.applicationContext as LaermprotokollApp).container }
+    val db = container.database
     val dao = db.noiseDao()
     val records by dao.getAll().collectAsState(initial = emptyList())
     val references by dao.getAllReferences().collectAsState(initial = emptyList())
@@ -447,8 +454,7 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                             return@Button
                         }
                         val intent = Intent(context, AudioRecordingService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-                        else context.startService(intent)
+                        context.startForegroundService(intent)
                         isServiceRunning = true
                     },
                     modifier = Modifier.weight(1f),
