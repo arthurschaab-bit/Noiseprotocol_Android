@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -16,9 +17,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { SettingsManager(context) }
     
-    var threshold by remember { mutableFloatStateOf(settings.threshold.toFloat()) }
+    var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
     var duration by remember { mutableFloatStateOf(settings.recordDurationSeconds.toFloat()) }
+    
+    var aiEnabled by remember { mutableStateOf(settings.aiEnabled) }
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
     var sampleRate by remember { mutableIntStateOf(settings.audioSampleRate) }
 
@@ -35,12 +38,12 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            Text("Aufnahme-Schwellenwert: ${threshold.toInt()}")
+            Text("Aufnahme-Schwellenwert: ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB")
             Slider(
-                value = threshold,
-                onValueChange = { threshold = it },
-                onValueChangeFinished = { settings.threshold = threshold.toInt() },
-                valueRange = 500f..10000f
+                value = dbThreshold,
+                onValueChange = { dbThreshold = it },
+                onValueChangeFinished = { settings.dbThreshold = dbThreshold },
+                valueRange = 30f..100f
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -66,33 +69,41 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            Text("Experten-Einstellungen (KI)", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text("KI-Vertrauensschwelle: ${(aiConfidence * 100).toInt()}%")
-            Slider(
-                value = aiConfidence,
-                onValueChange = { aiConfidence = it },
-                onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
-                valueRange = 0.05f..0.95f
-            )
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("KI-Erkennung aktivieren", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = aiEnabled, onCheckedChange = { 
+                    aiEnabled = it
+                    settings.aiEnabled = it
+                })
+            }
+            
+            if (aiEnabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("KI-Vertrauensschwelle: ${(aiConfidence * 100).toInt()}%")
+                Slider(
+                    value = aiConfidence,
+                    onValueChange = { aiConfidence = it },
+                    onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
+                    valueRange = 0.05f..0.95f
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text("Abtastrate (Sample Rate): $sampleRate Hz")
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 FilterChip(
                     selected = sampleRate == 16000,
                     onClick = { sampleRate = 16000; settings.audioSampleRate = 16000 },
-                    label = { Text("16000 Hz (Optimal)") }
+                    label = { Text("16000 Hz (KI Opt.)") }
                 )
                 FilterChip(
                     selected = sampleRate == 44100,
                     onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
-                    label = { Text("44100 Hz (High-Res)") }
+                    label = { Text("44100 Hz (Qualität)") }
                 )
             }
-            Text("Hinweis: 16000 Hz ist für YAMNet optimiert.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         }
     }
 }

@@ -8,6 +8,7 @@ data class NoiseRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
     val amplitude: Double,
+    val dbValue: Double = 0.0,
     val filePath: String,
     val label: String? = null,
     val detectedLabel: String? = null

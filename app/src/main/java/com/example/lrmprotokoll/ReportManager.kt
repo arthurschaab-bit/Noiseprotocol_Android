@@ -12,8 +12,13 @@ import java.util.zip.ZipOutputStream
 
 class ReportManager(private val context: Context) {
 
+    private fun getDateString(records: List<NoiseRecord>): String {
+        val timestamp = records.firstOrNull()?.timestamp ?: System.currentTimeMillis()
+        return SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(timestamp))
+    }
+
     fun generateDailyReport(records: List<NoiseRecord>): File {
-        val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
+        val dateStr = getDateString(records)
         val fileName = "Tagesbericht_$dateStr.txt"
         val file = File(context.getExternalFilesDir(null), fileName)
         
@@ -24,6 +29,7 @@ class ReportManager(private val context: Context) {
         records.forEach { record ->
             val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
             content.append("Zeit: $time\n")
+            content.append("Pegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB\n")
             content.append("Amplitude: ${record.amplitude.toInt()}\n")
             content.append("Label: ${record.label ?: "Keines"}\n")
             content.append("KI Erkannt: ${record.detectedLabel ?: "Keines"}\n")
@@ -45,7 +51,7 @@ class ReportManager(private val context: Context) {
     }
 
     fun createZipAndShare(records: List<NoiseRecord>, reportFile: File?) {
-        val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
+        val dateStr = getDateString(records)
         val zipFile = File(context.getExternalFilesDir(null), "Laermprotokoll_$dateStr.zip")
         
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->

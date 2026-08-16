@@ -140,9 +140,12 @@ class AudioRecordingService : LifecycleService() {
                     updateRollingBuffer()
                     writeToRollingBuffer(tempByteBuffer.array(), readSize * 2)
 
-                    if (maxAmplitude > settingsManager.threshold) {
-                        Log.d("AudioRecordingService", "Threshold exceeded: $maxAmplitude")
-                        saveRecording(audioRecord, maxAmplitude.toDouble(), sampleRate)
+                    val currentDb = calculateDb(buffer, readSize)
+
+                    // Trigger based on dB threshold
+                    if (currentDb > settingsManager.dbThreshold) {
+                        Log.d("AudioRecordingService", "dB Threshold exceeded: ${String.format("%.1f", currentDb)} dB")
+                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate)
                     }
                 }
                 delay(50)
@@ -150,6 +153,17 @@ class AudioRecordingService : LifecycleService() {
             audioRecord.stop()
             audioRecord.release()
         }
+    }
+
+    private fun calculateDb(buffer: ShortArray, readSize: Int): Double {
+        if (readSize <= 0) return 0.0
+        var sum = 0.0
+        for (i in 0 until readSize) {
+            sum += buffer[i].toDouble() * buffer[i].toDouble()
+        }
+        val rms = Math.sqrt(sum / readSize)
+        val db = 20 * Math.log10(rms / 32767.0) + 100.0
+        return if (db < 0) 0.0 else db
     }
 
     private fun writeToRollingBuffer(data: ByteArray, size: Int) {
@@ -194,7 +208,7 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
-    private suspend fun saveRecording(audioRecord: AudioRecord, amplitude: Double, sampleRate: Int) {
+    private suspend fun saveRecording(audioRecord: AudioRecord, amplitude: Double, dbValue: Double, sampleRate: Int) {
         val timestamp = System.currentTimeMillis()
         val fileName = "noise_$timestamp.wav"
         val file = File(getExternalFilesDir(null), fileName)
@@ -228,12 +242,18 @@ class AudioRecordingService : LifecycleService() {
         outputStream.close()
         updateWavHeader(file, totalDataLen)
 
-        val detected = classifier?.classify(file)
+        // KI Klassifizierung nur wenn aktiviert
+        val detected = if (settingsManager.aiEnabled) {
+            classifier?.classify(file)
+        } else {
+            null
+        }
 
         val dao = AppDatabase.getDatabase(applicationContext).noiseDao()
         dao.insert(NoiseRecord(
             timestamp = timestamp, 
             amplitude = amplitude, 
+            dbValue = dbValue,
             filePath = file.absolutePath,
             detectedLabel = detected
         ))

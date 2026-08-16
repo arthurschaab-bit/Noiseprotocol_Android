@@ -95,6 +95,12 @@ fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings:
     val selectedIds = remember { mutableStateListOf<Long>() }
     val collapsedDays = remember { mutableStateListOf<String>() }
     val dayFilters = remember { mutableStateMapOf<String, String>() }
+    
+    var minDbFilter by remember { mutableFloatStateOf(0f) }
+    var maxDbFilter by remember { mutableFloatStateOf(120f) }
+    var startHour by remember { mutableFloatStateOf(0f) }
+    var endHour by remember { mutableFloatStateOf(23f) }
+    var showGlobalFilter by remember { mutableStateOf(false) }
 
     var hasPermissions by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
@@ -134,6 +140,64 @@ fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings:
 
         Spacer(modifier = Modifier.height(16.dp))
         
+        // Globaler Filter
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { showGlobalFilter = !showGlobalFilter }) {
+                    Icon(if (showGlobalFilter) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Globale Filter (Pegel)", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (minDbFilter > 0 || maxDbFilter < 120) {
+                        AssistChip(onClick = {}, label = { Text("${minDbFilter.toInt()}-${maxDbFilter.toInt()} dB") })
+                    }
+                }
+                
+                AnimatedVisibility(visible = showGlobalFilter) {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        Text("Pegelbereich (dB): ${minDbFilter.toInt()} - ${maxDbFilter.toInt()}")
+                        RangeSlider(
+                            value = minDbFilter..maxDbFilter,
+                            onValueChange = { range ->
+                                minDbFilter = range.start
+                                maxDbFilter = range.endInclusive
+                            },
+                            valueRange = 0f..120f,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text("Zeitraum (Uhrzeit): ${startHour.toInt()}:00 - ${endHour.toInt()}:59")
+                        RangeSlider(
+                            value = startHour..endHour,
+                            onValueChange = { range ->
+                                startHour = range.start
+                                endHour = range.endInclusive
+                            },
+                            valueRange = 0f..23f,
+                            steps = 22,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { 
+                                minDbFilter = 0f; maxDbFilter = 120f 
+                                startHour = 0f; endHour = 23f
+                            }) {
+                                Text("Filter zurücksetzen")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Anzeige bekannter Geräusche (Datenbank)
         if (references.isNotEmpty()) {
             Text("Gelernte Geräusche: ${references.size}", style = MaterialTheme.typography.titleSmall)
@@ -154,8 +218,17 @@ fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings:
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        val groupedRecords = remember(records) {
-            records.groupBy { 
+        val filteredRecords = remember(records, minDbFilter, maxDbFilter, startHour, endHour) {
+            records.filter { 
+                val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                val hour = cal.get(Calendar.HOUR_OF_DAY)
+                it.dbValue >= minDbFilter && it.dbValue <= maxDbFilter && 
+                hour >= startHour.toInt() && hour <= endHour.toInt()
+            }
+        }
+
+        val groupedRecords = remember(filteredRecords) {
+            filteredRecords.groupBy {
                 SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(it.timestamp)) 
             }
         }
@@ -427,7 +500,7 @@ fun NoiseRecordItem(
                 Column(modifier = Modifier.weight(1f)) {
                     val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
                     Text(time)
-                    Text("Amplitude: ${record.amplitude.toInt()}", style = MaterialTheme.typography.bodySmall)
+                    Text("Pegel: ${String.format("%.1f", record.dbValue)} dB (Amp: ${record.amplitude.toInt()})", style = MaterialTheme.typography.bodySmall)
                     if (record.detectedLabel != null) {
                         Text("KI Erkannt: ${record.detectedLabel}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
                     }
