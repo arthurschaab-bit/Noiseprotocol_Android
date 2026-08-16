@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.ui
 
 import android.media.MediaPlayer
 import androidx.compose.foundation.Canvas

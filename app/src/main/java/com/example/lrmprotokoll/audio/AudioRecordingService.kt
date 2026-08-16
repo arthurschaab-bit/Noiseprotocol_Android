@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.audio
 
 import android.app.*
 import android.content.Intent
@@ -12,6 +12,9 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.SettingsManager
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream

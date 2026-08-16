@@ -1,4 +1,4 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.data.SettingsManager
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)

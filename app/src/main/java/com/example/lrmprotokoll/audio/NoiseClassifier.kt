@@ -1,7 +1,9 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.audio
 
 import android.content.Context
 import android.util.Log
+import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.SettingsManager
 import org.tensorflow.lite.task.audio.classifier.AudioClassifier
 import java.io.File
 import java.io.FileInputStream
