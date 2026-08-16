@@ -1,8 +1,9 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.report
 
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
+import com.example.lrmprotokoll.data.NoiseRecord
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat

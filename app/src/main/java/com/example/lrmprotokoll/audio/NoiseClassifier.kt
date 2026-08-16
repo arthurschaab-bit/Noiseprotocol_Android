@@ -1,7 +1,8 @@
-package com.example.lrmprotokoll
+package com.example.lrmprotokoll.audio
 
 import android.content.Context
 import android.util.Log
+import com.example.lrmprotokoll.LaermprotokollApp
 import org.tensorflow.lite.task.audio.classifier.AudioClassifier
 import java.io.File
 import java.io.FileInputStream
@@ -12,8 +13,10 @@ import kotlinx.coroutines.runBlocking
 
 class NoiseClassifier(private val context: Context) {
 
+    private val container get() = (context.applicationContext as LaermprotokollApp).container
+
     private var classifier: AudioClassifier? = null
-    private val settingsManager = SettingsManager(context)
+    private val settingsManager = container.settingsManager
 
     private val labelMapping = mapOf(
         "Hammer" to "Hämmern",
@@ -50,8 +53,7 @@ class NoiseClassifier(private val context: Context) {
         
         // 1. Abgleich mit der Datenbank bekannter Geräusche
         try {
-            val db = AppDatabase.getDatabase(context)
-            val references = runBlocking { db.noiseDao().getAllReferences().first() }
+            val references = runBlocking { container.database.noiseDao().getAllReferences().first() }
             
             references.forEach { ref ->
                 val refPattern = ref.pattern.split(",").toSet()
