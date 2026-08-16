@@ -4,20 +4,80 @@ Stand: 2026-08-16 · **minSdk 31 (Android 12)** · targetSdk 36 (Android 16)
 
 ---
 
-## 0. Ausgangslage
+## 0. Bestandsaufnahme
 
-Das Repository `arthurschaab-bit/Noiseprotocol_Android` ist zum Zeitpunkt dieser Analyse
-**vollständig leer** — keine Commits, keine Branches, kein Quellcode auf `origin`.
+> **Revision 3.** Der bestehende Stand liegt inzwischen als `main` vor (`c11dd2a`,
+> „Bestehender Stand Lärmprotokoll"). Abschnitt 0 und 4 sind gegen den tatsächlichen Code
+> korrigiert; Abschnitt 8.4 (Google-Drive-Sync) ist neu hinzugekommen.
 
-Ein bestehender Stand liegt laut Auftraggeber lokal unter
-`C:\Users\arthu\AndroidStudioProjects\Lrmprotokoll`, ist aber **noch nicht gepusht** und konnte
-daher nicht analysiert werden.
+### 0.1 Was bereits existiert
 
-> **Offen:** Sobald der lokale Stand auf `origin` liegt, ist dieser Plan gegen den tatsächlichen
-> Code zu spiegeln — insbesondere Abschnitt 4 (Zielarchitektur). Bis dahin beschreibt er den
-> Aufbau von Grund auf.
+Eine funktionsfähige Lärmprotokoll-App, die **über das Telefonmikrofon** misst — nicht über ein
+externes Messgerät. Rund 1.430 Zeilen Kotlin, Single-Module, Package `com.example.lrmprotokoll`.
 
-### 0.1 Getroffene Entscheidungen
+| Datei | Zeilen | Aufgabe |
+|-------|--------|---------|
+| `MainActivity.kt` | 548 | Compose-UI, Navigation (`main` / `player` / `settings`), Ereignisliste, Service-Steuerung, Permissions |
+| `AudioRecordingService.kt` | 306 | Foreground Service: `AudioRecord`-Dauerschleife, 2 s Pre-Roll-Ringpuffer, Schwellwert-Trigger, WAV-Schreiben |
+| `AudioPlayerScreen.kt` | 167 | Wiedergabe mit Wellenformdarstellung |
+| `NoiseClassifier.kt` | 108 | YAMNet (TFLite), Label-Mapping DE, Abgleich mit gelernten Referenzgeräuschen |
+| `SettingsScreen.kt` | 109 | Schwellwert, Pre-Roll, Dauer, KI an/aus, Konfidenz, Samplerate |
+| `ReportManager.kt` | 75 | Tagesbericht, ZIP-Export via `FileProvider` |
+| `NoiseDao` / `NoiseRecord` / `AppDatabase` | 87 | Room v6: `noise_records`, `reference_sounds` |
+| `SettingsManager.kt` | 32 | SharedPreferences-Wrapper |
+
+**Funktionsprinzip heute:** Der Service liest kontinuierlich vom Mikrofon (16 kHz, Mono, PCM16),
+hält die letzten 2 s in einem Ringpuffer und schneidet bei Überschreiten der dB-Schwelle
+(Default 60) eine WAV-Datei mit Vorlauf. YAMNet klassifiziert das Geräusch (Hämmern, Bohren,
+Bagger, Verkehr …), ein Datensatz landet in Room.
+
+**Stack:** Kotlin 2.2.10, AGP 9.2.1, Compose (BOM 2024.05), Room 2.8.4 + KSP,
+Navigation-Compose, TFLite Task Audio 0.4.4. **minSdk 29, compileSdk 34, targetSdk 34.**
+Kein DI-Framework, kein Modulschnitt, keine Tests außer den generierten Platzhaltern.
+
+### 0.2 Die entscheidende Erkenntnis für dieses Vorhaben
+
+Die heutige Pegelberechnung in `AudioRecordingService.calculateDb()` lautet:
+
+```kotlin
+val db = 20 * Math.log10(rms / 32767.0) + 100.0
+```
+
+Das ist **dBFS plus ein willkürlicher Offset von 100** — kein Schalldruckpegel, keine
+A-Bewertung, keine Kalibrierung, geräteabhängig. Für ein Lärmprotokoll mit Beweisanspruch ist
+dieser Wert nicht verwertbar.
+
+**Genau hier liegt der Wert des PCE-323**: klassenzertifizierte, A-bewertete Pegel (Klasse 2).
+Das Vorhaben ist damit nicht „ein zweiter Sensor", sondern die **Ablösung der unkalibrierten
+Pegelquelle durch eine belastbare** — bei Beibehaltung von Audioaufnahme und Klassifikation,
+die das PCE-323 seinerseits nicht kann.
+
+| | Pegel belastbar | Audio-Beweis | Klassifikation |
+|---|---|---|---|
+| **PCE-323** | ✅ Klasse 2, dBA | ❌ | ❌ |
+| **Mikrofon** | ❌ unkalibriert | ✅ | ✅ YAMNet |
+
+Integrationsstrategie daraus: Abschnitt 4.5.
+
+### 0.3 Befunde am Bestand
+
+| # | Befund | Wirkung |
+|---|--------|---------|
+| **B-1** | `AndroidManifest.xml` trägt noch `package="com.example.lrmprotokoll"`, während `namespace` in `build.gradle.kts` gesetzt ist. Seit AGP 8 ist das ein **harter Build-Fehler**; hier läuft AGP 9.2.1 | Erklärt vermutlich das vorhandene `manifest_error.txt`. **Blocker** — Attribut ersatzlos entfernen |
+| **B-2** | `AppDatabase` nutzt `fallbackToDestructiveMigration()` bei Schema-Version 6 | **Jede** Schemaänderung löscht alle bisherigen Messdaten. PCE-323 und Drive-Sync bringen neue Spalten mit ⇒ vor M4 auf echte Migrationen umstellen |
+| **B-3** | `compileSdk`/`targetSdk` = 34 bei AGP 9.2.1 | AGP 9 erwartet neuere compileSdk; auf 35/36 anheben |
+| **B-4** | 6 CameraX-Abhängigkeiten deklariert, **kein einziger Camera-Aufruf** im Code | Toter Ballast im APK — streichen |
+| **B-5** | `allowBackup="true"` | Aufnahmen, künftig Rufnummern und OAuth-Zustand flössen über Auto-Backup ab |
+| **B-6** | `applicationId = "com.example.lrmprotokoll"` | `com.example.*` ist im Play Store unzulässig und nach Veröffentlichung **nie wieder änderbar**. Zudem braucht Google Drive OAuth eine stabile Package-ID + Signatur — jetzt ändern, nicht später |
+| **B-7** | KSP-Version `2.3.2` passt nicht zum üblichen Schema `<kotlin>-<ksp>` | Bei Build-Problemen zuerst hier prüfen |
+| **B-8** | `POST_NOTIFICATIONS` wird zur Laufzeit angefragt, steht aber **nicht im Manifest** | Ab targetSdk 33 wird die Anfrage stillschweigend abgelehnt ⇒ Foreground-Notification unsichtbar |
+| **B-9** | `delay(50)` in der `AudioRecord`-Leseschleife; `updateRollingBuffer()` liest je Durchlauf SharedPreferences | Latenz/Overrun-Risiko; ~20 Prefs-Zugriffe/s |
+| **B-10** | Während `saveRecording()` läuft (3 s), pausiert die Pegelüberwachung | Ereignisse in diesem Fenster werden nicht erkannt |
+| **B-11** | `tensorflow-lite-task-audio:0.4.4` ist abgekündigt (Nachfolger LiteRT) | Migrationsschuld, nicht akut |
+
+B-1 und B-2 sind vor Beginn der Bluetooth-Arbeit zu erledigen. B-6 vor Beginn der Drive-Arbeit.
+
+### 0.4 Getroffene Entscheidungen
 
 | # | Frage | Entscheidung |
 |---|-------|--------------|
@@ -26,11 +86,15 @@ daher nicht analysiert werden.
 | 3 | Alarmierung des Zweitgeräts | **Mehrkanal-Kaskade** statt SMS allein — siehe Abschnitt 7 |
 | 4 | Minimum-SDK | **API 31 (Android 12)** |
 
-**Folgen von minSdk 31:** Die Legacy-Bluetooth-Pfade entfallen ersatzlos — kein
-`ACCESS_FINE_LOCATION` für BLE-Scans, keine `maxSdkVersion`-Altlasten im Manifest, nur noch
-`BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT`. Das vereinfacht das Onboarding erheblich. Ebenfalls
-gesetzt verfügbar: `BluetoothLeScanner` mit `ScanSettings.CALLBACK_TYPE_FIRST_MATCH`,
-`PendingIntent.FLAG_IMMUTABLE` als Pflicht, `SplashScreen`-API, Material You.
+| 5 | Messwerte in die Cloud | **Google Drive, 30-min-Zyklus, eine Datei pro Tag** — siehe 8.4 |
+
+**Folgen von minSdk 31:** Der Bestand steht auf **minSdk 29**, wird also angehoben. Geräte mit
+Android 10/11 fallen damit raus — bei einer selbst genutzten App unkritisch, aber eine bewusste
+Entscheidung. Im Gegenzug entfallen alle Legacy-Bluetooth-Pfade: kein `ACCESS_FINE_LOCATION`
+für BLE-Scans, keine `maxSdkVersion`-Altlasten, nur noch `BLUETOOTH_SCAN` +
+`BLUETOOTH_CONNECT`. Ebenfalls gesetzt verfügbar: `BluetoothLeScanner` mit
+`ScanSettings.CALLBACK_TYPE_FIRST_MATCH`, `PendingIntent.FLAG_IMMUTABLE` als Pflicht,
+`SplashScreen`-API, Material You.
 
 ---
 
@@ -47,8 +111,9 @@ gesetzt verfügbar: `BluetoothLeScanner` mit `ScanSettings.CALLBACK_TYPE_FIRST_M
 | F-5 | Ableitung akustischer Kennwerte: LAeq, LAFmax, LAFmin, Überschreitungsdauer je Schwelle |
 | F-6 | **Alarm bei Verbindungsabbruch** — per SMS an hinterlegte Rufnummern **und** per Push an ein zweites Android-Gerät |
 | F-7 | Automatischer Wiederverbindungsversuch mit Backoff, optionale Entwarnung bei Wiederkehr |
-| F-9 | **Totmannschaltung**: Alarm auch dann, wenn das Überwachungsgerät selbst ausfällt |
 | F-8 | Export (CSV/PDF) der Messreihe inkl. Ausfallprotokoll |
+| F-9 | **Totmannschaltung**: Alarm auch dann, wenn das Überwachungsgerät selbst ausfällt |
+| F-10 | **Google-Drive-Sync**: alle 30 min in einen wählbaren Ordner, **eine Datei pro Tag**, die aktualisiert statt dupliziert wird |
 
 ### 1.2 Nichtfunktionale Anforderungen (Schwerpunkt des Auftrags)
 
@@ -178,36 +243,70 @@ Rohdaten-Beispielen, die später als Testvektoren dienen.
 
 ### 4.1 Technologiestack
 
-- Kotlin, Coroutines + Flow
-- Jetpack Compose (Material 3) für die UI
-- MVVM + Clean-Layering, unidirektionaler Datenfluss
-- Hilt für DI
-- Room für die Messreihe, DataStore (verschlüsselt) für Einstellungen
-- WorkManager + AlarmManager für Alarmierung und Wartungsjobs
-- Gradle Version Catalogs, Kotlin DSL
+Bestehend und beibehalten: Kotlin + Coroutines/Flow, Jetpack Compose (Material 3),
+Navigation-Compose, Room + KSP, Gradle Version Catalogs (Kotlin DSL), TFLite/YAMNet.
 
-### 4.2 Modulschnitt
+Neu hinzukommend:
+
+| Baustein | Zweck |
+|----------|-------|
+| `AppContainer` (manuelles DI) | Testbarkeit ohne Hilt-Vollumbau — siehe 4.2 |
+| WorkManager | Drive-Sync (30 min), Heartbeat, Retention |
+| AlarmManager (exact) | Karenzzeit der Ausfallerkennung (7.2) |
+| `EncryptedSharedPreferences` / Tink | Rufnummern, ntfy-Topic, Drive-Konfiguration |
+| `play-services-auth` (`AuthorizationClient`) | Google-Drive-OAuth (8.4.3) |
+| OkHttp | ntfy, Drive-Upload, Heartbeat |
+
+Bewusst **nicht** übernommen: Hilt und der Gradle-Modulschnitt aus Revision 1 (Begründung in 4.2).
+
+### 4.2 Paketstruktur — bewusst **kein** Gradle-Modulschnitt
+
+> **Korrektur gegenüber Revision 1.** Der ursprüngliche Entwurf sah 11 Gradle-Module vor. Das war
+> für ein leeres Repository gedacht und ist für den tatsächlichen Bestand (1.430 Zeilen, ein
+> Modul, kein DI) überdimensioniert: Der Umbau würde mehr Zeit kosten als das Bluetooth-Feature
+> selbst und keinen Nutzen bringen, den Packages nicht auch liefern.
+
+Stattdessen bleibt der Single-Module-Aufbau und wird **innerhalb** von
+`app/src/main/java/com/example/lrmprotokoll/` nach Verantwortlichkeiten sortiert — der heutige
+Flat-Namespace ist bei wachsendem Umfang das eigentliche Problem:
 
 ```
-:app                    Compose-Navigation, DI-Wiring, Manifest
-:core:model             Reine Datenklassen (Measurement, ConnectionState, AlarmEvent)
-:core:common            Dispatcher, Result-Typen, Zeitquelle (injizierbar!)
-:core:database          Room: MeasurementEntity, SessionEntity, ConnectionEventEntity
-:core:datastore         Verschlüsselte Einstellungen (Rufnummern, Schwellen, Gerät)
-:transport:contract     interface MeterTransport — technologieunabhängig
-:transport:ble          BLE-Implementierung + Pce323Profile + FrameDecoder
-:transport:fake         Simulator für Tests und Demo-Modus
-:feature:pairing        Scan, Auswahl, Bonding
-:feature:live           Live-Anzeige, Pegelverlauf
-:feature:protocol       Messreihen, Kennwerte, Export
-:feature:settings       Alarmkonfiguration, Rufnummern, Diagnose
-:service:monitoring     Foreground Service, Verbindungs-Supervisor
-:alerting               Ausfallerkennung, SMS-Versand, Zustellnachweis
+com.example.lrmprotokoll
+├── ui/                     MainActivity, Screens (bestehend, nur verschoben)
+├── audio/                  AudioRecordingService, NoiseClassifier (bestehend)
+├── data/                   Room, DAO, Entities, SettingsManager (bestehend)
+├── report/                 ReportManager (bestehend), CsvBuilder
+│
+├── meter/                  ← NEU: alles zum PCE-323
+│   ├── MeterTransport.kt       Schnittstelle (4.3)
+│   ├── ble/
+│   │   ├── BleMeterTransport.kt
+│   │   ├── GattQueue.kt
+│   │   ├── Pce323Profile.kt     UUIDs + Kommandos, einzige Quelle der Wahrheit
+│   │   └── FrameDecoder.kt      6-Byte-Frames, Ringpuffer, Resync
+│   ├── FakeMeterTransport.kt    Simulator für Tests und Demo
+│   └── ConnectionSupervisor.kt  Zustandsautomat, Backoff, Watchdog
+│
+├── alerting/               ← NEU
+│   ├── AlertChannel.kt · SmsAlertChannel.kt · NtfyAlertChannel.kt
+│   ├── AlarmCoordinator.kt
+│   └── HeartbeatWorker.kt
+│
+└── sync/                   ← NEU: Google Drive (8.4)
+    ├── DriveAuthManager.kt      OAuth, Token, Kontowahl
+    ├── DriveSyncWorker.kt       30-min-Zyklus
+    ├── DriveUploader.kt         create/update über fileId
+    └── DailyFileRegistry.kt     Datum → fileId, Idempotenz
 ```
 
-Begründung des Schnitts: `:transport:contract` erlaubt es, die Ausfallerkennung und die gesamte
-UI ohne echtes Gerät zu testen (`:transport:fake`), und hält die Tür für eine spätere
-SPP-/USB-Implementierung offen, ohne dass Domänencode angefasst werden muss.
+**DI:** Hilt ist nicht zwingend. Der Bestand instanziiert direkt (`SettingsManager(context)`,
+`AppDatabase.getDatabase()`). Empfehlung: ein schlanker manueller `AppContainer` in einer
+`Application`-Subklasse — reicht für Testbarkeit, kostet einen halben Tag statt zwei und zwingt
+nicht zur Annotation aller bestehenden Klassen. Hilt bleibt nachrüstbar.
+
+**Was von der ursprünglichen Idee bleibt:** die `MeterTransport`-Abstraktion mit
+Fake-Implementierung. Sie kostet fast nichts und erlaubt, Ausfallerkennung, Alarmierung und
+Drive-Sync vollständig ohne Hardware zu testen — der eigentliche Hebel bei diesem Vorhaben.
 
 ### 4.3 Zentrale Schnittstelle
 
@@ -250,7 +349,51 @@ PCE-323 ──BLE Notify──▶ GattCallback ──▶ Ringpuffer ──▶ Fr
                                             ┌───────────────┼───────────────┐
                                             ▼               ▼               ▼
                                      SmsAlertChannel  PushAlertChannel  LocalAlertChannel
+
+  MeasurementRepository ──alle 30 min──▶ DriveSyncWorker ──▶ Google Drive (8.4)
 ```
+
+### 4.5 Integrationsstrategie: PCE-323 **neben** dem Mikrofon
+
+Aus 0.2 folgt: Die beiden Quellen ersetzen einander nicht, sie ergänzen sich. Tragfähig ist
+deshalb **das PCE-323 als Pegelwahrheit und Auslöser, das Mikrofon als Beweismittel und
+Klassifikator**:
+
+```
+PCE-323 (dBA, kalibriert) ──▶ Schwellwertvergleich ──▶ TRIGGER
+                                                          │
+                                                          ▼
+                              AudioRecordingService schneidet WAV (Pre-Roll wie bisher)
+                                                          │
+                                                          ▼
+                                            YAMNet klassifiziert (wie bisher)
+                                                          │
+                                                          ▼
+                          NoiseRecord: WAV + Label + dBA(PCE) + dBFS(Mikrofon)
+```
+
+Was sich dadurch am Bestand ändert:
+
+- **`AudioRecordingService`** bekommt eine zweite Triggerquelle. Die Schwellwertprüfung wandert
+  aus der Audio-Leseschleife in einen `MeterTriggerSource`, der bei verbundenem Messgerät die
+  PCE-Werte auswertet und sonst auf die bisherige Mikrofonberechnung zurückfällt. Ringpuffer-,
+  WAV- und Klassifikationspfad bleiben **unverändert** — das ist der bewährte Teil.
+- **`NoiseRecord`** bekommt drei Spalten: `calibratedDbA: Double?`, `meterWeighting: String?`,
+  `meterConnected: Boolean`. `dbValue` bleibt als Mikrofonwert erhalten, wird im UI aber als
+  „unkalibriert" gekennzeichnet, sobald ein Messgerät gekoppelt ist. **Erfordert eine echte
+  Room-Migration (B-2).**
+- **`SettingsScreen`** bekommt die Schwellenwahl je Quelle. Wichtig: Eine bisher eingestellte
+  Schwelle von 60 („dBFS+100") ist **nicht** dieselbe Zahl wie 60 dBA. Beim ersten Koppeln muss
+  die Schwelle neu gesetzt werden, sonst triggert es dauerhaft oder nie. Als getrennte
+  Einstellung führen, nicht als gemeinsamen Wert.
+- **Foreground Service** braucht beide Typen:
+  `android:foregroundServiceType="microphone|connectedDevice"` und beim `startForeground()`
+  entsprechend `FOREGROUND_SERVICE_TYPE_MICROPHONE or FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE`.
+  Der bestehende Aufruf setzt nur `MICROPHONE`.
+
+**Ausbaustufe (nicht eingeplant):** Aus dem Verhältnis PCE-dBA zu Mikrofon-dBFS ließe sich ein
+**Kalibrieroffset** bestimmen und speichern. Danach lieferte das Mikrofon auch ohne Messgerät
+brauchbare Näherungswerte — allerdings ohne A-Bewertungsfilter, also nie mit Beweisanspruch.
 
 ---
 
@@ -707,6 +850,147 @@ klassischer und im Protokollkontext gravierender Fehler. Zusätzlich LAFmax, LAF
 Überschreitungsdauer pro konfigurierter Schwelle sowie Perzentile L10/L50/L90 (streaming-fähig via
 Histogramm in 0,1-dB-Bins).
 
+### 8.4 Google-Drive-Synchronisation (F-10)
+
+Anforderung: alle 30 Minuten in einen wählbaren Drive-Ordner hochladen, **eine Datei pro Tag**,
+die aktualisiert statt dupliziert wird.
+
+#### 8.4.1 Datenmenge — die Entscheidung, die vor allem anderen kommt
+
+Bei 2 Hz Rohauflösung fallen **172.800 Werte pro Tag** an, als CSV rund 5–8 MB. Da die Drive-API
+**kein Anhängen kennt** — jede Aktualisierung überträgt die *komplette* Datei neu — würde ein
+naiver 30-min-Zyklus die wachsende Tagesdatei 48× am Tag hochladen. Das summiert sich auf
+grob **150–200 MB Upload pro Tag**, auf Mobilfunk ein ernstes Problem.
+
+Deshalb wird **aggregiert in die Tagesdatei geschrieben**, nicht roh:
+
+| Auflösung | Zeilen/Tag | CSV-Größe | Upload/Tag (48 Zyklen) |
+|-----------|-----------|-----------|------------------------|
+| Roh (2 Hz) | 172.800 | ~6 MB | ~150 MB ❌ |
+| **1 s** | 86.400 | ~3 MB | ~75 MB |
+| **10 s** | 8.640 | ~300 KB | ~7 MB ✅ **Empfehlung** |
+| 1 min | 1.440 | ~55 KB | ~1,3 MB |
+
+**Empfehlung: 10-Sekunden-Aggregate** — je Intervall LAeq, LAFmax, LAFmin und Anzahl gültiger
+Samples. Das ist für ein Lärmprotokoll mehr als ausreichend granular (Einzelereignisse stecken
+ohnehin mit WAV und Klassifikation in der Ereignisliste), und der Upload bleibt im
+einstelligen MB-Bereich pro Tag. Die **Rohwerte bleiben lokal** in Room verfügbar.
+
+Zusätzlich: Upload nur ausführen, wenn sich seit dem letzten Zyklus etwas geändert hat, und die
+Datei per **gzip** übertragen. Optionale Einstellung „nur über WLAN".
+
+**Audio wird nicht hochgeladen.** WAV-Dateien sind groß und enthalten potenziell Sprache Dritter
+— das ist datenschutzrechtlich eine andere Kategorie als Pegelwerte. Falls gewünscht, als
+separate, ausdrücklich zu aktivierende Option mit eigenem Hinweis.
+
+#### 8.4.2 Dateiformat
+
+Eine CSV je Tag, Name `laermprotokoll_2026-08-16.csv`, UTF-8 mit BOM (damit Excel Umlaute
+korrekt zeigt), Semikolon als Trenner (deutsches Excel-Gebietsschema):
+
+```csv
+Zeit;LAeq_dBA;LAFmax_dBA;LAFmin_dBA;Samples;Quelle;Ereignis;Klassifikation
+2026-08-16T08:00:00+02:00;52,3;61,8;48,1;20;PCE-323;;
+2026-08-16T08:00:10+02:00;71,4;89,2;53,0;20;PCE-323;JA;Hämmern
+2026-08-16T08:00:20+02:00;;;;0;KEINE_VERBINDUNG;;
+```
+
+Die Zeile mit `KEINE_VERBINDUNG` ist wesentlich: **Lücken müssen als Lücken sichtbar sein.** Eine
+Messreihe, in der Ausfälle einfach fehlen, ist forensisch wertlos — dasselbe Argument wie bei
+`ConnectionEventEntity`. Dezimalkomma passend zum deutschen Excel.
+
+#### 8.4.3 Authentifizierung und Ordnerwahl — die kritische Weichenstellung
+
+Der Scope bestimmt, wie aufwendig das Vorhaben wird:
+
+| Scope | Ordnerwahl | Google-Verifizierung | Bewertung |
+|-------|-----------|---------------------|-----------|
+| **`drive.file`** | nur Ordner, die die App selbst angelegt hat | **keine nötig** (nicht-sensibler Scope) | **Empfehlung** |
+| `drive` (voll) | jeder beliebige Ordner | **restricted scope** → CASA-Sicherheitsprüfung, jährlich, aufwendig | nur wenn zwingend |
+
+**Empfehlung: `drive.file`.** Die App legt beim Einrichten einen Ordner an (Name frei wählbar,
+Default „Lärmprotokoll"), merkt sich dessen `folderId` und arbeitet ausschließlich darin. Der
+Nutzer kann diesen Ordner in Drive beliebig verschieben oder umbenennen — die `folderId` bleibt
+stabil, der Sync läuft weiter. „Wählbar" ist damit erfüllt, ohne Google-Verifizierung.
+
+> **⚠ Falle bei der Alternative:** Bleibt das OAuth-Projekt im Status *Testing*, laufen
+> Refresh-Tokens **nach 7 Tagen** ab. Der Sync würde dann wöchentlich stillschweigend
+> aussteigen — der schlimmste Fehlermodus für eine Protokollierung. Mit `drive.file` und
+> Publishing-Status *In production* tritt das nicht auf, weil der Scope keine Verifizierung
+> erfordert.
+
+Umsetzung: Google Sign-In über **Credential Manager**, Scope-Anforderung über `AuthorizationClient`
+(`play-services-auth`). Der Zugriffstoken wird nicht selbst persistiert, sondern vor jedem Upload
+über `authorize()` erneuert — das läuft still, solange die Zustimmung besteht.
+
+#### 8.4.4 Eine Datei pro Tag — Idempotenz
+
+Der Kernfehler, den es zu vermeiden gilt: bei jedem Zyklus eine *neue* Datei anlegen, sodass am
+Ende des Tages 48 Kopien im Ordner liegen. Deshalb eine lokale Zuordnung Datum → `fileId`:
+
+```kotlin
+@Entity(tableName = "drive_daily_files")
+data class DriveDailyFile(
+    @PrimaryKey val date: String,      // "2026-08-16"
+    val fileId: String?,               // null = noch nie hochgeladen
+    val lastSyncedAt: Long,
+    val lastRowCount: Int,             // unveraendert => Upload ueberspringen
+    val state: String,                 // PENDING / SYNCED / FAILED
+)
+```
+
+Ablauf je Zyklus:
+
+```
+1. Aggregate für "heute" aus Room erzeugen
+2. Zeilenzahl unverändert? ⇒ fertig, kein Upload
+3. fileId vorhanden? ──ja──▶ files.update(fileId, media)      ← aktualisiert in place
+                     └─nein─▶ files.create(parent=folderId)   ← einmal pro Tag
+                              ⇒ fileId speichern
+4. Tageswechsel: gestrige Datei ein letztes Mal final hochladen, dann neuen Tag beginnen
+```
+
+Wichtig: `fileId` **vor** dem Upload-Ende zu speichern ist nicht möglich — bricht `files.create`
+nach dem Anlegen, aber vor der Antwort ab, entsteht eine Waise. Absicherung: Vor jedem `create`
+per `files.list` mit `name = '<dateiname>' and '<folderId>' in parents and trashed = false`
+prüfen, ob die Datei schon existiert, und deren ID übernehmen. Das kostet einen API-Aufruf pro
+Tag und verhindert Duplikate zuverlässig.
+
+#### 8.4.5 Zeitsteuerung
+
+`PeriodicWorkRequest` mit 30 min Intervall (WorkManager-Minimum ist 15 min), Constraint
+`NetworkType.CONNECTED` bzw. `UNMETERED` je Einstellung, `BackoffPolicy.EXPONENTIAL`.
+
+WorkManager-Periodik ist **nicht exakt** — im Doze kann ein Zyklus deutlich später laufen. Für
+einen 30-min-Sync ist das akzeptabel und ausdrücklich kein Grund, auf `AlarmManager` mit
+Exact-Alarms auszuweichen: Bei Netzverlust wäre ein exakter Wecker ohnehin nutzlos, und die
+Datenlage auf dem Gerät bleibt vollständig. Anders als bei der Alarm-Karenzzeit (7.2) ist
+Pünktlichkeit hier keine Anforderung.
+
+#### 8.4.6 Fehlerbehandlung
+
+| Fehler | Reaktion |
+|--------|----------|
+| Kein Netz | `Result.retry()`, WorkManager-Backoff |
+| 401 / Token abgelaufen | Stiller Re-`authorize()`; scheitert das, Notification „Drive-Anmeldung erneuern" |
+| 403 Quota / Rate Limit | Exponentieller Backoff, nächster Zyklus |
+| 404 — Datei gelöscht | `fileId` verwerfen, im nächsten Zyklus neu anlegen |
+| Ordner gelöscht | Sync pausieren, Nutzer zur Neuwahl auffordern — **nicht** stillschweigend in „Meine Ablage" schreiben |
+| Speicherplatz voll | Notification, Sync pausieren |
+
+**Sync-Ausfall ist meldepflichtig, aber kein SMS-Fall.** Schlägt der Upload länger als *n* Zyklen
+(Default 6 ≈ 3 h) fehl, erscheint eine Warnung im UI und eine lokale Notification. SMS/Push
+bleiben dem Verbindungsabbruch vorbehalten — sonst wird der Alarmkanal abgestumpft. Der
+Sync-Zustand gehört zusätzlich in den Diagnose-Screen (letzter Erfolg, nächster Lauf,
+Fehlerzähler).
+
+#### 8.4.7 Datenschutz
+
+Mit dem Sync verlassen Messdaten das Gerät. Konsequenzen: minimaler Scope (`drive.file`), kein
+Audio-Upload per Default, im Onboarding klar benennen, was hochgeladen wird, und eine
+Möglichkeit, den Sync jederzeit abzuschalten und das Konto zu trennen. Der OAuth-Zustand fällt
+unter `allowBackup="false"` (B-5).
+
 ---
 
 ## 9. UI (Compose)
@@ -718,7 +1002,8 @@ Histogramm in 0,1-dB-Bins).
 | **Live** | Großer dBA-Wert, Verlaufsgraph (60 s), Verbindungs-Badge, A/C-Warnbanner |
 | **Protokoll** | Sessions, Kennwerte, Ausfallmarkierungen als rote Bänder im Verlauf |
 | **Alarm** | Empfängerliste, Karenzzeit, Cooldown, Eskalation, SIM-Auswahl, Test-SMS |
-| **Diagnose** | Zustandsautomat live, Reconnect-Zähler, Decode-Fehlerrate, Roh-Frame-Log |
+| **Drive-Sync** | Google-Konto verbinden/trennen, Ordnername, Aggregationsintervall, „nur WLAN", letzter/nächster Sync, Fehlerzähler, „Jetzt synchronisieren" |
+| **Diagnose** | Zustandsautomat live, Reconnect-Zähler, Decode-Fehlerrate, Roh-Frame-Log, Sync-Historie |
 
 Der **Diagnose-Screen** ist kein Luxus: Bei einer Dauerüberwachung, die per SMS alarmiert, muss
 nachvollziehbar sein, warum ein Alarm ausgelöst wurde oder ausblieb.
@@ -750,6 +1035,7 @@ Dank **minSdk 31** entfallen sämtliche Legacy-Bluetooth-Berechtigungen:
 <uses-permission android:name="android.permission.INTERNET" />                <!-- ntfy / FCM -->
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" /><!-- DND-Durchbruch -->
+<uses-permission android:name="android.permission.GET_ACCOUNTS" />            <!-- Drive-Kontowahl -->
 
 <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 ```
@@ -780,9 +1066,15 @@ Anmerkungen:
   (Verbindung fällt 10× kurz aus ⇒ höchstens 1 SMS)
 
 **Integrationstests**
-- Room-Migrationen
-- `:transport:fake` speist reale Aufzeichnungen ein; komplette Pipeline bis SMS-Trigger wird
-  ohne Hardware verifiziert
+- **Room-Migration v6 → v7** mit echtem Altbestand: Nach der Migration müssen alle vorhandenen
+  `noise_records` samt WAV-Pfaden erhalten sein. Wegen B-2 ist das der kritischste Test des
+  gesamten Vorhabens — bisher wurden bei jeder Schemaänderung stillschweigend alle Daten gelöscht
+- `FakeMeterTransport` speist reale Aufzeichnungen ein; komplette Pipeline bis Alarm-Trigger
+  wird ohne Hardware verifiziert
+- Trigger-Umschaltung: Messgerät verbunden ⇒ PCE-Schwelle greift; getrennt ⇒ Rückfall auf
+  Mikrofonschwelle, ohne dass Aufnahmen ausbleiben
+- **Drive-Sync gegen einen Fake-Uploader**: Tageswechsel, `fileId`-Wiederverwendung,
+  unveränderte Zeilenzahl ⇒ kein Upload, 404 ⇒ Neuanlage. Kein Test darf 48 Dateien erzeugen
 
 **Instrumentierte Tests**
 - Zwei Testgeräte: eines als BLE-Peripheral (`BluetoothGattServer`), das das PCE-323-Profil
@@ -804,6 +1096,11 @@ Anmerkungen:
 | Überwachungsgerät hart abschalten | **Totmannschaltung** meldet sich innerhalb des Heartbeat-Fensters |
 | Zweitgerät im Do-Not-Disturb-Modus | Alarm wird hörbar zugestellt (Prio 5 / `CATEGORY_ALARM`) |
 | `SCHEDULE_EXACT_ALARM` entzogen | Diagnose-Screen weist es aus, Onboarding fordert erneut an |
+| Tageswechsel um Mitternacht während laufendem Sync | Gestrige Datei final, neue Datei angelegt, keine Vermischung |
+| Drive-Ordner am PC gelöscht | Sync pausiert mit Hinweis, schreibt **nicht** nach „Meine Ablage" |
+| Drive-Datei am PC gelöscht | Nächster Zyklus legt sie neu an, ohne Duplikat |
+| 24 h Sync-Dauerlauf | Genau 1 Datei im Ordner, Uploadvolumen im erwarteten Bereich (8.4.1) |
+| Google-Zugriff in den Kontoeinstellungen widerrufen | Notification „Anmeldung erneuern", keine Endlosschleife |
 
 ---
 
@@ -811,24 +1108,36 @@ Anmerkungen:
 
 | # | Meilenstein | Inhalt | Aufwand |
 |---|-------------|--------|---------|
+| **M-1** | **Bestand instandsetzen** | B-1 (Manifest-`package`, Build läuft wieder), B-2 (Room-Migrationen), B-3 (compileSdk/targetSdk), B-4 (CameraX raus), B-5/B-6/B-8 | 1 d |
 | **M0** | Protokoll-Discovery | Abschnitt 3 vollständig, Profil + Testvektoren | 0,5–1 d |
-| **M1** | Projektgerüst | Gradle, Module, Hilt, Compose-Navigation, CI | 1 d |
+| **M1** | Umbau statt Neubau | Paketstruktur (4.2), `AppContainer`, minSdk 29 → 31, `MeterTransport` + Fake, erste Unit-Tests | 1,5 d |
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
 | **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
 | **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `SmsAlertChannel` mit Zustellnachweis + Retry, `NtfyAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** | 4 d |
 | **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
+| **M7b** | **Google-Drive-Sync (F-10)** | OAuth `drive.file`, Ordneranlage, 10-s-Aggregation, CSV-Erzeugung, `DriveSyncWorker`, `DailyFileRegistry`, Fehlerbehandlung, Sync-Status im UI | 3–4 d |
 | **M8** | Härtung | Chaos-Checkliste, 24-h-Dauerlauf, Herstellerspezifika, Release-Build | 2–3 d |
 | **M9** | *(optional)* FCM-Zielbild | Google Sign-In, Firestore, Cloud-Function-Relay, `FcmAlertChannel`, serverseitiger Heartbeat | 3–4 d |
 
-**Gesamt ca. 21–27 Personentage** (M0–M8), mit M9 rund 25–31. M0 ist echte Voraussetzung für M2 —
-ohne bestätigtes Profil sollte M2 nicht begonnen werden.
+**Gesamt ca. 26–33 Personentage** (M-1 bis M8), mit M9 rund 29–37.
 
-**Kritischer Pfad:** M0 → M2 → M3 → M5. M4, M6 und M7 sind parallelisierbar. M9 ist bewusst
-nachgelagert: Der `NtfyAlertChannel` aus M5 liefert dieselbe Funktion bei einem Bruchteil des
-Aufwands, und die `AlertChannel`-Abstraktion macht den späteren Wechsel zu einem Austausch einer
-einzigen Implementierung.
+Gegenüber Revision 1 kommt M-1 hinzu (Instandsetzung), M1 wird vom Neuaufbau zum Umbau, M7b ist
+neu (Drive-Sync). M4 fällt kleiner aus als ursprünglich geschätzt, weil Room, DAO, Export und
+Berichtserzeugung bereits existieren und nur erweitert werden.
+
+**Kritischer Pfad:** M-1 → M0 → M2 → M3 → M5.
+
+- **M-1 zuerst**, weil B-1 den Build blockiert und B-2 sonst beim ersten Schema-Update die
+  bisherigen Aufnahmen vernichtet.
+- **M0 vor M2** — ohne bestätigtes BLE-Profil ist die Transport-Implementierung Spekulation.
+- **M7b nach M4**, weil der Sync auf der Aggregationslogik aufsetzt. Es hängt aber *nicht* am
+  Bluetooth-Pfad: Die Drive-Anbindung lässt sich vollständig mit den heutigen Mikrofonwerten
+  bauen und testen und ist damit gut parallelisierbar — wenn zwei Personen arbeiten, ist das der
+  natürliche zweite Strang.
+- M6 und M7 sind ebenfalls parallelisierbar. M9 ist bewusst nachgelagert: Der `NtfyAlertChannel`
+  aus M5 liefert dieselbe Funktion bei einem Bruchteil des Aufwands.
 
 ---
 
@@ -846,6 +1155,10 @@ einzigen Implementierung.
 | Überwachungsgerät fällt komplett aus | Ausfall bleibt unbemerkt | **Totmannschaltung (7.5)** — der einzige Schutz dagegen |
 | `SCHEDULE_EXACT_ALARM` ab Android 14 nicht gewährt | Karenzzeit-Alarm feuert im Doze verspätet | Onboarding fragt aktiv ab, `canScheduleExactAlarms()` wird geprüft und im Diagnose-Screen angezeigt |
 | ntfy-Topic-Name kompromittiert | Fremde können Alarme mitlesen/senden | Langes Zufalls-Topic, verschlüsselt gespeichert, Alarmtext ohne sensible Details, ggf. self-hosted |
+| **B-2**: `fallbackToDestructiveMigration` löscht Altbestand | Bisherige Aufnahmen unwiederbringlich weg | M-1 vor allem anderen; Migrationstest mit echtem Altbestand |
+| Drive-Sync erzeugt 48 Dateien/Tag statt einer | Ordner unbrauchbar | `DailyFileRegistry` + `files.list`-Vorabprüfung (8.4.4), eigener Testfall |
+| Naiver Roh-Upload frisst Mobilfunkvolumen | ~150 MB/Tag | 10-s-Aggregate, gzip, Änderungserkennung, Option „nur WLAN" (8.4.1) |
+| OAuth-Projekt bleibt im Status *Testing* | Refresh-Token läuft alle 7 Tage ab, Sync stirbt lautlos | Scope `drive.file` (keine Verifizierung nötig) + Publishing-Status *In production* |
 
 **Noch offene Entscheidungen:**
 
@@ -856,6 +1169,12 @@ einzigen Implementierung.
 3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
    Wiederholungen.
 4. **Push-Kanal für M5** — ntfy öffentlich oder self-hosted?
+5. **Drive-Aggregationsintervall** — Vorschlag 10 s (8.4.1). Feiner geht, kostet aber
+   überproportional Upload-Volumen.
+6. **Drive-Ordnerwahl** — reicht ein von der App angelegter Ordner (`drive.file`, keine
+   Google-Verifizierung), oder muss es zwingend ein beliebiger bestehender Ordner sein
+   (voller `drive`-Scope, jährliche CASA-Prüfung)? *Vorschlag: `drive.file`.*
+7. **Sollen die WAV-Aufnahmen ebenfalls nach Drive?** *Vorschlag: nein, nur Pegeldaten.*
 
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
@@ -864,11 +1183,17 @@ minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
 
 ## 14. Nächste Schritte
 
-1. **Lokalen Stand pushen** (`C:\Users\arthu\AndroidStudioProjects\Lrmprotokoll`), damit dieser Plan
-   gegen den vorhandenen Code gespiegelt werden kann. Solange das nicht geschehen ist, sind
-   Abschnitt 4 (Modulschnitt) und M1 als Vorschlag, nicht als Bestandsaufnahme zu lesen.
-2. **Phase 0** durchführen — ohne bestätigtes BLE-Profil ist M2 Spekulation.
-3. Die vier offenen Entscheidungen aus Abschnitt 13 klären.
+1. ~~Lokalen Stand pushen~~ ✅ erledigt (`main`, `c11dd2a`), Plan ist gespiegelt.
+2. **M-1: Bestand instandsetzen** — zuerst B-1 (Manifest-`package`, blockiert den Build) und
+   B-2 (Room-Migrationen, sonst gehen beim ersten Schema-Update alle bisherigen Aufnahmen
+   verloren). Unabhängig vom Bluetooth-Thema und sofort machbar.
+3. **M0: Protokoll-Discovery** am realen PCE-323 — ohne bestätigtes BLE-Profil ist M2
+   Spekulation.
+4. Die offenen Entscheidungen aus Abschnitt 13 klären, insbesondere Nr. 5–7 zum Drive-Sync.
+
+Der Drive-Sync (M7b) hängt **nicht** am Bluetooth-Pfad und ließe sich sofort nach M-1 mit den
+heutigen Mikrofonwerten bauen — sinnvoll, falls parallel gearbeitet werden soll oder das
+Messgerät noch nicht verfügbar ist.
 
 ---
 
@@ -890,3 +1215,12 @@ Alarmierung:
 - [Android: Berechtigung `SEND_SMS` (Play-Richtlinie zu eingeschränkten Berechtigungen)](https://support.google.com/googleplay/android-developer/answer/10208820)
 - [Android: `SCHEDULE_EXACT_ALARM` ab Android 13/14](https://developer.android.com/develop/background-work/services/alarms/schedule#exact-permission-declare)
 - [Android: Notification-Channels und DND-Durchbruch](https://developer.android.com/develop/ui/views/notifications/channels)
+
+Google Drive:
+
+- [Drive API — Dateien erstellen und aktualisieren](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
+- [Drive API — OAuth-Scopes (`drive.file` vs. `drive`)](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+- [Google OAuth — Verifizierung und eingeschränkte Scopes](https://support.google.com/cloud/answer/13463073)
+- [OAuth: Ablauf von Refresh-Tokens im Publishing-Status *Testing*](https://developers.google.com/identity/protocols/oauth2#expiration)
+- [Android: Autorisierung mit `AuthorizationClient`](https://developers.google.com/identity/authorization/android)
+- [WorkManager: Periodische Arbeit](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work#schedule_periodic_work)
