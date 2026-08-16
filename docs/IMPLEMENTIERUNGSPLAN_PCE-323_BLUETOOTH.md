@@ -1,6 +1,6 @@
 # Implementierungsplan: PCE-323 dBA-Empfang über Bluetooth
 
-Stand: 2026-08-16 · Zielplattform: Android 8.0 (API 26) – Android 16 (API 36)
+Stand: 2026-08-16 · **minSdk 31 (Android 12)** · targetSdk 36 (Android 16)
 
 ---
 
@@ -9,10 +9,28 @@ Stand: 2026-08-16 · Zielplattform: Android 8.0 (API 26) – Android 16 (API 36)
 Das Repository `arthurschaab-bit/Noiseprotocol_Android` ist zum Zeitpunkt dieser Analyse
 **vollständig leer** — keine Commits, keine Branches, kein Quellcode auf `origin`.
 
-Konsequenz: Es gibt keine bestehende Architektur, die erweitert werden könnte. Dieser Plan
-beschreibt daher den Aufbau der App **von Grund auf**, mit dem PCE-323-Bluetooth-Anbindung als
-fachlichem Kern. Sollte lokal oder anderswo bereits ein Stand existieren, muss dieser Plan gegen
-den tatsächlichen Code gespiegelt werden — insbesondere Abschnitt 4 (Zielarchitektur).
+Ein bestehender Stand liegt laut Auftraggeber lokal unter
+`C:\Users\arthu\AndroidStudioProjects\Lrmprotokoll`, ist aber **noch nicht gepusht** und konnte
+daher nicht analysiert werden.
+
+> **Offen:** Sobald der lokale Stand auf `origin` liegt, ist dieser Plan gegen den tatsächlichen
+> Code zu spiegeln — insbesondere Abschnitt 4 (Zielarchitektur). Bis dahin beschreibt er den
+> Aufbau von Grund auf.
+
+### 0.1 Getroffene Entscheidungen
+
+| # | Frage | Entscheidung |
+|---|-------|--------------|
+| 1 | Vertriebsweg | **Vertagt.** Bis auf Weiteres interne Verteilung (Sideload). Die `AlertChannel`-Abstraktion hält die Play-Store-Option offen — siehe 7.5 |
+| 2 | Karenzzeit bis Alarm | **60 s** (Default, im UI einstellbar 10 s – 15 min) |
+| 3 | Alarmierung des Zweitgeräts | **Mehrkanal-Kaskade** statt SMS allein — siehe Abschnitt 7 |
+| 4 | Minimum-SDK | **API 31 (Android 12)** |
+
+**Folgen von minSdk 31:** Die Legacy-Bluetooth-Pfade entfallen ersatzlos — kein
+`ACCESS_FINE_LOCATION` für BLE-Scans, keine `maxSdkVersion`-Altlasten im Manifest, nur noch
+`BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT`. Das vereinfacht das Onboarding erheblich. Ebenfalls
+gesetzt verfügbar: `BluetoothLeScanner` mit `ScanSettings.CALLBACK_TYPE_FIRST_MATCH`,
+`PendingIntent.FLAG_IMMUTABLE` als Pflicht, `SplashScreen`-API, Material You.
 
 ---
 
@@ -27,8 +45,9 @@ den tatsächlichen Code gespiegelt werden — insbesondere Abschnitt 4 (Zielarch
 | F-3 | Dauerhafte Aufzeichnung im Hintergrund (Foreground Service), auch bei gesperrtem Display |
 | F-4 | Persistente Speicherung der Messreihe inkl. Lücken-/Ausfallmarkierung |
 | F-5 | Ableitung akustischer Kennwerte: LAeq, LAFmax, LAFmin, Überschreitungsdauer je Schwelle |
-| F-6 | **SMS-Alarm bei Verbindungsabbruch** an eine oder mehrere hinterlegte Rufnummern |
-| F-7 | Automatischer Wiederverbindungsversuch mit Backoff, Entwarnungs-SMS bei Wiederkehr (optional) |
+| F-6 | **Alarm bei Verbindungsabbruch** — per SMS an hinterlegte Rufnummern **und** per Push an ein zweites Android-Gerät |
+| F-7 | Automatischer Wiederverbindungsversuch mit Backoff, optionale Entwarnung bei Wiederkehr |
+| F-9 | **Totmannschaltung**: Alarm auch dann, wenn das Überwachungsgerät selbst ausfällt |
 | F-8 | Export (CSV/PDF) der Messreihe inkl. Ausfallprotokoll |
 
 ### 1.2 Nichtfunktionale Anforderungen (Schwerpunkt des Auftrags)
@@ -37,8 +56,8 @@ den tatsächlichen Code gespiegelt werden — insbesondere Abschnitt 4 (Zielarch
 |----|-------------|
 | N-1 | **Robuste Verbindung**: übersteht Funklöcher, Bluetooth-Aus/Ein, Doze, Prozess-Tod, Reboot |
 | N-2 | **Sichere Verbindung**: Bindung an genau ein bekanntes Gerät, Verschlüsselung wo unterstützt, Plausibilisierung der Nutzdaten gegen Spoofing |
-| N-3 | Keine Fehlalarme: Alarm erst nach definierter Karenzzeit und mehreren fehlgeschlagenen Reconnects |
-| N-4 | Keine SMS-Stürme: Cooldown, Deduplizierung, Zustandsspeicherung über Prozessgrenzen hinweg |
+| N-3 | Keine Fehlalarme: Alarm erst nach **60 s Karenzzeit** und mehreren fehlgeschlagenen Reconnects |
+| N-4 | Keine Alarmstürme: Cooldown, Deduplizierung, Zustandsspeicherung über Prozessgrenzen hinweg |
 | N-5 | Alarmzustellung nachweisbar: `sentIntent`/`deliveryIntent`, Retry, Persistenz der Alarm-Queue |
 | N-6 | Messdaten und Rufnummern verschlüsselt at rest |
 
@@ -228,7 +247,9 @@ PCE-323 ──BLE Notify──▶ GattCallback ──▶ Ringpuffer ──▶ Fr
                             │                               │
                      Leq/Max/Min-Aggregation          AlarmCoordinator
                                                             │
-                                                    SmsDispatcher ──▶ SmsManager
+                                            ┌───────────────┼───────────────┐
+                                            ▼               ▼               ▼
+                                     SmsAlertChannel  PushAlertChannel  LocalAlertChannel
 ```
 
 ---
@@ -366,7 +387,20 @@ jedem. Sicherheit muss deshalb überwiegend auf App-Seite hergestellt werden.
 
 ---
 
-## 7. Ausfallerkennung und SMS-Alarm (F-6)
+## 7. Ausfallerkennung und Alarmierung (F-6)
+
+### 7.0 Die Lücke, die kein Alarmkanal schließt
+
+Jeder Alarm ist eine **ausgehende** Nachricht des Überwachungsgeräts. Damit deckt kein
+Alarmkanal — SMS wie Push — den wahrscheinlichsten Ausfall im Dauerbetrieb ab: dass das
+Überwachungsgerät **selbst** stirbt. Akku leer, ROM killt den Foreground Service, App gecrasht,
+Gerät neu gestartet und Autostart blockiert. Dann kommt schlicht gar nichts, und der Ausfall
+bleibt tagelang unbemerkt.
+
+Die einzige Konstruktion, die das abfängt, ist eine **Totmannschaltung**: Das Überwachungsgerät
+sendet regelmäßig ein Lebenszeichen; bleibt es aus, alarmiert die *Gegenseite* von sich aus.
+Details in 7.5. Diese Maßnahme bringt mehr Zuverlässigkeitsgewinn als jede Optimierung der
+Alarmkanäle und sollte deshalb **nicht als Ausbaustufe, sondern als Teil von M5** umgesetzt werden.
 
 ### 7.1 Ausfall ist nicht gleich Ausfall
 
@@ -394,16 +428,21 @@ Karenzzeit t_grace (Default 60 s, einstellbar 10 s – 15 min)
 Alarm ausgelöst ⇒ AlarmEvent(id, reason, since) in Room persistieren
      │
      ▼
-SMS-Versand an alle konfigurierten Empfänger
+Versand über alle aktivierten AlertChannels (parallel, nicht sequenziell)
      │
      ▼
-Cooldown t_cool (Default 30 min): kein weiterer Alarm-SMS für denselben Ausfall.
-Optional Eskalation: wenn nach t_esc (Default 60 min) immer noch getrennt ⇒ Wiederholungs-SMS,
+Cooldown t_cool (Default 30 min): kein weiterer Alarm für denselben Ausfall.
+Optional Eskalation: wenn nach t_esc (Default 60 min) immer noch getrennt ⇒ Wiederholung,
 maximal n_max Wiederholungen (Default 3).
      │
      ▼
-Verbindung kehrt zurück ⇒ optionale Entwarnungs-SMS, AlarmEvent schließen
+Verbindung kehrt zurück ⇒ optionale Entwarnung, AlarmEvent schließen
 ```
+
+**Kanäle parallel, nicht als Fallback-Kette.** Naheliegend wäre „erst Push, bei Fehlschlag SMS".
+Das ist hier falsch: Ein Push-Versand gilt als erfolgreich, sobald FCM ihn *angenommen* hat — ob er
+je ankommt, weiß die App nicht. Eine Fallback-Kette würde in genau dem Fall stumm bleiben, in dem
+sie gebraucht wird. Zwei parallele Alarme sind das kleinere Übel als ein verpasster.
 
 Die Karenzzeit wird über `AlarmManager.setExactAndAllowWhileIdle()` gestellt, **nicht** über einen
 Coroutine-`delay()`. Ein `delay()` im Doze-Modus feuert unter Umständen erst Stunden später — genau
@@ -451,25 +490,169 @@ class SmsDispatcher @Inject constructor(
 - **Testfunktion** in den Einstellungen: „Test-SMS senden“ — verifiziert Berechtigung, SIM-Auswahl
   und Rufnummer, bevor es ernst wird.
 
-### 7.4 ⚠ Google-Play-Restriktion für `SEND_SMS`
+### 7.4 Alarmierung des Zweitgeräts über Push
+
+Anforderung: ein zweites Android-Gerät im selben Google-Konto soll alarmiert werden.
+
+**Warum SMS allein nicht reicht — und Push allein auch nicht.** Die beiden Kanäle scheitern an
+*unterschiedlichen* Ausfällen und ergänzen sich deshalb:
+
+| Situation auf dem Überwachungsgerät | SMS | Push |
+|---|---|---|
+| Kein Internet (WLAN weg) | ✅ | ❌ |
+| Keine SIM / kein Mobilfunkempfang | ❌ | ✅ |
+| Beides vorhanden | ✅ | ✅ |
+| Gerät komplett tot | ❌ | ❌ → nur Totmannschaltung (7.5) |
+
+#### Kanalvergleich
+
+| Kanal | Aufwand | Backend | DND-Durchbruch | Bewertung |
+|---|---|---|---|---|
+| **ntfy** | ~0,5 d | nein¹ | ja (Priorität 5) | **Empfehlung kurzfristig** |
+| **FCM, eigene App** | 3–4 d | ja² | ja (`CATEGORY_ALARM`) | **Empfehlung als Zielbild** |
+| Telegram-Bot | ~0,5 d | nein | eingeschränkt | Alarmton nicht zuverlässig steuerbar |
+| E-Mail (SMTP) | ~0,5 d | nein | nein | als Beleg brauchbar, als Alarm untauglich |
+| Firestore-Listener | 2 d | ja | ja | **nicht empfohlen**, siehe unten |
+
+¹ öffentlicher Server `ntfy.sh` oder self-hosted · ² Cloud Function als Relay zwingend
+
+#### Option A — ntfy (Empfehlung für den ersten Wurf)
+
+Ein einziger HTTP-POST, kein SDK, kein Firebase-Projekt, keine Kontoverwaltung:
+
+```kotlin
+class NtfyAlertChannel(private val client: OkHttpClient, private val topic: String) : AlertChannel {
+    override suspend fun send(alert: Alert): Result<Unit> = runCatching {
+        val request = Request.Builder()
+            .url("https://ntfy.sh/$topic")
+            .post(alert.message.toRequestBody())
+            .header("Title", "Lärmprotokoll: Verbindung verloren")
+            .header("Priority", "5")          // durchbricht Do-Not-Disturb
+            .header("Tags", "warning")
+            .build()
+        client.newCall(request).await().use { check(it.isSuccessful) { "HTTP ${it.code}" } }
+    }
+}
+```
+
+Auf dem Zweitgerät nur die ntfy-App installieren und das Topic abonnieren — fertig.
+
+> **Sicherheitshinweis:** Beim öffentlichen Server *ist der Topic-Name die einzige Zugangskontrolle*.
+> Er muss zufällig und lang sein (z. B. 32 Zeichen aus `SecureRandom`), darf nicht im Klartext ins
+> Repo und gehört in den verschlüsselten DataStore. Wer Alarme mit Standort- oder Betriebsbezug
+> versendet, sollte ntfy selbst hosten oder auf Option B wechseln. Der Alarmtext selbst sollte
+> ohnehin minimal bleiben („Verbindung verloren seit HH:MM") und keine Messwerte oder Orte enthalten.
+
+#### Option B — FCM mit Google Sign-In (Zielbild)
+
+Hier zahlt sich das gemeinsame Google-Konto aus: Beide Geräte melden sich per Google Sign-In an,
+registrieren ihr FCM-Token unter derselben Firebase-UID, und das Überwachungsgerät alarmiert
+automatisch **alle anderen Geräte des Kontos**. Kein manuelles Koppeln, keine Rufnummern, keine
+Topic-Geheimnisse.
+
+```
+Überwachungsgerät ──▶ Firestore: alerts/{uid}/{alertId}
+                              │  onCreate-Trigger
+                              ▼
+                        Cloud Function
+                              │  liest alle Tokens unter devices/{uid}/
+                              ▼
+                       FCM (high priority) ──▶ Zweitgerät(e)
+```
+
+Zwei Haken, die vorab bekannt sein müssen:
+
+1. **Gerät-zu-Gerät geht nicht direkt.** FCM verlangt für den Versand einen Server-Key. Läge der im
+   APK, könnte jeder, der es dekompiliert, beliebige Alarme an das Konto schicken. Ein Relay
+   (Cloud Function oder Cloud Run) ist also nicht optional, sondern Sicherheitsanforderung.
+2. **Cloud Functions setzen den Blaze-Tarif voraus.** Das kostenlose Kontingent deckt diesen
+   Anwendungsfall um Größenordnungen, aber ein Billing-Konto muss hinterlegt sein.
+
+Umsetzungsdetails: Nachricht als **Data-Message mit `priority: high`** senden (nicht als
+Notification-Message), damit die App die Darstellung kontrolliert. Auf dem Empfänger ein
+Notification-Channel mit `IMPORTANCE_HIGH`, `setCategory(CATEGORY_ALARM)`, eigenem Alarmton und
+`setBypassDnd(true)` — letzteres erfordert die einmalige Freigabe über
+`ACCESS_NOTIFICATION_POLICY`. Ein Alarm, der nachts um drei lautlos ankommt, ist wertlos.
+
+#### Warum kein Firestore-Listener auf dem Zweitgerät
+
+Naheliegend, aber schlechter als FCM: Ein Snapshot-Listener braucht auf dem *Empfangsgerät* einen
+eigenen dauerhaft laufenden Foreground Service — und hat damit exakt dasselbe ROM-Kill- und
+Doze-Problem wie das Überwachungsgerät. FCM nutzt dagegen die ohnehin systemweit bestehende
+Play-Services-Verbindung, an die keine App-Lösung heranreicht. Ein Listener wäre ein zweiter
+Single Point of Failure statt einer Absicherung.
+
+### 7.5 Totmannschaltung (Heartbeat)
+
+Deckt den in 7.0 beschriebenen Totalausfall des Überwachungsgeräts ab.
+
+**Mechanik:** Ein WorkManager-Job sendet alle 5 Minuten ein Lebenszeichen, solange die Überwachung
+aktiv ist. Bleibt es aus, schlägt die Gegenseite Alarm — ohne dass das Überwachungsgerät noch
+irgendetwas tun müsste.
+
+**Variante 1 — healthchecks.io (Empfehlung).** Ein Dienst, der exakt dafür gebaut ist. Aufwand in
+der App: ein `GET` auf eine Ping-URL. Bleibt der Ping länger als das konfigurierte Fenster aus
+(z. B. 15 min), benachrichtigt der Dienst per E-Mail, Push-App oder Webhook. Kostenloser Tarif
+reicht; self-hosting möglich.
+
+```kotlin
+@HiltWorker
+class HeartbeatWorker(...) : CoroutineWorker(...) {
+    override suspend fun doWork(): Result {
+        if (!settings.monitoringActive.first()) return Result.success()
+        return runCatching { client.newCall(Request.Builder().url(pingUrl).build()).await() }
+            .fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+    }
+}
+// PeriodicWorkRequestBuilder<HeartbeatWorker>(5, MINUTES) — Mindestintervall bei WorkManager ist 15 min,
+// daher zusätzlich AlarmManager-getriebener Tick, wenn 5 min wirklich nötig sind.
+```
+
+**Variante 2 — im eigenen Backend.** Wenn Option B (Firebase) ohnehin gebaut wird: Das
+Überwachungsgerät schreibt `devices/{uid}/monitor.lastHeartbeat`. Eine zeitgesteuerte Cloud
+Function (Cloud Scheduler, alle 5 min) prüft das Feld und pusht bei Überalterung an die anderen
+Geräte des Kontos. Kein zusätzlicher Fremddienst, aber Voraussetzung ist der Blaze-Tarif.
+
+> **Wichtiges Detail:** Der Heartbeat darf **nicht** vom BLE-Zustand abhängen. Er bestätigt „App
+> und Gerät leben", nicht „Messgerät verbunden". Sonst würde ein normaler BLE-Ausfall zusätzlich
+> einen Heartbeat-Alarm auslösen und beide Signale wären nicht mehr unterscheidbar.
+
+### 7.6 ⚠ Google-Play-Restriktion für `SEND_SMS`
 
 `SEND_SMS` ist eine von Google eingeschränkte Berechtigung. Eine App, deren Kernfunktion nicht
 SMS-Verwaltung ist (also genau unser Fall), wird bei Veröffentlichung im Play Store **abgelehnt**,
 sofern nicht eine Ausnahmegenehmigung über das Declaration Form erteilt wird — die für diesen
 Anwendungsfall erfahrungsgemäß selten gewährt wird.
 
-Handlungsoptionen, **Entscheidung wird benötigt**:
+**Status: bewusst vertagt** (Entscheidung 1 in 0.1). Bis auf Weiteres wird intern verteilt
+(Sideload), damit ist der direkte `SmsManager`-Versand uneingeschränkt möglich.
 
-| Option | Bewertung |
-|--------|-----------|
-| **A: Interne Verteilung** (APK-Sideload, MDM, Play Private/Interne Testschiene) | Direkter `SmsManager`-Versand uneingeschränkt möglich. **Empfehlung, wenn die App für den Eigenbedarf ist.** |
-| **B: SMS-Gateway** (Twilio, sms77/seven, Vonage) | Play-konform, funktioniert auch ohne SIM im Messgerät-Handy — braucht aber Internet im Moment des Ausfalls und einen serverseitigen Schlüssel. Kein API-Key darf in der App liegen ⇒ eigener Relay-Endpunkt nötig. |
-| **C: Fallback-Kaskade** | Primär SMS (falls Berechtigung vorhanden), sekundär Push/E-Mail/Gateway. Höchste Zuverlässigkeit, höchster Aufwand. |
+Damit diese Entscheidung reversibel bleibt, wird die Alarmierung von Anfang an hinter eine
+Abstraktion gelegt:
 
-Die Architektur bildet das ab: `AlertChannel` als Interface mit den Implementierungen
-`SmsAlertChannel`, `GatewayAlertChannel`, `NotificationAlertChannel`. Der `AlarmCoordinator`
-arbeitet eine priorisierte Kanalliste ab. Damit ist die Entscheidung reversibel und blockiert die
-Umsetzung nicht.
+```kotlin
+interface AlertChannel {
+    val id: ChannelId
+    val isAvailable: Boolean          // Berechtigung / Konfiguration vorhanden?
+    suspend fun send(alert: Alert): Result<Unit>
+}
+```
+
+Implementierungen: `SmsAlertChannel`, `NtfyAlertChannel`, `FcmAlertChannel`,
+`LocalNotificationAlertChannel`, optional `SmsGatewayAlertChannel`. Der `AlarmCoordinator` kennt
+nur das Interface und versendet über alle aktivierten Kanäle parallel.
+
+Falls später doch eine Play-Veröffentlichung ansteht, ergibt sich daraus ein reiner
+Konfigurationswechsel:
+
+| Weg | Konsequenz |
+|-----|-----------|
+| Interne Verteilung (aktuell) | `SEND_SMS` unproblematisch, alle Kanäle nutzbar |
+| Play Store | `SmsAlertChannel` aus dem Release-Flavor entfernen (Manifest-Placeholder), Alarmierung läuft über ntfy/FCM weiter — **kein Umbau der Alarmlogik nötig** |
+| Play Store + SMS zwingend | SMS-Gateway (Twilio, seven.io) über eigenen Relay-Endpunkt; API-Key darf nie im APK liegen |
+
+Empfehlung für die Umsetzungsreihenfolge: **ntfy zuerst**, weil es in M5 fast nichts kostet und
+sofort den Play-tauglichen Pfad absichert; SMS parallel dazu für den Offline-Fall.
 
 ---
 
@@ -546,31 +729,44 @@ Verbindungsstatus wird nie nur farblich kodiert (Barrierefreiheit) — immer zus
 
 ## 10. Berechtigungen und Manifest
 
+Dank **minSdk 31** entfallen sämtliche Legacy-Bluetooth-Berechtigungen:
+
 ```xml
-<!-- Bluetooth ab Android 12 -->
+<!-- Bluetooth (ab API 31 die einzigen nötigen) -->
 <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
     android:usesPermissionFlags="neverForLocation" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
-<!-- Bluetooth bis Android 11 -->
-<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+<!-- Alarmierung -->
 <uses-permission android:name="android.permission.SEND_SMS" />
-<uses-permission android:name="android.permission.READ_PHONE_STATE" />   <!-- Dual-SIM -->
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />        <!-- Dual-SIM -->
+<uses-permission android:name="android.permission.INTERNET" />                <!-- ntfy / FCM -->
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" /><!-- DND-Durchbruch -->
 
 <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 ```
 
-`neverForLocation` auf `BLUETOOTH_SCAN` ist wichtig — sonst verlangt Android 12+ zusätzlich die
-Standortberechtigung, was die Onboarding-Abbruchquote deutlich erhöht.
+Anmerkungen:
+
+- `neverForLocation` auf `BLUETOOTH_SCAN` verhindert, dass Android zusätzlich die
+  Standortberechtigung verlangt. Bedingung: Die App darf Scan-Ergebnisse **nicht** zur
+  Standortbestimmung nutzen — trifft hier zu.
+- `SCHEDULE_EXACT_ALARM` wird für die Karenzzeit aus 7.2 benötigt. Ab Android 13 muss der Nutzer
+  sie über `ACTION_REQUEST_SCHEDULE_EXACT_ALARM` freigeben; ab Android 14 wird sie neu installierten
+  Apps standardmäßig **nicht** mehr gewährt. Das Onboarding muss das aktiv abfragen und den Zustand
+  über `AlarmManager.canScheduleExactAlarms()` prüfen, sonst verzögert Doze den Alarm unbemerkt.
+- `POST_NOTIFICATIONS` ist ab Android 13 Laufzeitberechtigung. Wird sie verweigert, ist der
+  Foreground Service zwar weiterhin erlaubt, aber die Statusanzeige unsichtbar — im Onboarding
+  erklären, nicht kommentarlos abfragen.
+- **Keine** `WAKE_LOCK`-Deklaration nötig, solange kein dauerhafter WakeLock genutzt wird (5.4).
 
 ---
 
@@ -603,6 +799,11 @@ Standortberechtigung, was die Onboarding-Abbruchquote deutlich erhöht.
 | Reboot | Überwachung nimmt automatisch wieder auf |
 | 24-h-Dauerlauf | Kein Speicherleck, keine `status 133`-Kaskade, lückenlose Messreihe |
 | Gerät auf C-Bewertung umschalten | Warnung im UI, keine dBC-Werte als dBA gespeichert |
+| WLAN aus, Mobilfunk an | SMS kommt an, Push scheitert stillschweigend — kein Doppelalarm nach Wiederkehr |
+| Flugmodus + BLE-Abbruch | Beide Kanäle scheitern, Alarm bleibt in der Queue und wird nachgeliefert |
+| Überwachungsgerät hart abschalten | **Totmannschaltung** meldet sich innerhalb des Heartbeat-Fensters |
+| Zweitgerät im Do-Not-Disturb-Modus | Alarm wird hörbar zugestellt (Prio 5 / `CATEGORY_ALARM`) |
+| `SCHEDULE_EXACT_ALARM` entzogen | Diagnose-Screen weist es aus, Onboarding fordert erneut an |
 
 ---
 
@@ -615,15 +816,19 @@ Standortberechtigung, was die Onboarding-Abbruchquote deutlich erhöht.
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
 | **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
-| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `SmsDispatcher`, Zustellnachweis, Retry | 3 d |
+| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `SmsAlertChannel` mit Zustellnachweis + Retry, `NtfyAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** | 4 d |
 | **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
 | **M8** | Härtung | Chaos-Checkliste, 24-h-Dauerlauf, Herstellerspezifika, Release-Build | 2–3 d |
+| **M9** | *(optional)* FCM-Zielbild | Google Sign-In, Firestore, Cloud-Function-Relay, `FcmAlertChannel`, serverseitiger Heartbeat | 3–4 d |
 
-**Gesamt ca. 20–26 Personentage.** M0 ist echte Voraussetzung für M2 — ohne bestätigtes Profil
-sollte M2 nicht begonnen werden.
+**Gesamt ca. 21–27 Personentage** (M0–M8), mit M9 rund 25–31. M0 ist echte Voraussetzung für M2 —
+ohne bestätigtes Profil sollte M2 nicht begonnen werden.
 
-**Kritischer Pfad:** M0 → M2 → M3 → M5. M4, M6 und M7 sind parallelisierbar.
+**Kritischer Pfad:** M0 → M2 → M3 → M5. M4, M6 und M7 sind parallelisierbar. M9 ist bewusst
+nachgelagert: Der `NtfyAlertChannel` aus M5 liefert dieselbe Funktion bei einem Bruchteil des
+Aufwands, und die `AlertChannel`-Abstraktion macht den späteren Wechsel zu einem Austausch einer
+einzigen Implementierung.
 
 ---
 
@@ -638,19 +843,36 @@ sollte M2 nicht begonnen werden.
 | BLE-Modul unterstützt kein Bonding | Unverschlüsselter Link | Ehrliche Kennzeichnung im UI + Plausibilisierung auf App-Ebene |
 | Gerät steht auf C-Bewertung | Falsche dBA-Werte im Protokoll | Flag-Auswertung, Warnbanner, optionales Auto-Umschalten |
 | Meter schaltet sich per Auto-Power-Off ab | Dauerüberwachung endet | Auto-Power-Off am Gerät deaktivieren, Netzteilbetrieb dokumentieren |
+| Überwachungsgerät fällt komplett aus | Ausfall bleibt unbemerkt | **Totmannschaltung (7.5)** — der einzige Schutz dagegen |
+| `SCHEDULE_EXACT_ALARM` ab Android 14 nicht gewährt | Karenzzeit-Alarm feuert im Doze verspätet | Onboarding fragt aktiv ab, `canScheduleExactAlarms()` wird geprüft und im Diagnose-Screen angezeigt |
+| ntfy-Topic-Name kompromittiert | Fremde können Alarme mitlesen/senden | Langes Zufalls-Topic, verschlüsselt gespeichert, Alarmtext ohne sensible Details, ggf. self-hosted |
 
-**Entscheidungen, die vom Auftraggeber benötigt werden:**
+**Noch offene Entscheidungen:**
 
-1. **Vertriebsweg** — Play Store oder interne Verteilung? Bestimmt Option A/B/C aus 7.4.
-2. **Alarmparameter** — Default-Karenzzeit, Cooldown, Eskalation, Anzahl Empfänger.
-3. **Entwarnungs-SMS** — gewünscht oder unerwünscht (verdoppelt das SMS-Aufkommen)?
-4. **Aufbewahrungsdauer** der Rohmesswerte und ob die Datenbank verschlüsselt werden soll.
-5. **Minimum-SDK** — API 26 (breite Abdeckung, mehr Legacy-Pfade) oder API 31 (deutlich
-   einfacheres Bluetooth-Permission-Handling).
+1. **Entwarnungsmeldung bei Wiederkehr** — gewünscht oder nicht? (verdoppelt das Meldungsaufkommen;
+   bei Push unkritisch, bei SMS spürbar). *Vorschlag: bei Push an, bei SMS aus.*
+2. **Aufbewahrungsdauer** der Rohmesswerte (Vorschlag: 90 Tage Rohwerte, danach Minutenaggregate)
+   und ob die Datenbank per SQLCipher verschlüsselt wird.
+3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
+   Wiederholungen.
+4. **Push-Kanal für M5** — ntfy öffentlich oder self-hosted?
+
+**Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
+minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
 
 ---
 
-## 14. Quellen
+## 14. Nächste Schritte
+
+1. **Lokalen Stand pushen** (`C:\Users\arthu\AndroidStudioProjects\Lrmprotokoll`), damit dieser Plan
+   gegen den vorhandenen Code gespiegelt werden kann. Solange das nicht geschehen ist, sind
+   Abschnitt 4 (Modulschnitt) und M1 als Vorschlag, nicht als Bestandsaufnahme zu lesen.
+2. **Phase 0** durchführen — ohne bestätigtes BLE-Profil ist M2 Spekulation.
+3. Die vier offenen Entscheidungen aus Abschnitt 13 klären.
+
+---
+
+## 15. Quellen
 
 - [PCE-323 Produktseite (PCE Instruments)](https://www.pce-instruments.com/deutsch/messtechnik/messgeraete-fuer-alle-parameter/schallpegelmessgeraet-schallpegelmesser-pce-instruments-schallpegelmessgeraet-pce-323-det_5990588.htm)
 - [PCE-323 Technische Daten](https://www.warensortiment.de/technische-daten/bluetooth-schallpegelmessgeraet-pce-323.htm)
@@ -659,3 +881,12 @@ sollte M2 nicht begonnen werden.
 - [libsigrok `src/hardware/pce-322a/protocol.c`](https://raw.githubusercontent.com/sigrokproject/libsigrok/master/src/hardware/pce-322a/protocol.c)
 - [PCE-323 App im Google Play Store](https://play.google.com/store/apps/details?id=com.pceinstruments.pce323)
 - [PCE-322A Bedienungsanleitung](https://www.pce-instruments.com/api/getartfile?_fnr=1045398)
+
+Alarmierung:
+
+- [ntfy — Publish/Subscribe Notifications](https://docs.ntfy.sh/publish/)
+- [healthchecks.io — Dead Man's Switch Monitoring](https://healthchecks.io/docs/)
+- [Firebase Cloud Messaging: Nachrichtenpriorität und Lifetime](https://firebase.google.com/docs/cloud-messaging/concept-options)
+- [Android: Berechtigung `SEND_SMS` (Play-Richtlinie zu eingeschränkten Berechtigungen)](https://support.google.com/googleplay/android-developer/answer/10208820)
+- [Android: `SCHEDULE_EXACT_ALARM` ab Android 13/14](https://developer.android.com/develop/background-work/services/alarms/schedule#exact-permission-declare)
+- [Android: Notification-Channels und DND-Durchbruch](https://developer.android.com/develop/ui/views/notifications/channels)
