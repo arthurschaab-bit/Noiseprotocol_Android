@@ -130,5 +130,6 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_UMSETZUNG.md`](docs/PROMPT_UMSETZUNG.md) | Prompt-Vorlage für Umsetzungs-Sessions, ein Meilenstein pro Session |
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
 | [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Aufträge für M1 (erledigt) und B-11 (offen) |
+| [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | **Auftrag für M2** — BLE-Transport, Decoder-Umbau, Kopplung |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
