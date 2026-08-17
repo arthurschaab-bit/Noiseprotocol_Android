@@ -166,3 +166,39 @@ Beginn von M2 durch eine Version ersetzt werden, die das oben dokumentierte 23-B
 decodiert. `meter/MeterCommand.kt` (ebenfalls M1) bildet die PCE-322A-Kommandotabelle ab, die
 durch diese Aufzeichnung ebenfalls nicht bestätigt ist. Beides ist bewusst **nicht** Teil
 dieses Dokuments — M0 liefert die Fakten, die Umsetzung im Code ist eine eigene Entscheidung.
+
+## 9. Folgeaufzeichnung: Bereich, Fast/Slow, A/C isoliert getestet (2026-08-17, unbestätigt)
+
+Reaktion auf Abschnitt 7: vier nRF-Connect-Logs vom selben Tag, in denen der Owner gezielt und
+möglichst isoliert einzelne Einstellungen am Gerät umgeschaltet hat (Messbereich, Fast/Slow,
+A/C), während der Notify-Strom mitlief. Ausgewertet über ein Skript, das bei jedem der drei
+bislang konstanten Bytes (Header-Offset 7, Footer-Offset 19, Trailer-Offset 20) Änderungen
+gegen Zeitstempel und Pegelverlauf abgleicht — nicht durch manuelles Duchsehen.
+
+**Ergebnis: alle drei Positionen bewegen sich, jede isoliert von den anderen beiden.**
+
+| Offset | Byte-Werte | Beleg | Verdacht |
+|---|---|---|---|
+| 7 (im Header) | `0x00`–`0x03` | sauberer Rundlauf 0→1→2→3→0… beim wiederholten Betätigen einer Taste, dreimal reproduziert; Pegel macht dabei unphysikalische Sprünge (Bereichswechsel-Signatur) | **Messbereich** |
+| 19 (2. Footer-Byte) | `0x0F`/`0x10` | im gezielten Fast/Slow-Test mehrfacher sauberer Wechsel, jeweils mit Pegelsprung (Detektor-Zeitkonstante ändert sich); am Ende 13 s stabil auf `0x10` | **Fast/Slow** |
+| 20 (1. Trailer-Byte) | `0x2C`/`0x2D` | im gezielten A/C-Test sauberer Wechsel, während Bereich und Fast/Slow unverändert blieben; am Ende 33 s stabil auf `0x2C` | **A/C-Bewertung** |
+
+Alle anderen 20 der 23 Frame-Bytes blieben über die gesamte Aufzeichnung (~3.900 Frames aus
+fünf Verbindungen) absolut konstant.
+
+**Was damit weiterhin offen ist — Byte-Position ≠ Werte-Zuordnung:**
+
+- Welcher der vier Bereichs-Werte (`0x00`–`0x03`) welchem tatsächlichen Bereich (30–130 /
+  30–80 / 50–100 / 80–130 dB) entspricht, ist aus den Logs allein nicht ablesbar — dafür
+  müsste der Bildschirm des Geräts bei jedem Tastendruck mitprotokolliert werden.
+- Ob `0x0F`/`0x2C` (der Ausgangszustand in **jeder** bisherigen Aufzeichnung inklusive der
+  allerersten M0-Aufnahme, vor jedem gezielten Umschalten) tatsächlich Fast/A ist oder Slow/C,
+  ist eine Annahme, keine Bestätigung.
+- **Hold** wurde in keinem der vier Logs isoliert getestet — kein Byte zeigt ein Verhalten,
+  das sich davon unterscheiden ließe.
+
+Der Code (`Pce323Profile.kt`, `Pce323FrameDecoder.kt`) setzt seit dieser Aufzeichnung eine
+konkrete Annahme für die Werte-Zuordnung um (0x00→30–130 dB, 0x0F→Fast, 0x2C→A, jeweils naheliegendste Deutung des Ausgangszustands) und markiert sie in der App
+(`MeterScreen`) ausdrücklich als unbestätigt, damit sie am realen Gerät gegengeprüft werden
+kann. Bis eine Rückmeldung vom Owner vorliegt, gilt sie **nicht** als gesichert — insbesondere
+darf der Pegel weiterhin nirgends als „dBA" beschriftet werden.
