@@ -199,4 +199,51 @@ class Pce323FrameDecoderTest {
         assertEquals(null, frame.holdMax)
         assertEquals(null, frame.holdMin)
     }
+
+    @Test
+    fun resetVerwirftAngefangenesFrameUndVerhindertKuenstlicheDecodeErrors() {
+        val decoder = Pce323FrameDecoder()
+
+        // Verbindungsabbruch mitten im Frame: die ersten 20 Byte sind angekommen, die
+        // restlichen 3 nicht - genau der Regelfall bei Default-MTU.
+        val angefangen = buildFrame(50.0f).copyOfRange(0, 20)
+        assertEquals(0, decoder.feed(angefangen).size)
+
+        decoder.reset()
+
+        // Nach dem Reconnect beginnt ein sauberer Strom. Ohne reset() haette der alte
+        // Teilframe hier einen verworfenen Kandidaten und damit einen Decode-Fehler erzeugt.
+        val frames = decoder.feed(buildFrame(48.0f))
+        assertEquals(1, frames.size)
+        assertEquals(48.0, frames[0].level, 0.001)
+        assertEquals(0, decoder.decodeErrors)
+    }
+
+    @Test
+    fun resetSetztDenPegelvergleichZurueckSodassKeinFalscherSprungGemeldetWird() {
+        val decoder = Pce323FrameDecoder()
+
+        assertEquals(30.0, decoder.feed(buildFrame(30.0f))[0].level, 0.001)
+        decoder.reset()
+
+        // 100 dB liegen mehr als 40 dB ueber dem letzten Wert VOR dem Abbruch. Nach dem
+        // Reconnect ist das kein Sprung im Signal, sondern nur eine Luecke - largeJump
+        // darf deshalb nicht gesetzt sein.
+        val frames = decoder.feed(buildFrame(100.0f))
+        assertEquals(1, frames.size)
+        assertFalse(frames[0].largeJump)
+    }
+
+    @Test
+    fun resetSetztDenFehlerzaehlerZurueck() {
+        val decoder = Pce323FrameDecoder()
+
+        val kaputt = buildFrame(45.0f)
+        kaputt[18] = 0x00 // Footer verfaelschen
+        decoder.feed(kaputt)
+        assertTrue(decoder.decodeErrors > 0)
+
+        decoder.reset()
+        assertEquals(0, decoder.decodeErrors)
+    }
 }

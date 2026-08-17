@@ -36,6 +36,23 @@ class Pce323FrameDecoder {
 
     private var lastValidLevel: Double? = null
 
+    /**
+     * Verwirft den gesamten Decoder-Zustand. Vor jedem neuen Verbindungsaufbau aufzurufen.
+     *
+     * Ohne diesen Schnitt schleppt der Decoder ueber einen Verbindungsabbruch hinweg drei Dinge
+     * mit: ein angefangenes Frame im Puffer (der Regelfall, das Geraet sendet 20 + 3 Byte),
+     * [lastValidLevel] und [decodeErrors]. Folge waeren kuenstliche Decode-Fehler bei jedem
+     * Reconnect - was mehr als Kosmetik ist, weil die Fehlerrate laut Plan Abschnitt 5.5 als
+     * Gesundheitssignal den DEGRADED-Zustand ausloest - und ein faelschlich gesetztes
+     * [MeterFrame.largeJump] auf dem ersten Frame danach, weil es gegen einen beliebig alten
+     * Pegel verglichen wuerde statt gegen den Vorgaenger im selben Datenstrom.
+     */
+    fun reset() {
+        buffer.clear()
+        lastValidLevel = null
+        decodeErrors = 0
+    }
+
     fun feed(bytes: ByteArray): List<MeterFrame> {
         buffer.addAll(bytes.toList())
         val frames = mutableListOf<MeterFrame>()

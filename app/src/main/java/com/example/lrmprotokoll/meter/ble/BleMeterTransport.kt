@@ -19,15 +19,12 @@ import com.example.lrmprotokoll.meter.Pce323FrameDecoder
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "BleMeterTransport"
@@ -50,7 +47,6 @@ private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b3
 @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_CONNECT vor jedem Zugriff
 class BleMeterTransport(
     private val context: Context,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob()),
 ) : MeterTransport {
 
     private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -96,6 +92,7 @@ class BleMeterTransport(
         @Suppress("DEPRECATION") // Zwei-Parameter-Variante noetig, da minSdk 31 < 33
         override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             @Suppress("DEPRECATION")
+            if (characteristic.uuid != Pce323Profile.NOTIFY_CHARACTERISTIC_UUID) return
             val value = characteristic.value ?: return
             onNotify(value)
         }
@@ -103,6 +100,12 @@ class BleMeterTransport(
 
     override suspend fun connect(device: BoundDevice) {
         disconnect()
+
+        // Zustand aus einer vorherigen Verbindung verwerfen: angefangenes Frame im Puffer,
+        // letzter Pegel, Fehlerzaehler - und die nach einem Timeout gesperrte GATT-Queue.
+        decoder.reset()
+        gattQueue.reset()
+
         _state.value = ConnectionState.CONNECTING
 
         try {
@@ -176,7 +179,11 @@ class BleMeterTransport(
         for (frame in decoded) {
             _state.value = ConnectionState.STREAMING
             _lastFrameAt.value = frame.receivedAt
-            scope.launch { _frames.emit(frame) }
+            // tryEmit statt launch+emit: nicht-suspendierend, behaelt damit die Reihenfolge des
+            // Byte-Stroms bei. Mehrere Frames aus einem feed() entstehen nach einer
+            // Resynchronisation oder bei zusammengefassten Notifications - nebenlaeufige
+            // Coroutinen koennten sie vertauscht in den SharedFlow schreiben.
+            _frames.tryEmit(frame)
         }
     }
 

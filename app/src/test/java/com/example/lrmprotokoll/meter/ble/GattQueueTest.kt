@@ -87,4 +87,27 @@ class GattQueueTest {
         job1.join()
         job2.join()
     }
+
+    @Test
+    fun nachTimeoutBleibtDieQueueBisZumResetGesperrt() = runTest {
+        val queue = GattQueue(timeoutMs = 1_000)
+
+        val a = async { queue.execute { true } }
+        runCurrent()
+        advanceTimeBy(1_500)
+        runCurrent()
+        assertFalse(a.await())
+
+        // Gesperrt: start() darf gar nicht mehr aufgerufen werden.
+        var started = false
+        assertFalse(queue.execute { started = true; true })
+        assertFalse("start() darf nach einem Timeout nicht mehr laufen", started)
+
+        // Nach reset() arbeitet die Queue wieder normal.
+        queue.reset()
+        val c = async { queue.execute { true } }
+        runCurrent()
+        queue.complete(true)
+        assertTrue(c.await())
+    }
 }
