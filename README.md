@@ -19,11 +19,12 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M-1** Bestand instandsetzen | ✅ abgeschlossen |
 | **M0** Protokoll-Discovery am PCE-323 | ✅ abgeschlossen |
 | **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
-| **M2** BLE-Transport (Scan, Verbindung, Notify) | ⬜ **als Nächstes** |
+| **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
+| **M3** Robustheit (Reconnect, Ausfallerkennung) | ⬜ **als Nächstes** |
 | Alarmierung bei Verbindungsabbruch (SMS + Push) | ⬜ offen |
 | Google-Drive-Sync (30 min, eine Datei pro Tag) | ⬜ offen |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 3 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 4 von 10 Meilensteinen.**
 
 ---
 
@@ -47,20 +48,24 @@ Datenverlust, Paketstruktur nach Zuständigkeit, `AppContainer`, `MeterTransport
 
 ### Nicht vorhanden
 
+Seit M2 vorhanden: BLE-Scan mit Geräte-Pinning, Verbindungsaufbau über eine serialisierte
+`GattQueue`, CCCD-Write, Reassembly der 20 + 3 Byte, Decoder auf dem realen 23-Byte-Format,
+Bluetooth-Berechtigungen und Live-Anzeige.
+
 | | |
 |---|---|
-| BLE-Scan, Verbindung, Bonding | → M2 |
-| `GattQueue` (serialisierte Operationen) | → M2 |
-| CCCD-Write und Notify-Abonnement | → M2 |
-| Reassembly der 20 + 3 Byte zu einem Frame | → M2 |
-| Verbindungs-Zustandsautomat, Reconnect-Backoff | → M3 |
-| Bluetooth-Berechtigungen im Manifest | → M2 |
-| Foreground-Service-Typ `connectedDevice` | aktuell nur `microphone` |
+| Reconnect mit Backoff, Ausfallerkennung | → M3 |
+| Verbindung im Foreground Service statt in der UI | → M3 |
+| Wiederaufnahme nach Neustart | → M3 |
+| Persistenz der Messreihe, Trigger-Umstellung | → M4 |
 
-> ⚠ **`Pce323FrameDecoder` aus M1 passt nicht zum realen Gerät.** Er wurde gegen die
-> Plan-Hypothese gebaut (6-Byte-Frame mit `0x7F`-Marker aus der PCE-322A-Familie), die M0
-> widerlegt hat. Er muss in M2 auf das tatsächliche Format umgebaut werden: 23 Byte,
-> float32-Messwert, Zusammensetzen aus zwei Notifications.
+> ⚠ **Der Gerätetest zu M2 steht noch aus.** Der gesamte BLE-Pfad ist bislang nur gegen die
+> 99 aufgezeichneten Frames aus M0 geprüft, nie gegen das reale Gerät.
+
+> ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Das Protokoll liefert keine erkennbare
+> Kodierung der Frequenzbewertung; die App beschriftet den Wert deshalb bewusst nur als „dB".
+> Klären lässt sich das nur durch eine zweite Aufzeichnung, bei der am Gerät zwischen A und C
+> umgeschaltet wird.
 
 ---
 
@@ -68,9 +73,10 @@ Datenverlust, Paketstruktur nach Zuständigkeit, `AppContainer`, `MeterTransport
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **M2** | BLE-Transport: Scan, Verbindung, `GattQueue`, CCCD-Write, Notify-Reassembly, Decoder auf das reale Format umbauen, Live-Anzeige | zum Testen ja |
+| **M3** | Robustheit: Reconnect-Backoff, Staleness- und Fehlerraten-Erkennung, Verbindung in den Foreground Service, Neustart-Wiederaufnahme | nein, nur zur Endabnahme |
+| **Gerätetest M2** | Erste echte Verbindung; dabei zwei Messungen: verfälscht die Funkstrecke den Pegel, und welches Byte kodiert A/C? | **ja** |
 | **B-11** | 16-KB-Seitengröße: `tensorflow-lite-task-audio` ablösen | nein |
-| M3–M8 | Robustheit, Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
+| M4–M8 | Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -130,6 +136,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_UMSETZUNG.md`](docs/PROMPT_UMSETZUNG.md) | Prompt-Vorlage für Umsetzungs-Sessions, ein Meilenstein pro Session |
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
 | [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Aufträge für M1 (erledigt) und B-11 (offen) |
-| [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | **Auftrag für M2** — BLE-Transport, Decoder-Umbau, Kopplung |
+| [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | Auftrag für M2 (erledigt) — BLE-Transport, Decoder-Umbau, Kopplung |
+| [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | **Auftrag für M3** — Reconnect, Ausfallerkennung, Foreground Service |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
