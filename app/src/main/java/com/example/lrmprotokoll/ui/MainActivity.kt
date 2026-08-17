@@ -119,13 +119,25 @@ fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings:
     var hasPermissions by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
+    var hasBluetoothPermissions by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        )
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         hasPermissions = permissions[Manifest.permission.RECORD_AUDIO] == true
+        hasBluetoothPermissions = permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
+            permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
     }
 
     LaunchedEffect(Unit) {
-        val permissionsToRequest = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        val permissionsToRequest = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
         }
