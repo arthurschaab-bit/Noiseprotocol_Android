@@ -106,13 +106,16 @@ class FakeMeterTransport(
         } else {
             baseLevel + Random.nextDouble(-3.0, 3.0)
         }
+        // Spiegelt das reale BleMeterTransport-Verhalten: Bewertung, Zeitbewertung, Bereich
+        // und Hold-Status sind beim echten Geraet unbekannt (siehe MeterFrame-Doc), der Fake
+        // taeuscht hier bewusst kein Wissen vor, das es in Wirklichkeit nicht gibt.
         return MeterFrame(
             level = level,
-            weighting = Weighting.A,
-            timeWeighting = TimeWeighting.FAST,
-            range = MeasurementRange.RANGE_30_130,
-            holdMax = false,
-            holdMin = false,
+            weighting = null,
+            timeWeighting = null,
+            range = null,
+            holdMax = null,
+            holdMin = null,
             receivedAt = Instant.now(),
         )
     }

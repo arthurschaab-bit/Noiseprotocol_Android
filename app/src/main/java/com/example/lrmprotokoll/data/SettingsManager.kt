@@ -29,4 +29,14 @@ class SettingsManager(context: Context) {
     var audioSampleRate: Int
         get() = prefs.getInt("sample_rate", 16000)
         set(value) = prefs.edit().putInt("sample_rate", value).apply()
+
+    // Geraete-Pinning fuer das PCE-323 (Plan Abschnitt 6): nach der Erstkopplung wird
+    // ausschliesslich noch zu dieser Adresse verbunden.
+    var meterDeviceAddress: String?
+        get() = prefs.getString("meter_device_address", null)
+        set(value) = prefs.edit().putString("meter_device_address", value).apply()
+
+    var meterDeviceName: String?
+        get() = prefs.getString("meter_device_name", null)
+        set(value) = prefs.edit().putString("meter_device_name", value).apply()
 }

@@ -93,7 +93,14 @@ class AudioRecordingService : LifecycleService() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stoppen", stopPendingIntent)
             .build()
 
-        startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        // connectedDevice zusaetzlich zu microphone deklariert (Plan Abschnitt 4.5): der
+        // Dienst nutzt das PCE-323 als Trigger-Quelle erst ab M4, aber Manifest und
+        // startForeground() muessen von Anfang an zusammenpassen.
+        startForeground(
+            1,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        )
     }
 
     private fun startMonitoring() {

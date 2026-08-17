@@ -4,8 +4,16 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Ab minSdk 31 die einzigen noetigen Bluetooth-Berechtigungen (Plan Abschnitt 10):
+         kein ACCESS_FINE_LOCATION, da die Scan-Ergebnisse nicht zur Standortbestimmung
+         genutzt werden (neverForLocation). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
         android:name=".LaermprotokollApp"
@@ -29,7 +37,7 @@
 
         <service
             android:name=".audio.AudioRecordingService"
-            android:foregroundServiceType="microphone"
+            android:foregroundServiceType="microphone|connectedDevice"
             android:exported="false" />
 
         <provider
