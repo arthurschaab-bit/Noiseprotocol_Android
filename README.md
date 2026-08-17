@@ -17,11 +17,13 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | KI-Klassifikation (YAMNet) | ✅ läuft |
 | Wellenform-Player, Tagesbericht, CSV/ZIP-Export | ✅ läuft |
 | **M-1** Bestand instandsetzen | ✅ abgeschlossen |
-| **Bluetooth / PCE-323** | ⬜ **noch nicht begonnen** |
+| **M0** Protokoll-Discovery am PCE-323 | ✅ abgeschlossen |
+| **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
+| **M2** BLE-Transport (Scan, Verbindung, Notify) | ⬜ **als Nächstes** |
 | Alarmierung bei Verbindungsabbruch (SMS + Push) | ⬜ offen |
 | Google-Drive-Sync (30 min, eine Datei pro Tag) | ⬜ offen |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 1 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 3 von 10 Meilensteinen.**
 
 ---
 
@@ -29,40 +31,36 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 
 ### Vorhanden
 
-**Protokollwissen.** Das PCE-323 ist ein OEM-Gerät von CEM und teilt sich das Handbuch mit dem
-PCE-322A, dessen serielles Protokoll in libsigrok reverse-engineered wurde. Daraus bekannt und in
-[Plan Abschnitt 2](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md#2-gerätewissen-pce-323)
-dokumentiert:
+**Das Protokoll ist am realen Gerät ermittelt** (M0) und in
+[`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) sowie im Code als
+`meter/ble/Pce323Profile.kt` festgeschrieben:
 
-- 6-Byte-Messframe: Startmarker `0x7F`, Messwert als 16-Bit big endian, Flags, Endmarker `0x00`
-- Dekodierung `dB = wert / 10.0`, A/C-Bewertung in `buf[3] bit0`, Fast/Slow in `bit1`
-- Vollständiger 16-Bit-Kommandosatz (Connect, Weighting umschalten, Speicher auslesen …)
+- BLE-Modul **Lierda LSD4BTC**, Custom-Service `0000fff0`
+- Notify auf `0000fff2`, Write auf `0000fff1` — **kein CONNECT-Kommando nötig**, der Strom läuft
+  nach dem CCCD-Write von allein
+- Logisches Frame 23 Byte, wegen Default-MTU auf zwei Notifications (20 + 3 Byte) aufgeteilt
+- Messwert als **IEEE-754-float32 big endian** in dB, Intervall rund 515 ms
 
-**Fundament.** Build läuft (AGP 9.2.1, targetSdk 36), Room migriert nachweislich ohne
-Datenverlust, ein Foreground Service existiert bereits für die Mikrofonaufnahme.
-
-**Architekturentscheidungen.** Transport-Abstraktion statt direktem BLE-Zugriff, Paketstruktur
-statt Gradle-Modulschnitt, Alarmkanäle parallel statt als Fallback-Kette — alles begründet im Plan.
+**Fundament und Abstraktion** (M-1, M1): Build läuft, Room migriert nachweislich ohne
+Datenverlust, Paketstruktur nach Zuständigkeit, `AppContainer`, `MeterTransport` mit
+`FakeMeterTransport` für hardwarefreie Tests.
 
 ### Nicht vorhanden
 
-Im Code existiert **keine einzige Zeile** zu Bluetooth. Konkret fehlt:
-
 | | |
 |---|---|
-| **GATT-UUIDs des Geräts** | Nirgends dokumentiert. Nur am realen Gerät ermittelbar → **M0** |
-| BLE-Scan, Verbindung, Bonding | — |
-| `GattQueue` (serialisierte Operationen) | — |
-| `Pce323FrameDecoder` | — |
-| `MeterTransport` + Fake für Tests | — |
-| Verbindungs-Zustandsautomat, Reconnect-Backoff | — |
-| Bluetooth-Berechtigungen im Manifest | — |
+| BLE-Scan, Verbindung, Bonding | → M2 |
+| `GattQueue` (serialisierte Operationen) | → M2 |
+| CCCD-Write und Notify-Abonnement | → M2 |
+| Reassembly der 20 + 3 Byte zu einem Frame | → M2 |
+| Verbindungs-Zustandsautomat, Reconnect-Backoff | → M3 |
+| Bluetooth-Berechtigungen im Manifest | → M2 |
 | Foreground-Service-Typ `connectedDevice` | aktuell nur `microphone` |
-| minSdk-Anhebung 29 → 31 | — |
 
-**Der Engpass ist M0.** Ohne die am Gerät ermittelten GATT-UUIDs ist jede
-Transport-Implementierung Spekulation. Der Frame-Decoder lässt sich dagegen schon jetzt bauen und
-testen, weil das Byte-Format bekannt ist.
+> ⚠ **`Pce323FrameDecoder` aus M1 passt nicht zum realen Gerät.** Er wurde gegen die
+> Plan-Hypothese gebaut (6-Byte-Frame mit `0x7F`-Marker aus der PCE-322A-Familie), die M0
+> widerlegt hat. Er muss in M2 auf das tatsächliche Format umgebaut werden: 23 Byte,
+> float32-Messwert, Zusammensetzen aus zwei Notifications.
 
 ---
 
@@ -70,10 +68,9 @@ testen, weil das Byte-Format bekannt ist.
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **M0** | Protokoll-Discovery am PCE-323 (GATT-Dump mit nRF Connect, HCI-Snoop-Log) | **ja** |
-| **M1** | Paketstruktur, `AppContainer`, minSdk 31, `MeterTransport` + Fake, `Pce323FrameDecoder` | nein |
+| **M2** | BLE-Transport: Scan, Verbindung, `GattQueue`, CCCD-Write, Notify-Reassembly, Decoder auf das reale Format umbauen, Live-Anzeige | zum Testen ja |
 | **B-11** | 16-KB-Seitengröße: `tensorflow-lite-task-audio` ablösen | nein |
-| M2–M8 | BLE-Transport, Robustheit, Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
+| M3–M8 | Robustheit, Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -132,5 +129,6 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md`](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md) | Der vollständige Plan: Protokoll, Architektur, Robustheit, Sicherheit, Alarmierung, Drive-Sync, Meilensteine, Risiken |
 | [`docs/PROMPT_UMSETZUNG.md`](docs/PROMPT_UMSETZUNG.md) | Prompt-Vorlage für Umsetzungs-Sessions, ein Meilenstein pro Session |
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
-| [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Ausformulierter Auftrag für den nächsten Schritt |
+| [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Aufträge für M1 (erledigt) und B-11 (offen) |
+| [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
