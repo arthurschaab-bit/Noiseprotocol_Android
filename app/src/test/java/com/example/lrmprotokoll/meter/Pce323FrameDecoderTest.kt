@@ -205,6 +205,18 @@ class Pce323FrameDecoderTest {
     }
 
     @Test
+    fun modeAssumptionConfirmedSpiegeltPce323ProfileWider() {
+        // Solange die Werte-Zuordnung fuer Bereich/Fast-Slow/A-C nicht am Geraet bestaetigt ist,
+        // muss jeder dekodierte Frame das kenntlich machen (Review PR #15, Befund 1) - sonst
+        // wuerde ein non-null weighting/timeWeighting/range wie gesichertes Wissen behandelt.
+        val decoder = Pce323FrameDecoder()
+
+        val frame = decoder.feed(buildFrame(50.0f)).single()
+
+        assertEquals(Pce323Profile.MODE_ASSUMPTION_CONFIRMED, frame.modeAssumptionConfirmed)
+    }
+
+    @Test
     fun alleVierMessbereichsByteswerteWerdenGemaessAnnahmeDekodiert() {
         val decoder = Pce323FrameDecoder()
         val erwartet = mapOf(

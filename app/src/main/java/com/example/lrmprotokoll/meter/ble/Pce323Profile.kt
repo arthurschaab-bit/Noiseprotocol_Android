@@ -115,4 +115,14 @@ object Pce323Profile {
 
     const val WEIGHTING_VALUE_A: Byte = 0x2C
     const val WEIGHTING_VALUE_C: Byte = 0x2D
+
+    /**
+     * Einziger Umschaltpunkt fuer den Bestaetigungsstatus der obigen Werte-Zuordnung
+     * (Review PR #15, Befund 1): [Pce323FrameDecoder] setzt [MeterFrame.modeAssumptionConfirmed]
+     * hierauf, [MeterScreen] zeigt den Annahme-Hinweis nur, solange dieser Wert `false` ist.
+     * Erst wenn der Owner die Zuordnung am realen Geraet bestaetigt hat, wird dies auf `true`
+     * gesetzt - vorher gilt jeder non-null-Wert in [weighting]/[timeWeighting]/[range] als
+     * angenommen, nicht als gesichert.
+     */
+    const val MODE_ASSUMPTION_CONFIRMED = false
 }

@@ -8,13 +8,6 @@ private const val MIN_PLAUSIBLE_LEVEL = 20.0
 private const val MAX_PLAUSIBLE_LEVEL = 140.0
 private const val LARGE_JUMP_THRESHOLD_DB = 40.0
 
-// Drei Positionen im sonst konstanten Header/Footer/Trailer sind erwiesenermassen variabel
-// (Pce323Profile-Doc) und werden beim Resync als Wildcard behandelt (jeder Bytewert akzeptiert),
-// nicht gegen eine feste Wertemenge geprueft: Ein noch unbekannter fuenfter Bereichs- oder
-// dritter Bewertungswert soll den Rest des Frames (allen voran den Pegel) nicht ungueltig
-// machen. Die eigentliche "kennen wir diesen Wert" Pruefung passiert erst in decode() - dort
-// wird ein unerkannter Wert bewusst zu `null`, nie zu einem geratenen Default.
-
 /**
  * Dekodiert den realen PCE-323-Frame-Strom, wie in M0 am Geraet ermittelt und in
  * docs/PROTOKOLL_PCE-323.md sowie [Pce323Profile] festgeschrieben - NICHT das im
@@ -31,11 +24,17 @@ private const val LARGE_JUMP_THRESHOLD_DB = 40.0
  * Arbeitet byteweise ueber einen Ringpuffer statt paketweise: Das Geraet liefert dieses Frame
  * bei Default-MTU in ZWEI BLE-Notifications (20 + 3 Byte, siehe M0), und der Puffer muss auch
  * beliebige andere Fragmentierung (ein Byte pro Aufruf, mehrere Frames pro Aufruf) verlustfrei
- * zusammensetzen. Sync-Anker sind die 20 (von 23) konstant gebliebenen Bytes aus Header, Footer
- * und Trailer - deutlich robuster gegen Zufallstreffer als ein 1-Byte-Marker. Die drei
- * variablen Positionen werden beim Resync gegen die jeweils bekannte kleine Wertemenge
- * geprueft (nicht gegen "beliebiges Byte"), damit echte Bitfehler weiterhin als Decode-Fehler
- * erkannt werden.
+ * zusammensetzen. Sync-Anker ist [indexOfHeader] mit den 13 konstant gebliebenen Header-Bytes
+ * (Offset 7 ausgenommen) - deutlich robuster gegen Zufallstreffer als ein 1-Byte-Marker.
+ * [footerAndTrailerMatch] prueft danach die restlichen 1+2 = 3 konstanten Footer-/Trailer-Bytes
+ * nach, macht also insgesamt 16 der 23 Frame-Bytes zur Bedingung fuer einen gueltigen
+ * Kandidaten (vor dieser Annahme-Dekodierung waren es 19, siehe [Pce323Profile]). Die drei
+ * variablen Positionen (Offset 7/19/20) werden dabei als Wildcard behandelt - jeder Bytewert
+ * wird akzeptiert, keine Pruefung gegen eine bekannte Wertemenge: Ein noch unbekannter fuenfter
+ * Bereichs- oder dritter Bewertungswert soll den Rest des Frames (allen voran den Pegel) nicht
+ * ungueltig machen. Ob ein konkreter Wert an diesen drei Positionen *bekannt* ist, entscheidet
+ * erst [decode] - dort wird ein unerkannter Wert bewusst zu `null`, nie zu einem geratenen
+ * Default.
  */
 class Pce323FrameDecoder {
 
@@ -186,6 +185,7 @@ class Pce323FrameDecoder {
             holdMin = null,
             receivedAt = Instant.now(),
             largeJump = largeJump,
+            modeAssumptionConfirmed = Pce323Profile.MODE_ASSUMPTION_CONFIRMED,
         )
     }
 
