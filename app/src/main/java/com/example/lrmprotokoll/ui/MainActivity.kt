@@ -68,7 +68,8 @@ class MainActivity : ComponentActivity() {
                         composable("main") {
                             NoiseProtocolApp(
                                 onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
-                                onNavigateToSettings = { navController.navigate("settings") }
+                                onNavigateToSettings = { navController.navigate("settings") },
+                                onNavigateToMeter = { navController.navigate("meter") }
                             )
                         }
                         composable(
@@ -81,6 +82,9 @@ class MainActivity : ComponentActivity() {
                         composable("settings") {
                             SettingsScreen(onBack = { navController.popBackStack() })
                         }
+                        composable("meter") {
+                            MeterScreen(onBack = { navController.popBackStack() })
+                        }
                     }
                 }
             }
@@ -90,7 +94,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings: () -> Unit) {
+fun NoiseProtocolApp(
+    onNavigateToPlayer: (String) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToMeter: () -> Unit
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val db = container.database
@@ -154,6 +162,9 @@ fun NoiseProtocolApp(onNavigateToPlayer: (String) -> Unit, onNavigateToSettings:
                 }) {
                     Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error)
                 }
+            }
+            TextButton(onClick = onNavigateToMeter) {
+                Text("Messgerät")
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
