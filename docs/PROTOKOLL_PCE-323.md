@@ -183,8 +183,9 @@ gegen Zeitstempel und Pegelverlauf abgleicht — nicht durch manuelles Duchsehen
 | 19 (2. Footer-Byte) | `0x0F`/`0x10` | im gezielten Fast/Slow-Test mehrfacher sauberer Wechsel, jeweils mit Pegelsprung (Detektor-Zeitkonstante ändert sich); am Ende 13 s stabil auf `0x10` | **Fast/Slow** |
 | 20 (1. Trailer-Byte) | `0x2C`/`0x2D` | im gezielten A/C-Test sauberer Wechsel, während Bereich und Fast/Slow unverändert blieben; am Ende 33 s stabil auf `0x2C` | **A/C-Bewertung** |
 
-Alle anderen 20 der 23 Frame-Bytes blieben über die gesamte Aufzeichnung (~3.900 Frames aus
-fünf Verbindungen) absolut konstant.
+Alle anderen 16 der 19 Header-/Footer-/Trailer-Bytes (die restlichen 4 Byte des 23-Byte-Frames
+sind der Messwert selbst, der erwartungsgemäß bei jedem Frame variiert) blieben über die
+gesamte Aufzeichnung (~3.900 Frames aus fünf Verbindungen) absolut konstant.
 
 **Was damit weiterhin offen ist — Byte-Position ≠ Werte-Zuordnung:**
 
@@ -196,6 +197,13 @@ fünf Verbindungen) absolut konstant.
   ist eine Annahme, keine Bestätigung.
 - **Hold** wurde in keinem der vier Logs isoliert getestet — kein Byte zeigt ein Verhalten,
   das sich davon unterscheiden ließe.
+
+**Tipp für den A/C-Abgleich am Gerät** (Review PR #15): Die Zuordnung von `0x2C`/`0x2D` lässt
+sich physikalisch härten statt nur über das Ausgangszustand-Indiz zu erschließen. Die
+A-Bewertung dämpft Frequenzen unter ca. 500 Hz deutlich, die C-Bewertung kaum. Mit einer
+tieffrequenten Quelle (Brummen, tiefer Ton, Rauschen) muss der angezeigte Pegel beim Umschalten
+auf C spürbar **steigen**. Steigt der Pegel genau dann, wenn das Byte auf `0x2D` wechselt, ist
+`0x2D`→C bewiesen statt vermutet — unabhängig davon, ob der Ausgangszustand wirklich A war.
 
 Der Code (`Pce323Profile.kt`, `Pce323FrameDecoder.kt`) setzt seit dieser Aufzeichnung eine
 konkrete Annahme für die Werte-Zuordnung um (0x00→30–130 dB, 0x0F→Fast, 0x2C→A, jeweils naheliegendste Deutung des Ausgangszustands) und markiert sie in der App

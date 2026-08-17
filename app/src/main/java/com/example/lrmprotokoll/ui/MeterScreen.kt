@@ -61,12 +61,15 @@ private const val SCAN_DURATION_MS = 10_000L
 /**
  * Kopplung und Live-Anzeige fuer das PCE-323 (Plan Abschnitt 9, minimale Ausbaustufe M2).
  * Reine Anzeige: keine Persistenz der Messreihe, keine Verknuepfung mit dem Aufnahme-Trigger
- * (das ist M4). Der Pegel wird bewusst nicht als "dBA" beschriftet - die Frequenzbewertung des
- * realen Geraets ist ungeklaert (docs/PROTOKOLL_PCE-323.md, Abschnitt 7).
+ * (das ist M4). Der Pegel traegt nur dann ein "dB(A)"/"dB(C)"-Label, wenn
+ * [MeterFrame.modeAssumptionConfirmed] gesetzt ist - bis dahin ist die Frequenzbewertung des
+ * realen Geraets nur eine Annahme, kein bestaetigtes Wissen (docs/PROTOKOLL_PCE-323.md,
+ * Abschnitt 9).
  *
  * Zusaetzlich werden Bewertung, Zeitbewertung und Messbereich gespiegelt, wie sie der Decoder
- * unter einer noch unbestaetigten Annahme interpretiert (docs/PROTOKOLL_PCE-323.md, Abschnitt
- * 9) - deutlich als Annahme markiert, damit ein Vergleich mit der Geraeteanzeige moeglich ist.
+ * unter dieser noch unbestaetigten Annahme interpretiert - deutlich markiert, damit ein
+ * Vergleich mit der Geraeteanzeige moeglich ist und der Owner die Annahme bestaetigen oder
+ * verwerfen kann.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,23 +124,42 @@ fun MeterScreen(onBack: () -> Unit) {
 
             val frame = latestFrame
             if (frame != null && connectionState == ConnectionState.STREAMING) {
+                // Die Annahme-Zuordnung darf den Pegel erst dann als "dB(A)"/"dB(C)"
+                // beschriften, wenn sie am Geraet bestaetigt ist (Review PR #15, Befund 1) -
+                // solange modeAssumptionConfirmed false ist, gilt weighting != null als
+                // "angenommen", nicht als gesichertes Wissen.
+                val confirmedWeighting = frame.weighting.takeIf { frame.modeAssumptionConfirmed }
                 Text(
-                    "${String.format("%.1f", frame.level)} dB",
+                    if (confirmedWeighting != null) {
+                        "${String.format("%.1f", frame.level)} dB(${weightingLabel(confirmedWeighting)})"
+                    } else {
+                        "${String.format("%.1f", frame.level)} dB"
+                    },
                     style = MaterialTheme.typography.displayLarge
                 )
-                Text(
-                    "Frequenzbewertung unbekannt – kein bestätigtes dBA",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                if (confirmedWeighting == null) {
+                    Text(
+                        "Frequenzbewertung unbekannt – kein bestätigtes dBA",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            "Annahme, unbestätigt – bitte gegen die Geräteanzeige prüfen",
+                            if (frame.modeAssumptionConfirmed) {
+                                "Bestätigt am Gerät"
+                            } else {
+                                "Annahme, unbestätigt – bitte gegen die Geräteanzeige prüfen"
+                            },
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error
+                            color = if (frame.modeAssumptionConfirmed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("Bewertung: ${weightingLabel(frame.weighting)}", style = MaterialTheme.typography.bodyMedium)
