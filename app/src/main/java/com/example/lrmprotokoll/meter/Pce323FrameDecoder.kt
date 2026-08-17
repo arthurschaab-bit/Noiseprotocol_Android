@@ -1,35 +1,36 @@
 package com.example.lrmprotokoll.meter
 
+import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import java.time.Instant
 import kotlin.math.abs
 
-private const val START_MARKER: Byte = 0x7F.toByte()
-private const val END_MARKER: Byte = 0x00.toByte()
-private const val FRAME_SIZE = 6
 private const val MIN_PLAUSIBLE_LEVEL = 20.0
 private const val MAX_PLAUSIBLE_LEVEL = 140.0
 private const val LARGE_JUMP_THRESHOLD_DB = 40.0
 
 /**
- * Dekodiert den 6-Byte-Frame-Strom des PCE-323 (Plan Abschnitt 2.2):
+ * Dekodiert den realen PCE-323-Frame-Strom, wie in M0 am Geraet ermittelt und in
+ * docs/PROTOKOLL_PCE-323.md sowie [Pce323Profile] festgeschrieben - NICHT das im
+ * Implementierungsplan (Abschnitt 2.2) angenommene, dort mittlerweile als widerlegt markierte
+ * PCE-322A-Format.
  *
- *   [0] 0x7F Startmarker
- *   [1..2] Messwert, 16 Bit big endian -> dB = wert / 10.0
- *   [3] bit0: 0=A-Bewertung 1=C-Bewertung   bit1: 0=Fast 1=Slow
- *   [4] bit0..1: Messbereich 0=30-130 1=30-80 2=50-100 3=80-130   bit2: Max-Hold   bit3: Min-Hold
- *   [5] 0x00 Endmarker
+ * Logisches Frame, 23 Byte:
+ *   [0..13]  konstanter Header (14 Byte, [Pce323Profile.FRAME_HEADER])
+ *   [14..17] Messwert, IEEE-754 float32 BIG ENDIAN, Wert direkt in dB
+ *   [18..19] konstanter Footer (2 Byte)
+ *   [20..22] konstanter Trailer (3 Byte, Funktion ungeklaert)
  *
- * Arbeitet byteweise ueber einen Ringpuffer statt paketweise, weil BLE-Notifications
- * fragmentiert eintreffen koennen: ein Frame kann sich ueber mehrere [feed]-Aufrufe erstrecken,
- * und mehrere Frames koennen in einem Aufruf stecken. Bei Muell im Strom wird auf
- * 0x7F ... 0x00 resynchronisiert, ohne bereits empfangene, noch unvollstaendige Bytes zu
- * verwerfen.
+ * Arbeitet byteweise ueber einen Ringpuffer statt paketweise: Das Geraet liefert dieses Frame
+ * bei Default-MTU in ZWEI BLE-Notifications (20 + 3 Byte, siehe M0), und der Puffer muss auch
+ * beliebige andere Fragmentierung (ein Byte pro Aufruf, mehrere Frames pro Aufruf) verlustfrei
+ * zusammensetzen. Sync-Anker ist der 14 Byte lange konstante Header, nicht ein einzelnes
+ * Markerbyte - deutlich robuster gegen Zufallstreffer als ein 1-Byte-Marker.
  */
 class Pce323FrameDecoder {
 
     private val buffer = ArrayDeque<Byte>()
 
-    /** Zaehlt verworfene Frame-Kandidaten: falscher Endmarker oder unplausibler Messwert. */
+    /** Zaehlt verworfene Frame-Kandidaten: falscher Footer/Trailer oder unplausibler Messwert. */
     var decodeErrors: Int = 0
         private set
 
@@ -40,22 +41,31 @@ class Pce323FrameDecoder {
         val frames = mutableListOf<MeterFrame>()
 
         while (true) {
-            while (buffer.isNotEmpty() && buffer.first() != START_MARKER) {
-                buffer.removeFirst()
+            val headerIndex = indexOfHeader()
+            if (headerIndex == null) {
+                // Kein vollstaendiger Header im Puffer. Nur das verwerfen, was garantiert
+                // nicht mehr Anfang eines kuenftigen Headers sein kann - der Rest bleibt fuer
+                // den naechsten feed()-Aufruf stehen (kein Datenverlust bei Fragmentierung
+                // mitten im Header).
+                val keep = longestHeaderPrefixSuffixLength()
+                repeat(buffer.size - keep) { buffer.removeFirst() }
+                break
             }
-            if (buffer.size < FRAME_SIZE) break
+            repeat(headerIndex) { buffer.removeFirst() }
 
-            val candidate = ByteArray(FRAME_SIZE) { buffer[it] }
-            if (candidate[FRAME_SIZE - 1] != END_MARKER) {
-                // Kein gueltiger Frame an dieser Position: nur den Startmarker verwerfen und
-                // erneut resynchronisieren, statt den ganzen Kandidaten wegzuwerfen - ein
-                // echter Frame koennte innerhalb dieses Fensters erst noch beginnen.
+            if (buffer.size < Pce323Profile.FRAME_SIZE) break // Frame noch nicht vollstaendig
+
+            val candidate = ByteArray(Pce323Profile.FRAME_SIZE) { buffer[it] }
+            if (!footerAndTrailerMatch(candidate)) {
+                // Header war ein Zufallstreffer oder der Frame ist beschaedigt: nur das erste
+                // Byte verwerfen und neu resynchronisieren, statt den ganzen Kandidaten wegzuwerfen
+                // - ein echter Frame koennte innerhalb dieses Fensters erst noch beginnen.
                 buffer.removeFirst()
                 decodeErrors++
                 continue
             }
 
-            repeat(FRAME_SIZE) { buffer.removeFirst() }
+            repeat(Pce323Profile.FRAME_SIZE) { buffer.removeFirst() }
             val frame = decode(candidate)
             if (frame == null) {
                 decodeErrors++
@@ -67,38 +77,76 @@ class Pce323FrameDecoder {
         return frames
     }
 
+    private fun indexOfHeader(): Int? {
+        val header = Pce323Profile.FRAME_HEADER
+        if (buffer.size < header.size) return null
+        outer@ for (start in 0..buffer.size - header.size) {
+            for (i in header.indices) {
+                if (buffer[start + i] != header[i]) continue@outer
+            }
+            return start
+        }
+        return null
+    }
+
+    /** Laengste Endung des Puffers, die ein echtes Praefix von [Pce323Profile.FRAME_HEADER] ist. */
+    private fun longestHeaderPrefixSuffixLength(): Int {
+        val header = Pce323Profile.FRAME_HEADER
+        val maxLen = minOf(buffer.size, header.size - 1)
+        for (len in maxLen downTo 1) {
+            val start = buffer.size - len
+            var matches = true
+            for (i in 0 until len) {
+                if (buffer[start + i] != header[i]) {
+                    matches = false
+                    break
+                }
+            }
+            if (matches) return len
+        }
+        return 0
+    }
+
+    private fun footerAndTrailerMatch(candidate: ByteArray): Boolean {
+        val footerOffset = Pce323Profile.LEVEL_OFFSET + Pce323Profile.LEVEL_SIZE
+        for (i in Pce323Profile.FRAME_FOOTER.indices) {
+            if (candidate[footerOffset + i] != Pce323Profile.FRAME_FOOTER[i]) return false
+        }
+        val trailerOffset = footerOffset + Pce323Profile.FRAME_FOOTER.size
+        for (i in Pce323Profile.FRAME_TRAILER.indices) {
+            if (candidate[trailerOffset + i] != Pce323Profile.FRAME_TRAILER[i]) return false
+        }
+        return true
+    }
+
     private fun decode(raw: ByteArray): MeterFrame? {
-        val level = (((raw[1].toInt() and 0xFF) shl 8) or (raw[2].toInt() and 0xFF)) / 10.0
-        if (level < MIN_PLAUSIBLE_LEVEL || level > MAX_PLAUSIBLE_LEVEL) {
+        val o = Pce323Profile.LEVEL_OFFSET
+        val bits = ((raw[o].toInt() and 0xFF) shl 24) or
+            ((raw[o + 1].toInt() and 0xFF) shl 16) or
+            ((raw[o + 2].toInt() and 0xFF) shl 8) or
+            (raw[o + 3].toInt() and 0xFF)
+        val level = Float.fromBits(bits).toDouble()
+
+        // NaN/Infinity kann ein gestoerter Funkstrom liefern, obwohl Header/Footer/Trailer
+        // zufaellig passen - beides ist per Definition kein plausibler Pegel.
+        if (level.isNaN() || level.isInfinite() || level < MIN_PLAUSIBLE_LEVEL || level > MAX_PLAUSIBLE_LEVEL) {
             return null
         }
-
-        val weightingFlags = raw[3].toInt()
-        val rangeFlags = raw[4].toInt()
-
-        val weighting = if (weightingFlags and 0b01 == 0) Weighting.A else Weighting.C
-        val timeWeighting = if (weightingFlags and 0b10 == 0) TimeWeighting.FAST else TimeWeighting.SLOW
-        val range = when (rangeFlags and 0b11) {
-            0 -> MeasurementRange.RANGE_30_130
-            1 -> MeasurementRange.RANGE_30_80
-            2 -> MeasurementRange.RANGE_50_100
-            else -> MeasurementRange.RANGE_80_130
-        }
-        val holdMax = rangeFlags and 0b0100 != 0
-        val holdMin = rangeFlags and 0b1000 != 0
 
         // Impulsschall ist real - grosse Spruenge werden markiert, nicht verworfen.
         val previous = lastValidLevel
         val largeJump = previous != null && abs(level - previous) > LARGE_JUMP_THRESHOLD_DB
         lastValidLevel = level
 
+        // weighting/timeWeighting/range/holdMax/holdMin sind unbekannt (siehe MeterFrame-Doc) -
+        // das reale Protokoll liefert dafuer keine bekannte Kodierung.
         return MeterFrame(
             level = level,
-            weighting = weighting,
-            timeWeighting = timeWeighting,
-            range = range,
-            holdMax = holdMax,
-            holdMin = holdMin,
+            weighting = null,
+            timeWeighting = null,
+            range = null,
+            holdMax = null,
+            holdMin = null,
             receivedAt = Instant.now(),
             largeJump = largeJump,
         )
