@@ -141,12 +141,24 @@ für BLE-Scans, keine `maxSdkVersion`-Altlasten, nur noch `BLUETOOTH_SCAN` +
   (CEM „SuperMeterBox“) — das PCE-323 ist ein OEM-Gerät von CEM/Shenzhen Everbest
 - Gemeinsames Handbuch mit PCE-322A und PCE-MSM 4 → sehr wahrscheinlich gemeinsame Protokollfamilie
 
-### 2.2 Protokoll der Gerätefamilie (aus libsigrok, Treiber `pce-322a`)
+### 2.2 ~~Protokoll der Gerätefamilie~~ — ÜBERHOLT durch M0
+
+> 🛑 **Diese Hypothese ist widerlegt.** Die Protokoll-Discovery (M0) hat am realen Gerät ein
+> vollkommen anderes Format gefunden. Verbindlich ist ausschließlich
+> **[`docs/PROTOKOLL_PCE-323.md`](PROTOKOLL_PCE-323.md)** bzw. im Code
+> `meter/ble/Pce323Profile.kt`.
+>
+> Kurzfassung des tatsächlichen Protokolls: Custom-Service `0000fff0`, Notify auf `0000fff2`,
+> Write auf `0000fff1`, kein CONNECT-Kommando nötig. Logisches Frame 23 Byte, wegen
+> Default-MTU auf zwei Notifications (20 + 3 Byte) aufgeteilt, Messwert als
+> **IEEE-754-float32 big endian** in dB. Intervall rund 515 ms.
+>
+> Der folgende Abschnitt bleibt stehen, weil er dokumentiert, woher die ursprüngliche Annahme
+> kam und warum sie plausibel war — **nicht als Umsetzungsgrundlage.**
 
 libsigrok hat das PCE-322A über dessen serielle Schnittstelle (CP210x, 9600 Bd) reverse-engineered.
-Das PCE-323 ist der Bluetooth-Nachfolger derselben Familie; die Wahrscheinlichkeit, dass die
-Bluetooth-Strecke exakt diesen Byte-Strom tunnelt, ist hoch — **muss aber in Phase 0 verifiziert
-werden**.
+Weil sich PCE-322A und PCE-323 ein Handbuch teilen, wurde angenommen, die Bluetooth-Strecke tunnele
+denselben Byte-Strom. Diese Annahme hat sich nicht bestätigt.
 
 **Live-Messframe (6 Byte):**
 
@@ -1145,7 +1157,8 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 | Risiko | Auswirkung | Gegenmaßnahme |
 |--------|-----------|---------------|
-| Bluetooth-Profil weicht von der Annahme ab (kein 0x7F-Framing) | M2 verzögert sich | M0 vorgeschaltet; Decoder ist gekapselt und austauschbar |
+| ~~Bluetooth-Profil weicht von der Annahme ab~~ — **EINGETRETEN** | Der in M1 gebaute Decoder passt nicht und muss in M2 umgebaut werden | M0 war vorgeschaltet und hat es vor der Transport-Implementierung aufgedeckt; die Kapselung hinter `MeterTransport` begrenzt den Schaden auf eine Klasse |
+| Funkverbindung verfälscht die Messung — bei einem baugleich aufgebauten Fremdgerät (Uni-T UT353BT) sind ~15 dB Abweichung dokumentiert | Plausibel aussehende, aber falsche Pegel im Protokoll | Einmalige Gegenmessung: Pegel ohne Bluetooth ablesen, dann verbunden gegenprüfen. Zehn Minuten Aufwand, sonst unentdeckbar |
 | PCE-323 nutzt Bluetooth Classic SPP statt BLE | Transport neu zu implementieren | `MeterTransport`-Abstraktion; SPP-Variante ist die einfachere Implementierung |
 | `SEND_SMS` blockiert Play-Veröffentlichung | Vertriebsweg | Abschnitt 7.4, `AlertChannel`-Abstraktion |
 | Hersteller-ROM killt den Foreground Service | Stiller Überwachungsausfall | Akku-Ausnahme, Boot-Receiver, Heartbeat-Selbstüberwachung, Nutzerhinweise |
@@ -1206,6 +1219,16 @@ Messgerät noch nicht verfügbar ist.
 - [libsigrok `src/hardware/pce-322a/protocol.c`](https://raw.githubusercontent.com/sigrokproject/libsigrok/master/src/hardware/pce-322a/protocol.c)
 - [PCE-323 App im Google Play Store](https://play.google.com/store/apps/details?id=com.pceinstruments.pce323)
 - [PCE-322A Bedienungsanleitung](https://www.pce-instruments.com/api/getartfile?_fnr=1045398)
+
+Protokollrecherche 2026-08-16/17 — warum die Hypothese danebenlag:
+
+- [libsigrok `cem-dt-885x/protocol.h`](https://raw.githubusercontent.com/sigrokproject/libsigrok/master/src/hardware/cem-dt-885x/protocol.h) und
+  [sigrok-Wiki: CEM DT-8852](https://sigrok.org/wiki/CEM_DT-8852) — belegen, dass CEM ein
+  eigenes, zum PCE-322A inkompatibles Protokoll fährt (`0xA5`/BCD statt `0x7F`/binär).
+  Damit ist auch die frühere Annahme widerlegt, das PCE-323 sei ein CEM-Rebadge
+- [`dt8852` auf PyPI](https://pypi.org/project/dt8852/) — Referenzimplementierung der CEM-Familie
+- [Reverse Engineering des Uni-T UT353BT](https://www.blog.yofukashi-works.com/?p=2764) — Quelle
+  des oben genannten Messfehler-Risikos durch die Funkverbindung
 
 Alarmierung:
 
