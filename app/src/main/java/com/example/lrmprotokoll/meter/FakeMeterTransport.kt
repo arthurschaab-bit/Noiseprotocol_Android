@@ -44,8 +44,23 @@ class FakeMeterTransport(
     private var corruptFrames = false
     private var validFrameCount = 0L
     private var errorFrameCount = 0L
+    private var throwOnConnect = false
+
+    /**
+     * Simuliert eine unerwartete Exception aus dem Transport, z.B. eine DeadObjectException
+     * beim Neustart des Bluetooth-Stacks oder eine IllegalStateException aus getRemoteDevice()
+     * bei ungueltig gewordener Adresse (Review-Befund 2, PR #16) - fuer den Test, dass
+     * [ConnectionSupervisor] darauf wie auf einen normalen Fehlschlag reagiert statt die
+     * Ueberwachung lautlos zu beenden.
+     */
+    fun simulateConnectException(enabled: Boolean) {
+        throwOnConnect = enabled
+    }
 
     override suspend fun connect(device: BoundDevice) {
+        if (throwOnConnect) {
+            throw IllegalStateException("Simulierter Verbindungsfehler (simulateConnectException)")
+        }
         stopEmitting()
         // Wie beim realen Decoder (Pce323FrameDecoder.reset()) faengt jeder (Re-)Connect mit
         // sauberen Zaehlern an - sonst wuerde die Fehlerrate eines fruehen Verbindungsversuchs
