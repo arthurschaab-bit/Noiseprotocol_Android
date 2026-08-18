@@ -1175,13 +1175,16 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 **Noch offene Entscheidungen:**
 
-1. **Entwarnungsmeldung bei Wiederkehr** — gewünscht oder nicht? (verdoppelt das Meldungsaufkommen;
-   bei Push unkritisch, bei SMS spürbar). *Vorschlag: bei Push an, bei SMS aus.*
+1. ~~**Entwarnungsmeldung bei Wiederkehr**~~ — **entschieden: bei Push an, bei SMS aus**, je Kanal
+   umstellbar.
 2. **Aufbewahrungsdauer** der Rohmesswerte (Vorschlag: 90 Tage Rohwerte, danach Minutenaggregate)
    und ob die Datenbank per SQLCipher verschlüsselt wird.
-3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
-   Wiederholungen.
-4. **Push-Kanal für M5** — ntfy öffentlich oder self-hosted?
+3. ~~**Cooldown und Eskalation**~~ — **entschieden: Cooldown 30 min, Eskalation nach 60 min,
+   max. 3 Wiederholungen.**
+4. ~~**Push-Kanal für M5**~~ — **entschieden: ntfy**, für den ersten Wurf der öffentliche Server
+   `ntfy.sh` mit langem Zufalls-Topic. Die Basis-URL gehört in die Einstellungen, damit ein
+   späterer Wechsel auf eine self-hosted Instanz eine Konfigurationsänderung bleibt und kein Umbau.
+   SMS läuft parallel weiter (Offline-Fall, siehe Kanaltabelle in 7.4).
 5. **Drive-Aggregationsintervall** — Vorschlag 10 s (8.4.1). Feiner geht, kostet aber
    überproportional Upload-Volumen.
 6. **Drive-Ordnerwahl** — reicht ein von der App angelegter Ordner (`drive.file`, keine
