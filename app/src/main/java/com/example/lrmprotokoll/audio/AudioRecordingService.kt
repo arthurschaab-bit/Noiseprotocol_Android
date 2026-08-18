@@ -94,6 +94,11 @@ class AudioRecordingService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == "STOP_SERVICE") {
+            // Expliziter Nutzerstop: die Flags fuer die Neustart-Wiederaufnahme (Plan Abschnitt
+            // 5.4) muessen hier zurueckgesetzt werden, sonst wuerde ein spaeterer Geraeteneustart
+            // etwas reaktivieren, das der Nutzer bewusst beendet hat.
+            settingsManager.monitoringWasActive = false
+            settingsManager.audioMonitoringWasActive = false
             stopSelf()
             return START_NOT_STICKY
         }
@@ -101,10 +106,12 @@ class AudioRecordingService : LifecycleService() {
         if (!isForegroundActive) {
             isForegroundActive = true
             startForegroundService()
+            settingsManager.monitoringWasActive = true
         }
         if (!isRunning && intent?.getBooleanExtra(EXTRA_START_AUDIO_MONITORING, false) == true) {
             isRunning = true
             startMonitoring()
+            settingsManager.audioMonitoringWasActive = true
         }
         ensureMeterMonitoringStarted()
         return START_STICKY

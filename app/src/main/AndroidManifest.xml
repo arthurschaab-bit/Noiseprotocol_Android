@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Wiederaufnahme der Ueberwachung nach Neustart (Plan Abschnitt 5.4). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Ehrlich abgefragt in den Einstellungen, nicht automatisch erzwungen (Plan 5.4): ohne
+         Ausnahme drosseln Hersteller-ROMs den Foreground Service aggressiv. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Ab minSdk 31 die einzigen noetigen Bluetooth-Berechtigungen (Plan Abschnitt 10):
          kein ACCESS_FINE_LOCATION, da die Scan-Ergebnisse nicht zur Standortbestimmung
@@ -39,6 +44,16 @@
             android:name=".audio.AudioRecordingService"
             android:foregroundServiceType="microphone|connectedDevice"
             android:exported="false" />
+
+        <!-- exported=true ist hier vertretbar: BOOT_COMPLETED ist ein geschuetzter
+             Systembroadcast, den keine App faelschen kann. -->
+        <receiver
+            android:name=".audio.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"
