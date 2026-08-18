@@ -75,7 +75,6 @@ Bluetooth-Berechtigungen und Live-Anzeige.
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Gerätetest** | M2 + M3 am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| **B-11** | 16-KB-Seitengröße: `tensorflow-lite-task-audio` ablösen | nein |
 | M4–M8 | Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
 
@@ -92,9 +91,6 @@ Vorschlag — u. a. Drive-Aggregationsintervall, OAuth-Scope, ob WAV-Dateien mit
 
 - **Der Mikrofon-Pegelwert ist unkalibriert.** `20·log10(rms/32767) + 100` ist dBFS plus
   willkürlicher Offset, ohne A-Bewertung und geräteabhängig. Genau deshalb das PCE-323.
-- **16-KB-Seitengröße** (B-11): `libtask_audio_jni.so` aus dem abgekündigten TFLite-Task-Paket ist
-  nicht 16-KB-ausgerichtet. Auf Geräten im 16-KB-Modus schlägt die KI-Klassifikation fehl; der
-  `catch (e: Exception)` im `NoiseClassifier` fängt den `UnsatisfiedLinkError` nicht ab.
 - **`applicationId` ist `com.example.lrmprotokoll`** (B-6). Im Play Store unzulässig, aber nach
   Veröffentlichung nie wieder änderbar — bewusst vertagt, weil eine Änderung bestehende Aufnahmen
   auf dem Gerät unerreichbar macht.
@@ -135,10 +131,10 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md`](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md) | Der vollständige Plan: Protokoll, Architektur, Robustheit, Sicherheit, Alarmierung, Drive-Sync, Meilensteine, Risiken |
 | [`docs/PROMPT_UMSETZUNG.md`](docs/PROMPT_UMSETZUNG.md) | Prompt-Vorlage für Umsetzungs-Sessions, ein Meilenstein pro Session |
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
-| [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Aufträge für M1 (erledigt) und B-11 (offen) |
+| [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Auftrag für M1 (erledigt) |
 | [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | Auftrag für M2 (erledigt) — BLE-Transport, Decoder-Umbau, Kopplung |
 | [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | Auftrag für M3 (erledigt) — Reconnect, Ausfallerkennung, Foreground Service |
-| [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | **Auftrag für B-11** — 16-KB-Seitengröße, TFLite-Ablösung |
+| [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | Auftrag für B-11 (erledigt) — 16-KB-Seitengröße, TFLite-Ablösung |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
