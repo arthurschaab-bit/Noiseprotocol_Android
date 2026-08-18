@@ -95,7 +95,7 @@ dependencies {
     // Klassifikations-Code (libmediapipe_tasks_jni.so); dessen LOAD-Segmente sind 0x4000
     // (16 KB) ausgerichtet statt der 0x1000 (4 KB) der alten Bibliothek - per readelf -lW
     // gegen beide AARs geprueft.
-    implementation("com.google.mediapipe:tasks-audio:1.0.0")
+    implementation(libs.mediapipe.tasks.audio)
 
     // Testen
     testImplementation(libs.junit)
