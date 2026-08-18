@@ -49,7 +49,7 @@ class AudioRecordingService : LifecycleService() {
 
     private lateinit var settingsManager: SettingsManager
     private lateinit var connectionSupervisor: ConnectionSupervisor
-    private var classifier: NoiseClassifier? = null
+    private var classifier: SoundClassifier? = null
 
     private var rollingBuffer: ByteArray = ByteArray(0)
     private var writeHead = 0
@@ -310,12 +310,9 @@ class AudioRecordingService : LifecycleService() {
         outputStream.close()
         updateWavHeader(file, totalDataLen)
 
-        // KI Klassifizierung nur wenn aktiviert
-        val detected = if (settingsManager.aiEnabled) {
-            classifier?.classify(file)
-        } else {
-            null
-        }
+        // Klassifikator-Aufruf darf die Aufnahme nie verhindern (Prompt B-11, Problem 2):
+        // classifySafely() faengt jede Ausnahme ab und liefert dann nur ein fehlendes Label.
+        val detected = classifySafely(classifier, settingsManager.aiEnabled, file)
 
         val dao = (application as LaermprotokollApp).container.database.noiseDao()
         dao.insert(NoiseRecord(
