@@ -85,7 +85,10 @@ class FakeMeterTransportTest {
     }
 
     @Test
-    fun simulateCorruptFramesLiefertUnplausibleWerte() = runTest {
+    fun simulateCorruptFramesEmittiertKeineFramesNurFehlerzaehler() = runTest {
+        // Ein echter Decode-Fehler (Pegel ausserhalb 20-140 dB) erzeugt beim realen Decoder
+        // KEIN MeterFrame, nur einen hochgezaehlten Fehlerzaehler - der Fake muss das spiegeln,
+        // sonst waere ein "Frame" mit erfundenem Pegel im Umlauf (siehe MeterFrame-Doc).
         val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
         val received = mutableListOf<MeterFrame>()
         backgroundScope.launch { transport.frames.collect { received.add(it) } }
@@ -95,8 +98,29 @@ class FakeMeterTransportTest {
         advanceTimeBy(1_500)
         runCurrent()
 
-        assertTrue(received.isNotEmpty())
-        assertTrue(received.all { it.level !in 20.0..140.0 })
+        assertTrue(received.isEmpty())
+        val quality = transport.frameQuality.value
+        assertTrue("erwartet Fehler > 0, war $quality", quality.errorFrames > 0)
+        assertEquals(quality.totalFrames, quality.errorFrames)
+    }
+
+    @Test
+    fun frameQualityWirdBeiReconnectZurueckgesetzt() = runTest {
+        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
+
+        transport.connect(device)
+        transport.simulateCorruptFrames(true)
+        advanceTimeBy(1_500)
+        runCurrent()
+        assertTrue(transport.frameQuality.value.errorFrames > 0)
+
+        transport.simulateCorruptFrames(false)
+        transport.connect(device)
+        // Bewusst VOR runCurrent() geprueft: connect() setzt frameQuality synchron zurueck,
+        // bevor der neue Emit-Job ueberhaupt zum ersten Mal laeuft. Ein runCurrent() davor
+        // liesse den allerersten (validen) Tick bereits durch und wuerde totalFrames=1 statt 0
+        // liefern - das waere kein Bug, sondern nur eine ungenaue Pruefzeitpunkt-Wahl.
+        assertEquals(FrameQuality(), transport.frameQuality.value)
     }
 
     @Test

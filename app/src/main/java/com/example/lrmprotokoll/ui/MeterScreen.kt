@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,13 +47,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
-import com.example.lrmprotokoll.meter.BoundDevice
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.MeasurementRange
 import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleScanner
+import com.example.lrmprotokoll.meter.label
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -77,6 +79,7 @@ fun MeterScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val transport = container.meterTransport
+    val supervisor = container.connectionSupervisor
     val settings = container.settingsManager
     val scope = rememberCoroutineScope()
 
@@ -87,13 +90,24 @@ fun MeterScreen(onBack: () -> Unit) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     }
 
-    val connectionState by transport.state.collectAsState()
+    // Der Verbindungszustand kommt vom ConnectionSupervisor, nicht direkt vom Transport (PROMPT_M3
+    // Aufgabe 3): nur der Supervisor kennt RECONNECTING/DEGRADED/FAILED, und nur er - vom
+    // AudioRecordingService betrieben - ueberlebt das Schliessen dieses Screens. Die UI
+    // beobachtet nur noch, sie treibt die Verbindung nicht mehr selbst.
+    val connectionState by supervisor.state.collectAsState()
     val latestFrame by transport.frames.collectAsState(initial = null)
 
     var pairedAddress by remember { mutableStateOf(settings.meterDeviceAddress) }
     var pairedName by remember { mutableStateOf(settings.meterDeviceName) }
     var isScanning by remember { mutableStateOf(false) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
+
+    // Startet (falls noetig) den Foreground Service, der den Supervisor mit dem aktuell in
+    // SettingsManager gepinnten Geraet verbindet - ohne EXTRA_START_AUDIO_MONITORING, das
+    // Koppeln eines Messgeraets soll nicht ungefragt die Mikrofon-Ueberwachung mitstarten.
+    fun ensureConnected() {
+        context.startForegroundService(Intent(context, AudioRecordingService::class.java))
+    }
 
     Scaffold(
         topBar = {
@@ -180,10 +194,7 @@ fun MeterScreen(onBack: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = {
-                        val address = pairedAddress ?: return@Button
-                        scope.launch { transport.connect(BoundDevice(address, pairedName ?: address)) }
-                    },
+                    onClick = { ensureConnected() },
                     enabled = hasBluetoothPermissions
                 ) {
                     Text("Verbinden")
@@ -230,9 +241,7 @@ fun MeterScreen(onBack: () -> Unit) {
                             settings.meterDeviceName = device.name ?: device.address
                             pairedAddress = device.address
                             pairedName = device.name ?: device.address
-                            scope.launch {
-                                transport.connect(BoundDevice(device.address, device.name ?: device.address))
-                            }
+                            ensureConnected()
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -278,19 +287,24 @@ private fun rangeLabel(range: MeasurementRange?): String = when (range) {
     null -> "unbekannter Wert"
 }
 
-/** Verbindungszustand wird nie nur farblich kodiert (Barrierefreiheit) - immer Text und Icon. */
+/**
+ * Verbindungszustand wird nie nur farblich kodiert (Barrierefreiheit) - immer Text und Icon.
+ * Der Text kommt aus [com.example.lrmprotokoll.meter.label], damit Notification und Live-Anzeige
+ * nie auseinanderlaufen; Icon und Farbe bleiben UI-lokal.
+ */
 @Composable
 private fun connectionStateDisplay(state: ConnectionState): Triple<ImageVector, String, Color> {
-    return when (state) {
-        ConnectionState.IDLE -> Triple(Icons.Default.Info, "Nicht verbunden", Color.Gray)
-        ConnectionState.SCANNING -> Triple(Icons.Default.Refresh, "Suche…", Color(0xFF1976D2))
+    val (icon, color) = when (state) {
+        ConnectionState.IDLE -> Icons.Default.Info to Color.Gray
+        ConnectionState.SCANNING -> Icons.Default.Refresh to Color(0xFF1976D2)
         ConnectionState.CONNECTING,
         ConnectionState.DISCOVERING,
-        ConnectionState.SUBSCRIBING -> Triple(Icons.Default.Refresh, "Verbinde…", Color(0xFF1976D2))
-        ConnectionState.STREAMING -> Triple(Icons.Default.Check, "Verbunden", Color(0xFF4CAF50))
-        ConnectionState.DEGRADED -> Triple(Icons.Default.Warning, "Instabil", Color(0xFFFFA000))
-        ConnectionState.RECONNECTING -> Triple(Icons.Default.Refresh, "Verbinde erneut…", Color(0xFFFFA000))
-        ConnectionState.DISCONNECTED -> Triple(Icons.Default.Close, "Getrennt", Color.Gray)
-        ConnectionState.FAILED -> Triple(Icons.Default.Warning, "Fehlgeschlagen", Color(0xFFD32F2F))
+        ConnectionState.SUBSCRIBING -> Icons.Default.Refresh to Color(0xFF1976D2)
+        ConnectionState.STREAMING -> Icons.Default.Check to Color(0xFF4CAF50)
+        ConnectionState.DEGRADED -> Icons.Default.Warning to Color(0xFFFFA000)
+        ConnectionState.RECONNECTING -> Icons.Default.Refresh to Color(0xFFFFA000)
+        ConnectionState.DISCONNECTED -> Icons.Default.Close to Color.Gray
+        ConnectionState.FAILED -> Icons.Default.Warning to Color(0xFFD32F2F)
     }
+    return Triple(icon, state.label(), color)
 }

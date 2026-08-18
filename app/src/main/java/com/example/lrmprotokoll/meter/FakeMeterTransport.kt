@@ -36,12 +36,38 @@ class FakeMeterTransport(
     private val _lastFrameAt = MutableStateFlow<Instant?>(null)
     override val lastFrameAt: StateFlow<Instant?> = _lastFrameAt.asStateFlow()
 
+    private val _frameQuality = MutableStateFlow(FrameQuality())
+    override val frameQuality: StateFlow<FrameQuality> = _frameQuality.asStateFlow()
+
     private var emitJob: Job? = null
     private var stalled = false
     private var corruptFrames = false
+    private var validFrameCount = 0L
+    private var errorFrameCount = 0L
+    private var throwOnConnect = false
+
+    /**
+     * Simuliert eine unerwartete Exception aus dem Transport, z.B. eine DeadObjectException
+     * beim Neustart des Bluetooth-Stacks oder eine IllegalStateException aus getRemoteDevice()
+     * bei ungueltig gewordener Adresse (Review-Befund 2, PR #16) - fuer den Test, dass
+     * [ConnectionSupervisor] darauf wie auf einen normalen Fehlschlag reagiert statt die
+     * Ueberwachung lautlos zu beenden.
+     */
+    fun simulateConnectException(enabled: Boolean) {
+        throwOnConnect = enabled
+    }
 
     override suspend fun connect(device: BoundDevice) {
+        if (throwOnConnect) {
+            throw IllegalStateException("Simulierter Verbindungsfehler (simulateConnectException)")
+        }
         stopEmitting()
+        // Wie beim realen Decoder (Pce323FrameDecoder.reset()) faengt jeder (Re-)Connect mit
+        // sauberen Zaehlern an - sonst wuerde die Fehlerrate eines fruehen Verbindungsversuchs
+        // ueber einen Reconnect hinweg fortleben.
+        validFrameCount = 0
+        errorFrameCount = 0
+        _frameQuality.value = FrameQuality()
         _state.value = ConnectionState.CONNECTING
         _state.value = ConnectionState.DISCOVERING
         _state.value = ConnectionState.SUBSCRIBING
@@ -75,7 +101,14 @@ class FakeMeterTransport(
         this.stalled = stalled
     }
 
-    /** Laesst nachfolgende Frames unplausible Pegelwerte (ausserhalb 20-140 dB) tragen. */
+    /**
+     * Laesst nachfolgende Ticks wie verworfene Decode-Kandidaten wirken: kein Frame wird
+     * emittiert, nur der Fehlerzaehler steigt - genau das Verhalten des echten
+     * [Pce323FrameDecoder] bei einem unplausiblen Wert (Pegel ausserhalb 20-140 dB), nicht ein
+     * Frame MIT unplausiblem Pegel. Ein tatsaechlich emittiertes MeterFrame gilt sonst als
+     * valides Wissen (siehe MeterFrame-Doc) - ein "Frame" mit erfundenem Pegel waere genau der
+     * Vertrauensbruch, den diese Klasse an anderer Stelle bewusst vermeidet.
+     */
     fun simulateCorruptFrames(corrupt: Boolean) {
         this.corruptFrames = corrupt
     }
@@ -86,9 +119,15 @@ class FakeMeterTransport(
             val periodMs = (1000.0 / frameRateHz).toLong()
             while (isActive) {
                 if (!stalled) {
-                    val frame = nextFrame()
-                    _lastFrameAt.value = frame.receivedAt
-                    _frames.emit(frame)
+                    if (corruptFrames) {
+                        errorFrameCount++
+                    } else {
+                        val frame = nextFrame()
+                        validFrameCount++
+                        _lastFrameAt.value = frame.receivedAt
+                        _frames.emit(frame)
+                    }
+                    _frameQuality.value = FrameQuality(validFrameCount + errorFrameCount, errorFrameCount)
                 }
                 delay(periodMs)
             }
@@ -101,11 +140,7 @@ class FakeMeterTransport(
     }
 
     private fun nextFrame(): MeterFrame {
-        val level = if (corruptFrames) {
-            listOf(-10.0, 999.0).random()
-        } else {
-            baseLevel + Random.nextDouble(-3.0, 3.0)
-        }
+        val level = baseLevel + Random.nextDouble(-3.0, 3.0)
         // Spiegelt das reale BleMeterTransport-Verhalten: Bewertung, Zeitbewertung, Bereich
         // und Hold-Status sind beim echten Geraet unbekannt (siehe MeterFrame-Doc), der Fake
         // taeuscht hier bewusst kein Wissen vor, das es in Wirklichkeit nicht gibt.

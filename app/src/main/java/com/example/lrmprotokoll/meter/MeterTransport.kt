@@ -12,11 +12,21 @@ interface MeterTransport {
     val state: StateFlow<ConnectionState>
     val frames: SharedFlow<MeterFrame>
     val lastFrameAt: StateFlow<Instant?>
+    val frameQuality: StateFlow<FrameQuality>
 
     suspend fun connect(device: BoundDevice)
     suspend fun disconnect()
     suspend fun send(command: MeterCommand): Result<Unit>
 }
+
+/**
+ * Kumulative Frame-/Fehlerzaehler seit dem letzten [connect] (Plan Abschnitt 5.5,
+ * PROMPT_M3 Aufgabe 2). Absichtlich kein gleitendes Fenster hier - das waere doppelt
+ * gemoppelt, weil [ConnectionSupervisor] die Fehlerrate ueber sein eigenes Fenster berechnet
+ * und dabei bei jedem Reconnect (also jedem Reset dieser Zaehler) neu ansetzen muss, statt die
+ * absoluten Werte ueber einen Reconnect hinweg fortzuschreiben.
+ */
+data class FrameQuality(val totalFrames: Long = 0, val errorFrames: Long = 0)
 
 /**
  * Ein dekodierter Messwert. [weighting], [timeWeighting], [range], [holdMax] und [holdMin]

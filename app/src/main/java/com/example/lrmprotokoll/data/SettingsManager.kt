@@ -39,4 +39,17 @@ class SettingsManager(context: Context) {
     var meterDeviceName: String?
         get() = prefs.getString("meter_device_name", null)
         set(value) = prefs.edit().putString("meter_device_name", value).apply()
+
+    // Fuer die automatische Wiederaufnahme nach einem Geraeteneustart (Plan Abschnitt 5.4):
+    // monitoringWasActive haelt fest, ob der Foreground Service beim letzten expliziten Stop
+    // noch lief (egal ob wegen Audio- oder Messgeraet-Ueberwachung), audioMonitoringWasActive
+    // zusaetzlich, ob davon auch die Mikrofon-Schwellwertueberwachung betroffen war - ein
+    // Neustart soll nur das reaktivieren, was der Nutzer tatsaechlich zuletzt laufen hatte.
+    var monitoringWasActive: Boolean
+        get() = prefs.getBoolean("monitoring_was_active", false)
+        set(value) = prefs.edit().putBoolean("monitoring_was_active", value).apply()
+
+    var audioMonitoringWasActive: Boolean
+        get() = prefs.getBoolean("audio_monitoring_was_active", false)
+        set(value) = prefs.edit().putBoolean("audio_monitoring_was_active", value).apply()
 }

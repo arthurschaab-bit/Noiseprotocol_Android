@@ -14,35 +14,71 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.meter.BoundDevice
+import com.example.lrmprotokoll.meter.ConnectionState
+import com.example.lrmprotokoll.meter.ConnectionSupervisor
+import com.example.lrmprotokoll.meter.label
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+private const val NOTIFICATION_ID = 1
+private const val NOTIFICATION_CHANNEL_ID = "noise_monitoring_channel"
+
+/**
+ * Steuert, ob dieser Start auch die Mikrofon-Ueberwachung anstossen soll. Fehlt das Extra
+ * (z. B. wenn MeterScreen den Dienst nur startet, damit ein frisch gepinntes Geraet unter dem
+ * Schutz des Foreground Service verbunden wird), bleibt die Aufnahme unberuehrt - das Koppeln
+ * eines Messgeraets soll nicht ungefragt die Mikrofon-Schwellwertueberwachung mitstarten.
+ */
+const val EXTRA_START_AUDIO_MONITORING = "start_audio_monitoring"
+
 class AudioRecordingService : LifecycleService() {
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
-    
+
+    private var isForegroundActive = false
     private var isRunning = false
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bytesPerSample = 2 
+    private val bytesPerSample = 2
     private var bufferSize = 0
 
     private lateinit var settingsManager: SettingsManager
+    private lateinit var connectionSupervisor: ConnectionSupervisor
     private var classifier: NoiseClassifier? = null
-    
+
     private var rollingBuffer: ByteArray = ByteArray(0)
     private var writeHead = 0
     private var isBufferFull = false
 
     override fun onCreate() {
         super.onCreate()
-        settingsManager = (application as LaermprotokollApp).container.settingsManager
+        val container = (application as LaermprotokollApp).container
+        settingsManager = container.settingsManager
+        connectionSupervisor = container.connectionSupervisor
         classifier = NoiseClassifier(applicationContext)
         updateRollingBuffer()
+
+        lifecycleScope.launch {
+            connectionSupervisor.state.collect { updateNotification(it) }
+        }
+    }
+
+    /**
+     * Verbindung zum PCE-323 gehoert in den Foreground Service, nicht in die UI (PROMPT_M3
+     * Aufgabe 3): sie muss eine geschlossene UI und Konfigurationswechsel ueberleben. Bei jedem
+     * [onStartCommand] neu geprueft statt nur in [onCreate] - so wird auch ein waehrend
+     * laufendem Dienst neu gepinntes Geraet aufgenommen, ohne dass die Aufnahme neu gestartet
+     * werden muss. [ConnectionSupervisor.start] ist ein No-Op, wenn bereits genau dieses Geraet
+     * ueberwacht wird. Ohne gepinntes Geraet (Plan Abschnitt 6) passiert nichts.
+     */
+    private fun ensureMeterMonitoringStarted() {
+        val address = settingsManager.meterDeviceAddress ?: return
+        connectionSupervisor.start(BoundDevice(address, settingsManager.meterDeviceName ?: address))
     }
 
     private fun updateRollingBuffer() {
@@ -58,49 +94,78 @@ class AudioRecordingService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == "STOP_SERVICE") {
+            // Expliziter Nutzerstop: die Flags fuer die Neustart-Wiederaufnahme (Plan Abschnitt
+            // 5.4) muessen hier zurueckgesetzt werden, sonst wuerde ein spaeterer Geraeteneustart
+            // etwas reaktivieren, das der Nutzer bewusst beendet hat.
+            settingsManager.monitoringWasActive = false
+            settingsManager.audioMonitoringWasActive = false
             stopSelf()
             return START_NOT_STICKY
         }
-        
-        if (!isRunning) {
-            isRunning = true
+
+        if (!isForegroundActive) {
+            isForegroundActive = true
             startForegroundService()
-            startMonitoring()
+            settingsManager.monitoringWasActive = true
         }
+        if (!isRunning && intent?.getBooleanExtra(EXTRA_START_AUDIO_MONITORING, false) == true) {
+            isRunning = true
+            startMonitoring()
+            settingsManager.audioMonitoringWasActive = true
+        }
+        ensureMeterMonitoringStarted()
         return START_STICKY
     }
 
     private fun startForegroundService() {
-        val channelId = "noise_monitoring_channel"
         val channel = NotificationChannel(
-            channelId,
+            NOTIFICATION_CHANNEL_ID,
             "Lärm-Monitoring Dienst",
             NotificationManager.IMPORTANCE_LOW
         )
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
-
-        val stopIntent = Intent(this, AudioRecordingService::class.java).apply {
-            action = "STOP_SERVICE"
-        }
-        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
-
-        val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Lärm-Monitoring aktiv")
-            .setContentText("Die App überwacht die Umgebungslautstärke im Hintergrund.")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stoppen", stopPendingIntent)
-            .build()
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
         // connectedDevice zusaetzlich zu microphone deklariert (Plan Abschnitt 4.5): der
         // Dienst nutzt das PCE-323 als Trigger-Quelle erst ab M4, aber Manifest und
         // startForeground() muessen von Anfang an zusammenpassen.
         startForeground(
-            1,
-            notification,
+            NOTIFICATION_ID,
+            buildNotification(connectionSupervisor.state.value),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
+    }
+
+    /**
+     * Zeigt den Messgeraet-Verbindungszustand in der Dauer-Notification (Plan Abschnitt 5.4):
+     * sonst ist von aussen nicht erkennbar, ob die Ueberwachung wirklich laeuft oder der
+     * Dienst nur ohne Datenfluss dasteht. Nur relevant, solange ueberhaupt ein Geraet gepinnt
+     * ist - ohne Pinning bleibt der Supervisor bei IDLE und die Zeile wird nicht angezeigt.
+     */
+    private fun updateNotification(state: ConnectionState) {
+        if (!isForegroundActive) return // Notification-Kanal existiert erst nach startForegroundService()
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildNotification(state))
+    }
+
+    private fun buildNotification(meterState: ConnectionState): Notification {
+        val stopIntent = Intent(this, AudioRecordingService::class.java).apply {
+            action = "STOP_SERVICE"
+        }
+        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val contentText = if (settingsManager.meterDeviceAddress != null) {
+            "Überwacht die Umgebungslautstärke. Messgerät: ${meterState.label()}"
+        } else {
+            "Die App überwacht die Umgebungslautstärke im Hintergrund."
+        }
+
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("Lärm-Monitoring aktiv")
+            .setContentText(contentText)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stoppen", stopPendingIntent)
+            .build()
     }
 
     private fun startMonitoring() {
@@ -299,6 +364,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onDestroy() {
         isRunning = false
+        connectionSupervisor.stop()
         serviceJob.cancel()
         super.onDestroy()
     }
