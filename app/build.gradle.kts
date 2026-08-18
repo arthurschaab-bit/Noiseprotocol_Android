@@ -90,7 +90,12 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    implementation("org.tensorflow:tensorflow-lite-task-audio:0.4.4")
+    // B-11: Nachfolger fuer org.tensorflow:tensorflow-lite-task-audio (abgekuendigt, nicht
+    // 16-KB-seitenausgerichtet). tasks-audio zieht tasks-core mit dem eigentlichen nativen
+    // Klassifikations-Code (libmediapipe_tasks_jni.so); dessen LOAD-Segmente sind 0x4000
+    // (16 KB) ausgerichtet statt der 0x1000 (4 KB) der alten Bibliothek - per readelf -lW
+    // gegen beide AARs geprueft.
+    implementation("com.google.mediapipe:tasks-audio:1.0.0")
 
     // Testen
     testImplementation(libs.junit)
