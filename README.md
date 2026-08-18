@@ -20,11 +20,12 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M0** Protokoll-Discovery am PCE-323 | ✅ abgeschlossen |
 | **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
 | **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
-| **M3** Robustheit (Reconnect, Ausfallerkennung) | ⬜ **als Nächstes** |
+| **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
+| **Gerätetest** M2 + M3 am realen PCE-323 | ⬜ **als Nächstes** |
 | Alarmierung bei Verbindungsabbruch (SMS + Push) | ⬜ offen |
 | Google-Drive-Sync (30 min, eine Datei pro Tag) | ⬜ offen |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 4 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 5 von 10 Meilensteinen.**
 
 ---
 
@@ -73,8 +74,7 @@ Bluetooth-Berechtigungen und Live-Anzeige.
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **M3** | Robustheit: Reconnect-Backoff, Staleness- und Fehlerraten-Erkennung, Verbindung in den Foreground Service, Neustart-Wiederaufnahme | nein, nur zur Endabnahme |
-| **Gerätetest M2** | Erste echte Verbindung; dabei zwei Messungen: verfälscht die Funkstrecke den Pegel, und welches Byte kodiert A/C? | **ja** |
+| **Gerätetest** | M2 + M3 am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | **B-11** | 16-KB-Seitengröße: `tensorflow-lite-task-audio` ablösen | nein |
 | M4–M8 | Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
@@ -137,6 +137,8 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
 | [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Aufträge für M1 (erledigt) und B-11 (offen) |
 | [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | Auftrag für M2 (erledigt) — BLE-Transport, Decoder-Umbau, Kopplung |
-| [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | **Auftrag für M3** — Reconnect, Ausfallerkennung, Foreground Service |
+| [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | Auftrag für M3 (erledigt) — Reconnect, Ausfallerkennung, Foreground Service |
+| [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | **Auftrag für B-11** — 16-KB-Seitengröße, TFLite-Ablösung |
+| [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
