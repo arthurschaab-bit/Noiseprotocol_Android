@@ -21,8 +21,8 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
 | **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
 | **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
-| **Gerätetest** M2 + M3 am realen PCE-323 | ⬜ **als Nächstes** |
-| Alarmierung bei Verbindungsabbruch (SMS + Push) | ⬜ offen |
+| **Gerätetest** M2 + M3 am realen PCE-323 | ⬜ **als Nächstes am Gerät** |
+| **M5** Alarmierung bei Verbindungsabbruch (SMS + ntfy, Totmannschaltung) | ⬜ **als Nächstes am Code** — [Auftrag](docs/PROMPT_M5.md) |
 | Google-Drive-Sync (30 min, eine Datei pro Tag) | ⬜ offen |
 
 **Gesamtfortschritt Bluetooth-Vorhaben: 5 von 10 Meilensteinen.**
@@ -82,16 +82,26 @@ Wiederaufnahme nach Neustart.
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
+| **M5** | **Alarmierung** — Watchdog, Karenzzeit, SMS + ntfy, Totmannschaltung. Auftrag: [`docs/PROMPT_M5.md`](docs/PROMPT_M5.md) | nein, erst zur Endabnahme |
 | **Gerätetest** | M2 + M3 am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M4–M8 | Persistenz, Alarmierung, Sicherheit, UI, Härtung | teilweise |
+| M4 | Persistenz der Messreihe — Voraussetzung für M7b. Die Frequenzbewertung bleibt bis zum Gerätetest ungespeichert | nein |
+| M6–M8 | Sicherheit, UI-Ausbau, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
+
+M5 steht laut Plan auf dem kritischen Pfad (`M-1 → M0 → M2 → M3 → M5`) und ist die Funktion, für
+die das Vorhaben gestartet wurde. M4 ist dafür ausdrücklich **keine** Voraussetzung.
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
 ### Offene Entscheidungen
 
-Sieben Punkte in [Plan Abschnitt 13](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md), jeweils mit
-Vorschlag — u. a. Drive-Aggregationsintervall, OAuth-Scope, ob WAV-Dateien mit hochgeladen werden.
+**Für M5 entschieden:** Entwarnung bei Push an / bei SMS aus · Cooldown 30 min, Eskalation nach
+60 min, max. 3 Wiederholungen · Push-Kanal **ntfy** (zunächst öffentlicher Server, Basis-URL
+konfigurierbar) · SMS parallel dazu.
+
+**Noch offen:** drei Punkte in [Plan Abschnitt 13](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md),
+alle zu M4/M7b — Aufbewahrungsdauer und SQLCipher, Drive-Aggregationsintervall und OAuth-Scope, ob
+WAV-Dateien mit hochgeladen werden.
 
 ---
 
@@ -143,6 +153,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M2.md`](docs/PROMPT_M2.md) | Auftrag für M2 (erledigt) — BLE-Transport, Decoder-Umbau, Kopplung |
 | [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | Auftrag für M3 (erledigt) — Reconnect, Ausfallerkennung, Foreground Service |
 | [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | Auftrag für B-11 (erledigt) — 16-KB-Seitengröße, TFLite-Ablösung |
+| [`docs/PROMPT_M5.md`](docs/PROMPT_M5.md) | **Auftrag für M5** — Alarmierung, Karenzzeit, SMS + ntfy, Totmannschaltung |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
 | [`docs/PROTOKOLL_PCE-323_ANLEITUNG.md`](docs/PROTOKOLL_PCE-323_ANLEITUNG.md) | Schritt-für-Schritt-Anleitung für M0 (Protokoll-Discovery am realen Gerät) |
