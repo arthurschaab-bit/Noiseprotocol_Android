@@ -213,8 +213,14 @@ class ConnectionSupervisor(
     }
 
     private fun backoffDelayMillis(consecutiveFailures: Int): Long {
-        require(consecutiveFailures >= 1) { "backoffDelayMillis gilt erst ab dem ersten Fehlschlag" }
-        val baseSeconds = BACKOFF_STEPS_SECONDS.getOrElse(consecutiveFailures - 1) { BACKOFF_CONSTANT_SECONDS }
+        require(consecutiveFailures >= 0) { "consecutiveFailures kann nicht negativ sein" }
+        // consecutiveFailures == 0 tritt nach einem STREAMED_THEN_LOST-Reset auf (Geraet war
+        // gerade noch erreichbar) - das bekommt bewusst denselben ersten Backoff-Schritt wie
+        // der allererste echte Fehlschlag, statt sofort ohne Wartezeit erneut zu verbinden:
+        // sonst wuerde schnelles Flattern (Plan 7.1, PROMPT_M3-Testfall) zu einem Reconnect-
+        // Sturm ohne jede Verzoegerung fuehren.
+        val stepIndex = (consecutiveFailures - 1).coerceAtLeast(0)
+        val baseSeconds = BACKOFF_STEPS_SECONDS.getOrElse(stepIndex) { BACKOFF_CONSTANT_SECONDS }
         val jitter = 1.0 + random.nextDouble(-BACKOFF_JITTER_FRACTION, BACKOFF_JITTER_FRACTION)
         return (baseSeconds * 1000 * jitter).toLong().coerceAtLeast(0)
     }
