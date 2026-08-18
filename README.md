@@ -47,26 +47,34 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 Datenverlust, Paketstruktur nach Zuständigkeit, `AppContainer`, `MeterTransport` mit
 `FakeMeterTransport` für hardwarefreie Tests.
 
-### Nicht vorhanden
-
-Seit M2 vorhanden: BLE-Scan mit Geräte-Pinning, Verbindungsaufbau über eine serialisierte
-`GattQueue`, CCCD-Write, Reassembly der 20 + 3 Byte, Decoder auf dem realen 23-Byte-Format,
+**Aus M2:** BLE-Scan mit Geräte-Pinning, Verbindungsaufbau über eine serialisierte `GattQueue`,
+CCCD-Write, Reassembly der 20 + 3 Byte, Decoder auf dem realen 23-Byte-Format,
 Bluetooth-Berechtigungen und Live-Anzeige.
+
+**Aus M3:** Reconnect mit Backoff und Jitter, vier unabhängige Ausfallsignale (Abbruch,
+Datenstillstand, Adapter aus, Fehlerrate), Verbindung im Foreground Service statt in der UI,
+Wiederaufnahme nach Neustart.
+
+### Nicht vorhanden
 
 | | |
 |---|---|
-| Reconnect mit Backoff, Ausfallerkennung | → M3 |
-| Verbindung im Foreground Service statt in der UI | → M3 |
-| Wiederaufnahme nach Neustart | → M3 |
-| Persistenz der Messreihe, Trigger-Umstellung | → M4 |
+| Persistenz der Messreihe, Trigger-Umstellung auf das Messgerät | → M4 |
+| Alarmierung bei Verbindungsabbruch, Totmannschaltung | → M5 |
+| Verschlüsselung at rest, Geräte-Pinning härten | → M6 |
+| Diagnose-Screen, Export der Messreihe | → M7 |
+| Google-Drive-Sync | → M7b |
 
-> ⚠ **Der Gerätetest zu M2 steht noch aus.** Der gesamte BLE-Pfad ist bislang nur gegen die
-> 99 aufgezeichneten Frames aus M0 geprüft, nie gegen das reale Gerät.
+> ⚠ **Der Gerätetest steht noch aus — für M2 *und* M3.** Der gesamte BLE-Pfad und die gesamte
+> Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0 geprüft,
+> nie gegen das reale Gerät. Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
 
-> ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Das Protokoll liefert keine erkennbare
-> Kodierung der Frequenzbewertung; die App beschriftet den Wert deshalb bewusst nur als „dB".
-> Klären lässt sich das nur durch eine zweite Aufzeichnung, bei der am Gerät zwischen A und C
-> umgeschaltet wird.
+> ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Die Byte-Position der Frequenzbewertung ist seit
+> der Folgeaufzeichnung bekannt, welcher Bytewert aber A und welcher C bedeutet, ist eine
+> Annahme — abgebildet über `MeterFrame.modeAssumptionConfirmed`, das auf `false` steht. Die App
+> beschriftet den Wert deshalb bewusst nur als „dB". Beweisen lässt sich die Zuordnung über die
+> Frequenzgang-Messung in Teil B2 der Checkliste. **Bis dahin darf M4 die Frequenzbewertung nicht
+> als Tatsache speichern.**
 
 ---
 
