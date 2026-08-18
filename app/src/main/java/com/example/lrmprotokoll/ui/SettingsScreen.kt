@@ -1,5 +1,9 @@
 package com.example.lrmprotokoll.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -8,7 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.LaermprotokollApp
 import java.util.Locale
 
@@ -25,6 +32,24 @@ fun SettingsScreen(onBack: () -> Unit) {
     var aiEnabled by remember { mutableStateOf(settings.aiEnabled) }
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
     var sampleRate by remember { mutableIntStateOf(settings.audioSampleRate) }
+
+    val powerManager = remember { context.getSystemService(PowerManager::class.java) }
+    fun isIgnoringBatteryOptimizations() =
+        powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+    var batteryOptimizationIgnored by remember { mutableStateOf(isIgnoringBatteryOptimizations()) }
+
+    // Der Systemdialog laeuft in einer eigenen Activity - beim Zurueckkehren (ON_RESUME) den
+    // tatsaechlichen Status neu lesen, statt ihn optimistisch anzunehmen.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                batteryOptimizationIgnored = isIgnoringBatteryOptimizations()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -104,6 +129,35 @@ fun SettingsScreen(onBack: () -> Unit) {
                     onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
                     label = { Text("44100 Hz (Qualität)") }
                 )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text("Akku-Optimierung", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            if (batteryOptimizationIgnored) {
+                Text(
+                    "Diese App ist von der Akku-Optimierung ausgenommen. Die Messgeräte-" +
+                        "Überwachung im Hintergrund läuft damit zuverlässig weiter."
+                )
+            } else {
+                Text(
+                    "Ohne Ausnahme von der Akku-Optimierung beendet das Betriebssystem die " +
+                        "Bluetooth-Verbindung zum Messgerät im Hintergrund oft vorzeitig, " +
+                        "besonders bei Herstellern wie Xiaomi, Huawei oder Samsung. Mit der " +
+                        "Ausnahme bleibt die Verbindung auch bei ausgeschaltetem Bildschirm " +
+                        "bestehen. Das kann den Akkuverbrauch leicht erhöhen."
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = {
+                    val intent = Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                }) {
+                    Text("Akku-Optimierung deaktivieren")
+                }
             }
         }
     }
