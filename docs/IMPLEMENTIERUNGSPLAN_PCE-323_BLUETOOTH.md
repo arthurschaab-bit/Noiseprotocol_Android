@@ -779,8 +779,14 @@ SMS-Verwaltung ist (also genau unser Fall), wird bei Veröffentlichung im Play S
 sofern nicht eine Ausnahmegenehmigung über das Declaration Form erteilt wird — die für diesen
 Anwendungsfall erfahrungsgemäß selten gewährt wird.
 
-**Status: bewusst vertagt** (Entscheidung 1 in 0.1). Bis auf Weiteres wird intern verteilt
-(Sideload), damit ist der direkte `SmsManager`-Versand uneingeschränkt möglich.
+**Status: erledigt durch Streichung.** Der SMS-Kanal wurde in M5 nicht gebaut — der Owner hat sich
+gegen ihn entschieden, statt auf die interne Verteilung zu setzen. Der Abschnitt bleibt stehen,
+weil er die Begründung trägt und weil die `AlertChannel`-Abstraktion, die er verlangt hat, sich
+genau dabei bewährt hat: Das Streichen war eine Zeile in der Kanalliste des `AppContainer` und
+kein Eingriff in die Alarmlogik.
+
+Was dadurch fehlt, steht in 13.4: Der Fall „kein Internet" hat keinen zweiten Alarmkanal mehr und
+wird von der Totmannschaltung (7.5) getragen.
 
 Damit diese Entscheidung reversibel bleibt, wird die Alarmierung von Anfang an hinter eine
 Abstraktion gelegt:
@@ -1126,7 +1132,7 @@ Anmerkungen:
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
 | **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
-| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `SmsAlertChannel` mit Zustellnachweis + Retry, `NtfyAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** | 4 d |
+| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `NtfyAlertChannel`, `LocalNotificationAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** — `SmsAlertChannel` gestrichen (Owner-Entscheidung, siehe 13.4) | 4 d |
 | **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
 | **M7b** | **Google-Drive-Sync (F-10)** | OAuth `drive.file`, Ordneranlage, 10-s-Aggregation, CSV-Erzeugung, `DriveSyncWorker`, `DailyFileRegistry`, Fehlerbehandlung, Sync-Status im UI | 3–4 d |
@@ -1181,7 +1187,15 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
    und ob die Datenbank per SQLCipher verschlüsselt wird.
 3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
    Wiederholungen.
-4. **Push-Kanal für M5** — ntfy öffentlich oder self-hosted?
+4. ~~**Push-Kanal für M5**~~ — **entschieden: ntfy**, für den ersten Wurf der öffentliche Server
+   `ntfy.sh` mit langem Zufalls-Topic; die Basis-URL liegt in den Einstellungen, ein Wechsel auf
+   eine self-hosted Instanz bleibt damit eine Konfigurationsänderung.
+   **Der SMS-Kanal wurde gestrichen** (Owner-Entscheidung, `SEND_SMS` ist eine eingeschränkte
+   Berechtigung, siehe 7.6). Folge: Die Kanaltabelle in 7.4 stimmt nicht mehr — der Fall
+   „kein Internet" ist durch keinen zweiten Alarmkanal mehr abgedeckt. Getragen wird er jetzt
+   von der Totmannschaltung (7.5): Ohne Internet bleibt auch der Heartbeat aus, und die
+   Gegenseite alarmiert. Damit ist 7.5 nicht mehr nur die wichtigste Einzelmaßnahme, sondern
+   für diesen Ausfall die einzige.
 5. **Drive-Aggregationsintervall** — Vorschlag 10 s (8.4.1). Feiner geht, kostet aber
    überproportional Upload-Volumen.
 6. **Drive-Ordnerwahl** — reicht ein von der App angelegter Ordner (`drive.file`, keine
