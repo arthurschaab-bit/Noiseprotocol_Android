@@ -116,8 +116,10 @@ class FakeMeterTransportTest {
 
         transport.simulateCorruptFrames(false)
         transport.connect(device)
-        runCurrent()
-
+        // Bewusst VOR runCurrent() geprueft: connect() setzt frameQuality synchron zurueck,
+        // bevor der neue Emit-Job ueberhaupt zum ersten Mal laeuft. Ein runCurrent() davor
+        // liesse den allerersten (validen) Tick bereits durch und wuerde totalFrames=1 statt 0
+        // liefern - das waere kein Bug, sondern nur eine ungenaue Pruefzeitpunkt-Wahl.
         assertEquals(FrameQuality(), transport.frameQuality.value)
     }
 
