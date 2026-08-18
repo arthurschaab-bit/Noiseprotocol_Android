@@ -65,9 +65,50 @@ val MIGRATION_4_6 = object : Migration(4, 6) {
     }
 }
 
-@Database(entities = [NoiseRecord::class, ReferenceSound::class], version = 6, exportSchema = true)
+
+/**
+ * Migration von Schema-Version 6 auf 7: die Tabelle `alerts` fuer M5 (Alarmierung).
+ *
+ * Rein additiv - es wird keine bestehende Tabelle angefasst, keine Spalte umbenannt, kein
+ * Datensatz beruehrt. Aufgezeichnete Laermereignisse und gelernte Referenzgeraeusche bleiben
+ * dadurch nachweislich unveraendert; der Migrationstest prueft genau das.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Muss dem exportierten Schema 7.json entsprechen, sonst schlaegt Rooms Validierung
+        // beim Oeffnen fehl - inklusive der NOT-NULL-Angaben und der Default-Werte.
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `alerts` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER, " +
+                "`outageSince` INTEGER NOT NULL, " +
+                "`raisedAt` INTEGER, " +
+                "`resolvedAt` INTEGER, " +
+                "`reason` TEXT NOT NULL, " +
+                "`recipients` TEXT NOT NULL, " +
+                "`deliveryState` TEXT NOT NULL, " +
+                "`attempts` INTEGER NOT NULL, " +
+                "`escalations` INTEGER NOT NULL)"
+        )
+    }
+}
+
+/**
+ * Alle Migrationen an einer Stelle.
+ *
+ * Der Umweg ueber eine Konstante ist kein Selbstzweck: Die Migrationstests registrieren ihre
+ * Migrationen selbst, weil sie die Datenbank ueber einen eigenen Builder oeffnen. Stuenden die
+ * Migrationen nur im Builder unten, wuerde jede neue Migration die Tests stillschweigend an der
+ * Produktionsliste vorbeilaufen lassen - genau das ist beim Sprung auf Version 7 passiert und
+ * haette einen gruenen Test trotz kaputtem Upgrade-Pfad ergeben koennen.
+ */
+val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7)
+
+@Database(entities = [NoiseRecord::class, ReferenceSound::class, AlertEntity::class], version = 7, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noiseDao(): NoiseDao
+
+    abstract fun alertDao(): AlertDao
 
     companion object {
         @Volatile
@@ -80,7 +121,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "noise_database"
                 )
-                .addMigrations(MIGRATION_4_6)
+                .addMigrations(*ALLE_MIGRATIONEN)
                 .build()
                 INSTANCE = instance
                 instance

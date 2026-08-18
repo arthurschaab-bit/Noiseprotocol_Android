@@ -14,8 +14,8 @@ import org.robolectric.annotation.Config
 private const val V4_DB_NAME = "v4-migration-test"
 
 /**
- * Prueft den Migrationspfad 4 -> 6 mit dem Schema, das tatsaechlich auf einem Geraet vorgefunden
- * wurde.
+ * Prueft den vollstaendigen Migrationspfad von Version 4 bis zur aktuellen Version mit dem
+ * Schema, das tatsaechlich auf einem Geraet vorgefunden wurde.
  *
  * Warum dieser Test zusaetzlich zu [AppDatabaseMigrationTest] noetig ist: Jener Test baut seine
  * Ausgangsdatenbank ueber MigrationTestHelper aus dem exportierten Schema-JSON auf. Sie passt damit
@@ -68,15 +68,16 @@ class AppDatabaseV4MigrationTest {
     }
 
     @Test
-    fun v4BestandUeberlebtMigrationAufV6() {
+    fun v4BestandUeberlebtDieMigrationAufDieAktuelleVersion() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         erzeugeV4Datenbank(context)
 
-        // Oeffnen ueber denselben Builder-Pfad wie in AppDatabase.getDatabase(): mit der Migration,
-        // ohne destruktiven Fallback. Schlaegt die Migration fehl oder passt das Ergebnis nicht zum
-        // deklarierten v6-Schema, wirft Room hier.
+        // Oeffnen ueber denselben Builder-Pfad wie in AppDatabase.getDatabase(): mit derselben
+        // Migrationsliste, ohne destruktiven Fallback. Room laeuft dabei die ganze Kette ab
+        // (4 -> 6 -> 7). Schlaegt ein Schritt fehl oder passt das Ergebnis nicht zum deklarierten
+        // Schema, wirft Room hier.
         val database = Room.databaseBuilder(context, AppDatabase::class.java, V4_DB_NAME)
-            .addMigrations(MIGRATION_4_6)
+            .addMigrations(*ALLE_MIGRATIONEN)
             .allowMainThreadQueries()
             .build()
 
@@ -135,7 +136,7 @@ class AppDatabaseV4MigrationTest {
         erzeugeV4Datenbank(context)
 
         Room.databaseBuilder(context, AppDatabase::class.java, V4_DB_NAME)
-            .addMigrations(MIGRATION_4_6)
+            .addMigrations(*ALLE_MIGRATIONEN)
             .allowMainThreadQueries()
             .build()
             .apply {
@@ -144,7 +145,7 @@ class AppDatabaseV4MigrationTest {
             }
 
         Room.databaseBuilder(context, AppDatabase::class.java, V4_DB_NAME)
-            .addMigrations(MIGRATION_4_6)
+            .addMigrations(*ALLE_MIGRATIONEN)
             .allowMainThreadQueries()
             .build()
             .apply {

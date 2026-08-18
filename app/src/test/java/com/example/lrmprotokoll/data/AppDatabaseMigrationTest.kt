@@ -54,6 +54,7 @@ class AppDatabaseMigrationTest {
         // Oeffnet dieselbe Datenbankdatei ueber den echten Produktionscode-Pfad.
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val database = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB_NAME)
+            .addMigrations(*ALLE_MIGRATIONEN)
             .allowMainThreadQueries()
             .build()
 
