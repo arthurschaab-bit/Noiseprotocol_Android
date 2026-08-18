@@ -31,6 +31,15 @@ interface AlertDao {
     @Query("SELECT * FROM alerts WHERE deliveryState = 'FAILED' ORDER BY outageSince")
     suspend fun fehlgeschlagene(): List<AlertEntity>
 
+    /**
+     * Zeitpunkt des zuletzt tatsaechlich ausgeloesten Alarms - Grundlage fuer den Cooldown.
+     * Bewusst aus der Datenbank und nicht aus einem Feld im AlarmCoordinator: Sonst wuerde ein
+     * Prozess-Neustart den Cooldown zuruecksetzen und der Nutzer bekaeme nach jedem Neustart
+     * sofort wieder einen Alarm.
+     */
+    @Query("SELECT MAX(raisedAt) FROM alerts")
+    suspend fun letzterAlarmZeitpunkt(): Long?
+
     @Query("SELECT * FROM alerts ORDER BY outageSince DESC")
     fun alle(): Flow<List<AlertEntity>>
 }
