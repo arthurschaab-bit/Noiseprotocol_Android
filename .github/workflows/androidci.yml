@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Manuell ausloesbar, damit ein Lauf nicht erst einen Commit braucht.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -37,8 +39,18 @@ jobs:
       - name: Build debug
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
+      # --continue, damit ein fehlgeschlagener Test die uebrigen nicht abschneidet: Sonst zeigt
+      # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu
+      # sehen.
       - name: Unit tests
-        run: ./gradlew test --no-daemon --stacktrace
+        run: ./gradlew test --no-daemon --stacktrace --continue
+
+      # Ohne diesen Schritt steht das Ergebnis nur im hochgeladenen Artefakt - man muss es
+      # herunterladen und entpacken, um zu erfahren, welcher Test warum gescheitert ist. Hier
+      # landet es direkt auf der Zusammenfassungsseite des Laufs.
+      - name: Testbericht in die Zusammenfassung schreiben
+        if: always()
+        run: python3 .github/scripts/testbericht.py >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test reports
         if: always()
@@ -47,3 +59,13 @@ jobs:
           name: unit-test-reports
           path: app/build/reports/tests/
           retention-days: 7
+
+      # Erlaubt, eine PR-Fassung auf dem Telefon zu installieren, ohne sie selbst zu bauen:
+      # Artefakt herunterladen, entpacken, `adb install -r app-debug.apk`.
+      - name: Debug-APK bereitstellen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
