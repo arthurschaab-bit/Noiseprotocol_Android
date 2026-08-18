@@ -97,12 +97,20 @@ dependencies {
     // gegen beide AARs geprueft.
     implementation(libs.mediapipe.tasks.audio)
 
+    // M5: ntfy-Versand (ein HTTP-POST, kein SDK) und der Heartbeat der Totmannschaltung.
+    implementation(libs.okhttp)
+    // M5: Wiederholung fehlgeschlagener Versendungen und der periodische Heartbeat.
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Testen
     testImplementation(libs.junit)
     testImplementation("androidx.room:room-testing:2.8.4")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Prueft den ntfy-Versand gegen einen echten HTTP-Server statt gegen einen Fake-Client:
+    // Nur so ist belegt, dass Pfad, Header und Rumpf tatsaechlich so rausgehen wie gedacht.
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

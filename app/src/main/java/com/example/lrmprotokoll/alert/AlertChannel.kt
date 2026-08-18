@@ -5,12 +5,10 @@ import java.time.Instant
 /**
  * Ein Alarmkanal (Plan Abschnitt 7.6).
  *
- * Die Abstraktion ist keine Stilfrage, sondern eine Vorsichtsmassnahme gegen eine bereits bekannte
- * Zukunft: `SEND_SMS` ist eine von Google eingeschraenkte Berechtigung, und eine App, deren
- * Kernfunktion nicht SMS-Verwaltung ist, wird im Play Store abgelehnt. Aktuell wird intern
- * verteilt, der direkte Versand ist also moeglich. Sollte sich das aendern, muss sich der
- * [com.example.lrmprotokoll.alert.sms.SmsAlertChannel] aus dem Release entfernen lassen, ohne dass
- * die Alarmlogik angefasst wird - genau dafuer kennt der [AlarmCoordinator] nur dieses Interface.
+ * Die Abstraktion hat sich bereits bewaehrt, bevor der erste Kanal fertig war: Der urspruenglich
+ * geplante SMS-Kanal wurde vom Owner gestrichen (`SEND_SMS` ist eine von Google eingeschraenkte
+ * Berechtigung, siehe Plan 7.6). Weil der [AlarmCoordinator] nur dieses Interface kennt, war das
+ * ein Streichen aus der Kanalliste - kein Eingriff in die Alarmlogik.
  */
 interface AlertChannel {
 
@@ -27,8 +25,19 @@ interface AlertChannel {
 }
 
 enum class ChannelId {
-    SMS,
+    /** Push auf das Zweitgeraet ueber ntfy (Plan 7.4, Option A). */
     NTFY,
+
+    /**
+     * Meldung auf dem Ueberwachungsgeraet selbst (Plan 7.6 nennt sie als
+     * `LocalNotificationAlertChannel`).
+     *
+     * Deckt einen anderen Ausfall ab als ntfy und ist deshalb kein Ersatz, sondern eine
+     * Ergaenzung: Sie braucht kein Netz und keinen Fremddienst. Faellt genau das Internet aus,
+     * ist sie der einzige Kanal, der noch etwas melden kann - und sei es nur fuer den, der das
+     * Geraet ohnehin in der Hand hat.
+     */
+    LOCAL_NOTIFICATION,
 }
 
 /** Warum alarmiert wird. Landet als String in [com.example.lrmprotokoll.data.AlertEntity.reason]. */

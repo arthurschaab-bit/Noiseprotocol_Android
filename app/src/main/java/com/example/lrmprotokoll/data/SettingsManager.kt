@@ -52,4 +52,69 @@ class SettingsManager(context: Context) {
     var audioMonitoringWasActive: Boolean
         get() = prefs.getBoolean("audio_monitoring_was_active", false)
         set(value) = prefs.edit().putBoolean("audio_monitoring_was_active", value).apply()
+
+    // ---------------------------------------------------------------- M5: Alarmierung
+
+    var alarmierungAktiv: Boolean
+        get() = prefs.getBoolean("alarm_enabled", false)
+        set(value) = prefs.edit().putBoolean("alarm_enabled", value).apply()
+
+    /** Karenzzeit in Sekunden. Beschlossener Default 60 s, einstellbar 10 s bis 15 min (Plan 7.2). */
+    var karenzzeitSekunden: Int
+        get() = prefs.getInt("alarm_grace_seconds", 60).coerceIn(10, 15 * 60)
+        set(value) = prefs.edit().putInt("alarm_grace_seconds", value.coerceIn(10, 15 * 60)).apply()
+
+    var ntfyAktiv: Boolean
+        get() = prefs.getBoolean("ntfy_enabled", false)
+        set(value) = prefs.edit().putBoolean("ntfy_enabled", value).apply()
+
+    /**
+     * Basis-URL des ntfy-Servers.
+     *
+     * Bewusst eine Einstellung und keine Konstante im Code: Die Entscheidung des Owners lautete
+     * "ntfy ausprobieren", nicht "fuer immer ntfy.sh". Ein Wechsel auf eine selbst betriebene
+     * Instanz - der empfohlene Weg, sobald es ernst wird - soll eine Einstellungsaenderung
+     * bleiben und kein Umbau.
+     */
+    var ntfyServer: String
+        get() = prefs.getString("ntfy_server", "https://ntfy.sh").orEmpty().ifBlank { "https://ntfy.sh" }
+        set(value) = prefs.edit().putString("ntfy_server", value.trim().trimEnd('/')).apply()
+
+    /**
+     * Das ntfy-Topic. Beim oeffentlichen Server ist der Topic-Name die EINZIGE Zugangskontrolle -
+     * wer ihn kennt, liest mit und kann senden. Er wird deshalb zufaellig erzeugt
+     * ([erzeugeNtfyTopic]) und darf nirgends protokolliert werden.
+     *
+     * Die verschluesselte Ablage ist M6 (Keystore, verschluesselter DataStore) und bewusst noch
+     * nicht hier: eine selbstgebaute Teilloesung waere schlechter als die dokumentierte Luecke.
+     */
+    var ntfyTopic: String
+        get() = prefs.getString("ntfy_topic", "").orEmpty()
+        set(value) = prefs.edit().putString("ntfy_topic", value).apply()
+
+    /**
+     * Ping-URL der Totmannschaltung (healthchecks.io oder selbst betrieben). Leer heisst aus -
+     * niemand wird zu einem Fremddienst gezwungen.
+     */
+    var heartbeatUrl: String
+        get() = prefs.getString("heartbeat_url", "").orEmpty()
+        set(value) = prefs.edit().putString("heartbeat_url", value.trim()).apply()
+
+    var entwarnungUeberNtfy: Boolean
+        get() = prefs.getBoolean("entwarnung_ntfy", true)
+        set(value) = prefs.edit().putBoolean("entwarnung_ntfy", value).apply()
+
+    var entwarnungUeberMeldung: Boolean
+        get() = prefs.getBoolean("entwarnung_local", true)
+        set(value) = prefs.edit().putBoolean("entwarnung_local", value).apply()
+}
+
+/**
+ * Erzeugt ein Topic aus [SecureRandom]. 32 Zeichen aus 62 moeglichen sind rund 190 Bit - beim
+ * oeffentlichen ntfy-Server ist das die gesamte Sicherheit der Alarmierung, ein sprechender oder
+ * kurzer Name waere hier fahrlaessig.
+ */
+fun erzeugeNtfyTopic(zufall: java.security.SecureRandom = java.security.SecureRandom()): String {
+    val alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    return (1..32).map { alphabet[zufall.nextInt(alphabet.length)] }.joinToString("")
 }

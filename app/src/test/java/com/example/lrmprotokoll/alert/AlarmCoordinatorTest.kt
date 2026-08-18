@@ -38,8 +38,8 @@ class AlarmCoordinatorTest {
     private val uhr = TestUhr()
     private val scheduler = TestScheduler()
     private val dao = TestAlertDao()
-    private val sms = TestKanal(ChannelId.SMS)
     private val ntfy = TestKanal(ChannelId.NTFY)
+    private val lokal = TestKanal(ChannelId.LOCAL_NOTIFICATION)
     private val zustaende = MutableStateFlow(ConnectionState.IDLE)
     private val adapter = MutableStateFlow(true)
 
@@ -48,7 +48,7 @@ class AlarmCoordinatorTest {
     private fun baue(
         scope: kotlinx.coroutines.CoroutineScope,
         config: AlarmConfig = AlarmConfig(),
-        kanaele: List<AlertChannel> = listOf(sms, ntfy),
+        kanaele: List<AlertChannel> = listOf(ntfy, lokal),
     ) = AlarmCoordinator(
         states = zustaende,
         adapterEnabled = adapter,
@@ -82,7 +82,7 @@ class AlarmCoordinatorTest {
         uhr.vor(Duration.ofSeconds(20))
         zustaende.value = ConnectionState.STREAMING
 
-        assertTrue("Kein Kanal darf etwas versendet haben", sms.gesendet.isEmpty() && ntfy.gesendet.isEmpty())
+        assertTrue("Kein Kanal darf etwas versendet haben", lokal.gesendet.isEmpty() && ntfy.gesendet.isEmpty())
         assertNull("Die Weckzeit muss zurueckgenommen sein", scheduler.geplant)
         assertEquals(1, dao.inhalt.size)
         assertNull("Der Ausfall darf nie ausgeloest worden sein", dao.inhalt.single().raisedAt)
@@ -100,7 +100,7 @@ class AlarmCoordinatorTest {
 
         weckeZurGeplantenZeit(koordinator)
 
-        assertEquals(listOf(AlertKind.RAISED), sms.arten)
+        assertEquals(listOf(AlertKind.RAISED), lokal.arten)
         assertEquals(listOf(AlertKind.RAISED), ntfy.arten)
         val zeile = dao.inhalt.single()
         assertEquals(beginn.plus(karenz).toEpochMilli(), zeile.raisedAt)
@@ -122,7 +122,7 @@ class AlarmCoordinatorTest {
             uhr.vor(Duration.ofSeconds(5))
         }
 
-        assertTrue(sms.gesendet.isEmpty())
+        assertTrue(lokal.gesendet.isEmpty())
         assertTrue(ntfy.gesendet.isEmpty())
         assertEquals("Pro Aussetzer genau eine geschlossene Zeile, kein Wildwuchs", 10, dao.inhalt.size)
         assertTrue("Keine Zeile darf ausgeloest worden sein", dao.inhalt.all { it.raisedAt == null })
@@ -152,7 +152,7 @@ class AlarmCoordinatorTest {
 
     @Test
     fun einWerfenderKanalVerhindertDenVersandUeberDieAnderenNicht() = runTest(UnconfinedTestDispatcher()) {
-        sms.wirftAb(RuntimeException("SMS-Stack kaputt"))
+        lokal.wirftAb(RuntimeException("SMS-Stack kaputt"))
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
 
@@ -160,7 +160,7 @@ class AlarmCoordinatorTest {
         weckeZurGeplantenZeit(koordinator)
 
         assertEquals("Der intakte Kanal muss versendet haben", listOf(AlertKind.RAISED), ntfy.arten)
-        assertEquals("Der kaputte Kanal muss es versucht haben", 1, sms.versuche)
+        assertEquals("Der kaputte Kanal muss es versucht haben", 1, lokal.versuche)
         assertEquals(
             "Ein durchgekommener Kanal genuegt fuer SENT",
             DeliveryState.SENT,
@@ -170,7 +170,7 @@ class AlarmCoordinatorTest {
 
     @Test
     fun scheiternAllerKanaeleWirdAlsFailedVermerkt() = runTest(UnconfinedTestDispatcher()) {
-        sms.scheitertAb(true)
+        lokal.scheitertAb(true)
         ntfy.scheitertAb(true)
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
@@ -179,20 +179,20 @@ class AlarmCoordinatorTest {
         weckeZurGeplantenZeit(koordinator)
 
         assertEquals(DeliveryState.FAILED, dao.inhalt.single().deliveryState)
-        assertEquals(1, sms.versuche)
+        assertEquals(1, lokal.versuche)
         assertEquals(1, ntfy.versuche)
     }
 
     @Test
     fun nichtVerfuegbareKanaeleWerdenUebersprungen() = runTest(UnconfinedTestDispatcher()) {
-        sms.isAvailable = false
+        lokal.isAvailable = false
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
 
-        assertEquals("Ohne Berechtigung darf gar nicht erst versucht werden", 0, sms.versuche)
+        assertEquals("Ohne Berechtigung darf gar nicht erst versucht werden", 0, lokal.versuche)
         assertEquals(listOf(AlertKind.RAISED), ntfy.arten)
     }
 
@@ -300,8 +300,14 @@ class AlarmCoordinatorTest {
     // ------------------------------------------------------------------ Entwarnung
 
     @Test
-    fun entwarnungGehtAnPushAberNichtAnSms() = runTest(UnconfinedTestDispatcher()) {
-        val koordinator = baue(scope = backgroundScope)
+    fun entwarnungGehtNurAnDieDafuerEingeschaltetenKanaele() = runTest(UnconfinedTestDispatcher()) {
+        // Nur der Push-Kanal bekommt eine Entwarnung. Die Einstellung ist je Kanal schaltbar,
+        // weil ihr urspruenglicher Grund - ein Kanal, bei dem jede Nachricht spuerbar zaehlt -
+        // mit jedem kuenftigen Kanal wiederkommen kann.
+        val koordinator = baue(
+            scope = backgroundScope,
+            config = AlarmConfig(entwarnungUeber = setOf(ChannelId.NTFY)),
+        )
         koordinator.start()
 
         zustaende.value = ConnectionState.DISCONNECTED
@@ -309,14 +315,14 @@ class AlarmCoordinatorTest {
         zustaende.value = ConnectionState.STREAMING
 
         assertEquals(
-            "Entwarnung per Push: eingeschaltet",
+            "Eingeschalteter Kanal: bekommt die Entwarnung",
             listOf(AlertKind.RAISED, AlertKind.RESOLVED),
             ntfy.arten,
         )
         assertEquals(
-            "Entwarnung per SMS: ausgeschaltet, sonst verdoppelt sie das Nachrichtenaufkommen",
+            "Ausgeschalteter Kanal: bekommt nur den Alarm, nicht die Entwarnung",
             listOf(AlertKind.RAISED),
-            sms.arten,
+            lokal.arten,
         )
         assertNotNull(dao.inhalt.single().resolvedAt)
     }
@@ -475,13 +481,13 @@ class AlarmCoordinatorTest {
 
     @Test
     fun testnachrichtUeberEinenNichtVerfuegbarenKanalSchlaegtFehl() = runTest(UnconfinedTestDispatcher()) {
-        sms.isAvailable = false
+        lokal.isAvailable = false
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
 
-        val ergebnis = koordinator.sendeTest(ChannelId.SMS)
+        val ergebnis = koordinator.sendeTest(ChannelId.LOCAL_NOTIFICATION)
 
         assertTrue("Der Nutzer muss erfahren, dass der Kanal nicht einsatzbereit ist", ergebnis.isFailure)
-        assertEquals(0, sms.versuche)
+        assertEquals(0, lokal.versuche)
     }
 }

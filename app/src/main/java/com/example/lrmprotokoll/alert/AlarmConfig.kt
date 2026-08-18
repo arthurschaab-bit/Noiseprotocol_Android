@@ -33,10 +33,15 @@ data class AlarmConfig(
     val maxEscalations: Int = 3,
 
     /**
-     * Kanaele, die eine Entwarnung bekommen. Default nur Push: Bei SMS verdoppelt die Entwarnung
-     * das Nachrichtenaufkommen spuerbar, bei Push kostet sie nichts.
+     * Kanaele, die eine Entwarnung bekommen.
+     *
+     * Der Owner hat entschieden: bei Push an. Die Einschraenkung, die diese Einstellung
+     * ueberhaupt noetig machte, betraf SMS - dort haette die Entwarnung das Nachrichtenaufkommen
+     * spuerbar verdoppelt. Bei Push und lokaler Meldung kostet sie nichts, deshalb beide an.
+     * Die Einstellung bleibt trotzdem je Kanal schaltbar, weil der Grund fuer sie mit jedem
+     * kuenftigen Kanal wiederkommen kann.
      */
-    val entwarnungUeber: Set<ChannelId> = setOf(ChannelId.NTFY),
+    val entwarnungUeber: Set<ChannelId> = setOf(ChannelId.NTFY, ChannelId.LOCAL_NOTIFICATION),
 
     /**
      * Nachfrist nach einem Neustart des Prozesses. Wurde die App waehrend eines laufenden
