@@ -41,6 +41,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
@@ -476,7 +477,9 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                             Toast.makeText(context, "Berechtigung erforderlich", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        val intent = Intent(context, AudioRecordingService::class.java)
+                        val intent = Intent(context, AudioRecordingService::class.java).apply {
+                            putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                        }
                         context.startForegroundService(intent)
                         isServiceRunning = true
                     },

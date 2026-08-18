@@ -17,3 +17,21 @@ enum class ConnectionState {
     RECONNECTING,
     FAILED,
 }
+
+/**
+ * Deutsche Kurzbezeichnung fuer Notification und MeterScreen - an einer Stelle gepflegt, damit
+ * beide Anzeigen nie auseinanderlaufen. Verbindungszustand wird nie nur farblich kodiert
+ * (Barrierefreiheit); dieser Text ist der verbindliche Teil davon, Icon/Farbe bleiben UI-lokal.
+ */
+fun ConnectionState.label(): String = when (this) {
+    ConnectionState.IDLE -> "Nicht verbunden"
+    ConnectionState.SCANNING -> "Suche…"
+    ConnectionState.CONNECTING,
+    ConnectionState.DISCOVERING,
+    ConnectionState.SUBSCRIBING -> "Verbinde…"
+    ConnectionState.STREAMING -> "Verbunden"
+    ConnectionState.DEGRADED -> "Instabil"
+    ConnectionState.RECONNECTING -> "Verbinde erneut…"
+    ConnectionState.DISCONNECTED -> "Getrennt"
+    ConnectionState.FAILED -> "Fehlgeschlagen"
+}

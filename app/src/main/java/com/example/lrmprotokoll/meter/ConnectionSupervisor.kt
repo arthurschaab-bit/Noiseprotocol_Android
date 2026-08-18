@@ -63,9 +63,18 @@ class ConnectionSupervisor(
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
     private var job: Job? = null
+    private var currentDevice: BoundDevice? = null
 
-    /** (Re-)Startet die Ueberwachung fuer [device]. Ein laufender vorheriger Auftrag wird beendet. */
+    /**
+     * (Re-)Startet die Ueberwachung fuer [device]. Ein Aufruf fuer das bereits aktiv
+     * ueberwachte Geraet ist ein No-Op - sowohl [com.example.lrmprotokoll.audio.AudioRecordingService]
+     * (beim eigenen Start) als auch die UI (beim Koppeln) rufen [start] auf, ohne sich
+     * abzustimmen; ohne diese Absicherung wuerde der zweite Aufruf eine laufende Verbindung
+     * unnoetig neu aufbauen.
+     */
     fun start(device: BoundDevice) {
+        if (job?.isActive == true && currentDevice == device) return
+        currentDevice = device
         job?.cancel()
         job = scope.launch { supervise(device) }
     }
@@ -74,6 +83,7 @@ class ConnectionSupervisor(
     fun stop() {
         job?.cancel()
         job = null
+        currentDevice = null
         scope.launch { runCatching { transport.disconnect() } }
         _state.value = ConnectionState.IDLE
     }
