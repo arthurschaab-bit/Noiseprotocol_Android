@@ -12,6 +12,7 @@ import android.content.Context
 import android.util.Log
 import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
+import com.example.lrmprotokoll.meter.FrameQuality
 import com.example.lrmprotokoll.meter.MeterCommand
 import com.example.lrmprotokoll.meter.MeterFrame
 import com.example.lrmprotokoll.meter.MeterTransport
@@ -58,10 +59,14 @@ class BleMeterTransport(
     private val _lastFrameAt = MutableStateFlow<Instant?>(null)
     override val lastFrameAt: StateFlow<Instant?> = _lastFrameAt.asStateFlow()
 
+    private val _frameQuality = MutableStateFlow(FrameQuality())
+    override val frameQuality: StateFlow<FrameQuality> = _frameQuality.asStateFlow()
+
     private val decoder = Pce323FrameDecoder()
     private val gattQueue = GattQueue()
     private var gatt: BluetoothGatt? = null
     private var connecting: CompletableDeferred<Boolean>? = null
+    private var validFrameCount = 0L
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -73,6 +78,17 @@ class BleMeterTransport(
                     Log.w(TAG, "Verbindung getrennt, status=$status")
                     connecting?.complete(false)
                     _state.value = ConnectionState.DISCONNECTED
+                    // Spontaner Abbruch (Geraet aus, Funkloch) - nicht ueber disconnect()
+                    // ausgeloest, das g bereits schliesst. Ohne close() hier leckt der
+                    // Client-Interface-Slot bei jedem spontanen Abbruch, und der Stack liefert
+                    // nach ~30 Zyklen nur noch status 133 (Plan Abschnitt 5.3, M2-Review Befund 5) -
+                    // mit dem automatischen Reconnect aus M3 durchlaeuft die App diese Zyklen.
+                    try {
+                        g.close()
+                    } catch (e: SecurityException) {
+                        Log.w(TAG, "Bluetooth-Berechtigung beim spontanen Trennen fehlt", e)
+                    }
+                    if (gatt === g) gatt = null
                 }
             }
         }
@@ -105,6 +121,8 @@ class BleMeterTransport(
         // letzter Pegel, Fehlerzaehler - und die nach einem Timeout gesperrte GATT-Queue.
         decoder.reset()
         gattQueue.reset()
+        validFrameCount = 0
+        _frameQuality.value = FrameQuality()
 
         _state.value = ConnectionState.CONNECTING
 
@@ -177,6 +195,7 @@ class BleMeterTransport(
     private fun onNotify(raw: ByteArray) {
         val decoded = decoder.feed(raw)
         for (frame in decoded) {
+            validFrameCount++
             _state.value = ConnectionState.STREAMING
             _lastFrameAt.value = frame.receivedAt
             // tryEmit statt launch+emit: nicht-suspendierend, behaelt damit die Reihenfolge des
@@ -185,6 +204,13 @@ class BleMeterTransport(
             // Coroutinen koennten sie vertauscht in den SharedFlow schreiben.
             _frames.tryEmit(frame)
         }
+        // Jede Notification aktualisiert die Kennzahl, nicht nur solche mit validem Frame -
+        // sonst wuerde eine Serie reiner Decode-Fehler (kein einziges valides Frame) den
+        // Supervisor nie erreichen (Plan Abschnitt 5.5).
+        _frameQuality.value = FrameQuality(
+            totalFrames = validFrameCount + decoder.decodeErrors,
+            errorFrames = decoder.decodeErrors.toLong(),
+        )
     }
 
     override suspend fun disconnect() {
