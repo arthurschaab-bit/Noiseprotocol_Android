@@ -19,6 +19,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * PROMPT_M3 Aufgabe 1+2: Tests fuer den Verbindungs-Zustandsautomaten. Jeder Testfall aus dem
@@ -26,8 +29,16 @@ import org.junit.Test
  * beide Seiten einer Schwelle prueft (z.B. hoheFehlerrateFuehrtZuDegraded vs.
  * einzelnerFehlerFrameLoestKeinSofortigesDegradedAus fuer die Fehlerraten-Schwelle,
  * nachErschoepftenVersuchenWirdFailedGemeldet vs. flatterndeVerbindungFuehrtNichtZuFailed fuer
- * den Fehlschlagszaehler) - so faellt der jeweils andere Test durch, wenn eine der beiden Seiten
- * der Logik entfernt oder falsch verschoben wird.
+ * den Fehlschlagszaehler, flatterndeVerbindungFuehrtNichtZuFailed [stabile Sessions] vs.
+ * kurzesFlatternEskaliertDurchBackoffStattEndlosSofortigerReconnects [Sessions unter
+ * minStableSession] fuer die Reset-Schwelle) - so faellt der jeweils andere Test durch, wenn
+ * eine der beiden Seiten der Logik entfernt oder falsch verschoben wird.
+ *
+ * Ergaenzt um drei Regressionstests aus dem Review von PR #16:
+ * exceptionBeimVerbindenBeendetUeberwachungNichtLautlos (Befund 2), sowie je eine zusaetzliche
+ * Pruefung in stallFuehrtNachTStaleZuDegradedUndErholtSichNachEndeDesStalls und
+ * hoheFehlerrateFuehrtZuDegraded, dass kein spontanes DISCONNECTED zwischen DEGRADED und
+ * RECONNECTING auftaucht (Befund 1).
  *
  * Alle Zeiten laufen ueber die virtuelle Zeit von [runTest]: sowohl [ConnectionSupervisor] als
  * auch [FakeMeterTransport] werden mit [TestScope.backgroundScope] konstruiert, die injizierte
@@ -37,8 +48,14 @@ import org.junit.Test
  * [kotlinx.coroutines.test.advanceUntilIdle] wuerde dann nie "idle" werden. Deshalb wird hier
  * durchgehend [advanceTimeBy] mit konkreten, aus dem erwarteten Verhalten hergeleiteten
  * Obergrenzen verwendet, gefolgt von [runCurrent] fuer alles genau an der Zeitgrenze.
+ *
+ * Robolectric statt reinem JUnit, weil exceptionBeimVerbindenBeendetUeberwachungNichtLautlos
+ * den echten android.util.Log-Aufruf in ConnectionSupervisor durchlaeuft - ohne Shadow wirft
+ * das in einem reinen JVM-Unit-Test "Method w in android.util.Log not mocked".
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class ConnectionSupervisorTest {
 
     private val device = BoundDevice(address = "AA:BB:CC:DD:EE:FF", name = "PCE-323")
@@ -52,6 +69,8 @@ class ConnectionSupervisorTest {
         staleAfter: Duration = Duration.ofSeconds(5),
         errorRateWindow: Duration = Duration.ofSeconds(30),
         maxAttempts: Int = 8,
+        minStableSession: Duration = Duration.ofSeconds(5),
+        random: Random = Random(1),
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -59,11 +78,18 @@ class ConnectionSupervisorTest {
             scope = backgroundScope,
             adapterEnabled = adapterEnabled,
             now = clock,
-            random = Random(1),
+            random = random,
             staleAfter = staleAfter,
             errorRateWindow = errorRateWindow,
             maxAttempts = maxAttempts,
+            minStableSession = minStableSession,
         )
+    }
+
+    /** Liefert immer 0 Jitter, damit Backoff-Werte in Tests exakt den Nominalwerten entsprechen. */
+    private val zeroJitterRandom = object : Random() {
+        override fun nextBits(bitCount: Int): Int = 0
+        override fun nextDouble(from: Double, until: Double): Double = 0.0
     }
 
     private fun TestScope.observeStates(supervisor: ConnectionSupervisor): List<ConnectionState> {
@@ -103,6 +129,28 @@ class ConnectionSupervisorTest {
         assertTrue(
             "$label: erwartet ${expectedMillis}ms ±20%, war ${actualMillis}ms",
             actualMillis in lower..upper
+        )
+    }
+
+    /**
+     * Regressionspruefung zu Review-Befund 1 (PR #16): ohne den supervisorOverride-Mechanismus
+     * wuerde das eigene transport.disconnect() nach dem Setzen von DEGRADED den Wert binnen
+     * kuerzester Zeit ueber den forwarder auf DISCONNECTED ueberschreiben, bevor RECONNECTING
+     * folgt - genau dieses spontane DISCONNECTED darf zwischen DEGRADED und RECONNECTING nicht
+     * mehr auftauchen.
+     */
+    private fun assertNoSpuriousDisconnectAroundDegraded(states: List<ConnectionState>) {
+        val degradedIndex = states.indexOf(ConnectionState.DEGRADED)
+        assertTrue("DEGRADED sollte im Zustandsverlauf vorkommen, war $states", degradedIndex >= 0)
+        val afterDegraded = states.subList(degradedIndex + 1, states.size)
+        val reconnectingOffset = afterDegraded.indexOf(ConnectionState.RECONNECTING)
+        assertTrue("RECONNECTING sollte nach DEGRADED folgen, war $states", reconnectingOffset >= 0)
+        val between = afterDegraded.subList(0, reconnectingOffset)
+        assertFalse(
+            "DEGRADED wurde durch ein zwischenzeitliches DISCONNECTED vom forwarder " +
+                "ueberschrieben (Review-Befund 1), Zustaende zwischen DEGRADED und " +
+                "RECONNECTING: $between",
+            between.contains(ConnectionState.DISCONNECTED)
         )
     }
 
@@ -179,6 +227,7 @@ class ConnectionSupervisorTest {
         advanceTimeBy(5_100) // > t_stale
         runCurrent()
         assertTrue("Stall haette DEGRADED ausloesen muessen, war $states", states.contains(ConnectionState.DEGRADED))
+        assertNoSpuriousDisconnectAroundDegraded(states)
 
         // Stall vor dem automatischen Reconnect beenden, sonst wuerde die neue Verbindung
         // (stalled bleibt sonst gesetzt) sofort wieder in denselben Stillstand laufen.
@@ -231,6 +280,7 @@ class ConnectionSupervisorTest {
             "Hohe Fehlerrate haette DEGRADED ausloesen muessen, war $states",
             states.contains(ConnectionState.DEGRADED)
         )
+        assertNoSpuriousDisconnectAroundDegraded(states)
     }
 
     @Test
@@ -261,11 +311,15 @@ class ConnectionSupervisorTest {
 
     @Test
     fun flatterndeVerbindungFuehrtNichtZuFailed() = runTest {
-        // Gegentest zu nachErschoepftenVersuchenWirdFailedGemeldet: eine Verbindung, die immer
-        // wieder kurz abbricht aber stets zurueckkommt, darf den Fehlschlagszaehler nie bis
-        // maxAttempts auflaufen lassen.
+        // Gegentest zu nachErschoepftenVersuchenWirdFailedGemeldet: eine Verbindung, die
+        // WIEDERHOLT STABIL streamt (mindestens minStableSession) und danach abbricht, darf den
+        // Fehlschlagszaehler nie bis maxAttempts auflaufen lassen. Sessions UNTER der Schwelle
+        // sind ein separater Fall, siehe kurzesFlatternEskaliertDurchBackoffStattEndlosSofortigerReconnects
+        // (Review-Befund 3, PR #16) - ohne diese Unterscheidung wuerde dieser Test schon durch
+        // reinen Zufall gruen bleiben, obwohl der Backoff nie greift.
         val transport = newTransport()
-        val supervisor = newSupervisor(transport, maxAttempts = 8)
+        val minStableSession = Duration.ofSeconds(5)
+        val supervisor = newSupervisor(transport, maxAttempts = 8, minStableSession = minStableSession)
         val states = observeStates(supervisor)
 
         supervisor.start(device)
@@ -273,13 +327,75 @@ class ConnectionSupervisorTest {
         assertEquals(ConnectionState.STREAMING, supervisor.state.value)
 
         repeat(10) {
+            advanceTimeBy(minStableSession.toMillis() + 500) // stabile Session, dann erst abbrechen
+            runCurrent()
             transport.simulateConnectionLoss()
             runCurrent()
-            advanceTimeBy(1_300) // > erster Backoff-Schritt (max. 1,2s)
+            advanceTimeBy(1_300) // > erster Backoff-Schritt (max. 1,2s) - stets Stufe 1 dank Reset
             runCurrent()
             assertEquals(ConnectionState.STREAMING, supervisor.state.value)
         }
 
         assertFalse("Flattern darf niemals FAILED ausloesen, war $states", states.contains(ConnectionState.FAILED))
+    }
+
+    @Test
+    fun kurzesFlatternEskaliertDurchBackoffStattEndlosSofortigerReconnects() = runTest {
+        // Regressionstest zu Review-Befund 3 (PR #16): eine Session UNTER minStableSession darf
+        // consecutiveFailures NICHT zuruecksetzen - sonst wuerde ein Geraet, das verbindet, kurz
+        // Daten liefert und sofort wieder abbricht, endlos im Sekundentakt neu verbunden (der
+        // Backoff greift nie, weil jeder Zyklus formal als Erfolg zaehlte). Genau dieses
+        // Dauerzyklus-Muster ist es, gegen das Aufgabe 5 in diesem PR (gatt.close() bei
+        // spontanem Disconnect) die status-133-Kaskade nach Plan 5.3 vermeiden soll.
+        //
+        // Null-Jitter macht die Luecken deterministisch exakt pruefbar statt nur "groesser
+        // werdend" - ohne die Mindestdauer-Pruefung blieben alle Luecken bei genau 1s.
+        val transport = newTransport()
+        val supervisor = newSupervisor(
+            transport,
+            minStableSession = Duration.ofSeconds(5),
+            random = zeroJitterRandom,
+        )
+        val reconnectingAtMillis = mutableListOf<Long>()
+        backgroundScope.launch {
+            supervisor.state.collect {
+                if (it == ConnectionState.RECONNECTING) reconnectingAtMillis.add(testScheduler.currentTime)
+            }
+        }
+
+        supervisor.start(device)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        // Jede Session bricht sofort wieder ab - weit unter minStableSession.
+        val nominalBackoffsMs = longArrayOf(1_000, 2_000, 4_000)
+        nominalBackoffsMs.forEach { backoff ->
+            transport.simulateConnectionLoss()
+            runCurrent()
+            advanceTimeBy(backoff)
+            runCurrent()
+        }
+
+        assertEquals(3, reconnectingAtMillis.size)
+        val gaps = reconnectingAtMillis.zipWithNext { a, b -> b - a }
+        assertEquals(listOf(1_000L, 2_000L), gaps)
+    }
+
+    @Test
+    fun exceptionBeimVerbindenBeendetUeberwachungNichtLautlos() = runTest {
+        // Regressionstest zu Review-Befund 2 (PR #16): eine Exception aus transport.connect()
+        // (z.B. DeadObjectException beim Neustart des Bluetooth-Stacks) darf die Ueberwachung
+        // nicht lautlos beenden - sie muss wie ein normaler Fehlschlag behandelt werden: Backoff,
+        // weiterer Versuch, nach maxAttempts sauber FAILED statt eingefroren auf dem letzten Wert.
+        val transport = newTransport()
+        transport.simulateConnectException(true)
+        val supervisor = newSupervisor(transport, staleAfter = Duration.ofMillis(1), maxAttempts = 3)
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000) // deckt die 2 Luecken (1s, 2s) mit max. +20% Jitter ab
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
     }
 }
