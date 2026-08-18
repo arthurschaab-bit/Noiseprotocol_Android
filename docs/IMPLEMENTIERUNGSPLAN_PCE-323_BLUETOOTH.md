@@ -1181,12 +1181,15 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 **Noch offene Entscheidungen:**
 
-1. **Entwarnungsmeldung bei Wiederkehr** — gewünscht oder nicht? (verdoppelt das Meldungsaufkommen;
-   bei Push unkritisch, bei SMS spürbar). *Vorschlag: bei Push an, bei SMS aus.*
+1. ~~**Entwarnungsmeldung bei Wiederkehr**~~ — **entschieden: je Kanal umstellbar.** Ursprünglich
+   „bei Push an, bei SMS aus"; mit dem Wegfall des SMS-Kanals (Punkt 4) ist sie bei beiden
+   verbliebenen Kanälen voreingestellt an, weil sie dort nichts kostet. Der Schalter bleibt, weil
+   der Grund für ihn — ein Kanal, bei dem jede Nachricht zählt — mit jedem künftigen Kanal
+   wiederkommen kann.
 2. **Aufbewahrungsdauer** der Rohmesswerte (Vorschlag: 90 Tage Rohwerte, danach Minutenaggregate)
    und ob die Datenbank per SQLCipher verschlüsselt wird.
-3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
-   Wiederholungen.
+3. ~~**Cooldown und Eskalation**~~ — **entschieden: Cooldown 30 min, Eskalation nach 60 min,
+   max. 3 Wiederholungen.**
 4. ~~**Push-Kanal für M5**~~ — **entschieden: ntfy**, für den ersten Wurf der öffentliche Server
    `ntfy.sh` mit langem Zufalls-Topic; die Basis-URL liegt in den Einstellungen, ein Wechsel auf
    eine self-hosted Instanz bleibt damit eine Konfigurationsänderung.

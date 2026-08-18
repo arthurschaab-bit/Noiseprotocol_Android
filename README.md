@@ -87,7 +87,7 @@ Alarmzustand in Room, damit ein Prozess-Tod während der Karenzzeit den Alarm ni
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3 + M5 am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M4 | Persistenz der Messreihe — Voraussetzung für M7b | nein |
+| M4 | Persistenz der Messreihe — Voraussetzung für M7b. Die Frequenzbewertung bleibt bis zum Gerätetest ungespeichert | nein |
 | M6–M8 | Sicherheit, UI-Ausbau, Härtung | teilweise |
 | M7b | Google-Drive-Sync | nein |
 
