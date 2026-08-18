@@ -30,7 +30,12 @@ private fun loadRealFrames(): ByteArray {
     return stream.use { it.readBytes() }
 }
 
-private fun buildFrame(level: Float): ByteArray {
+private fun buildFrame(
+    level: Float,
+    rangeByte: Byte = Pce323Profile.RANGE_VALUE_30_130,
+    timeWeightingByte: Byte = Pce323Profile.TIME_WEIGHTING_VALUE_FAST,
+    weightingByte: Byte = Pce323Profile.WEIGHTING_VALUE_A,
+): ByteArray {
     val bits = level.toRawBits()
     val levelBytes = byteArrayOf(
         ((bits ushr 24) and 0xFF).toByte(),
@@ -38,7 +43,10 @@ private fun buildFrame(level: Float): ByteArray {
         ((bits ushr 8) and 0xFF).toByte(),
         (bits and 0xFF).toByte(),
     )
-    return Pce323Profile.FRAME_HEADER + levelBytes + Pce323Profile.FRAME_FOOTER + Pce323Profile.FRAME_TRAILER
+    val header = Pce323Profile.FRAME_HEADER.copyOf().also { it[Pce323Profile.RANGE_BYTE_OFFSET] = rangeByte }
+    val footer = Pce323Profile.FRAME_FOOTER.copyOf().also { it[1] = timeWeightingByte }
+    val trailer = Pce323Profile.FRAME_TRAILER.copyOf().also { it[0] = weightingByte }
+    return header + levelBytes + footer + trailer
 }
 
 class Pce323FrameDecoderTest {
@@ -187,17 +195,98 @@ class Pce323FrameDecoderTest {
     }
 
     @Test
-    fun dekodierteFramesHabenUnbekannteBewertungUndBereich() {
+    fun holdMaxUndHoldMinBleibenUnbekannt() {
         val decoder = Pce323FrameDecoder()
 
-        val frames = decoder.feed(buildFrame(50.0f))
+        val frame = decoder.feed(buildFrame(50.0f)).single()
 
-        val frame = frames.single()
-        assertEquals(null, frame.weighting)
-        assertEquals(null, frame.timeWeighting)
-        assertEquals(null, frame.range)
         assertEquals(null, frame.holdMax)
         assertEquals(null, frame.holdMin)
+    }
+
+    @Test
+    fun modeAssumptionConfirmedSpiegeltPce323ProfileWider() {
+        // Solange die Werte-Zuordnung fuer Bereich/Fast-Slow/A-C nicht am Geraet bestaetigt ist,
+        // muss jeder dekodierte Frame das kenntlich machen (Review PR #15, Befund 1) - sonst
+        // wuerde ein non-null weighting/timeWeighting/range wie gesichertes Wissen behandelt.
+        val decoder = Pce323FrameDecoder()
+
+        val frame = decoder.feed(buildFrame(50.0f)).single()
+
+        assertEquals(Pce323Profile.MODE_ASSUMPTION_CONFIRMED, frame.modeAssumptionConfirmed)
+    }
+
+    @Test
+    fun alleVierMessbereichsByteswerteWerdenGemaessAnnahmeDekodiert() {
+        val decoder = Pce323FrameDecoder()
+        val erwartet = mapOf(
+            Pce323Profile.RANGE_VALUE_30_130 to MeasurementRange.RANGE_30_130,
+            Pce323Profile.RANGE_VALUE_30_80 to MeasurementRange.RANGE_30_80,
+            Pce323Profile.RANGE_VALUE_50_100 to MeasurementRange.RANGE_50_100,
+            Pce323Profile.RANGE_VALUE_80_130 to MeasurementRange.RANGE_80_130,
+        )
+
+        erwartet.forEach { (byte, range) ->
+            val frame = decoder.feed(buildFrame(50.0f, rangeByte = byte)).single()
+            assertEquals("Bereich fuer Byte $byte", range, frame.range)
+        }
+    }
+
+    @Test
+    fun unbekannterMessbereichsByteliefertNullStattFalschenDefaults() {
+        val decoder = Pce323FrameDecoder()
+
+        val frame = decoder.feed(buildFrame(50.0f, rangeByte = 0x07)).single()
+
+        assertEquals(null, frame.range)
+    }
+
+    @Test
+    fun beideZeitbewertungsWerteWerdenGemaessAnnahmeDekodiert() {
+        val decoder = Pce323FrameDecoder()
+
+        val fast = decoder.feed(
+            buildFrame(50.0f, timeWeightingByte = Pce323Profile.TIME_WEIGHTING_VALUE_FAST)
+        ).single()
+        val slow = decoder.feed(
+            buildFrame(50.0f, timeWeightingByte = Pce323Profile.TIME_WEIGHTING_VALUE_SLOW)
+        ).single()
+
+        assertEquals(TimeWeighting.FAST, fast.timeWeighting)
+        assertEquals(TimeWeighting.SLOW, slow.timeWeighting)
+    }
+
+    @Test
+    fun unbekannterZeitbewertungsByteliefertNullStattFalschenDefaults() {
+        val decoder = Pce323FrameDecoder()
+
+        val frame = decoder.feed(buildFrame(50.0f, timeWeightingByte = 0x00)).single()
+
+        assertEquals(null, frame.timeWeighting)
+    }
+
+    @Test
+    fun beideBewertungsWerteWerdenGemaessAnnahmeDekodiert() {
+        val decoder = Pce323FrameDecoder()
+
+        val a = decoder.feed(
+            buildFrame(50.0f, weightingByte = Pce323Profile.WEIGHTING_VALUE_A)
+        ).single()
+        val c = decoder.feed(
+            buildFrame(50.0f, weightingByte = Pce323Profile.WEIGHTING_VALUE_C)
+        ).single()
+
+        assertEquals(Weighting.A, a.weighting)
+        assertEquals(Weighting.C, c.weighting)
+    }
+
+    @Test
+    fun unbekannterBewertungsByteliefertNullStattFalschenDefaults() {
+        val decoder = Pce323FrameDecoder()
+
+        val frame = decoder.feed(buildFrame(50.0f, weightingByte = 0x00)).single()
+
+        assertEquals(null, frame.weighting)
     }
 
     @Test

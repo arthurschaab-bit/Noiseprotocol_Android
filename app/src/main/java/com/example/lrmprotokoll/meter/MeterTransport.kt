@@ -20,15 +20,21 @@ interface MeterTransport {
 
 /**
  * Ein dekodierter Messwert. [weighting], [timeWeighting], [range], [holdMax] und [holdMin]
- * sind nullable statt mit einem Default belegt: Beim realen PCE-323-Protokoll (M0) sind alle
- * Bytes, die diese Werte im urspruenglich angenommenen PCE-322A-Format kodiert haetten, in
- * jeder aufgezeichneten Probe konstant - ihre tatsaechliche Bedeutung ist ungeklaert
- * (docs/PROTOKOLL_PCE-323.md, Abschnitt 7). Ein erfundener oder defaulteter Wert wuerde hier
- * Wissen vortaeuschen, das nicht existiert - insbesondere darf [weighting] NICHT als A/dBA
- * angenommen werden, wenn es unbekannt ist. Deshalb bildet `null` "unbekannt" ab, nicht ein
+ * sind nullable statt mit einem Default belegt: `null` heisst, dass fuer das jeweilige Feld
+ * ueberhaupt keine Byte-Position bekannt ist - ein erfundener oder defaulteter Wert wuerde hier
+ * Wissen vortaeuschen, das nicht existiert. Deshalb bildet `null` "unbekannt" ab, nicht ein
  * Default oder ein synthetisches UNKNOWN-Enum-Element: jede Verwendungsstelle wird durch den
- * Compiler gezwungen, den Fall explizit zu behandeln, statt ihn versehentlich wie einen
- * echten Wert zu behandeln.
+ * Compiler gezwungen, den Fall explizit zu behandeln, statt ihn versehentlich wie einen echten
+ * Wert zu behandeln.
+ *
+ * Fuer [weighting], [timeWeighting] und [range] gilt zusaetzlich [modeAssumptionConfirmed]:
+ * Die Byte-Position dieser drei Felder ist durch isolierte Geraetetests belegt
+ * (docs/PROTOKOLL_PCE-323.md, Abschnitt 9), welcher Bytewert aber welchem Anzeigezustand
+ * entspricht, ist noch eine unbestaetigte Annahme. Solange [modeAssumptionConfirmed] `false`
+ * ist, bedeutet ein non-null-Wert also "angenommen", NICHT "bestaetigt" - insbesondere darf
+ * [weighting] NICHT als sicheres A/dBA behandelt werden. Jede Stelle, die diese drei Felder als
+ * Tatsache persistiert oder anzeigt (statt nur zum Geraete-Abgleich zu spiegeln), MUSS
+ * [modeAssumptionConfirmed] pruefen.
  */
 data class MeterFrame(
     val level: Double,
@@ -39,6 +45,7 @@ data class MeterFrame(
     val holdMin: Boolean?,
     val receivedAt: Instant,
     val largeJump: Boolean = false,
+    val modeAssumptionConfirmed: Boolean = false,
 )
 
 enum class Weighting { A, C }

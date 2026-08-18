@@ -79,4 +79,50 @@ object Pce323Profile {
     const val LEVEL_SIZE = 4
     val FRAME_FOOTER = byteArrayOf(0x01, 0x0F)
     val FRAME_TRAILER = byteArrayOf(0x2C, 0x00, 0x0D)
+
+    /**
+     * Folgeaufzeichnung (Owner, 2026-08-17, vier Logs beim gezielten Umschalten von Bereich,
+     * Fast/Slow und A/C): drei der bislang konstanten Bytes bewegen sich, jedes sauber isoliert
+     * in einem eigenen Test - siehe docs/PROTOKOLL_PCE-323.md Abschnitt 9 fuer die Rohdaten und
+     * die Herleitung.
+     *
+     *   Offset 7  (im Header): 4 Werte 0x00-0x03, sauberer Rundlauf beim wiederholten
+     *             Betaetigen einer Taste -> Messbereich.
+     *   Offset 19 (2. Footer-Byte): 0x0F/0x10, Wechsel faellt jeweils mit einem Pegelsprung
+     *             zusammen (Detektor-Zeitkonstante aendert sich) -> Fast/Slow.
+     *   Offset 20 (1. Trailer-Byte): 0x2C/0x2D, wechselt sauber waehrend Bereich und Fast/Slow
+     *             unveraendert blieben -> A/C-Bewertung.
+     *
+     * Die BYTE-POSITIONEN sind damit durch wiederholte, sich gegenseitig nicht ueberlappende
+     * Umschaltungen belegt. Die WERTE-ZUORDNUNG (welcher Bytewert welchem Anzeigezustand
+     * entspricht) ist dagegen eine ANNAHME, keine Bestaetigung: 0x00/0x0F/0x2C waren in jeder
+     * Aufzeichnung vor jedem Umschalten der Ausgangszustand und werden hier als jeweiliger
+     * Default interpretiert (A, Fast, groesster Bereich). Diese Annahme wird ueber
+     * [MeterScreen] am realen Geraet gegengeprueft - erst nach Bestaetigung durch den Owner
+     * gilt sie als gesichert. Ein nicht erkannter Bytewert liefert bewusst `null`, keinen Default.
+     */
+    const val RANGE_BYTE_OFFSET = 7
+    const val TIME_WEIGHTING_BYTE_OFFSET = 19
+    const val WEIGHTING_BYTE_OFFSET = 20
+
+    const val RANGE_VALUE_30_130: Byte = 0x00
+    const val RANGE_VALUE_30_80: Byte = 0x01
+    const val RANGE_VALUE_50_100: Byte = 0x02
+    const val RANGE_VALUE_80_130: Byte = 0x03
+
+    const val TIME_WEIGHTING_VALUE_FAST: Byte = 0x0F
+    const val TIME_WEIGHTING_VALUE_SLOW: Byte = 0x10
+
+    const val WEIGHTING_VALUE_A: Byte = 0x2C
+    const val WEIGHTING_VALUE_C: Byte = 0x2D
+
+    /**
+     * Einziger Umschaltpunkt fuer den Bestaetigungsstatus der obigen Werte-Zuordnung
+     * (Review PR #15, Befund 1): [Pce323FrameDecoder] setzt [MeterFrame.modeAssumptionConfirmed]
+     * hierauf, [MeterScreen] zeigt den Annahme-Hinweis nur, solange dieser Wert `false` ist.
+     * Erst wenn der Owner die Zuordnung am realen Geraet bestaetigt hat, wird dies auf `true`
+     * gesetzt - vorher gilt jeder non-null-Wert in [weighting]/[timeWeighting]/[range] als
+     * angenommen, nicht als gesichert.
+     */
+    const val MODE_ASSUMPTION_CONFIRMED = false
 }
