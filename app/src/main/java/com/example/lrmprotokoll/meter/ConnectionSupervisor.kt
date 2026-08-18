@@ -1,8 +1,10 @@
 package com.example.lrmprotokoll.meter
 
+import android.util.Log
 import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+
+private const val TAG = "ConnectionSupervisor"
 
 /** Zeitquelle als Funktionstyp statt direktem `Instant.now()` (PROMPT_M3 Aufgabe 1) - sonst
  * sind die Backoff-/Staleness-Tests nicht deterministisch testbar und dauern in echter Zeit. */
@@ -45,8 +49,14 @@ private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
  * plus zwei weitere Versuche im konstanten 60-s-Takt, bevor [ConnectionState.FAILED] gemeldet wird -
  * in Summe rund zwei Minuten Wartezeit ueber acht Versuche. Kein Wert aus Plan/Prompt vorgegeben,
  * eigene Abwaegung (nicht einer der sieben in Plan Abschnitt 13 als offen markierten Punkte).
- * Ein Reconnect NACH mindestens einem erfolgreich gestreamten Frame setzt den Zaehler zurueck -
- * eine flatternde, aber grundsaetzlich erreichbare Verbindung darf nie FAILED auslösen.
+ * Ein Reconnect NACH mindestens [minStableSession] erfolgreich gestreamter Zeit setzt den
+ * Zaehler zurueck - eine flatternde, aber grundsaetzlich erreichbare Verbindung darf nie FAILED
+ * ausloesen. Eine Session UNTER [minStableSession] zaehlt dagegen wie ein Fehlschlag (Review-
+ * Befund 3, PR #16): ohne diese Schwelle wuerde ein Geraet, das verbindet, ein Frame liefert
+ * und sofort wieder abbricht, endlos im Sekundentakt neu verbunden - der Backoff wuerde nie
+ * greifen, weil jeder Zyklus formal als Erfolg zaehlte. Genau dieses Dauerzyklus-Muster ist es,
+ * gegen das Aufgabe 5 (gatt.close() bei spontanem Disconnect) in diesem PR die status-133-
+ * Kaskade nach Plan 5.3 vermeiden soll.
  */
 class ConnectionSupervisor(
     private val transport: MeterTransport,
@@ -58,9 +68,34 @@ class ConnectionSupervisor(
     private val errorRateWindow: Duration = Duration.ofSeconds(30),
     private val errorRateThreshold: Double = 0.2,
     private val maxAttempts: Int = 8,
+    private val minStableSession: Duration = Duration.ofSeconds(5),
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
+
+    /**
+     * Hat Vorrang vor dem vom [transport] gespiegelten Zustand (Review-Befund 1, PR #16): ohne
+     * das wuerde z.B. DEGRADED durch das eigene transport.disconnect() direkt danach binnen
+     * kuerzester Zeit vom forwarder auf DISCONNECTED ueberschrieben, bevor ein Beobachter auf
+     * einem anderen Dispatcher (Notification, MeterScreen) es je sieht - StateFlow konflatiert,
+     * ein langsamer Collector wuerde den Zwischenwert schlicht verpassen. Wird in [attemptOnce]
+     * bei jedem neuen Verbindungsversuch geloescht, danach wird der Transport-Zustand wieder
+     * normal durchgereicht.
+     */
+    private var supervisorOverride: ConnectionState? = null
+
+    private fun publish(fromTransport: ConnectionState) {
+        _state.value = supervisorOverride ?: fromTransport
+    }
+
+    private fun setOverride(value: ConnectionState) {
+        supervisorOverride = value
+        _state.value = value
+    }
+
+    private fun clearOverride() {
+        supervisorOverride = null
+    }
 
     private var job: Job? = null
     private var currentDevice: BoundDevice? = null
@@ -76,6 +111,7 @@ class ConnectionSupervisor(
         if (job?.isActive == true && currentDevice == device) return
         currentDevice = device
         job?.cancel()
+        clearOverride() // ein erneuter Start darf keinen alten FAILED/DEGRADED-Override erben
         job = scope.launch { supervise(device) }
     }
 
@@ -84,42 +120,58 @@ class ConnectionSupervisor(
         job?.cancel()
         job = null
         currentDevice = null
+        clearOverride()
         scope.launch { runCatching { transport.disconnect() } }
         _state.value = ConnectionState.IDLE
     }
 
     private suspend fun supervise(device: BoundDevice): Unit = coroutineScope {
         // Spiegelt die feingranularen Zwischenzustaende des Transports (CONNECTING,
-        // DISCOVERING, SUBSCRIBING, STREAMING, DISCONNECTED, FAILED) direkt in [_state] -
-        // die RECONNECTING/DEGRADED-Ueberschreibungen unten bleiben bestehen, solange sich
-        // transport.state selbst nicht aendert (StateFlow emittiert nur bei echter Aenderung).
-        val forwarder = launch { transport.state.collectLatest { _state.value = it } }
+        // DISCOVERING, SUBSCRIBING, STREAMING, DISCONNECTED, FAILED) in [_state], solange kein
+        // [supervisorOverride] aktiv ist.
+        val forwarder = launch { transport.state.collectLatest { publish(it) } }
         try {
             var consecutiveFailures = 0
             var isFirstAttempt = true
             while (isActive) {
                 if (!adapterEnabled.value) {
-                    _state.value = ConnectionState.DISCONNECTED
+                    setOverride(ConnectionState.DISCONNECTED)
                     adapterEnabled.first { it } // pausiert, bis der Adapter wieder an ist
                 }
 
                 if (!isFirstAttempt) {
-                    _state.value = ConnectionState.RECONNECTING
+                    setOverride(ConnectionState.RECONNECTING)
                     delay(backoffDelayMillis(consecutiveFailures))
                     if (!adapterEnabled.value) continue // waehrend der Wartezeit wieder ausgeschaltet
                 }
                 isFirstAttempt = false
 
-                when (attemptOnce(device)) {
-                    AttemptOutcome.STREAMED_THEN_LOST -> consecutiveFailures = 0
+                // Review-Befund 2 (PR #16): eine unerwartete Exception aus dem Transport (z.B.
+                // DeadObjectException beim Neustart des Bluetooth-Stacks, IllegalStateException
+                // aus getRemoteDevice() bei ungueltig gewordener Adresse) darf die Ueberwachung
+                // nicht lautlos beenden - ohne Fang wuerde die Coroutine sterben, _state auf dem
+                // letzten Wert einfrieren und nie wieder FAILED oder ein Retry melden. Zaehlt
+                // hier bewusst wie ein normaler Fehlschlag statt eigener Fehlerbehandlung.
+                val outcome = try {
+                    attemptOnce(device)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Verbindungsversuch mit Ausnahme gescheitert", e)
+                    runCatching { transport.disconnect() }
+                    AttemptOutcome.NEVER_STREAMED
+                }
+
+                when (outcome) {
+                    AttemptOutcome.STREAMED_STABLY -> consecutiveFailures = 0
                     AttemptOutcome.ADAPTER_OFF -> {
                         consecutiveFailures = 0
                         isFirstAttempt = true // sofortige Wiederaufnahme ohne Backoff-Wartezeit
                     }
-                    AttemptOutcome.NEVER_STREAMED -> {
+                    AttemptOutcome.STREAMED_BRIEFLY, AttemptOutcome.NEVER_STREAMED -> {
                         consecutiveFailures++
                         if (consecutiveFailures >= maxAttempts) {
-                            _state.value = ConnectionState.FAILED
+                            setOverride(ConnectionState.FAILED)
                             return@coroutineScope
                         }
                     }
@@ -130,9 +182,18 @@ class ConnectionSupervisor(
         }
     }
 
-    private enum class AttemptOutcome { STREAMED_THEN_LOST, NEVER_STREAMED, ADAPTER_OFF }
+    /**
+     * STREAMED_BRIEFLY: die Session hat [minStableSession] nicht erreicht (Review-Befund 3,
+     * PR #16) - zaehlt fuer den Fehlschlagszaehler wie NEVER_STREAMED, sonst wuerde ein Geraet,
+     * das verbindet, kurz Daten liefert und sofort wieder abbricht, endlos im Sekundentakt neu
+     * verbunden, weil jeder Zyklus formal als Erfolg zaehlte und der Backoff nie greift.
+     */
+    private enum class AttemptOutcome { STREAMED_STABLY, STREAMED_BRIEFLY, NEVER_STREAMED, ADAPTER_OFF }
+
+    private enum class StreamEndReason { LOST, ADAPTER_OFF }
 
     private suspend fun attemptOnce(device: BoundDevice): AttemptOutcome {
+        clearOverride() // ein neuer Versuch beginnt, ein alter Override-Zustand ist ueberholt
         transport.connect(device)
         // transport.connect() kehrt erst zurueck, wenn der GATT-Aufbau (inkl. eigener Timeouts
         // in GattQueue/BleMeterTransport) abgeschlossen ist - hier faengt nur noch das Warten
@@ -147,15 +208,23 @@ class ConnectionSupervisor(
             transport.disconnect()
             return AttemptOutcome.NEVER_STREAMED
         }
-        return monitorStreamingSession()
+        val streamingStartedAt = now.now()
+        val endReason = monitorStreamingSession()
+        if (endReason == StreamEndReason.ADAPTER_OFF) return AttemptOutcome.ADAPTER_OFF
+        val sessionDuration = Duration.between(streamingStartedAt, now.now())
+        return if (sessionDuration >= minStableSession) {
+            AttemptOutcome.STREAMED_STABLY
+        } else {
+            AttemptOutcome.STREAMED_BRIEFLY
+        }
     }
 
-    private suspend fun monitorStreamingSession(): AttemptOutcome = coroutineScope {
-        val done = CompletableDeferred<AttemptOutcome>()
+    private suspend fun monitorStreamingSession(): StreamEndReason = coroutineScope {
+        val done = CompletableDeferred<StreamEndReason>()
 
         val disconnectWatcher = launch {
             transport.state.first { it == ConnectionState.DISCONNECTED || it == ConnectionState.FAILED }
-            done.complete(AttemptOutcome.STREAMED_THEN_LOST)
+            done.complete(StreamEndReason.LOST)
         }
 
         // Watchdog-Timer: jedes neue lastFrameAt bricht den laufenden delay() ab und startet ihn
@@ -164,9 +233,9 @@ class ConnectionSupervisor(
             transport.lastFrameAt.collectLatest { last ->
                 if (last == null) return@collectLatest
                 delay(staleAfter.toMillis())
-                _state.value = ConnectionState.DEGRADED
+                setOverride(ConnectionState.DEGRADED)
                 transport.disconnect()
-                done.complete(AttemptOutcome.STREAMED_THEN_LOST)
+                done.complete(StreamEndReason.LOST)
             }
         }
 
@@ -190,9 +259,9 @@ class ConnectionSupervisor(
                 if (totalDelta >= MIN_SAMPLES_FOR_ERROR_RATE) {
                     val rate = errorDelta.toDouble() / totalDelta
                     if (rate > errorRateThreshold) {
-                        _state.value = ConnectionState.DEGRADED
+                        setOverride(ConnectionState.DEGRADED)
                         transport.disconnect()
-                        done.complete(AttemptOutcome.STREAMED_THEN_LOST)
+                        done.complete(StreamEndReason.LOST)
                     }
                 }
             }
@@ -201,7 +270,7 @@ class ConnectionSupervisor(
         val adapterWatcher = launch {
             adapterEnabled.first { !it }
             transport.disconnect()
-            done.complete(AttemptOutcome.ADAPTER_OFF)
+            done.complete(StreamEndReason.ADAPTER_OFF)
         }
 
         val result = done.await()
