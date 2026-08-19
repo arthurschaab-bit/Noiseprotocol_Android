@@ -1132,7 +1132,7 @@ Anmerkungen:
 | **M1** | Umbau statt Neubau | Paketstruktur (4.2), `AppContainer`, minSdk 29 → 31, `MeterTransport` + Fake, erste Unit-Tests | 1,5 d |
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
-| **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
+| **M4** | **Persistenz — erledigt** | Room (`sessions`/`measurements`/`connection_events`/`minute_aggregates`, Migration 8→9), Batch-Writer (`MeasurementRecorder`), Trigger-Umstellung (`MeterTriggerSource`), Leq/Max/Min/L10/L50/L90 (`AkustischeKennwerte`), Retention-Job (`RetentionCoordinator`/`-Worker`, 90 Tage) | 2–3 d |
 | **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `NtfyAlertChannel`, `LocalNotificationAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** — `SmsAlertChannel` gestrichen (Owner-Entscheidung, siehe 13.4) | 4 d |
 | **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, Backup-Regeln — SQLCipher entfällt (13.2) | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |

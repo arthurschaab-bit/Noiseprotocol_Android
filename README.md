@@ -23,10 +23,10 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
 | **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code abgeschlossen, Google-Anmeldung braucht noch eine echte Client-ID + Gerätetest |
-| **Gerätetest** M2, M3, M5 + M7b am realen Gerät | ⬜ **als Nächstes** |
-| M4 Persistenz der Messreihe | ⬜ offen |
+| **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
+| **Gerätetest** M2, M3, M4, M5 + M7b am realen Gerät | ⬜ **als Nächstes** |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 7 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 8 von 10 Meilensteinen.**
 
 ---
 
@@ -68,15 +68,26 @@ dupliziert, mit Dedup-Absicherung gegen Waisen. Läuft bewusst auch **ohne** gep
 allein mit Mikrofonwerten. Aufzeichnungsgenauigkeit, WLAN-only und WAV-Upload sind in den
 Einstellungen konfigurierbar.
 
+**Aus M4:** Jede Überwachungsperiode wird als `SessionEntity` festgehalten, Messwerte batchweise
+(alle 5 s oder 50 Werte) als `MeasurementEntity` weggeschrieben, Verbindungsausfälle als
+`ConnectionEventEntity` — eine zusammenhängende Ausfallperiode erzeugt genau eine Zeile, nicht
+eine je Zwischenzustand. Der Auslöse-Trigger schaltet automatisch auf das Messgerät um, sobald
+eines verbunden ist (eigener Schwellwert, weil „60" bei Mikrofon und Messgerät nichts
+Vergleichbares bedeutet), und fällt sonst auf den Mikrofonwert zurück. Kennwerte (LAeq
+energetisch, Max/Min, L10/L50/L90, Überschreitungsdauer) lassen sich über `AkustischeKennwerte`
+abfragen. Ein täglicher Retention-Job verdichtet Rohwerte älter als 90 Tage zu Minutenaggregaten
+(Owner-Entscheidung, Plan 13.2) — erst schreiben, dann löschen, damit ein Abbruch dazwischen nie
+Daten verliert. Die A/C-Frequenzbewertung bleibt dabei durchgehend `null`, bis der Gerätetest sie
+bestätigt (siehe Warnhinweis unten).
+
 ### Nicht vorhanden
 
 | | |
 |---|---|
-| Persistenz der Messreihe, Trigger-Umstellung auf das Messgerät | → M4 |
 | Verschlüsselung at rest, Geräte-Pinning härten | → M6 |
 | Diagnose-Screen, Export der Messreihe | → M7 |
 
-> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M5 *und* M7b.** Der gesamte BLE-Pfad und die
+> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5 *und* M7b.** Der gesamte BLE-Pfad und die
 > gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
 > geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
 > nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung)
@@ -87,8 +98,9 @@ Einstellungen konfigurierbar.
 > der Folgeaufzeichnung bekannt, welcher Bytewert aber A und welcher C bedeutet, ist eine
 > Annahme — abgebildet über `MeterFrame.modeAssumptionConfirmed`, das auf `false` steht. Die App
 > beschriftet den Wert deshalb bewusst nur als „dB". Beweisen lässt sich die Zuordnung über die
-> Frequenzgang-Messung in Teil B2 der Checkliste. **Bis dahin darf M4 die Frequenzbewertung nicht
-> als Tatsache speichern.**
+> Frequenzgang-Messung in Teil B2 der Checkliste. **Bis dahin speichert M4 die Frequenzbewertung
+> konsequent als `null`**, sowohl in `MeasurementEntity`/`MinuteAggregateEntity` als auch in
+> `NoiseRecord.meterWeighting`.
 
 ---
 
@@ -97,9 +109,9 @@ Einstellungen konfigurierbar.
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
-| **Gerätetest** | M2, M3, M5 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M4 | Persistenz der Messreihe. Die Frequenzbewertung bleibt bis zum Gerätetest ungespeichert | nein |
-| M6–M8 | Sicherheit, UI-Ausbau, Härtung | teilweise |
+| **Gerätetest** | M2, M3, M4, M5 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| M6–M7 | Sicherheit, UI-Ausbau | teilweise |
+| M8 | Härtung | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
@@ -118,8 +130,12 @@ Default an, um das dadurch höhere Uploadvolumen abzufangen. OAuth-Scope **`driv
 eigenen Ordner an, keine Google-Verifizierung nötig). WAV-Upload **als Option vorhanden, Default
 aus** — Owner-Entscheidung, abweichend vom Plan-Vorschlag „nein", der WAVs komplett ausschließt.
 
-**Noch offen:** ein Punkt in [Plan Abschnitt 13](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md),
-zu M4 — Aufbewahrungsdauer der Rohmesswerte und ob die Datenbank per SQLCipher verschlüsselt wird.
+**Für M4 entschieden und umgesetzt:** Aufbewahrungsdauer der Rohmesswerte **90 Tage**, wie im Plan
+vorgeschlagen, danach Verdichtung zu Minutenaggregaten. **SQLCipher explizit gestrichen** —
+Owner-Entscheidung, abweichend vom Plan-Vorschlag: die App-Sandbox von Android schützt bereits
+gegen andere Apps, der Aufwand beim Öffnen/Migrieren stünde dazu nicht im Verhältnis. Die
+Datenbank bleibt unverschlüsselt; M6 setzt stattdessen nur EncryptedSharedPreferences für
+Alarmkonfiguration/Rufnummern um.
 
 ---
 
@@ -132,6 +148,10 @@ zu M4 — Aufbewahrungsdauer der Rohmesswerte und ob die Datenbank per SQLCipher
   auf dem Gerät unerreichbar macht.
 - Vier weitere Altbefunde (Ringpuffer-Synchronisation, `audioRecord.release()`, unvollständiges
   `InputStream.read`, `runBlocking`) in [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md), Schritt 5.
+- **`MeasurementRecorder` flusht nicht bei `onTrimMemory`.** Plan 8.2 nennt das als
+  zusätzliche Absicherung neben dem 5-s/50-Werte-Intervall; bewusst nicht umgesetzt (siehe
+  `docs/PROMPT_M4.md`) — im ungünstigsten Fall (Speicherdruck kurz vor Prozess-Kill) gehen bis
+  zu 5 s bzw. 50 Messwerte verloren.
 
 ---
 
@@ -173,6 +193,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | Auftrag für B-11 (erledigt) — 16-KB-Seitengröße, TFLite-Ablösung |
 | [`docs/PROMPT_M5.md`](docs/PROMPT_M5.md) | Auftrag für M5 (erledigt) — Alarmierung, Karenzzeit, ntfy, Totmannschaltung |
 | [`docs/PROMPT_M7B.md`](docs/PROMPT_M7B.md) | Auftrag für M7b (erledigt) — Drive-Sync, Aggregation, Google-Anmeldung |
+| [`docs/PROMPT_M4.md`](docs/PROMPT_M4.md) | Auftrag für M4 (erledigt) — Persistenz, Trigger-Umstellung, Kennwerte, Retention |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
