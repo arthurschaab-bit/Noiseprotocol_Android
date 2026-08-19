@@ -24,9 +24,10 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
 | **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code abgeschlossen, Google-Anmeldung braucht noch eine echte Client-ID + Gerätetest |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
-| **Gerätetest** M2, M3, M4, M5 + M7b am realen Gerät | ⬜ **als Nächstes** |
+| **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
+| **Gerätetest** M2, M3, M4, M5, M6 + M7b am realen Gerät | ⬜ **als Nächstes** |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 8 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 9 von 10 Meilensteinen.**
 
 ---
 
@@ -80,14 +81,27 @@ abfragen. Ein täglicher Retention-Job verdichtet Rohwerte älter als 90 Tage zu
 Daten verliert. Die A/C-Frequenzbewertung bleibt dabei durchgehend `null`, bis der Gerätetest sie
 bestätigt (siehe Warnhinweis unten).
 
+**Aus M6:** Bonding scheitert an diesem Gerät nachweislich (M0-Fund: `createBond()` bricht die
+Verbindung sofort ab) — statt es wiederholt zu versuchen, kennzeichnet die Live-Anzeige die
+Verbindung jetzt ehrlich als unverschlüsselt. Geräte-Pinning gehärtet: ein Advertiser mit
+demselben Namen wie das gekoppelte Gerät, aber anderer Adresse, wird nicht mehr kommentarlos
+angeboten, sondern gewarnt, geloggt und nur nach Bestätigung akzeptiert (`GeraetePinning`).
+Stream-Plausibilisierung als Spoofing-Erkennung: ein neuer Kadenz-Watcher in
+`ConnectionSupervisor` trennt die Verbindung, wenn die Frame-Rate wiederholt mehr als ±20% vom
+erwarteten Intervall abweicht. Die ntfy-Konfiguration (Topic, Server, Heartbeat-URL) liegt jetzt
+in `EncryptedSharedPreferences` (Android Keystore) statt im Klartext, mit automatischer Migration
+bestehender Werte. Ein neues, standardmäßig **ausgeschaltetes** Diagnose-Log (7-Tage-Löschung)
+zeichnet technische Ereignisse auf (Datenstillstand, Fehlerrate, Kadenz-Auffälligkeiten,
+gescheiterte Verbindungsversuche) — die Anzeige dafür ist M7. SQLCipher bleibt **bewusst aus**
+(Owner-Entscheidung, siehe M4/Plan 13.2).
+
 ### Nicht vorhanden
 
 | | |
 |---|---|
-| Verschlüsselung at rest, Geräte-Pinning härten | → M6 |
 | Diagnose-Screen, Export der Messreihe | → M7 |
 
-> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5 *und* M7b.** Der gesamte BLE-Pfad und die
+> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5, M6 *und* M7b.** Der gesamte BLE-Pfad und die
 > gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
 > geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
 > nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung)
@@ -109,8 +123,8 @@ bestätigt (siehe Warnhinweis unten).
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
-| **Gerätetest** | M2, M3, M4, M5 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M6–M7 | Sicherheit, UI-Ausbau | teilweise |
+| **Gerätetest** | M2, M3, M4, M5, M6 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| M7 | UI-Ausbau (Protokollansicht, Diagnose-Screen, Export) | nein |
 | M8 | Härtung | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -137,6 +151,14 @@ gegen andere Apps, der Aufwand beim Öffnen/Migrieren stünde dazu nicht im Verh
 Datenbank bleibt unverschlüsselt; M6 setzt stattdessen nur EncryptedSharedPreferences für
 Alarmkonfiguration/Rufnummern um.
 
+**Für M6 umgesetzt, keine Owner-Entscheidung nötig:** Bonding wird nicht erneut versucht (M0 hat
+den Fehlschlag bereits mit Beweis belegt, `createBond()` bricht die Verbindung ab) — die Konsequenz
+aus dem Plan (ehrliche UI-Kennzeichnung statt Sicherheit vorzutäuschen) greift direkt, ohne dass
+das noch einmal am Gerät ausprobiert werden musste. Das Diagnose-Log protokolliert bewusst keine
+rohen Frame-Bytes, sondern die von `ConnectionSupervisor` ohnehin erkannten Ereignisse
+(Datenstillstand, Fehlerrate, Kadenz, gescheiterte Verbindungsversuche) — ein Rohframe-Capture
+hätte noch keinen Konsumenten, der Diagnose-Screen dafür ist M7.
+
 ---
 
 ## Bekannte Einschränkungen
@@ -152,6 +174,12 @@ Alarmkonfiguration/Rufnummern um.
   zusätzliche Absicherung neben dem 5-s/50-Werte-Intervall; bewusst nicht umgesetzt (siehe
   `docs/PROMPT_M4.md`) — im ungünstigsten Fall (Speicherdruck kurz vor Prozess-Kill) gehen bis
   zu 5 s bzw. 50 Messwerte verloren.
+- **Ob `EncryptedSharedPreferences` auf einem echten Gerät tatsächlich verschlüsselt, ist nicht
+  durch Unit-Tests belegt.** Robolectric/die JVM stellen den Provider „AndroidKeyStore"
+  grundsätzlich nicht bereit (`KeyStoreException: AndroidKeyStore not found`, selbst geprüft) -
+  jeder Test, der `SettingsManager` unverändert konstruiert, läuft real über den dokumentierten
+  Klartext-Fallback. Die Migrations-/Fallback-*Logik* ist gegen ein injiziertes Test-Double
+  geprüft, die tatsächliche Verschlüsselung nur am Gerät (siehe `docs/PROMPT_M6.md`).
 
 ---
 
@@ -194,6 +222,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M5.md`](docs/PROMPT_M5.md) | Auftrag für M5 (erledigt) — Alarmierung, Karenzzeit, ntfy, Totmannschaltung |
 | [`docs/PROMPT_M7B.md`](docs/PROMPT_M7B.md) | Auftrag für M7b (erledigt) — Drive-Sync, Aggregation, Google-Anmeldung |
 | [`docs/PROMPT_M4.md`](docs/PROMPT_M4.md) | Auftrag für M4 (erledigt) — Persistenz, Trigger-Umstellung, Kennwerte, Retention |
+| [`docs/PROMPT_M6.md`](docs/PROMPT_M6.md) | Auftrag für M6 (erledigt) — Bonding-Kennzeichnung, Geräte-Pinning, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
