@@ -88,17 +88,24 @@ class GoogleDriveApiClient(
             put("parents", JSONArray().put(ordnerId))
         }.toString()
 
-        val (uebertrageneBytes, contentEncoding) = kodiere(inhalt, gzip)
-
         val multipart = MultipartBody.Builder(grenze())
             .setType("multipart/related".toMediaType())
             .addPart(metadaten.toRequestBody(JSON))
-            .addPart(uebertrageneBytes.toRequestBody(mimeType.toMediaType()))
+            .addPart(inhalt.toRequestBody(mimeType.toMediaType()))
             .build()
+
+        // Content-Encoding gilt fuer den GESAMTEN Rumpf. Nur den Dateianteil zu gzippen und den
+        // Header trotzdem fuer das komplette Multipart-Paket zu setzen, waere KEIN gueltiges
+        // gzip-Dokument mehr - die Grenzen und die JSON-Metadaten blieben unkomprimiert
+        // dazwischen stehen. Deshalb erst das vollstaendige Multipart-Paket in Bytes wandeln und
+        // ERST DANACH als Ganzes komprimieren (nachgewiesen durch Test: Roundtrip-Entpacken des
+        // Rumpfs ergibt wieder gueltigen Multipart-Inhalt).
+        val vollstaendigerRumpf = okio.Buffer().also { multipart.writeTo(it) }.readByteArray()
+        val (uebertrageneBytes, contentEncoding) = kodiere(vollstaendigerRumpf, gzip)
 
         val requestBuilder = Request.Builder()
             .url("$basisUrl/upload/drive/v3/files?uploadType=multipart")
-            .post(multipart)
+            .post(uebertrageneBytes.toRequestBody(multipart.contentType()))
             .header("Authorization", "Bearer $token")
         contentEncoding?.let { requestBuilder.header("Content-Encoding", it) }
 
