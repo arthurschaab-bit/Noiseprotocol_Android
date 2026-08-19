@@ -45,6 +45,7 @@ class MeasurementRecorderTest {
         override suspend fun update(session: SessionEntity) { zeilen[session.id] = session }
         override suspend fun byId(id: Long): SessionEntity? = zeilen[id]
         override suspend fun offeneSession(): SessionEntity? = zeilen.values.firstOrNull { it.endedAt == null }
+        override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
         override fun alle() = throw NotImplementedError("im Test nicht benoetigt")
     }
 
