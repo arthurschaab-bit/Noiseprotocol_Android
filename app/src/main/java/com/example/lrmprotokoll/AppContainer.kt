@@ -27,6 +27,7 @@ import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.ble.BleMeterTransport
 import com.example.lrmprotokoll.meter.ble.BluetoothAdapterStateObserver
+import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,9 @@ class AppContainer(context: Context) {
             transport = meterTransport,
             scope = connectionSupervisorScope,
             adapterEnabled = bluetoothAdapterStateObserver.enabled,
+            // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
+            // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
+            expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
         )
     }
 

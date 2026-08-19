@@ -37,6 +37,13 @@ private const val BACKOFF_JITTER_FRACTION = 0.2
 private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 
 /**
+ * Zwei aufeinanderfolgende Kadenz-Abweichungen, nicht eine - ein einzelner verspaeteter
+ * OS-Scheduler-Tick darf keinen Reconnect ausloesen (dasselbe Prinzip wie
+ * [MIN_SAMPLES_FOR_ERROR_RATE] bei der Fehlerrate: kein Einzelwert reicht).
+ */
+private const val MIN_CADENCE_VIOLATIONS = 2
+
+/**
  * Treibt den Verbindungs-Zustandsautomaten aus Plan Abschnitt 5.1 ueber die reine
  * [MeterTransport]-Schnittstelle - kennt NICHT [com.example.lrmprotokoll.meter.ble.BleMeterTransport],
  * nur so bleibt sie vollstaendig gegen [FakeMeterTransport] testbar (PROMPT_M3 Aufgabe 1).
@@ -69,6 +76,17 @@ class ConnectionSupervisor(
     private val errorRateThreshold: Double = 0.2,
     private val maxAttempts: Int = 8,
     private val minStableSession: Duration = Duration.ofSeconds(5),
+    /**
+     * Stream-Plausibilisierung als Spoofing-Erkennung (Plan Abschnitt 6): `null` (Default)
+     * schaltet die Pruefung ab - ohne eine geraetespezifische Erwartung (nur AppContainer kennt
+     * [com.example.lrmprotokoll.meter.ble.Pce323Profile.EXPECTED_FRAME_PERIOD_MS], diese Klasse
+     * bleibt bewusst frei von BLE-Details) gibt es nichts, wogegen zu pruefen waere. Ist ein Wert
+     * gesetzt, muss die Zeit zwischen zwei Frames innerhalb von ±[cadenceTolerance] liegen -
+     * wiederholte Abweichung (Framing/Kadenz eines untergeschobenen Geraets liesse sich kaum
+     * exakt nachbilden) trennt die Verbindung wie ein Datenstillstand.
+     */
+    private val expectedFramePeriod: Duration? = null,
+    private val cadenceTolerance: Double = 0.2,
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -273,11 +291,50 @@ class ConnectionSupervisor(
             done.complete(StreamEndReason.ADAPTER_OFF)
         }
 
+        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung): misst die Zeit zwischen
+        // zwei Frame-Ankuenften ueber [now] statt ueber die im Frame mitgelieferte Zeit - wie
+        // errorRateWatcher oben, damit die Pruefung synchron zur injizierten Uhr laeuft und in
+        // Tests ueber advanceTimeBy steuerbar ist, unabhaengig davon, welche Zeit der Transport
+        // selbst in lastFrameAt eintraegt.
+        val cadenceWatcher = expectedFramePeriod?.let { erwartet ->
+            launch {
+                var vorherigeAnkunft: Instant? = null
+                var abweichungenInFolge = 0
+                transport.lastFrameAt.collect { letzter ->
+                    if (letzter == null) return@collect
+                    val ankunft = now.now()
+                    val vorherige = vorherigeAnkunft
+                    vorherigeAnkunft = ankunft
+                    if (vorherige == null) return@collect
+
+                    val deltaMillis = Duration.between(vorherige, ankunft).toMillis()
+                    val minMillis = (erwartet.toMillis() * (1 - cadenceTolerance)).toLong()
+                    val maxMillis = (erwartet.toMillis() * (1 + cadenceTolerance)).toLong()
+                    if (deltaMillis < minMillis || deltaMillis > maxMillis) {
+                        abweichungenInFolge++
+                        if (abweichungenInFolge >= MIN_CADENCE_VIOLATIONS) {
+                            Log.w(
+                                TAG,
+                                "Framekadenz ${deltaMillis}ms wiederholt ausserhalb der Toleranz " +
+                                    "[$minMillis, $maxMillis]ms - moeglicher Spoofing-Verdacht",
+                            )
+                            setOverride(ConnectionState.DEGRADED)
+                            transport.disconnect()
+                            done.complete(StreamEndReason.LOST)
+                        }
+                    } else {
+                        abweichungenInFolge = 0
+                    }
+                }
+            }
+        }
+
         val result = done.await()
         disconnectWatcher.cancel()
         stalenessWatcher.cancel()
         errorRateWatcher.cancel()
         adapterWatcher.cancel()
+        cadenceWatcher?.cancel()
         result
     }
 
