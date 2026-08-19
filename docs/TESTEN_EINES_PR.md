@@ -7,12 +7,43 @@ PCE-323 braucht ein echtes Telefon, alles andere nicht.
 
 ## 1. Die APK bekommen, ohne selbst zu bauen
 
-Jeder CI-Lauf legt die Debug-APK als Artefakt ab. Im PR auf **Checks → build-and-test → Artifacts
-→ `app-debug-apk`**, herunterladen, entpacken, dann:
+Jeder CI-Lauf legt die Debug-APK als Artefakt ab. Der Weg dorthin ist aber nicht der, den man
+zuerst probiert — **Artefakte hängen an der Übersichtsseite des Laufs, nicht an der Job-Seite mit
+dem Protokoll.** Wer im PR auf „Details" neben dem grünen Haken klickt, landet auf der Job-Seite
+und findet dort keine Artefakte. Das ist die übliche Stolperstelle.
+
+Der verlässliche Weg:
+
+1. Im Repository oben auf den Reiter **Actions**.
+2. Links **Android CI**, dann in der Liste den Lauf anklicken, der zum gewünschten Branch bzw. PR
+   gehört (Branchname und Commit stehen in der Zeile).
+3. Auf der **Übersichtsseite des Laufs** ganz nach unten scrollen. Dort ein Kasten
+   **Artifacts** mit `app-debug-apk` (rund 37 MB) und `unit-test-reports`.
+4. `app-debug-apk` anklicken → es lädt eine **ZIP-Datei** herunter. Entpacken, darin liegt
+   `app-debug.apk`.
+
+Aus dem PR heraus geht es auch: Reiter **Checks** → links `build-and-test` → oben rechts
+**„View more details on GitHub Actions"** → dann ist man auf der Job-Seite, und von dort führt der
+Breadcrumb oben (Name des Laufs) auf die Übersichtsseite mit den Artefakten.
+
+> **Man muss bei GitHub angemeldet sein.** Artefakte sind für nicht angemeldete Besucher
+> unsichtbar — auch bei öffentlichen Repositories.
+
+Installieren:
 
 ```bat
 adb install -r app-debug.apk
 ```
+
+Ohne Kabel: die APK auf das Telefon kopieren und dort im Dateimanager öffnen. Android fragt dann
+einmalig nach der Erlaubnis „Unbekannte Apps installieren" für den Dateimanager.
+
+### Welcher Lauf enthält was?
+
+Ein Artefakt enthält genau den Stand **des Branches, auf dem der Lauf lief** — nicht den von
+`main`. Ein PR-Branch, der vor dem Merge eines anderen PRs abgezweigt wurde, enthält dessen
+Änderungen nicht. Im Zweifel den Lauf nehmen, dessen Commit-Kürzel zum gewünschten Stand passt,
+oder den neuesten Lauf auf `main`.
 
 Damit ist keine lokale Build-Umgebung nötig, um eine PR-Fassung auszuprobieren.
 
