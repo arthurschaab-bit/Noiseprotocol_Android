@@ -23,6 +23,7 @@ import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.label
+import com.example.lrmprotokoll.messreihe.RetentionPlanung
 import java.time.Instant
 import kotlinx.coroutines.*
 import java.io.File
@@ -191,6 +192,10 @@ class AudioRecordingService : LifecycleService() {
         }
         ensureMeterMonitoringStarted()
         ensureDriveSyncStarted()
+        // M4: unabhaengig von jeder Einstellung geplant (anders als Heartbeat/Drive-Sync) -
+        // alte Rohwerte sollen verdichtet werden, sobald der Dienst ueberhaupt einmal laeuft,
+        // unabhaengig davon, ob gerade ein Messgeraet gepinnt oder Drive-Sync aktiv ist.
+        com.example.lrmprotokoll.messreihe.RetentionPlanung.plane(applicationContext)
         return START_STICKY
     }
 
