@@ -102,13 +102,51 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
  * Produktionsliste vorbeilaufen lassen - genau das ist beim Sprung auf Version 7 passiert und
  * haette einen gruenen Test trotz kaputtem Upgrade-Pfad ergeben koennen.
  */
-val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7)
 
-@Database(entities = [NoiseRecord::class, ReferenceSound::class, AlertEntity::class], version = 7, exportSchema = true)
+/**
+ * Migration von Schema-Version 7 auf 8: die Tabellen `level_samples` und `drive_daily_files`
+ * fuer M7b (Google-Drive-Sync).
+ *
+ * Rein additiv wie die Migration zuvor - keine bestehende Tabelle wird angefasst.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `level_samples` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`at` INTEGER NOT NULL, " +
+                "`levelDb` REAL NOT NULL, " +
+                "`source` TEXT NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `drive_daily_files` (" +
+                "`date` TEXT NOT NULL, " +
+                "`fileId` TEXT, " +
+                "`lastSyncedAt` INTEGER NOT NULL, " +
+                "`lastRowCount` INTEGER NOT NULL, " +
+                "`state` TEXT NOT NULL, " +
+                "PRIMARY KEY(`date`))"
+        )
+    }
+}
+val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8)
+
+@Database(
+    entities = [
+        NoiseRecord::class, ReferenceSound::class, AlertEntity::class,
+        LevelSampleEntity::class, DriveDailyFileEntity::class,
+    ],
+    version = 8,
+    exportSchema = true,
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noiseDao(): NoiseDao
 
     abstract fun alertDao(): AlertDao
+
+    abstract fun levelSampleDao(): LevelSampleDao
+
+    abstract fun driveDailyFileDao(): DriveDailyFileDao
 
     companion object {
         @Volatile
