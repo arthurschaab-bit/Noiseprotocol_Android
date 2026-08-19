@@ -1135,7 +1135,7 @@ Anmerkungen:
 | **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `NtfyAlertChannel`, `LocalNotificationAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** — `SmsAlertChannel` gestrichen (Owner-Entscheidung, siehe 13.4) | 4 d |
 | **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
-| **M7b** | **Google-Drive-Sync (F-10)** | OAuth `drive.file`, Ordneranlage, 10-s-Aggregation, CSV-Erzeugung, `DriveSyncWorker`, `DailyFileRegistry`, Fehlerbehandlung, Sync-Status im UI | 3–4 d |
+| **M7b** | **Google-Drive-Sync (F-10)** — erledigt, ohne M4 | OAuth `drive.file`, Ordneranlage, konfigurierbare Aggregation (Default 1 s), CSV-Erzeugung, `DriveSyncWorker`, `DriveDailyFileEntity`, Fehlerbehandlung, Sync-Status als Notification | 3–4 d |
 | **M8** | Härtung | Chaos-Checkliste, 24-h-Dauerlauf, Herstellerspezifika, Release-Build | 2–3 d |
 | **M9** | *(optional)* FCM-Zielbild | Google Sign-In, Firestore, Cloud-Function-Relay, `FcmAlertChannel`, serverseitiger Heartbeat | 3–4 d |
 
@@ -1199,12 +1199,19 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
    von der Totmannschaltung (7.5): Ohne Internet bleibt auch der Heartbeat aus, und die
    Gegenseite alarmiert. Damit ist 7.5 nicht mehr nur die wichtigste Einzelmaßnahme, sondern
    für diesen Ausfall die einzige.
-5. **Drive-Aggregationsintervall** — Vorschlag 10 s (8.4.1). Feiner geht, kostet aber
-   überproportional Upload-Volumen.
-6. **Drive-Ordnerwahl** — reicht ein von der App angelegter Ordner (`drive.file`, keine
-   Google-Verifizierung), oder muss es zwingend ein beliebiger bestehender Ordner sein
-   (voller `drive`-Scope, jährliche CASA-Prüfung)? *Vorschlag: `drive.file`.*
-7. **Sollen die WAV-Aufnahmen ebenfalls nach Drive?** *Vorschlag: nein, nur Pegeldaten.*
+5. ~~**Drive-Aggregationsintervall**~~ — **entschieden: konfigurierbar, Default 1 s** (so fein
+   wie technisch sinnvoll) statt der vorgeschlagenen 10 s — Owner-Entscheidung. Dafür WLAN-only
+   (8.4.5) default AN, um das dadurch höhere Uploadvolumen abzufangen.
+6. ~~**Drive-Ordnerwahl**~~ — **entschieden: `drive.file`**, wie vorgeschlagen. Die App legt beim
+   Einrichten selbst einen Ordner an.
+7. ~~**Sollen die WAV-Aufnahmen ebenfalls nach Drive?**~~ — **entschieden: als Option vorhanden,
+   Default AUS.** Abweichend vom Vorschlag „nein" — der Owner wollte die Möglichkeit erhalten,
+   nicht WAV-Upload komplett ausschließen.
+
+**Neu hinzugekommen bei der Umsetzung:** Google Sign-In braucht eine echte OAuth-Client-ID aus
+der Google Cloud Console, die kein Agent selbst anlegen kann (braucht Browser-Zugriff auf ein
+Google-Konto). Entschieden: Code vollständig fertig, Client-ID bleibt ein dokumentierter
+Platzhalter (`GoogleClientConfig.SERVER_CLIENT_ID`) bis der Owner sie selbst einrichtet.
 
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
