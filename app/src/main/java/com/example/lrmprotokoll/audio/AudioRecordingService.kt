@@ -14,12 +14,16 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.AlarmCoordinator
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
+import com.example.lrmprotokoll.data.LevelSource
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.drive.LevelSampleCollector
 import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
+import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.label
+import java.time.Instant
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -52,6 +56,8 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var settingsManager: SettingsManager
     private lateinit var connectionSupervisor: ConnectionSupervisor
     private lateinit var alarmCoordinator: AlarmCoordinator
+    private lateinit var meterTransport: MeterTransport
+    private lateinit var levelSampleCollector: LevelSampleCollector
     private var classifier: SoundClassifier? = null
 
     private var rollingBuffer: ByteArray = ByteArray(0)
@@ -64,7 +70,21 @@ class AudioRecordingService : LifecycleService() {
         settingsManager = container.settingsManager
         connectionSupervisor = container.connectionSupervisor
         alarmCoordinator = container.alarmCoordinator
+        meterTransport = container.meterTransport
+        levelSampleCollector = container.levelSampleCollector
         classifier = NoiseClassifier(applicationContext)
+
+        // M7b: Pegelwerte des Messgeraets fuer den Drive-Sync einsammeln - unabhaengig vom
+        // Aufnahme-Trigger, der weiterhin am Mikrofon haengt (Trigger-Umstellung ist M4). Nur
+        // wenn Drive-Sync eingeschaltet ist, damit ohne aktivierten Sync kein Puffer waechst,
+        // den niemand ausliest.
+        lifecycleScope.launch {
+            meterTransport.frames.collect { frame ->
+                if (settingsManager.driveSyncEnabled) {
+                    levelSampleCollector.pegel(LevelSource.PCE_323, frame.level, frame.receivedAt)
+                }
+            }
+        }
         updateRollingBuffer()
 
         lifecycleScope.launch {
@@ -93,6 +113,19 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
+    /**
+     * Bewusst NICHT Teil von [ensureMeterMonitoringStarted]: Der Drive-Sync soll laut Plan 8.4
+     * auch ganz ohne gepinntes Messgeraet allein mit Mikrofonwerten laufen. Waere dieser Aufruf
+     * dort verschachtelt, wuerde ihn der fruehe Rueckgabe-Pfad ohne gepinntes Geraet nie
+     * erreichen - der Puffer in [levelSampleCollector] wuerde befuellt, aber nie geleert, weil
+     * die periodische Flush-Schleife nie gestartet waere.
+     */
+    private fun ensureDriveSyncStarted() {
+        if (!settingsManager.driveSyncEnabled) return
+        levelSampleCollector.start()
+        com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
+    }
+
     private fun updateRollingBuffer() {
         val sampleRate = settingsManager.audioSampleRate
         val size = sampleRate * settingsManager.preRollSeconds * bytesPerSample
@@ -114,6 +147,7 @@ class AudioRecordingService : LifecycleService() {
             // Erst hier den Heartbeat abbestellen: Der Nutzer hat die Ueberwachung bewusst
             // beendet, ein ausbleibendes Lebenszeichen waere ab jetzt kein Ausfall mehr.
             HeartbeatPlanung.stoppe(applicationContext)
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -129,6 +163,7 @@ class AudioRecordingService : LifecycleService() {
             settingsManager.audioMonitoringWasActive = true
         }
         ensureMeterMonitoringStarted()
+        ensureDriveSyncStarted()
         return START_STICKY
     }
 
@@ -382,6 +417,7 @@ class AudioRecordingService : LifecycleService() {
         // prueft selbst, ob ueberwacht werden soll, und schweigt sonst - abgeschaltet wird er
         // beim expliziten Nutzerstop in onStartCommand.
         alarmCoordinator.stop()
+        levelSampleCollector.stop()
         serviceJob.cancel()
         super.onDestroy()
     }

@@ -22,10 +22,11 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
 | **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
-| **Gerätetest** M2, M3 + M5 am realen PCE-323 | ⬜ **als Nächstes** |
-| Google-Drive-Sync (30 min, eine Datei pro Tag) | ⬜ offen |
+| **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code abgeschlossen, Google-Anmeldung braucht noch eine echte Client-ID + Gerätetest |
+| **Gerätetest** M2, M3, M5 + M7b am realen Gerät | ⬜ **als Nächstes** |
+| M4 Persistenz der Messreihe | ⬜ offen |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 6 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 7 von 10 Meilensteinen.**
 
 ---
 
@@ -60,6 +61,13 @@ Gerät und Meldung auf dem Gerät selbst, beide parallel; Cooldown, Eskalation u
 Alarmzustand in Room, damit ein Prozess-Tod während der Karenzzeit den Alarm nicht verschluckt;
 **Totmannschaltung** über eine Ping-URL; Probealarm je Kanal in den Einstellungen.
 
+**Aus M7b:** Pegelwerte aus Mikrofon *und* PCE-323 werden gepuffert, zu Zeitfenstern verdichtet
+(LAeq als energetischer Mittelwert, Lücken bleiben als Lücken sichtbar) und alle 30 Minuten als
+CSV in einen selbst gewählten Drive-Ordner hochgeladen — eine Datei pro Tag, aktualisiert statt
+dupliziert, mit Dedup-Absicherung gegen Waisen. Läuft bewusst auch **ohne** gepinntes PCE-323
+allein mit Mikrofonwerten. Aufzeichnungsgenauigkeit, WLAN-only und WAV-Upload sind in den
+Einstellungen konfigurierbar.
+
 ### Nicht vorhanden
 
 | | |
@@ -67,11 +75,13 @@ Alarmzustand in Room, damit ein Prozess-Tod während der Karenzzeit den Alarm ni
 | Persistenz der Messreihe, Trigger-Umstellung auf das Messgerät | → M4 |
 | Verschlüsselung at rest, Geräte-Pinning härten | → M6 |
 | Diagnose-Screen, Export der Messreihe | → M7 |
-| Google-Drive-Sync | → M7b |
 
-> ⚠ **Der Gerätetest steht noch aus — für M2, M3 *und* M5.** Der gesamte BLE-Pfad und die gesamte
-> Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0 geprüft,
-> nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy. Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
+> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M5 *und* M7b.** Der gesamte BLE-Pfad und die
+> gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
+> geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
+> nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung)
+> und die Google-Anmeldung braucht zusätzlich eine echte OAuth-Client-ID, die nur der Kontoinhaber
+> über die Google Cloud Console anlegen kann (siehe `GoogleClientConfig`-KDoc). Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
 
 > ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Die Byte-Position der Frequenzbewertung ist seit
 > der Folgeaufzeichnung bekannt, welcher Bytewert aber A und welcher C bedeutet, ist eine
@@ -86,10 +96,10 @@ Alarmzustand in Room, damit ein Prozess-Tod während der Karenzzeit den Alarm ni
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **Gerätetest** | M2, M3 + M5 am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M4 | Persistenz der Messreihe — Voraussetzung für M7b. Die Frequenzbewertung bleibt bis zum Gerätetest ungespeichert | nein |
+| **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
+| **Gerätetest** | M2, M3, M5 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| M4 | Persistenz der Messreihe. Die Frequenzbewertung bleibt bis zum Gerätetest ungespeichert | nein |
 | M6–M8 | Sicherheit, UI-Ausbau, Härtung | teilweise |
-| M7b | Google-Drive-Sync | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
@@ -102,9 +112,14 @@ Berechtigung. Damit entfällt die Absicherung gegen „Internet weg", die Plan �
 zugedacht hatte; sie wird jetzt von der Totmannschaltung getragen: Ohne Internet bleibt auch der
 Ping aus, und der Dienst auf der Gegenseite meldet sich.
 
-**Noch offen:** drei Punkte in [Plan Abschnitt 13](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md),
-alle zu M4/M7b — Aufbewahrungsdauer und SQLCipher, Drive-Aggregationsintervall und OAuth-Scope, ob
-WAV-Dateien mit hochgeladen werden.
+**Für M7b entschieden und umgesetzt:** Aufzeichnungsgenauigkeit **konfigurierbar, Default so fein
+wie technisch sinnvoll (1 s)** statt der im Plan vorgeschlagenen 10 s — dafür WLAN-only per
+Default an, um das dadurch höhere Uploadvolumen abzufangen. OAuth-Scope **`drive.file`** (App legt
+eigenen Ordner an, keine Google-Verifizierung nötig). WAV-Upload **als Option vorhanden, Default
+aus** — Owner-Entscheidung, abweichend vom Plan-Vorschlag „nein", der WAVs komplett ausschließt.
+
+**Noch offen:** ein Punkt in [Plan Abschnitt 13](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md),
+zu M4 — Aufbewahrungsdauer der Rohmesswerte und ob die Datenbank per SQLCipher verschlüsselt wird.
 
 ---
 
@@ -157,6 +172,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M3.md`](docs/PROMPT_M3.md) | Auftrag für M3 (erledigt) — Reconnect, Ausfallerkennung, Foreground Service |
 | [`docs/PROMPT_B11.md`](docs/PROMPT_B11.md) | Auftrag für B-11 (erledigt) — 16-KB-Seitengröße, TFLite-Ablösung |
 | [`docs/PROMPT_M5.md`](docs/PROMPT_M5.md) | Auftrag für M5 (erledigt) — Alarmierung, Karenzzeit, ntfy, Totmannschaltung |
+| [`docs/PROMPT_M7B.md`](docs/PROMPT_M7B.md) | Auftrag für M7b (erledigt) — Drive-Sync, Aggregation, Google-Anmeldung |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |

@@ -102,6 +102,15 @@ dependencies {
     // M5: Wiederholung fehlgeschlagener Versendungen und der periodische Heartbeat.
     implementation(libs.androidx.work.runtime.ktx)
 
+    // M7b: Google-Anmeldung fuer den Drive-Sync (Plan 8.4.3). Nur die Anmeldung selbst braucht
+    // ein Geraet mit echten Play-Services zur Pruefung - die Bibliotheken lassen sich ohne
+    // google-services.json und ohne echte Client-ID kompilieren, ausschliesslich zur Laufzeit
+    // wird eine echte OAuth-Client-ID benoetigt (siehe GoogleClientConfig).
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
+
     // Testen
     testImplementation(libs.junit)
     testImplementation("androidx.room:room-testing:2.8.4")

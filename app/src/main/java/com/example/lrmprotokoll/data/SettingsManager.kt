@@ -107,6 +107,72 @@ class SettingsManager(context: Context) {
     var entwarnungUeberMeldung: Boolean
         get() = prefs.getBoolean("entwarnung_local", true)
         set(value) = prefs.edit().putBoolean("entwarnung_local", value).apply()
+
+    // ---------------------------------------------------------------- M7b: Google-Drive-Sync
+
+    var driveSyncEnabled: Boolean
+        get() = prefs.getBoolean("drive_sync_enabled", false)
+        set(value) = prefs.edit().putBoolean("drive_sync_enabled", value).apply()
+
+    /** `folderId` des von der App angelegten Drive-Ordners (Plan 8.4.3, drive.file-Scope). */
+    var driveFolderId: String?
+        get() = prefs.getString("drive_folder_id", null)
+        set(value) = prefs.edit().putString("drive_folder_id", value).apply()
+
+    var driveFolderName: String
+        get() = prefs.getString("drive_folder_name", "Lärmprotokoll").orEmpty().ifBlank { "Lärmprotokoll" }
+        set(value) = prefs.edit().putString("drive_folder_name", value).apply()
+
+    /**
+     * Aggregationsfenster in Sekunden fuer die Drive-CSV (Plan 8.4.1). Default 1 s: die feinste
+     * Aufloesung, bei der eine Fensterbildung (und damit Luecken-Erkennung, Plan 8.4.2) noch
+     * sinnvoll ist - Sub-Sekunden-Fenster waeren bei ~2 Hz Messgeraet-Rate ohnehin meist leer.
+     * Bewusste Abweichung von der Plan-Empfehlung "10 s" auf ausdruecklichen Owner-Wunsch nach
+     * der feinstmoeglichen Aufloesung; dafuer ist [driveWlanOnly] default an.
+     */
+    var driveAggregationSekunden: Int
+        get() = prefs.getInt("drive_aggregation_seconds", 1).coerceAtLeast(1)
+        set(value) = prefs.edit().putInt("drive_aggregation_seconds", value.coerceAtLeast(1)).apply()
+
+    /**
+     * Default AN: bei feinstmoeglicher Aggregation (1 s) faellt deutlich mehr Uploadvolumen an
+     * als bei den im Plan durchgerechneten 10 s. WLAN-only faengt das ab, ohne die Aufloesung
+     * einzuschraenken.
+     */
+    var driveWlanOnly: Boolean
+        get() = prefs.getBoolean("drive_wlan_only", true)
+        set(value) = prefs.edit().putBoolean("drive_wlan_only", value).apply()
+
+    /**
+     * WAV-Upload ist Owner-Entscheidung: als Option vorhanden, aber Default AUS. WAVs sind gross
+     * und koennen Sprache Dritter enthalten - eine andere Datenschutzkategorie als reine
+     * Pegelwerte (Plan 8.4.1).
+     */
+    var driveUploadWav: Boolean
+        get() = prefs.getBoolean("drive_upload_wav", false)
+        set(value) = prefs.edit().putBoolean("drive_upload_wav", value).apply()
+
+    var driveSyncLastSuccessAt: Long
+        get() = prefs.getLong("drive_sync_last_success_at", 0L)
+        set(value) = prefs.edit().putLong("drive_sync_last_success_at", value).apply()
+
+    /** Gezaehlt ueber Zyklen hinweg, nicht nur innerhalb eines Laufs - sonst wuerde ein
+     * Prozess-Neustart die Warnschwelle aus Plan 8.4.6 (n=6) nie erreichen koennen. */
+    var driveSyncFehlschlaegeInFolge: Int
+        get() = prefs.getInt("drive_sync_failures", 0)
+        set(value) = prefs.edit().putInt("drive_sync_failures", value).apply()
+
+    /**
+     * Wird gesetzt, wenn der konfigurierte Ordner nicht mehr auffindbar ist (Plan 8.4.6:
+     * "Ordner geloescht -> Sync pausieren, Nutzer zur Neuwahl auffordern - NICHT stillschweigend
+     * in 'Meine Ablage' schreiben"). Bewusst ein eigenes Flag statt driveSyncEnabled=false zu
+     * setzen: Sonst saehe der Sync-Schalter in den Einstellungen so aus, als haette der Nutzer
+     * ihn selbst ausgeschaltet - er soll aber sichtbar bleiben, dass die App etwas zu melden hat.
+     * Eine neue Ordnerwahl (driveFolderId aendert sich) setzt dieses Flag zurueck.
+     */
+    var driveOrdnerBlockiert: Boolean
+        get() = prefs.getBoolean("drive_ordner_blockiert", false)
+        set(value) = prefs.edit().putBoolean("drive_ordner_blockiert", value).apply()
 }
 
 /**
