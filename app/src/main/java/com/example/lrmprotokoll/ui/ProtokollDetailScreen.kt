@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,15 +27,23 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Button
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.MeasurementEntity
+import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
+import com.example.lrmprotokoll.report.MessreiheExport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.Duration
 import java.util.Locale
@@ -56,8 +65,12 @@ import java.util.Locale
 fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
+    val scope = rememberCoroutineScope()
+    val export = remember { MessreiheExport(context) }
 
     var session by remember { mutableStateOf<SessionEntity?>(null) }
+    var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
+    var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
     var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
     var geladen by remember { mutableStateOf(false) }
@@ -67,11 +80,14 @@ fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
         val geladeneSession = db.sessionDao().byId(sessionId)
         session = geladeneSession
 
-        val messwerte = db.measurementDao().fuerSession(sessionId)
-        kennwerte = if (messwerte.isNotEmpty()) {
-            AkustischeKennwerte.berechne(messwerte)
+        val geladeneMesswerte = db.measurementDao().fuerSession(sessionId)
+        messwerte = geladeneMesswerte
+        kennwerte = if (geladeneMesswerte.isNotEmpty()) {
+            AkustischeKennwerte.berechne(geladeneMesswerte)
         } else {
-            AkustischeKennwerte.ausAggregaten(db.minuteAggregateDao().fuerSession(sessionId))
+            val geladeneAggregate = db.minuteAggregateDao().fuerSession(sessionId)
+            aggregate = geladeneAggregate
+            AkustischeKennwerte.ausAggregaten(geladeneAggregate)
         }
 
         val events = db.connectionEventDao().fuerSession(sessionId)
@@ -91,47 +107,71 @@ fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
-            if (!geladen) {
+        if (!geladen) {
+            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
                 Text("Lädt…", style = MaterialTheme.typography.bodyMedium)
-                return@Column
             }
-            val s = session
-            if (s == null) {
+            return@Scaffold
+        }
+        val s = session
+        if (s == null) {
+            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
                 Text("Session nicht gefunden.", style = MaterialTheme.typography.bodyMedium)
-                return@Column
             }
+            return@Scaffold
+        }
 
-            val formatierer = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
-            Text(
-                "${formatierer.format(s.startedAt)} — ${s.deviceName} (${s.deviceAddress})",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("Kennwerte", style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(4.dp))
-            KennwerteBlock(kennwerte)
-
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                "Ausfälle (${ausfallbaender.size})",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            if (ausfallbaender.isEmpty()) {
+        val formatierer = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+        // EIN LazyColumn statt Column+verschachteltem LazyColumn fuer die Ausfallliste: ein
+        // vertikal scrollbares Element ohne begrenzte Hoehe innerhalb eines nicht scrollbaren
+        // Column crasht zur Laufzeit ("infinity maximum height constraint").
+        LazyColumn(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
+            item {
                 Text(
-                    "Keine Verbindungsausfälle während dieser Session.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "${formatierer.format(s.startedAt)} — ${s.deviceName} (${s.deviceAddress})",
+                    style = MaterialTheme.typography.titleMedium,
                 )
-            } else {
-                LazyColumn {
-                    items(ausfallbaender) { band -> AusfallZeile(band, formatierer) }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Kennwerte", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                KennwerteBlock(kennwerte)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row {
+                    Button(onClick = {
+                        scope.launch {
+                            val datei = withContext(Dispatchers.IO) { export.exportiereCsv(s, messwerte, aggregate) }
+                            export.teilen(datei)
+                        }
+                    }) { Text("CSV exportieren") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        val k = kennwerte ?: return@Button
+                        scope.launch {
+                            val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender) }
+                            export.teilen(datei)
+                        }
+                    }) { Text("PDF exportieren") }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Ausfälle (${ausfallbaender.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (ausfallbaender.isEmpty()) {
+                    Text(
+                        "Keine Verbindungsausfälle während dieser Session.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
+            items(ausfallbaender) { band -> AusfallZeile(band, formatierer) }
         }
     }
 }
