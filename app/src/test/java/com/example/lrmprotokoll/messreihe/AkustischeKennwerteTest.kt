@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.data.MeasurementEntity
+import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -10,6 +11,12 @@ class AkustischeKennwerteTest {
 
     private fun messwert(zeitMs: Long, level: Double) =
         MeasurementEntity(sessionId = 1, timestamp = zeitMs, levelDb = level, weighting = null, flags = 0)
+
+    private fun aggregat(minuteStart: Long, leq: Double, max: Double, min: Double, samples: Int) =
+        MinuteAggregateEntity(
+            sessionId = 1, minuteStart = minuteStart, leqDb = leq, maxDb = max, minDb = min,
+            sampleCount = samples, weighting = null,
+        )
 
     @Test
     fun leereListeLiefertNullwerte() {
@@ -99,5 +106,53 @@ class AkustischeKennwerteTest {
     fun sampleCountZaehltAlleWerte() {
         val k = AkustischeKennwerte.berechne(listOf(messwert(0, 1.0), messwert(1, 2.0), messwert(2, 3.0)))
         assertEquals(3, k.sampleCount)
+    }
+
+    @Test
+    fun leereAggregatlisteLiefertNullwerte() {
+        val k = AkustischeKennwerte.ausAggregaten(emptyList())
+        assertNull(k.leqDb)
+        assertEquals(0, k.sampleCount)
+    }
+
+    @Test
+    fun ausAggregatenIstEnergetischerMittelwertDerMinutenLeqWerte() {
+        // Dieselbe Rechnung wie bei den Rohwerten, nur ueber bereits gemittelte Minuten-LAeq:
+        // 60 dB und 70 dB energetisch ~ 67,40 dB, nicht 65 (arithmetisch).
+        val k = AkustischeKennwerte.ausAggregaten(
+            listOf(aggregat(0, leq = 60.0, max = 62.0, min = 58.0, samples = 100),
+                aggregat(60_000, leq = 70.0, max = 72.0, min = 68.0, samples = 100))
+        )
+        assertEquals(67.4036, k.leqDb!!, 0.001)
+    }
+
+    @Test
+    fun ausAggregatenNimmtMaxUndMinUeberAlleMinuten() {
+        val k = AkustischeKennwerte.ausAggregaten(
+            listOf(aggregat(0, leq = 60.0, max = 65.0, min = 55.0, samples = 10),
+                aggregat(60_000, leq = 60.0, max = 90.0, min = 40.0, samples = 10))
+        )
+        assertEquals(90.0, k.maxDb!!, 0.0001)
+        assertEquals(40.0, k.minDb!!, 0.0001)
+    }
+
+    @Test
+    fun ausAggregatenSummiertSampleCountUeberAlleMinuten() {
+        val k = AkustischeKennwerte.ausAggregaten(
+            listOf(aggregat(0, leq = 60.0, max = 65.0, min = 55.0, samples = 100),
+                aggregat(60_000, leq = 60.0, max = 65.0, min = 55.0, samples = 40))
+        )
+        assertEquals(140, k.sampleCount)
+    }
+
+    @Test
+    fun ausAggregatenLiefertKeineL10L50L90UndKeineUeberschreitungsdauer() {
+        // Ohne Rohwerte laesst sich das nicht mehr rekonstruieren - bewusst null/0 statt einer
+        // erfundenen Naeherung.
+        val k = AkustischeKennwerte.ausAggregaten(listOf(aggregat(0, leq = 60.0, max = 65.0, min = 55.0, samples = 10)))
+        assertNull(k.l10Db)
+        assertNull(k.l50Db)
+        assertNull(k.l90Db)
+        assertEquals(0L, k.ueberschreitungsdauerMs)
     }
 }
