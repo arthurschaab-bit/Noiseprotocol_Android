@@ -10,6 +10,9 @@ interface LevelSampleDao {
     @Insert
     suspend fun insert(sample: LevelSampleEntity)
 
+    @Insert
+    suspend fun insertAll(samples: List<LevelSampleEntity>)
+
     @Query("SELECT * FROM level_samples WHERE at >= :von AND at < :bis ORDER BY at")
     suspend fun zwischen(von: Long, bis: Long): List<LevelSampleEntity>
 

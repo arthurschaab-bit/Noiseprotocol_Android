@@ -12,6 +12,13 @@ import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import com.example.lrmprotokoll.alert.ntfy.NtfyAlertChannel
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.drive.AccessTokenProvider
+import com.example.lrmprotokoll.drive.DriveApiClient
+import com.example.lrmprotokoll.drive.DriveSyncCoordinator
+import com.example.lrmprotokoll.drive.GoogleDriveApiClient
+import com.example.lrmprotokoll.drive.LevelSampleCollector
+import com.example.lrmprotokoll.drive.auth.DriveEinrichtung
+import com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider
 import java.time.Duration
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
@@ -97,6 +104,34 @@ class AppContainer(context: Context) {
             transport = meterTransport,
             scope = connectionSupervisorScope,
             adapterEnabled = bluetoothAdapterStateObserver.enabled,
+        )
+    }
+
+    // ---------------------------------------------------------------- M7b: Google-Drive-Sync
+
+    val levelSampleCollector: LevelSampleCollector by lazy {
+        LevelSampleCollector(dao = database.levelSampleDao(), scope = connectionSupervisorScope)
+    }
+
+    private val driveAccessTokenProvider: AccessTokenProvider by lazy {
+        GoogleSignInAccessTokenProvider(context.applicationContext)
+    }
+
+    val driveApiClient: DriveApiClient by lazy {
+        GoogleDriveApiClient(tokenProvider = driveAccessTokenProvider, client = httpClient)
+    }
+
+    val driveEinrichtung: DriveEinrichtung by lazy {
+        DriveEinrichtung(context.applicationContext, settingsManager, driveApiClient)
+    }
+
+    val driveSyncCoordinator: DriveSyncCoordinator by lazy {
+        DriveSyncCoordinator(
+            driveApi = driveApiClient,
+            levelSampleDao = database.levelSampleDao(),
+            dailyFileDao = database.driveDailyFileDao(),
+            noiseDao = database.noiseDao(),
+            settings = settingsManager,
         )
     }
 }
