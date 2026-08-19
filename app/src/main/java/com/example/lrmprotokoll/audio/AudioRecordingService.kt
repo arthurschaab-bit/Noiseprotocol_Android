@@ -154,6 +154,16 @@ class AudioRecordingService : LifecycleService() {
         com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
     }
 
+    /**
+     * Plan Abschnitt 6: das Diagnose-Log ist standardmaessig aus, der taegliche
+     * Bereinigungs-Job (7-Tage-Loeschung) soll deshalb nur laufen, wenn ueberhaupt geschrieben
+     * wird - anders als der M4-Retention-Job, der immer laeuft.
+     */
+    private fun ensureDiagnosticLoggingStarted() {
+        if (!settingsManager.diagnoseLoggingAktiv) return
+        com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.plane(applicationContext)
+    }
+
     private fun updateRollingBuffer() {
         val sampleRate = settingsManager.audioSampleRate
         val size = sampleRate * settingsManager.preRollSeconds * bytesPerSample
@@ -176,6 +186,7 @@ class AudioRecordingService : LifecycleService() {
             // beendet, ein ausbleibendes Lebenszeichen waere ab jetzt kein Ausfall mehr.
             HeartbeatPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
+            com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -192,6 +203,7 @@ class AudioRecordingService : LifecycleService() {
         }
         ensureMeterMonitoringStarted()
         ensureDriveSyncStarted()
+        ensureDiagnosticLoggingStarted()
         // M4: unabhaengig von jeder Einstellung geplant (anders als Heartbeat/Drive-Sync) -
         // alte Rohwerte sollen verdichtet werden, sobald der Dienst ueberhaupt einmal laeuft,
         // unabhaengig davon, ob gerade ein Messgeraet gepinnt oder Drive-Sync aktiv ist.

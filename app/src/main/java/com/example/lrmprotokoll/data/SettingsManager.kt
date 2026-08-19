@@ -243,6 +243,16 @@ class SettingsManager(
     var driveOrdnerBlockiert: Boolean
         get() = prefs.getBoolean("drive_ordner_blockiert", false)
         set(value) = prefs.edit().putBoolean("drive_ordner_blockiert", value).apply()
+
+    // ---------------------------------------------------------------- M6: Sicherheit
+
+    /**
+     * Diagnose-/Rohdaten-Log (Plan Abschnitt 6): "standardmaessig aus". Kein Geheimnis - anders
+     * als [ntfyTopic] & Co. bleibt dieser Schalter in den unverschluesselten Einstellungen.
+     */
+    var diagnoseLoggingAktiv: Boolean
+        get() = prefs.getBoolean("diagnose_logging_enabled", false)
+        set(value) = prefs.edit().putBoolean("diagnose_logging_enabled", value).apply()
 }
 
 /**

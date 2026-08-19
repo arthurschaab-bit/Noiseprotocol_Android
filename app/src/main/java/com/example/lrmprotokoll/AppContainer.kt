@@ -11,6 +11,8 @@ import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import com.example.lrmprotokoll.alert.ntfy.NtfyAlertChannel
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupCoordinator
+import com.example.lrmprotokoll.diagnose.DiagnosticLogger
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.example.lrmprotokoll.drive.DriveApiClient
@@ -102,6 +104,16 @@ class AppContainer(context: Context) {
         )
     }
 
+    // ---------------------------------------------------------------- M6: Sicherheit
+
+    val diagnosticLogger: DiagnosticLogger by lazy {
+        DiagnosticLogger(dao = database.diagnosticLogDao(), aktiv = { settingsManager.diagnoseLoggingAktiv })
+    }
+
+    val diagnosticLogCleanupCoordinator: DiagnosticLogCleanupCoordinator by lazy {
+        DiagnosticLogCleanupCoordinator(dao = database.diagnosticLogDao())
+    }
+
     val connectionSupervisor: ConnectionSupervisor by lazy {
         ConnectionSupervisor(
             transport = meterTransport,
@@ -110,6 +122,7 @@ class AppContainer(context: Context) {
             // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
             // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
             expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
+            diagnosticLogger = diagnosticLogger,
         )
     }
 

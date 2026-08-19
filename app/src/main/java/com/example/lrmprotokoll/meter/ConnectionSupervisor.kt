@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.meter
 
 import android.util.Log
+import com.example.lrmprotokoll.diagnose.DiagnosticLogger
 import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
@@ -87,6 +88,14 @@ class ConnectionSupervisor(
      */
     private val expectedFramePeriod: Duration? = null,
     private val cadenceTolerance: Double = 0.2,
+    /**
+     * Optionale Senke fuer das Diagnose-Log (Plan Abschnitt 6, standardmaessig aus - siehe
+     * [DiagnosticLogger]-KDoc). `null` (Default) haelt bestehende Aufrufer/Tests unveraendert;
+     * [DiagnosticLogger] selbst prueft bei jedem Aufruf erneut, ob das Log ueberhaupt
+     * eingeschaltet ist, ein `null` hier ist also nur eine zusaetzliche, gaenzlich kostenlose
+     * Abkuerzung fuer Aufrufer, die gar keine Senke haben (z.B. Tests).
+     */
+    private val diagnosticLogger: DiagnosticLogger? = null,
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -176,6 +185,7 @@ class ConnectionSupervisor(
                     throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "Verbindungsversuch mit Ausnahme gescheitert", e)
+                    diagnosticLogger?.protokolliere("Verbindungsversuch gescheitert: ${e.javaClass.simpleName}: ${e.message}")
                     runCatching { transport.disconnect() }
                     AttemptOutcome.NEVER_STREAMED
                 }
@@ -252,6 +262,7 @@ class ConnectionSupervisor(
                 if (last == null) return@collectLatest
                 delay(staleAfter.toMillis())
                 setOverride(ConnectionState.DEGRADED)
+                diagnosticLogger?.protokolliere("DEGRADED: Datenstillstand seit ${staleAfter.toMillis()}ms")
                 transport.disconnect()
                 done.complete(StreamEndReason.LOST)
             }
@@ -278,6 +289,9 @@ class ConnectionSupervisor(
                     val rate = errorDelta.toDouble() / totalDelta
                     if (rate > errorRateThreshold) {
                         setOverride(ConnectionState.DEGRADED)
+                        diagnosticLogger?.protokolliere(
+                            "DEGRADED: Fehlerrate ${(rate * 100).toInt()}% ueber $errorRateWindow"
+                        )
                         transport.disconnect()
                         done.complete(StreamEndReason.LOST)
                     }
@@ -319,6 +333,9 @@ class ConnectionSupervisor(
                                     "[$minMillis, $maxMillis]ms - moeglicher Spoofing-Verdacht",
                             )
                             setOverride(ConnectionState.DEGRADED)
+                            diagnosticLogger?.protokolliere(
+                                "DEGRADED: Framekadenz ${deltaMillis}ms wiederholt ausserhalb [$minMillis, $maxMillis]ms"
+                            )
                             transport.disconnect()
                             done.complete(StreamEndReason.LOST)
                         }
