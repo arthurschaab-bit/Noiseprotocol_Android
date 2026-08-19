@@ -2,9 +2,70 @@ package com.example.lrmprotokoll.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
-class SettingsManager(context: Context) {
+private const val TAG = "SettingsManager"
+
+class SettingsManager(
+    context: Context,
+    /**
+     * Verschluesselte Ablage fuer die drei sicherheitsrelevanten Werte aus [prefs] (Plan
+     * Abschnitt 6: "Rufnummern und Alarmkonfiguration in EncryptedSharedPreferences ...,
+     * Schluessel im Android Keystore"). Rufnummern gibt es seit dem Streichen des SMS-Kanals
+     * (Plan 13.4) nicht mehr - was bleibt, sind [ntfyTopic] (die alleinige Zugangskontrolle des
+     * Alarmkanals beim oeffentlichen Server), [ntfyServer] und [heartbeatUrl] (deren Kenntnis
+     * einen Fremd-Ping faelschen koennte). Alles andere (Schwellwerte, Aggregationsintervalle,
+     * ...) bleibt bewusst in [prefs]: Verschluesselung dort waere Mehraufwand ohne
+     * Sicherheitsgewinn - kein Angreifer profitiert vom Kenntnis eines dB-Schwellwerts.
+     *
+     * Als Konstruktorparameter statt eines fest verdrahteten Felds, damit die Migrations-/
+     * Fallback-LOGIK in [leseVerschluesselt]/[schreibeVerschluesselt] unabhaengig vom echten
+     * Android Keystore testbar ist: Robolectric/die JVM kennen den Provider "AndroidKeyStore"
+     * grundsaetzlich nicht (kein Software-Ersatz vorhanden, `KeyStoreException: AndroidKeyStore
+     * not found` - selbst gepruefte, nicht nur vermutete Tatsache). Der Default reproduziert das
+     * Produktionsverhalten inklusive Fallback; ob EncryptedSharedPreferences auf einem echten
+     * Geraet tatsaechlich verschluesselt, ist damit nur am Geraet zu pruefen (siehe
+     * docs/PROMPT_M6.md), nicht in diesem Test-Setup.
+     */
+    private val securePrefs: SharedPreferences? = sicherePraefsOderNull(context),
+) {
     private val prefs: SharedPreferences = context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+
+    /**
+     * Liest [schluessel] verschluesselt, mit einmaliger Migration aus dem Klartext-Feld in
+     * [prefs]: bestehende Installationen sollen ihre ntfy-Konfiguration nicht verlieren, nur weil
+     * M6 nachtraeglich verschluesselt. Kann [securePrefs] nicht erzeugt werden (Keystore-Problem
+     * auf diesem Geraet), wird auf den Klartextwert zurueckgefallen statt die Einstellung
+     * unbenutzbar zu machen - eine dokumentierte Luecke ist besser als eine App, die ihre
+     * Alarmkonfiguration verliert.
+     */
+    private fun leseVerschluesselt(schluessel: String, default: String): String {
+        val sicher = securePrefs
+        if (sicher == null) return prefs.getString(schluessel, default).orEmpty().ifBlank { default }
+
+        sicher.getString(schluessel, null)?.let { return it }
+        val klartext = prefs.getString(schluessel, null)
+        if (klartext != null) {
+            sicher.edit().putString(schluessel, klartext).apply()
+            prefs.edit().remove(schluessel).apply()
+            return klartext
+        }
+        return default
+    }
+
+    private fun schreibeVerschluesselt(schluessel: String, wert: String) {
+        val sicher = securePrefs
+        if (sicher == null) {
+            prefs.edit().putString(schluessel, wert).apply()
+            return
+        }
+        sicher.edit().putString(schluessel, wert).apply()
+        // Falls noch ein Klartextwert aus der Zeit vor M6 herumliegt (z.B. wenn securePrefs beim
+        // Lesen fehlschlug, jetzt aber wieder verfuegbar ist).
+        prefs.edit().remove(schluessel).apply()
+    }
 
     var dbThreshold: Float
         get() = prefs.getFloat("db_threshold", 60.0f)
@@ -87,28 +148,27 @@ class SettingsManager(context: Context) {
      * bleiben und kein Umbau.
      */
     var ntfyServer: String
-        get() = prefs.getString("ntfy_server", "https://ntfy.sh").orEmpty().ifBlank { "https://ntfy.sh" }
-        set(value) = prefs.edit().putString("ntfy_server", value.trim().trimEnd('/')).apply()
+        get() = leseVerschluesselt("ntfy_server", "https://ntfy.sh").ifBlank { "https://ntfy.sh" }
+        set(value) = schreibeVerschluesselt("ntfy_server", value.trim().trimEnd('/'))
 
     /**
      * Das ntfy-Topic. Beim oeffentlichen Server ist der Topic-Name die EINZIGE Zugangskontrolle -
      * wer ihn kennt, liest mit und kann senden. Er wird deshalb zufaellig erzeugt
      * ([erzeugeNtfyTopic]) und darf nirgends protokolliert werden.
      *
-     * Die verschluesselte Ablage ist M6 (Keystore, verschluesselter DataStore) und bewusst noch
-     * nicht hier: eine selbstgebaute Teilloesung waere schlechter als die dokumentierte Luecke.
+     * Verschluesselt abgelegt (M6, Plan Abschnitt 6) - siehe [securePrefs]/[leseVerschluesselt].
      */
     var ntfyTopic: String
-        get() = prefs.getString("ntfy_topic", "").orEmpty()
-        set(value) = prefs.edit().putString("ntfy_topic", value).apply()
+        get() = leseVerschluesselt("ntfy_topic", "")
+        set(value) = schreibeVerschluesselt("ntfy_topic", value)
 
     /**
      * Ping-URL der Totmannschaltung (healthchecks.io oder selbst betrieben). Leer heisst aus -
      * niemand wird zu einem Fremddienst gezwungen.
      */
     var heartbeatUrl: String
-        get() = prefs.getString("heartbeat_url", "").orEmpty()
-        set(value) = prefs.edit().putString("heartbeat_url", value.trim()).apply()
+        get() = leseVerschluesselt("heartbeat_url", "")
+        set(value) = schreibeVerschluesselt("heartbeat_url", value.trim())
 
     var entwarnungUeberNtfy: Boolean
         get() = prefs.getBoolean("entwarnung_ntfy", true)
@@ -184,6 +244,28 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("drive_ordner_blockiert", false)
         set(value) = prefs.edit().putBoolean("drive_ordner_blockiert", value).apply()
 }
+
+/**
+ * Erzeugt die Keystore-gestuetzte [EncryptedSharedPreferences] fuer [SettingsManager.securePrefs].
+ * `null` bei Fehlschlag statt einer Exception, die den ganzen [SettingsManager] unbenutzbar
+ * machen wuerde - ein Keystore-Problem auf einem einzelnen Geraet (kaputte ROM, Herstellerbug)
+ * darf nicht die gesamte App-Konfiguration lahmlegen. Eigene Datei ("noise_settings_secure")
+ * statt derselben wie [SettingsManager.prefs]: EncryptedSharedPreferences erwartet eine Datei,
+ * die ausschliesslich ihr gehoert.
+ */
+private fun sicherePraefsOderNull(context: Context): SharedPreferences? = runCatching {
+    val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+    EncryptedSharedPreferences.create(
+        context,
+        "noise_settings_secure",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+}.onFailure { Log.w(TAG, "Verschluesselte Ablage nicht verfuegbar, falle auf Klartext zurueck", it) }
+    .getOrNull()
 
 /**
  * Erzeugt ein Topic aus [SecureRandom]. 32 Zeichen aus 62 moeglichen sind rund 190 Bit - beim
