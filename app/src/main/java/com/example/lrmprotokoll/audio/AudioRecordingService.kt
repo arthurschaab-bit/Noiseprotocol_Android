@@ -111,10 +111,19 @@ class AudioRecordingService : LifecycleService() {
             alarmCoordinator.start()
             HeartbeatPlanung.plane(applicationContext)
         }
-        if (settingsManager.driveSyncEnabled) {
-            levelSampleCollector.start()
-            com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
-        }
+    }
+
+    /**
+     * Bewusst NICHT Teil von [ensureMeterMonitoringStarted]: Der Drive-Sync soll laut Plan 8.4
+     * auch ganz ohne gepinntes Messgeraet allein mit Mikrofonwerten laufen. Waere dieser Aufruf
+     * dort verschachtelt, wuerde ihn der fruehe Rueckgabe-Pfad ohne gepinntes Geraet nie
+     * erreichen - der Puffer in [levelSampleCollector] wuerde befuellt, aber nie geleert, weil
+     * die periodische Flush-Schleife nie gestartet waere.
+     */
+    private fun ensureDriveSyncStarted() {
+        if (!settingsManager.driveSyncEnabled) return
+        levelSampleCollector.start()
+        com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
     }
 
     private fun updateRollingBuffer() {
@@ -138,6 +147,7 @@ class AudioRecordingService : LifecycleService() {
             // Erst hier den Heartbeat abbestellen: Der Nutzer hat die Ueberwachung bewusst
             // beendet, ein ausbleibendes Lebenszeichen waere ab jetzt kein Ausfall mehr.
             HeartbeatPlanung.stoppe(applicationContext)
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -153,6 +163,7 @@ class AudioRecordingService : LifecycleService() {
             settingsManager.audioMonitoringWasActive = true
         }
         ensureMeterMonitoringStarted()
+        ensureDriveSyncStarted()
         return START_STICKY
     }
 

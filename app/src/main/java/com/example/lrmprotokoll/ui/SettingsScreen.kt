@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -53,6 +54,15 @@ fun SettingsScreen(onBack: () -> Unit) {
     var entwarnungNtfy by remember { mutableStateOf(settings.entwarnungUeberNtfy) }
     var entwarnungMeldung by remember { mutableStateOf(settings.entwarnungUeberMeldung) }
     var testErgebnis by remember { mutableStateOf<String?>(null) }
+
+    var driveSyncAktiv by remember { mutableStateOf(settings.driveSyncEnabled) }
+    var driveOrdnerName by remember { mutableStateOf(settings.driveFolderName) }
+    var driveOrdnerId by remember { mutableStateOf(settings.driveFolderId) }
+    var driveOrdnerBlockiert by remember { mutableStateOf(settings.driveOrdnerBlockiert) }
+    var driveAggregationSekunden by remember { mutableFloatStateOf(settings.driveAggregationSekunden.toFloat()) }
+    var driveWlanOnly by remember { mutableStateOf(settings.driveWlanOnly) }
+    var driveUploadWav by remember { mutableStateOf(settings.driveUploadWav) }
+    var driveEinrichtungsErgebnis by remember { mutableStateOf<String?>(null) }
 
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
     fun kannExakteAlarme() =
@@ -356,6 +366,127 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Text(
                     "Ein angenommener Push heißt nur, dass der Server ihn entgegengenommen hat - " +
                         "nicht, dass er angekommen ist. Deshalb bitte am zweiten Gerät nachsehen.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text("Google-Drive-Synchronisation", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Lädt die Pegelwerte alle 30 Minuten in einen selbst gewählten Drive-Ordner hoch " +
+                    "- eine Datei pro Tag, die aktualisiert statt dupliziert wird.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = driveSyncAktiv,
+                    onCheckedChange = {
+                        driveSyncAktiv = it
+                        settings.driveSyncEnabled = it
+                        if (it) {
+                            DriveSyncPlanung.plane(context)
+                        } else {
+                            DriveSyncPlanung.stoppe(context)
+                        }
+                    },
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Synchronisation aktiv")
+            }
+
+            if (driveSyncAktiv) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (driveOrdnerBlockiert) {
+                    Text(
+                        "Der eingerichtete Ordner wurde nicht gefunden - bitte neu verbinden.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                if (driveOrdnerId == null) {
+                    Text(
+                        "Noch nicht mit Google verbunden.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Text("Ordner: $driveOrdnerName")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(onClick = {
+                    scope.launch {
+                        driveEinrichtungsErgebnis = container.driveEinrichtung
+                            .richteEin(driveOrdnerName.ifBlank { "Lärmprotokoll" })
+                            .fold(
+                                onSuccess = {
+                                    driveOrdnerId = settings.driveFolderId
+                                    driveOrdnerBlockiert = false
+                                    "Verbunden. Ordner \"$driveOrdnerName\" wurde angelegt."
+                                },
+                                onFailure = { "Verbindung fehlgeschlagen: ${it.message}" },
+                            )
+                    }
+                }) {
+                    Text(if (driveOrdnerId == null) "Mit Google verbinden" else "Ordner neu einrichten")
+                }
+                driveEinrichtungsErgebnis?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Aufzeichnungsgenauigkeit: ${driveAggregationSekunden.toInt()} s", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Je feiner, desto mehr Uploadvolumen. Die Rohwerte bleiben davon unberührt " +
+                        "immer vollständig auf dem Gerät erhalten - das betrifft nur die Drive-Datei.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = driveAggregationSekunden,
+                    onValueChange = { driveAggregationSekunden = it },
+                    onValueChangeFinished = {
+                        settings.driveAggregationSekunden = driveAggregationSekunden.toInt()
+                    },
+                    valueRange = 1f..60f,
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = driveWlanOnly,
+                        onCheckedChange = {
+                            driveWlanOnly = it
+                            settings.driveWlanOnly = it
+                            if (driveSyncAktiv) DriveSyncPlanung.plane(context) // Constraint neu setzen
+                        },
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Nur über WLAN synchronisieren")
+                }
+                Text(
+                    "Bei feiner Aufzeichnungsgenauigkeit kann täglich ein zweistelliger " +
+                        "MB-Betrag zusammenkommen. Empfohlen, solange kein unbegrenzter Datentarif besteht.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = driveUploadWav,
+                        onCheckedChange = { driveUploadWav = it; settings.driveUploadWav = it },
+                    )
+                    Text("Audioaufnahmen (WAV) ebenfalls hochladen")
+                }
+                Text(
+                    "WAV-Dateien können Sprache Dritter enthalten und sind eine andere " +
+                        "Datenschutzkategorie als reine Pegelwerte - standardmäßig aus.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
