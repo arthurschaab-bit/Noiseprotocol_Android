@@ -25,9 +25,11 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code abgeschlossen, Google-Anmeldung braucht noch eine echte Client-ID + Gerätetest |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
-| **Gerätetest** M2, M3, M4, M5, M6 + M7b am realen Gerät | ⬜ **als Nächstes** |
+| **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen, Gerätetest offen |
+| **Gerätetest** M2, M3, M4, M5, M6, M7 + M7b am realen Gerät | ⬜ **als Nächstes** |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 9 von 10 Meilensteinen.**
+**Gesamtfortschritt Bluetooth-Vorhaben: 10 von 10 Meilensteinen.** (M8 Härtung ist im Plan
+zusätzlich vorgesehen, siehe „Nächste Schritte".)
 
 ---
 
@@ -95,13 +97,23 @@ zeichnet technische Ereignisse auf (Datenstillstand, Fehlerrate, Kadenz-Auffäll
 gescheiterte Verbindungsversuche) — die Anzeige dafür ist M7. SQLCipher bleibt **bewusst aus**
 (Owner-Entscheidung, siehe M4/Plan 13.2).
 
+**Aus M7:** Protokollansicht (`ProtokollScreen`/`ProtokollDetailScreen`) zeigt alle Sessions,
+Kennwerte je Session (aus Rohwerten oder, falls der Retention-Job sie bereits verdichtet hat, aus
+Minutenaggregaten) und Verbindungsausfälle als rote Karten im Verlauf. Diagnose-Screen
+(`DiagnoseScreen`) zeigt den Verbindungszustand live, einen aus den Verbindungsereignissen
+abgeleiteten Reconnect-Zähler, die Decode-Fehlerrate, das Diagnose-Log (M6) und die
+Drive-Sync-Historie. Export der Messreihe als CSV (`MessreiheCsv`, dieselbe Konvention wie
+`DriveCsv` aus M7b) und als PDF-Textbericht (`MessreiheExport`, `android.graphics.pdf.PdfDocument`
+aus dem SDK, kein neuer Dependency), geteilt über denselben FileProvider-Weg wie der bestehende
+Tagesbericht. Einstellungen waren bereits konsolidiert (durchgängig betitelte Abschnitte) —
+keine Änderung nötig.
+
 ### Nicht vorhanden
 
-| | |
-|---|---|
-| Diagnose-Screen, Export der Messreihe | → M7 |
+Nichts mehr aus dem ursprünglichen Plan-Umfang (M-1 bis M7 sowie M7b) — offen sind nur noch der
+Gerätetest (siehe unten) und M8 (Härtung, Plan Abschnitt 12).
 
-> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5, M6 *und* M7b.** Der gesamte BLE-Pfad und die
+> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5, M6, M7 *und* M7b.** Der gesamte BLE-Pfad und die
 > gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
 > geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
 > nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung)
@@ -123,9 +135,8 @@ gescheiterte Verbindungsversuche) — die Anzeige dafür ist M7. SQLCipher bleib
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
-| **Gerätetest** | M2, M3, M4, M5, M6 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M7 | UI-Ausbau (Protokollansicht, Diagnose-Screen, Export) | nein |
-| M8 | Härtung | teilweise |
+| **Gerätetest** | M2, M3, M4, M5, M6, M7 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| M8 | Härtung (Plan Abschnitt 12) | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
@@ -159,6 +170,13 @@ rohen Frame-Bytes, sondern die von `ConnectionSupervisor` ohnehin erkannten Erei
 (Datenstillstand, Fehlerrate, Kadenz, gescheiterte Verbindungsversuche) — ein Rohframe-Capture
 hätte noch keinen Konsumenten, der Diagnose-Screen dafür ist M7.
 
+**Für M7 umgesetzt, keine Owner-Entscheidung nötig:** Export-CSV folgt derselben Konvention wie
+`DriveCsv` aus M7b (Semikolon, Dezimalkomma, UTF-8-BOM, CRLF, `_dB` statt `_dBA`) statt einer
+eigenen Formatierung — Konsistenz zwischen den beiden Export-Wegen der App. Das PDF ist bewusst
+ein reiner Textbericht ohne Diagramm/Grafik und ohne neuen Bibliotheks-Dependency
+(`android.graphics.pdf.PdfDocument` aus dem SDK) — passend zum durchgängig minimalen
+Abhängigkeits-Stil des Projekts.
+
 ---
 
 ## Bekannte Einschränkungen
@@ -180,6 +198,13 @@ hätte noch keinen Konsumenten, der Diagnose-Screen dafür ist M7.
   jeder Test, der `SettingsManager` unverändert konstruiert, läuft real über den dokumentierten
   Klartext-Fallback. Die Migrations-/Fallback-*Logik* ist gegen ein injiziertes Test-Double
   geprüft, die tatsächliche Verschlüsselung nur am Gerät (siehe `docs/PROMPT_M6.md`).
+- **Der PDF-Export ist nicht durch Unit-Tests belegt.** `android.graphics.pdf.PdfDocument()`
+  wirft unter Robolectric bei jedem `startPage()`-Aufruf `IllegalStateException: document is
+  closed!`, reproduzierbar auch isoliert — ein verifiziertes Robolectric-Limit, keine Aussage
+  über die Korrektheit von `MessreiheExport.exportierePdf`. Nur durch `assembleDebug` verifiziert,
+  Inhalt und Layout müssen am echten Gerät geprüft werden (siehe `docs/PROMPT_M7.md`).
+- **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) sind mangels Emulator in dieser
+  Entwicklungsumgebung nur kompiliert, nicht visuell geprüft.**
 
 ---
 
@@ -223,6 +248,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M7B.md`](docs/PROMPT_M7B.md) | Auftrag für M7b (erledigt) — Drive-Sync, Aggregation, Google-Anmeldung |
 | [`docs/PROMPT_M4.md`](docs/PROMPT_M4.md) | Auftrag für M4 (erledigt) — Persistenz, Trigger-Umstellung, Kennwerte, Retention |
 | [`docs/PROMPT_M6.md`](docs/PROMPT_M6.md) | Auftrag für M6 (erledigt) — Bonding-Kennzeichnung, Geräte-Pinning, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log |
+| [`docs/PROMPT_M7.md`](docs/PROMPT_M7.md) | Auftrag für M7 (erledigt) — Protokollansicht, Diagnose-Screen, CSV/PDF-Export |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
