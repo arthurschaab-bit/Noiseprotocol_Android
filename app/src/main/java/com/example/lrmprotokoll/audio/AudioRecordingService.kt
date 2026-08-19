@@ -64,6 +64,18 @@ class AudioRecordingService : LifecycleService() {
     private var writeHead = 0
     private var isBufferFull = false
 
+    private lateinit var measurementRecorder: com.example.lrmprotokoll.messreihe.MeasurementRecorder
+
+    /**
+     * Der zuletzt eingetroffene Messgeraet-Frame, solange die Verbindung tatsaechlich auf
+     * STREAMING steht - sonst `null` (Plan 4.5: "sonst auf die bisherige Mikrofonberechnung
+     * zurueckfallen"). Wird bewusst NICHT aus [meterTransport.lastFrameAt] plus einer eigenen
+     * Alterspruefung hergeleitet: Die Staleness-Schwelle dafuer legt bereits
+     * [com.example.lrmprotokoll.meter.ConnectionSupervisor] fest (Plan 5.1) - eine zweite,
+     * eigene Schwelle hier wuerde nur auseinanderlaufen koennen.
+     */
+    @Volatile private var letzterMeterFrame: com.example.lrmprotokoll.meter.MeterFrame? = null
+
     override fun onCreate() {
         super.onCreate()
         val container = (application as LaermprotokollApp).container
@@ -78,8 +90,11 @@ class AudioRecordingService : LifecycleService() {
         // Aufnahme-Trigger, der weiterhin am Mikrofon haengt (Trigger-Umstellung ist M4). Nur
         // wenn Drive-Sync eingeschaltet ist, damit ohne aktivierten Sync kein Puffer waechst,
         // den niemand ausliest.
+        measurementRecorder = container.measurementRecorder
+
         lifecycleScope.launch {
             meterTransport.frames.collect { frame ->
+                letzterMeterFrame = frame
                 if (settingsManager.driveSyncEnabled) {
                     levelSampleCollector.pegel(LevelSource.PCE_323, frame.level, frame.receivedAt)
                 }
@@ -88,7 +103,13 @@ class AudioRecordingService : LifecycleService() {
         updateRollingBuffer()
 
         lifecycleScope.launch {
-            connectionSupervisor.state.collect { updateNotification(it) }
+            connectionSupervisor.state.collect { state ->
+                updateNotification(state)
+                // Ein Frame gilt nur als "aktuell", solange die Verbindung wirklich steht - sonst
+                // wuerde der letzte Wert vor einem Abbruch beliebig lange als Live-Pegel
+                // durchgereicht, obwohl laengst nichts mehr ankommt.
+                if (state != ConnectionState.STREAMING) letzterMeterFrame = null
+            }
         }
     }
 
@@ -102,7 +123,8 @@ class AudioRecordingService : LifecycleService() {
      */
     private fun ensureMeterMonitoringStarted() {
         val address = settingsManager.meterDeviceAddress ?: return
-        connectionSupervisor.start(BoundDevice(address, settingsManager.meterDeviceName ?: address))
+        val device = BoundDevice(address, settingsManager.meterDeviceName ?: address)
+        connectionSupervisor.start(device)
 
         // Die Alarmierung haengt am selben Lebenszyklus wie die Verbindung: Sie beobachtet
         // deren Zustand und ist ohne sie gegenstandslos. Beide Aufrufe sind No-Ops, wenn
@@ -111,6 +133,11 @@ class AudioRecordingService : LifecycleService() {
             alarmCoordinator.start()
             HeartbeatPlanung.plane(applicationContext)
         }
+
+        // M4: die Messreihe braucht zwingend ein Geraet (SessionEntity.deviceAddress) - anders
+        // als der Drive-Sync gehoert sie deshalb hierher und nicht in eine eigene, ungegatete
+        // Methode.
+        measurementRecorder.start(device)
     }
 
     /**
@@ -260,10 +287,31 @@ class AudioRecordingService : LifecycleService() {
 
                     val currentDb = calculateDb(buffer, readSize)
 
-                    // Trigger based on dB threshold
-                    if (currentDb > settingsManager.dbThreshold) {
-                        Log.d("AudioRecordingService", "dB Threshold exceeded: ${String.format("%.1f", currentDb)} dB")
-                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate)
+                    // M7b-Nachtrag: dieser Aufruf fehlte bislang komplett - der Mikrofon-Pfad hat
+                    // nie in den Drive-Sync-Puffer geschrieben, obwohl der PCE-323-Pfad das schon
+                    // seit M7b tat. Ohne Messgeraet blieb der Sync damit lautlos leer, obwohl er
+                    // laut Plan genau dafuer auch allein mit Mikrofonwerten laufen sollte.
+                    if (settingsManager.driveSyncEnabled) {
+                        levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
+                    }
+
+                    // M4 (Plan 4.5): bei verbundenem Messgeraet gilt dessen kalibrierter Pegel
+                    // und dessen eigene Schwelle als Ausloeser - das Mikrofon bleibt nur
+                    // Beweismittel (WAV) und Klassifikator, faellt aber automatisch zurueck,
+                    // sobald kein Messgeraet (mehr) verbunden ist.
+                    val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
+                        letzterMeterFrame = letzterMeterFrame,
+                        mikrofonDb = currentDb,
+                        mikrofonSchwelle = settingsManager.dbThreshold,
+                        meterSchwelle = settingsManager.meterDbThreshold,
+                    )
+                    if (auswertung.ausgeloest) {
+                        Log.d(
+                            "AudioRecordingService",
+                            "Schwelle überschritten: ${String.format("%.1f", auswertung.pegel)} dB " +
+                                "(Quelle: ${if (auswertung.meterConnected) "Messgerät" else "Mikrofon"})",
+                        )
+                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate, auswertung)
                     }
                 }
                 delay(50)
@@ -326,7 +374,13 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
-    private suspend fun saveRecording(audioRecord: AudioRecord, amplitude: Double, dbValue: Double, sampleRate: Int) {
+    private suspend fun saveRecording(
+        audioRecord: AudioRecord,
+        amplitude: Double,
+        dbValue: Double,
+        sampleRate: Int,
+        auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
+    ) {
         val timestamp = System.currentTimeMillis()
         val fileName = "noise_$timestamp.wav"
         val file = File(getExternalFilesDir(null), fileName)
@@ -370,7 +424,10 @@ class AudioRecordingService : LifecycleService() {
             amplitude = amplitude, 
             dbValue = dbValue,
             filePath = file.absolutePath,
-            detectedLabel = detected
+            detectedLabel = detected,
+            calibratedDbA = auswertung.calibratedDbA,
+            meterWeighting = auswertung.meterWeighting,
+            meterConnected = auswertung.meterConnected,
         ))
     }
 
@@ -418,6 +475,7 @@ class AudioRecordingService : LifecycleService() {
         // beim expliziten Nutzerstop in onStartCommand.
         alarmCoordinator.stop()
         levelSampleCollector.stop()
+        measurementRecorder.stop()
         serviceJob.cancel()
         super.onDestroy()
     }
