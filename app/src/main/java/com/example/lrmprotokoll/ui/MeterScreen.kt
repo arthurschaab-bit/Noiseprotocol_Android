@@ -54,6 +54,7 @@ import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleScanner
+import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import com.example.lrmprotokoll.meter.label
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -132,6 +133,29 @@ fun MeterScreen(onBack: () -> Unit) {
                 Icon(icon, contentDescription = null, tint = color)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.titleMedium)
+            }
+
+            // Plan Abschnitt 6: createBond() fuehrte in der M0-Aufzeichnung zu einem sofortigen
+            // Disconnect (Pce323Profile.BONDING_SUPPORTED-KDoc) - ein erneuter Versuch wuerde die
+            // Verbindung nur wieder gefaehrden. Die Konsequenz aus dem Plan ist deshalb nicht ein
+            // Bonding-Versuch, sondern die ehrliche Kennzeichnung: Sicherheit vorzutaeuschen waere
+            // schlimmer als eine dokumentierte Luecke.
+            if (!Pce323Profile.BONDING_SUPPORTED) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.height(16.dp).width(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Unverschlüsselte Verbindung – dieses Gerät unterstützt kein Bonding",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
