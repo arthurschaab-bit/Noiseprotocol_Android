@@ -12,6 +12,8 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.alert.AlarmCoordinator
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.meter.BoundDevice
@@ -49,6 +51,7 @@ class AudioRecordingService : LifecycleService() {
 
     private lateinit var settingsManager: SettingsManager
     private lateinit var connectionSupervisor: ConnectionSupervisor
+    private lateinit var alarmCoordinator: AlarmCoordinator
     private var classifier: SoundClassifier? = null
 
     private var rollingBuffer: ByteArray = ByteArray(0)
@@ -60,6 +63,7 @@ class AudioRecordingService : LifecycleService() {
         val container = (application as LaermprotokollApp).container
         settingsManager = container.settingsManager
         connectionSupervisor = container.connectionSupervisor
+        alarmCoordinator = container.alarmCoordinator
         classifier = NoiseClassifier(applicationContext)
         updateRollingBuffer()
 
@@ -79,6 +83,14 @@ class AudioRecordingService : LifecycleService() {
     private fun ensureMeterMonitoringStarted() {
         val address = settingsManager.meterDeviceAddress ?: return
         connectionSupervisor.start(BoundDevice(address, settingsManager.meterDeviceName ?: address))
+
+        // Die Alarmierung haengt am selben Lebenszyklus wie die Verbindung: Sie beobachtet
+        // deren Zustand und ist ohne sie gegenstandslos. Beide Aufrufe sind No-Ops, wenn
+        // bereits gestartet.
+        if (settingsManager.alarmierungAktiv) {
+            alarmCoordinator.start()
+            HeartbeatPlanung.plane(applicationContext)
+        }
     }
 
     private fun updateRollingBuffer() {
@@ -99,6 +111,9 @@ class AudioRecordingService : LifecycleService() {
             // etwas reaktivieren, das der Nutzer bewusst beendet hat.
             settingsManager.monitoringWasActive = false
             settingsManager.audioMonitoringWasActive = false
+            // Erst hier den Heartbeat abbestellen: Der Nutzer hat die Ueberwachung bewusst
+            // beendet, ein ausbleibendes Lebenszeichen waere ab jetzt kein Ausfall mehr.
+            HeartbeatPlanung.stoppe(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -362,6 +377,11 @@ class AudioRecordingService : LifecycleService() {
     override fun onDestroy() {
         isRunning = false
         connectionSupervisor.stop()
+        // Der Koordinator wird gestoppt, der Heartbeat aber NICHT: Er meldet "App und Gerät
+        // leben" und ist gerade dann aussagekraeftig, wenn dieser Dienst nicht mehr laeuft. Er
+        // prueft selbst, ob ueberwacht werden soll, und schweigt sonst - abgeschaltet wird er
+        // beim expliziten Nutzerstop in onStartCommand.
+        alarmCoordinator.stop()
         serviceJob.cancel()
         super.onDestroy()
     }

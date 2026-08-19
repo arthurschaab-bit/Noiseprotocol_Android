@@ -16,7 +16,16 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.app.AlarmManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,6 +42,27 @@ fun SettingsScreen(onBack: () -> Unit) {
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
     var sampleRate by remember { mutableIntStateOf(settings.audioSampleRate) }
 
+    val container = remember { (context.applicationContext as LaermprotokollApp).container }
+    val scope = rememberCoroutineScope()
+    var alarmierungAktiv by remember { mutableStateOf(settings.alarmierungAktiv) }
+    var karenzzeit by remember { mutableFloatStateOf(settings.karenzzeitSekunden.toFloat()) }
+    var ntfyAktiv by remember { mutableStateOf(settings.ntfyAktiv) }
+    var ntfyServer by remember { mutableStateOf(settings.ntfyServer) }
+    var ntfyTopic by remember { mutableStateOf(settings.ntfyTopic) }
+    var heartbeatUrl by remember { mutableStateOf(settings.heartbeatUrl) }
+    var entwarnungNtfy by remember { mutableStateOf(settings.entwarnungUeberNtfy) }
+    var entwarnungMeldung by remember { mutableStateOf(settings.entwarnungUeberMeldung) }
+    var testErgebnis by remember { mutableStateOf<String?>(null) }
+
+    val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
+    fun kannExakteAlarme() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() == true
+        } else {
+            true
+        }
+    var exakteAlarmeErlaubt by remember { mutableStateOf(kannExakteAlarme()) }
+
     val powerManager = remember { context.getSystemService(PowerManager::class.java) }
     fun isIgnoringBatteryOptimizations() =
         powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
@@ -45,6 +75,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 batteryOptimizationIgnored = isIgnoringBatteryOptimizations()
+                exakteAlarmeErlaubt = kannExakteAlarme()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -128,6 +159,204 @@ fun SettingsScreen(onBack: () -> Unit) {
                     selected = sampleRate == 44100,
                     onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
                     label = { Text("44100 Hz (Qualität)") }
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text("Alarmierung bei Verbindungsabbruch", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Reißt die Verbindung zum Messgerät ab und kommt sie nicht innerhalb der " +
+                    "Karenzzeit zurück, wird alarmiert.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = alarmierungAktiv,
+                    onCheckedChange = { alarmierungAktiv = it; settings.alarmierungAktiv = it },
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Alarmierung aktiv")
+            }
+
+            if (alarmierungAktiv) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Karenzzeit: ${karenzzeit.toInt()} s")
+                Text(
+                    "Kurze Aussetzer sind im Betrieb normal. Ohne Karenzzeit meldet die App " +
+                        "jeden davon - und wird nach einer Woche stummgeschaltet.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = karenzzeit,
+                    onValueChange = { karenzzeit = it },
+                    onValueChangeFinished = { settings.karenzzeitSekunden = karenzzeit.toInt() },
+                    valueRange = 10f..900f,
+                )
+
+                if (!exakteAlarmeErlaubt) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Ohne die Berechtigung für exakte Alarme kann die Karenzzeit im " +
+                            "Energiesparmodus deutlich verspätet ablaufen. Der Alarm geht dann " +
+                            "immer noch raus, aber unter Umständen erst viel später.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                        }
+                    }) {
+                        Text("Exakte Alarme erlauben")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Push auf ein zweites Gerät (ntfy)", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = ntfyAktiv,
+                        onCheckedChange = {
+                            ntfyAktiv = it
+                            settings.ntfyAktiv = it
+                            // Beim ersten Einschalten sofort ein Topic erzeugen - sonst waere der
+                            // Kanal scheinbar an, aber ohne Ziel.
+                            if (it && ntfyTopic.isBlank()) {
+                                ntfyTopic = erzeugeNtfyTopic()
+                                settings.ntfyTopic = ntfyTopic
+                            }
+                        },
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Push aktiv")
+                }
+
+                if (ntfyAktiv) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = ntfyServer,
+                        onValueChange = { ntfyServer = it },
+                        label = { Text("ntfy-Server") },
+                        supportingText = { Text("Standard: https://ntfy.sh. Eigene Instanz möglich.") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Button(onClick = { settings.ntfyServer = ntfyServer; ntfyServer = settings.ntfyServer }) {
+                        Text("Server übernehmen")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Topic", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "Auf dem öffentlichen Server ist dieser Name das einzige Geheimnis: Wer " +
+                            "ihn kennt, liest alle Alarme mit und kann selbst welche senden. " +
+                            "Niemandem zeigen, den Sie nicht alarmieren wollen.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(ntfyTopic.ifBlank { "– noch keines erzeugt –" })
+                    Row {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(ClipboardManager::class.java)
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("ntfy-Topic", ntfyTopic))
+                        }) { Text("Kopieren") }
+                        TextButton(onClick = {
+                            ntfyTopic = erzeugeNtfyTopic()
+                            settings.ntfyTopic = ntfyTopic
+                        }) { Text("Neu erzeugen") }
+                    }
+                    Text(
+                        "Auf dem zweiten Gerät die ntfy-App installieren und genau dieses Topic " +
+                            "abonnieren.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Entwarnung senden", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = entwarnungNtfy,
+                        onCheckedChange = { entwarnungNtfy = it; settings.entwarnungUeberNtfy = it },
+                    )
+                    Text("per Push")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = entwarnungMeldung,
+                        onCheckedChange = { entwarnungMeldung = it; settings.entwarnungUeberMeldung = it },
+                    )
+                    Text("als Meldung auf diesem Gerät")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Totmannschaltung", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Jeder Alarm ist eine Nachricht dieses Geräts. Stirbt es selbst - Akku leer, " +
+                        "App abgeschossen, kein Internet - kommt gar nichts mehr, und der " +
+                        "Ausfall bleibt unbemerkt. Dagegen hilft nur die umgekehrte Richtung: " +
+                        "Dieses Gerät meldet sich alle 15 Minuten bei einem Dienst; bleibt die " +
+                        "Meldung aus, alarmiert der Dienst Sie.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = heartbeatUrl,
+                    onValueChange = { heartbeatUrl = it },
+                    label = { Text("Ping-URL (z. B. healthchecks.io)") },
+                    supportingText = { Text("Leer lassen schaltet die Totmannschaltung ab.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(onClick = { settings.heartbeatUrl = heartbeatUrl; heartbeatUrl = settings.heartbeatUrl }) {
+                    Text("Ping-URL übernehmen")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Probealarm", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Ein Alarmkanal, der erst im Ernstfall zum ersten Mal benutzt wird, ist kein " +
+                        "Alarmkanal, sondern eine Hoffnung. Jetzt testen.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
+                    Button(onClick = {
+                        scope.launch {
+                            testErgebnis = container.alarmCoordinator.sendeTest(ChannelId.NTFY)
+                                .fold(
+                                    onSuccess = { "Push wurde angenommen. Kam er auf dem zweiten Gerät an?" },
+                                    onFailure = { "Push fehlgeschlagen: ${it.message}" },
+                                )
+                        }
+                    }) { Text("Test-Push") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        scope.launch {
+                            testErgebnis = container.alarmCoordinator
+                                .sendeTest(ChannelId.LOCAL_NOTIFICATION)
+                                .fold(
+                                    onSuccess = { "Meldung auf diesem Gerät ausgelöst." },
+                                    onFailure = { "Meldung fehlgeschlagen: ${it.message}" },
+                                )
+                        }
+                    }) { Text("Test-Meldung") }
+                }
+                testErgebnis?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Ein angenommener Push heißt nur, dass der Server ihn entgegengenommen hat - " +
+                        "nicht, dass er angekommen ist. Deshalb bitte am zweiten Gerät nachsehen.",
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
 
