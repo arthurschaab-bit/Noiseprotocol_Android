@@ -25,6 +25,7 @@ class RetentionCoordinatorTest {
         val zeilen = mutableListOf<MeasurementEntity>()
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) { zeilen += messwerte }
         override suspend fun fuerSession(sessionId: Long) = zeilen.filter { it.sessionId == sessionId }
+        override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = zeilen.filter { it.timestamp in von until bis }
         override suspend fun aelterAls(grenze: Long) = zeilen.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
@@ -35,6 +36,7 @@ class RetentionCoordinatorTest {
         val geschrieben = mutableListOf<MinuteAggregateEntity>()
         override suspend fun insertAll(aggregate: List<MinuteAggregateEntity>) { geschrieben += aggregate }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
+        override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = geschrieben.filter { it.minuteStart in von until bis }
     }
 

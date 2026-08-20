@@ -44,8 +44,11 @@ class MeasurementRecorderTest {
         }
         override suspend fun update(session: SessionEntity) { zeilen[session.id] = session }
         override suspend fun byId(id: Long): SessionEntity? = zeilen[id]
+        override fun byIdFlow(id: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun offeneSession(): SessionEntity? = zeilen.values.firstOrNull { it.endedAt == null }
+        override fun offeneSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
+        override fun letzteSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override fun alle() = throw NotImplementedError("im Test nicht benoetigt")
     }
 
@@ -53,6 +56,7 @@ class MeasurementRecorderTest {
         val geschrieben = mutableListOf<MeasurementEntity>()
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) { geschrieben += messwerte }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
+        override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = geschrieben.filter { it.timestamp in von until bis }
         override suspend fun aelterAls(grenze: Long) = geschrieben.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { geschrieben.removeAll { it.timestamp < grenze } }
@@ -63,6 +67,7 @@ class MeasurementRecorderTest {
         val geschrieben = mutableListOf<ConnectionEventEntity>()
         override suspend fun insert(event: ConnectionEventEntity) { geschrieben += event }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
+        override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private val sessionDao = FakeSessionDao()
