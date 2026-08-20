@@ -60,6 +60,24 @@ class SettingsScreenInstrumentedTest {
     }
 
     @Test
+    fun settingsScreenErlaubtAbtastrateAuswahlUndSchalterBedienung() {
+        composeRule.setContent {
+            SettingsScreen(onBack = {})
+        }
+        composeRule.waitForIdle()
+
+        // 1. Abtastrate-Chips prüfen
+        composeRule.onNodeWithText("16000 Hz", substring = true).assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("44100 Hz", substring = true).assertIsDisplayed().performClick()
+
+        // 2. KI-Erkennung Switch prüfen
+        composeRule.onNodeWithText("KI-Erkennung aktivieren", substring = true).assertIsDisplayed().performClick()
+
+        // 3. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
+        composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun formatiereDriveFehlerEnthaeltUrsacheWennVorhanden() {
         val mitUrsache = RuntimeException("Token-Fehler", IllegalStateException("Keine OAuth-Client-ID"))
         val textMitUrsache = formatiereDriveFehler(mitUrsache)
