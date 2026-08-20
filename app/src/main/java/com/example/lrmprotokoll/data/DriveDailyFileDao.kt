@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DriveDailyFileDao {
@@ -21,7 +22,8 @@ interface DriveDailyFileDao {
     @Query("SELECT * FROM drive_daily_files WHERE state = 'FAILED' ORDER BY date DESC LIMIT 1")
     suspend fun letzterFehlschlag(): DriveDailyFileEntity?
 
-    /** Sync-Historie fuer den Diagnose-Screen (Plan Abschnitt 9). */
+    /** Sync-Historie fuer den Diagnose-Screen (Plan Abschnitt 9). Flow statt einmaliger Abfrage
+     * (M7c Aufgabe 5), analog zu [DiagnosticLogDao.alle]. */
     @Query("SELECT * FROM drive_daily_files ORDER BY date DESC")
-    suspend fun alle(): List<DriveDailyFileEntity>
+    fun alle(): Flow<List<DriveDailyFileEntity>>
 }

@@ -44,11 +44,14 @@ import java.util.Locale
  * Der Diagnose-Screen (Plan Abschnitt 9) - "kein Luxus": bei einer Dauerüberwachung, die
  * alarmiert, muss nachvollziehbar sein, warum ein Alarm ausgelöst wurde oder ausblieb.
  *
- * Zustandsautomat und Decode-Fehlerrate sind live (StateFlow-basiert), Reconnect-Zähler,
- * Diagnose-Log und Sync-Historie werden einmalig beim Öffnen geladen (siehe
- * [ProtokollDetailScreen]-KDoc für dieselbe Abwägung - die zugrunde liegenden DAOs liefern kein
- * `Flow`). Der Reconnect-Zähler bezieht sich auf die letzte bzw. laufende Session, nicht auf die
- * gesamte App-Historie - das ist der diagnostisch relevante Zeitraum.
+ * Zustandsautomat, Decode-Fehlerrate, Diagnose-Log und Sync-Historie sind alle live
+ * (StateFlow/Flow-basiert, M7c Aufgabe 5) - neue Einträge erscheinen, ohne den Screen neu zu
+ * öffnen. Nur der Reconnect-Zähler wird einmalig beim Öffnen geladen (siehe
+ * [ProtokollDetailScreen]-KDoc für dieselbe Abwägung - `ConnectionEventDao.fuerSession` liefert
+ * kein `Flow`, und ein Reconnect ändert diese Zahl ohnehin nur, wenn ein neuer Datenbankeintrag
+ * entsteht, den man ebenso gut durch erneutes Öffnen sieht). Der Reconnect-Zähler bezieht sich
+ * auf die letzte bzw. laufende Session, nicht auf die gesamte App-Historie - das ist der
+ * diagnostisch relevante Zeitraum.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,10 +61,10 @@ fun DiagnoseScreen(onBack: () -> Unit) {
 
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
     val frameQuality by container.meterTransport.frameQuality.collectAsState()
+    val diagnoseLog by container.database.diagnosticLogDao().alle().collectAsState(initial = emptyList())
+    val syncHistorie by container.database.driveDailyFileDao().alle().collectAsState(initial = emptyList())
 
     var reconnectZaehler by remember { mutableStateOf(0) }
-    var diagnoseLog by remember { mutableStateOf<List<DiagnosticLogEntity>>(emptyList()) }
-    var syncHistorie by remember { mutableStateOf<List<DriveDailyFileEntity>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         val db = container.database
@@ -69,8 +72,6 @@ fun DiagnoseScreen(onBack: () -> Unit) {
         if (session != null) {
             reconnectZaehler = zaehleReconnects(db.connectionEventDao().fuerSession(session.id))
         }
-        diagnoseLog = db.diagnosticLogDao().alle()
-        syncHistorie = db.driveDailyFileDao().alle()
     }
 
     val fehlerrateProzent = if (frameQuality.totalFrames > 0) {

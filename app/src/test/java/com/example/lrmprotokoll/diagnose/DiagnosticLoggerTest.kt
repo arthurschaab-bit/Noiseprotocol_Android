@@ -4,6 +4,7 @@ import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import java.time.Instant
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -20,7 +21,7 @@ class DiagnosticLoggerTest {
     private class FakeDiagnosticLogDao : DiagnosticLogDao {
         val zeilen = mutableListOf<DiagnosticLogEntity>()
         override suspend fun insert(eintrag: DiagnosticLogEntity) { zeilen += eintrag }
-        override suspend fun alle() = zeilen.sortedByDescending { it.timestamp }
+        override fun alle() = flowOf(zeilen.sortedByDescending { it.timestamp })
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
     }
 

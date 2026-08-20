@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
@@ -69,7 +70,7 @@ class ConnectionSupervisorTest {
     private class FakeDiagnosticLogDao : DiagnosticLogDao {
         val zeilen = mutableListOf<DiagnosticLogEntity>()
         override suspend fun insert(eintrag: DiagnosticLogEntity) { zeilen += eintrag }
-        override suspend fun alle() = zeilen.sortedByDescending { it.timestamp }
+        override fun alle() = flowOf(zeilen.sortedByDescending { it.timestamp })
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
     }
 
