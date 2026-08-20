@@ -9,13 +9,13 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: emulator-${{ github.ref }}
+  group: emulator-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
   instrumented-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       matrix:
         api-level: [34]
@@ -42,15 +42,21 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Pre-build Debug and Test APKs
+        run: ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+
       - name: Run Instrumented Android Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: google_apis
+          target: default
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
           script: |
             adb logcat -c
             ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace || (adb logcat -d > logcat-failure.txt && exit 1)
