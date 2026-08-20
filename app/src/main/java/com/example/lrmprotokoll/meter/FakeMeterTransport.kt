@@ -144,6 +144,13 @@ class FakeMeterTransport(
         // Spiegelt das reale BleMeterTransport-Verhalten: Bewertung, Zeitbewertung, Bereich
         // und Hold-Status sind beim echten Geraet unbekannt (siehe MeterFrame-Doc), der Fake
         // taeuscht hier bewusst kein Wissen vor, das es in Wirklichkeit nicht gibt.
+        //
+        // plusNanos(validFrameCount) stellt sicher, dass jedes Frame einen echt monoton steigenden
+        // Zeitstempel traegt. In Coroutine-Tests unter TestScope/runTest laeuft die virtuelle Zeit
+        // ueber delay() weiter, die reale Systemuhr (Instant.now()) bleibt jedoch innerhalb derselben
+        // Millisekunde stehen - ohne diesen Nanosekunden-Offset wuerde StateFlow<Instant?> aufeinander-
+        // folgende Frames faelschlich als identisch ansehen und die Benachrichtigung von Collectorn
+        // (z. B. Kadenz-Watcher in ConnectionSupervisor) unterdruecken.
         return MeterFrame(
             level = level,
             weighting = null,

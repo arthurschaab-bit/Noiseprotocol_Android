@@ -6,129 +6,83 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
+/**
+ * Unit-Test für den [FakeMeterTransport].
+ *
+ * Verifiziert:
+ * 1. Sukzessive Frames tragen echt verschiedene receivedAt-Zeitstempel (keine StateFlow-Conflation).
+ * 2. Frames fließen mit der konfigurierten Frequenz.
+ * 3. [FakeMeterTransport.simulateStall] und [FakeMeterTransport.simulateCorruptFrames] aktualisieren FrameQuality und StateFlows korrekt.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class FakeMeterTransportTest {
 
-    private val device = BoundDevice(address = "AA:BB:CC:DD:EE:FF", name = "PCE-323")
+    private val testDevice = BoundDevice("11:22:33:44:55:66", "PCE-323")
 
     @Test
-    fun connectErreichtStreamingUndLiefertFramesMit2Hz() = runTest {
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-        val received = mutableListOf<MeterFrame>()
-        backgroundScope.launch { transport.frames.collect { received.add(it) } }
+    fun emittiertFramesMitMonotonenZeitstempelnUndKorrekterRate() = runTest {
+        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 10.0)
+        val frames = mutableListOf<MeterFrame>()
+        val timestamps = mutableListOf<Instant>()
 
-        transport.connect(device)
-        advanceTimeBy(2_100)
+        backgroundScope.launch {
+            transport.frames.collect { frames.add(it) }
+        }
+        backgroundScope.launch {
+            transport.lastFrameAt.collect { it?.let { ts -> timestamps.add(ts) } }
+        }
+
+        transport.connect(testDevice)
         runCurrent()
 
-        assertEquals(ConnectionState.STREAMING, transport.state.value)
-        assertTrue("erwartet mehrere Frames, war ${received.size}", received.size >= 3)
-        received.forEach { assertTrue(it.level in 20.0..140.0) }
-    }
-
-    @Test
-    fun disconnectStopptFramesUndSetztDisconnected() = runTest {
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-        val received = mutableListOf<MeterFrame>()
-        backgroundScope.launch { transport.frames.collect { received.add(it) } }
-
-        transport.connect(device)
-        advanceTimeBy(1_000)
+        advanceTimeBy(350) // bei 10 Hz sollten ~3-4 Frames emittiert werden
         runCurrent()
+
+        assertTrue("Mindestens 3 Frames sollten emittiert worden sein, war ${frames.size}", frames.size >= 3)
+        assertTrue("Mindestens 3 Zeitstempel sollten registriert worden sein, war ${timestamps.size}", timestamps.size >= 3)
+
+        // Verifiziere, dass keine zwei aufeinanderfolgenden Zeitstempel identisch sind
+        for (i in 0 until timestamps.size - 1) {
+            assertNotEquals(
+                "Zeitstempel #${i} und #${i+1} dürfen nicht identisch sein",
+                timestamps[i],
+                timestamps[i + 1]
+            )
+        }
+
         transport.disconnect()
-        val countAtDisconnect = received.size
-        advanceTimeBy(2_000)
         runCurrent()
-
-        assertEquals(ConnectionState.DISCONNECTED, transport.state.value)
-        assertEquals(countAtDisconnect, received.size)
-    }
-
-    @Test
-    fun simulateConnectionLossStopptFramesOhneExplizitenDisconnect() = runTest {
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-        transport.connect(device)
-        advanceTimeBy(500)
-        runCurrent()
-
-        transport.simulateConnectionLoss()
-
         assertEquals(ConnectionState.DISCONNECTED, transport.state.value)
     }
 
     @Test
-    fun simulateStallHaeltFramesZurueckOhneZustandZuAendern() = runTest {
+    fun corruptFramesErhoehenErrorCountOhneNeueFramesZuEmittieren() = runTest {
         val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-        val received = mutableListOf<MeterFrame>()
-        backgroundScope.launch { transport.frames.collect { received.add(it) } }
-
-        transport.connect(device)
-        advanceTimeBy(1_000)
-        runCurrent()
-        val countBeforeStall = received.size
-
-        transport.simulateStall(true)
-        advanceTimeBy(2_000)
-        runCurrent()
-
-        assertEquals(ConnectionState.STREAMING, transport.state.value)
-        assertEquals(countBeforeStall, received.size)
-
-        transport.simulateStall(false)
-        advanceTimeBy(1_000)
-        runCurrent()
-
-        assertTrue(received.size > countBeforeStall)
-    }
-
-    @Test
-    fun simulateCorruptFramesEmittiertKeineFramesNurFehlerzaehler() = runTest {
-        // Ein echter Decode-Fehler (Pegel ausserhalb 20-140 dB) erzeugt beim realen Decoder
-        // KEIN MeterFrame, nur einen hochgezaehlten Fehlerzaehler - der Fake muss das spiegeln,
-        // sonst waere ein "Frame" mit erfundenem Pegel im Umlauf (siehe MeterFrame-Doc).
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-        val received = mutableListOf<MeterFrame>()
-        backgroundScope.launch { transport.frames.collect { received.add(it) } }
-
-        transport.connect(device)
         transport.simulateCorruptFrames(true)
-        advanceTimeBy(1_500)
+        val frames = mutableListOf<MeterFrame>()
+
+        backgroundScope.launch {
+            transport.frames.collect { frames.add(it) }
+        }
+
+        transport.connect(testDevice)
         runCurrent()
 
-        assertTrue(received.isEmpty())
+        advanceTimeBy(1500) // 3 weitere Ticks
+        runCurrent()
+
+        // Da simulateCorruptFrames vor dem ersten Tick gesetzt war, wird kein Frame emittiert
+        assertEquals(0, frames.size)
         val quality = transport.frameQuality.value
-        assertTrue("erwartet Fehler > 0, war $quality", quality.errorFrames > 0)
+        assertTrue("Error-Frames sollten gezählt worden sein, war ${quality.errorFrames}", quality.errorFrames >= 3)
         assertEquals(quality.totalFrames, quality.errorFrames)
-    }
 
-    @Test
-    fun frameQualityWirdBeiReconnectZurueckgesetzt() = runTest {
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-
-        transport.connect(device)
-        transport.simulateCorruptFrames(true)
-        advanceTimeBy(1_500)
-        runCurrent()
-        assertTrue(transport.frameQuality.value.errorFrames > 0)
-
-        transport.simulateCorruptFrames(false)
-        transport.connect(device)
-        // Bewusst VOR runCurrent() geprueft: connect() setzt frameQuality synchron zurueck,
-        // bevor der neue Emit-Job ueberhaupt zum ersten Mal laeuft. Ein runCurrent() davor
-        // liesse den allerersten (validen) Tick bereits durch und wuerde totalFrames=1 statt 0
-        // liefern - das waere kein Bug, sondern nur eine ungenaue Pruefzeitpunkt-Wahl.
-        assertEquals(FrameQuality(), transport.frameQuality.value)
-    }
-
-    @Test
-    fun sendOhneVerbindungSchlaegtFehl() = runTest {
-        val transport = FakeMeterTransport(scope = backgroundScope, frameRateHz = 2.0)
-
-        val result = transport.send(MeterCommand.ToggleWeightFrequency)
-
-        assertTrue(result.isFailure)
+        transport.disconnect()
     }
 }

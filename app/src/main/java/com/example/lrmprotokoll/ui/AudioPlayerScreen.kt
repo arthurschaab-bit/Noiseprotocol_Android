@@ -17,7 +17,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -50,62 +52,99 @@ val PauseIcon: ImageVector by lazy {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
-    val file = File(filePath)
-    val amplitudes = remember(filePath) { loadAmplitudes(file) }
+    val file = remember(filePath) { File(filePath) }
+    var amplitudes by remember(filePath) { mutableStateOf<List<Float>>(emptyList()) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentProgress by remember { mutableFloatStateOf(0f) }
+    var isPrepared by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     
-    val mediaPlayer = remember { MediaPlayer() }
-    
+    // Amplituden asynchron im Hintergrund laden, um die UI-Komposition nicht durch Datei-I/O zu blockieren
+    LaunchedEffect(filePath) {
+        amplitudes = withContext(Dispatchers.IO) {
+            loadAmplitudes(file)
+        }
+    }
+
+    var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+
     DisposableEffect(filePath) {
-        var initialized = false
+        val player = MediaPlayer()
+        mediaPlayerRef = player
+        var isDisposed = false
+
         try {
             if (!file.exists()) {
                 loadError = "Audiodatei existiert nicht mehr."
             } else if (file.length() < 44) {
                 loadError = "Audiodatei ist beschädigt (zu kurz)."
             } else {
-                mediaPlayer.setDataSource(filePath)
-                mediaPlayer.prepare()
-                initialized = true
+                player.setDataSource(filePath)
+                player.setOnPreparedListener {
+                    if (!isDisposed) {
+                        isPrepared = true
+                    }
+                }
+                player.setOnCompletionListener {
+                    isPlaying = false
+                    currentProgress = 1f
+                }
+                player.setOnErrorListener { _, what, extra ->
+                    if (!isDisposed) {
+                        loadError = "Fehler bei der Audiowiedergabe ($what, $extra)"
+                        isPlaying = false
+                        isPrepared = false
+                    }
+                    true // Fehler wurde behandelt
+                }
+                // Asynchrones Vorbereiten verhindert ANRs und Blockieren des Main/UI-Threads
+                player.prepareAsync()
             }
         } catch (e: Exception) {
             loadError = "Audiodatei konnte nicht geladen werden: ${e.message ?: e.javaClass.simpleName}"
         }
+
         onDispose {
-            if (initialized) {
-                try {
-                    mediaPlayer.release()
-                } catch (_: Exception) {}
+            isDisposed = true
+            isPrepared = false
+            isPlaying = false
+            mediaPlayerRef = null
+            // MediaPlayer-Ressourcen ausnahmslos und sicher freigeben (verhindert Leaks und Zombie-Prozesse)
+            runCatching {
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.reset()
+                player.release()
             }
         }
     }
 
-    LaunchedEffect(isPlaying) {
-        if (loadError != null) {
-            isPlaying = false
-            return@LaunchedEffect
-        }
-        if (isPlaying) {
+    // Fortschritts-Tracker während aktiver Wiedergabe
+    LaunchedEffect(isPlaying, isPrepared) {
+        val player = mediaPlayerRef
+        if (player != null && isPlaying && isPrepared) {
             try {
-                mediaPlayer.start()
-                while (mediaPlayer.isPlaying) {
-                    val duration = mediaPlayer.duration
+                player.start()
+                while (player.isPlaying) {
+                    val duration = player.duration
                     if (duration > 0) {
-                        currentProgress = (mediaPlayer.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
+                        currentProgress = (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
                     }
                     delay(50)
                 }
-                isPlaying = false
-                currentProgress = 1f
+                if (!player.isPlaying && currentProgress < 0.99f) {
+                    isPlaying = false
+                }
             } catch (_: Exception) {
                 isPlaying = false
             }
-        } else {
-            try {
-                if (mediaPlayer.isPlaying) mediaPlayer.pause()
-            } catch (_: Exception) {}
+        } else if (player != null && !isPlaying && isPrepared) {
+            runCatching {
+                if (player.isPlaying) {
+                    player.pause()
+                }
+            }
         }
     }
 
@@ -175,16 +214,18 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(32.dp))
                 
                 IconButton(
-                    onClick = { 
-                        if (currentProgress >= 0.99f) {
-                            try {
-                                mediaPlayer.seekTo(0)
-                            } catch (_: Exception) {}
-                            currentProgress = 0f
+                    onClick = {
+                        val player = mediaPlayerRef
+                        if (player != null && isPrepared) {
+                            if (currentProgress >= 0.99f) {
+                                runCatching { player.seekTo(0) }
+                                currentProgress = 0f
+                            }
+                            isPlaying = !isPlaying
                         }
-                        isPlaying = !isPlaying 
                     },
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier.size(64.dp),
+                    enabled = isPrepared
                 ) {
                     Icon(
                         imageVector = if (isPlaying) PauseIcon else Icons.Default.PlayArrow,
@@ -237,7 +278,11 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
 fun loadAmplitudes(file: File): List<Float> {
     if (!file.exists()) return emptyList()
     
-    val bytes = file.readBytes()
+    val bytes = try {
+        file.readBytes()
+    } catch (_: Exception) {
+        return emptyList()
+    }
     if (bytes.size < 44) return emptyList()
     
     // Einfache PCM-Extraktion (16-bit Mono angenommen)
