@@ -175,7 +175,48 @@ fun NoiseProtocolApp(
         permissionLauncher.launch(permissionsToRequest.toTypedArray())
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    // M7c Aufgabe 3 (Bestandsaufnahme Verbesserungsvorschlag 3): erkennbare Struktur mit klar
+    // benannten Zielen statt verstreuter Text-/Icon-Buttons in der Kopfzeile - Diagnose war zuvor
+    // nur ueber ein Info-Icon ohne Text erreichbar (Befund 4, explizit zu beheben). Nur auf dem
+    // Home-Screen: die Zielscreens bleiben bei Zurueck-Pfeil + TopAppBar, kein globaler Umbau
+    // aller Screens noetig.
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {},
+                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    label = { Text("Start") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToMeter,
+                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                    label = { Text("Messgerät") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToProtokoll,
+                    icon = { Icon(Icons.Default.List, contentDescription = null) },
+                    label = { Text("Protokoll") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToDiagnose,
+                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                    label = { Text("Diagnose") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToSettings,
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Einstellungen") },
+                )
+            }
+        }
+    ) { scaffoldPadding ->
+    Column(modifier = Modifier.padding(scaffoldPadding).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Lärmprotokoll", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             if (selectedIds.isNotEmpty()) {
@@ -186,20 +227,8 @@ fun NoiseProtocolApp(
                     Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error)
                 }
             }
-            TextButton(onClick = onNavigateToMeter) {
-                Text("Messgerät")
-            }
-            TextButton(onClick = onNavigateToProtokoll) {
-                Text("Protokoll")
-            }
-            IconButton(onClick = onNavigateToDiagnose) {
-                Icon(Icons.Default.Info, contentDescription = "Diagnose")
-            }
-            IconButton(onClick = onNavigateToSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
-            }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
 
         ServiceControl(context, hasPermissions)
@@ -384,6 +413,7 @@ fun NoiseProtocolApp(
                 }
             }
         }
+    }
     }
 
     if (showReferenceDialog != null) {
