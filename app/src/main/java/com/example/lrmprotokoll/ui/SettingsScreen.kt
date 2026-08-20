@@ -460,7 +460,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                     driveOrdnerBlockiert = false
                                     "Verbunden. Ordner \"$driveOrdnerName\" wurde angelegt."
                                 },
-                                onFailure = { "Verbindung fehlgeschlagen: ${it.message}" },
+                                onFailure = { formatiereDriveFehler(it) },
                             )
                     }
                 }) {
@@ -516,7 +516,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Text(
                     "WAV-Dateien können Sprache Dritter enthalten und sind eine andere " +
-                        "Datenschutzkategorie als reine Pegelwerte - standardmäßig aus.",
+                        "Datenschutzkategorie als reine Pegelwerte - standardmäßig an, bei Bedarf hier abschaltbar.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -591,3 +591,25 @@ fun SettingsScreen(onBack: () -> Unit) {
 }
 
 const val BILDSCHIRM_ENDE_TAG = "settings_bildschirm_ende"
+
+/**
+ * Owner-Rückmeldung: "beim Google Drive Synchronisation 'Mit Google verbinden' kommt nur
+ * 'Verbindung fehlgeschlagen: Kein Zugriffstoken verfügbar'." Diese Meldung stammt aus
+ * [com.example.lrmprotokoll.drive.GoogleDriveApiClient]s `mitToken()`, das JEDEN Fehler beim
+ * Tokenabruf pauschal in "Kein Zugriffstoken verfügbar" verpackt (mit der eigentlichen Ursache
+ * nur als `cause`, siehe dortiger KDoc) - z. B. verschluckt das die viel konkretere Meldung aus
+ * [com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider] ("Keine echte
+ * OAuth-Client-ID eingerichtet - siehe GoogleClientConfig"), solange keine echte
+ * [com.example.lrmprotokoll.drive.auth.GoogleClientConfig.SERVER_CLIENT_ID] eingerichtet ist.
+ * Bislang zeigte die UI nur `fehler.message` - die tatsächliche Ursache blieb dem Nutzer
+ * verborgen. Diese Funktion haengt die `cause`-Meldung an, falls vorhanden, statt sie zu
+ * verwerfen.
+ */
+internal fun formatiereDriveFehler(fehler: Throwable): String {
+    val ursache = fehler.cause?.message
+    return if (ursache != null) {
+        "Verbindung fehlgeschlagen: ${fehler.message} ($ursache)"
+    } else {
+        "Verbindung fehlgeschlagen: ${fehler.message}"
+    }
+}

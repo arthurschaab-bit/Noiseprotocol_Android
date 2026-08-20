@@ -34,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -66,52 +68,153 @@ class MainActivity : ComponentActivity() {
                         .windowInsetsPadding(WindowInsets.safeDrawing),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val navController = rememberNavController()
-                    NavHost(navController = navController, startDestination = "main") {
-                        composable("main") {
-                            NoiseProtocolApp(
-                                onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
-                                onNavigateToSettings = { navController.navigate("settings") },
-                                onNavigateToMeter = { navController.navigate("meter") },
-                                onNavigateToProtokoll = { navController.navigate("protokoll") },
-                                onNavigateToDiagnose = { navController.navigate("diagnose") },
-                            )
-                        }
-                        composable(
-                            "player?path={path}",
-                            arguments = listOf(navArgument("path") { defaultValue = "" })
-                        ) { backStackEntry ->
-                            val path = backStackEntry.arguments?.getString("path") ?: ""
-                            AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
-                        }
-                        composable("settings") {
-                            SettingsScreen(onBack = { navController.popBackStack() })
-                        }
-                        composable("meter") {
-                            MeterScreen(onBack = { navController.popBackStack() })
-                        }
-                        composable("protokoll") {
-                            ProtokollScreen(
-                                onBack = { navController.popBackStack() },
-                                onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
-                            )
-                        }
-                        composable(
-                            "protokoll/{sessionId}",
-                            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
-                        ) { backStackEntry ->
-                            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
-                            ProtokollDetailScreen(sessionId = sessionId, onBack = { navController.popBackStack() })
-                        }
-                        composable("diagnose") {
-                            DiagnoseScreen(onBack = { navController.popBackStack() })
-                        }
-                    }
+                    AppNavigation()
                 }
             }
         }
     }
 }
+
+/**
+ * Rueckmeldung nach dem M7c-Gerätetest: "Die Navileiste ist in jeder Seite außer Start nicht
+ * vorhanden." Ursache war, dass die NavigationBar bisher NUR in [NoiseProtocolApp] (der
+ * "main"-Route) lag, statt den [NavHost] von außen zu umschließen - jede andere Route hatte
+ * dadurch keine. Diese Komposable ist jetzt die einzige Stelle, die [NavigationBar] aufbaut, und
+ * umschliesst den gesamten [NavHost], nicht nur eine einzelne Route.
+ *
+ * `navController` ist ein Parameter (statt intern per `rememberNavController()` fest verdrahtet),
+ * damit ein Compose-Test einen eigenen Controller uebergeben und den aktuellen Zielort direkt
+ * pruefen kann.
+ */
+@Composable
+fun AppNavigation(navController: NavHostController = rememberNavController()) {
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+
+    fun navigiereZuTab(route: String) {
+        navController.navigate(route) {
+            // main bleibt als "Boden" des Backstacks stehen, damit wiederholtes Wechseln
+            // zwischen Tabs keine unbegrenzt wachsende Historie anhaeuft - beim Zurueckwechseln
+            // zu "main" selbst wird sie stattdessen mit entfernt, damit ein erneuter Start-Tap
+            // wieder einen frischen main-Eintrag erzeugt statt doppelt zu stapeln.
+            popUpTo("main") { inclusive = route == "main" }
+            launchSingleTop = true
+        }
+    }
+
+    Scaffold(
+        bottomBar = {
+            AppNavigationBar(
+                currentRoute = currentRoute,
+                onNavigateToStart = { navigiereZuTab("main") },
+                onNavigateToMeter = { navigiereZuTab("meter") },
+                onNavigateToProtokoll = { navigiereZuTab("protokoll") },
+                onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                onNavigateToSettings = { navigiereZuTab("settings") },
+            )
+        }
+    ) { scaffoldPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = "main",
+            modifier = Modifier.padding(scaffoldPadding),
+        ) {
+            composable("main") {
+                NoiseProtocolApp(
+                    onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
+                    onNavigateToSettings = { navigiereZuTab("settings") },
+                    onNavigateToMeter = { navigiereZuTab("meter") },
+                    onNavigateToProtokoll = { navigiereZuTab("protokoll") },
+                    onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                )
+            }
+            composable(
+                "player?path={path}",
+                arguments = listOf(navArgument("path") { defaultValue = "" })
+            ) { backStackEntry ->
+                val path = backStackEntry.arguments?.getString("path") ?: ""
+                AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
+            }
+            composable("settings") {
+                SettingsScreen(onBack = { navController.popBackStack() })
+            }
+            composable("meter") {
+                MeterScreen(onBack = { navController.popBackStack() })
+            }
+            composable("protokoll") {
+                ProtokollScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
+                )
+            }
+            composable(
+                "protokoll/{sessionId}",
+                arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+                ProtokollDetailScreen(sessionId = sessionId, onBack = { navController.popBackStack() })
+            }
+            composable("diagnose") {
+                DiagnoseScreen(onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
+
+/**
+ * Faehrt nur die Beschriftung/Icons und den ausgewaehlten Zustand auf - welches Ziel gerade
+ * aktiv ist, kommt aus [istBottomNavZielAktiv] und ist damit ohne Compose per JVM-Test pruefbar.
+ */
+@Composable
+fun AppNavigationBar(
+    currentRoute: String?,
+    onNavigateToStart: () -> Unit,
+    onNavigateToMeter: () -> Unit,
+    onNavigateToProtokoll: () -> Unit,
+    onNavigateToDiagnose: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+) {
+    NavigationBar {
+        NavigationBarItem(
+            selected = istBottomNavZielAktiv(currentRoute, "main"),
+            onClick = onNavigateToStart,
+            icon = { Icon(Icons.Default.Home, contentDescription = null) },
+            label = { Text("Start") },
+        )
+        NavigationBarItem(
+            selected = istBottomNavZielAktiv(currentRoute, "meter"),
+            onClick = onNavigateToMeter,
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            label = { Text("Messgerät") },
+        )
+        NavigationBarItem(
+            selected = istBottomNavZielAktiv(currentRoute, "protokoll"),
+            onClick = onNavigateToProtokoll,
+            icon = { Icon(Icons.Default.List, contentDescription = null) },
+            label = { Text("Protokoll") },
+        )
+        NavigationBarItem(
+            selected = istBottomNavZielAktiv(currentRoute, "diagnose"),
+            onClick = onNavigateToDiagnose,
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            label = { Text("Diagnose") },
+        )
+        NavigationBarItem(
+            selected = istBottomNavZielAktiv(currentRoute, "settings"),
+            onClick = onNavigateToSettings,
+            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            label = { Text("Einstellungen") },
+        )
+    }
+}
+
+/**
+ * `currentRoute` ist bei parametrisierten Zielen das Routen-MUSTER, nicht der befuellte Wert
+ * (z. B. "protokoll/{sessionId}", nicht "protokoll/42") - ein Praefix-Vergleich reicht deshalb,
+ * um z. B. die Detailansicht einer Session weiterhin als "Protokoll" auszuweisen. "player?path=
+ * {path}" passt bewusst zu keinem Tab (kein eigener Bottom-Nav-Eintrag dafuer vorgesehen).
+ */
+internal fun istBottomNavZielAktiv(currentRoute: String?, ziel: String): Boolean =
+    currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -176,47 +279,11 @@ fun NoiseProtocolApp(
     }
 
     // M7c Aufgabe 3 (Bestandsaufnahme Verbesserungsvorschlag 3): erkennbare Struktur mit klar
-    // benannten Zielen statt verstreuter Text-/Icon-Buttons in der Kopfzeile - Diagnose war zuvor
-    // nur ueber ein Info-Icon ohne Text erreichbar (Befund 4, explizit zu beheben). Nur auf dem
-    // Home-Screen: die Zielscreens bleiben bei Zurueck-Pfeil + TopAppBar, kein globaler Umbau
-    // aller Screens noetig.
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = true,
-                    onClick = {},
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    label = { Text("Start") },
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = onNavigateToMeter,
-                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                    label = { Text("Messgerät") },
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = onNavigateToProtokoll,
-                    icon = { Icon(Icons.Default.List, contentDescription = null) },
-                    label = { Text("Protokoll") },
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = onNavigateToDiagnose,
-                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                    label = { Text("Diagnose") },
-                )
-                NavigationBarItem(
-                    selected = false,
-                    onClick = onNavigateToSettings,
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Einstellungen") },
-                )
-            }
-        }
-    ) { scaffoldPadding ->
-    Column(modifier = Modifier.padding(scaffoldPadding).padding(16.dp)) {
+    // benannten Zielen statt verstreuter Text-/Icon-Buttons in der Kopfzeile. Die NavigationBar
+    // selbst lebt seit der Geraetetest-Rueckmeldung ("fehlt auf jeder Seite ausser Start") nicht
+    // mehr hier, sondern in AppNavigation, die den gesamten NavHost umschliesst statt nur diese
+    // eine Route - siehe deren KDoc.
+    Column(modifier = Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Lärmprotokoll", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             if (selectedIds.isNotEmpty()) {
@@ -413,7 +480,6 @@ fun NoiseProtocolApp(
                 }
             }
         }
-    }
     }
 
     if (showReferenceDialog != null) {

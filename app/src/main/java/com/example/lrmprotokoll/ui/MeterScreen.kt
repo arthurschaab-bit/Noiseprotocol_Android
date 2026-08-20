@@ -62,6 +62,7 @@ import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleScanner
 import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import com.example.lrmprotokoll.meter.label
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -108,6 +109,10 @@ fun MeterScreen(onBack: () -> Unit) {
     var pairedAddress by remember { mutableStateOf(settings.meterDeviceAddress) }
     var pairedName by remember { mutableStateOf(settings.meterDeviceName) }
     var isScanning by remember { mutableStateOf(false) }
+    // Geraetetest-Rueckmeldung: "Wenn ich Scannen crashed die App." - siehe scanFehlermeldung()
+    // fuer die Ursache und den Grund, warum eine reine try{}finally{} (ohne catch) das nicht
+    // abfing.
+    var scanFehler by remember { mutableStateOf<String?>(null) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
     // Plan Abschnitt 6, Geraete-Pinning: ein Advertiser mit demselben Namen wie das gepinnte
     // Geraet, aber anderer Adresse, wird nicht kommentarlos wie jedes andere gefundene Geraet
@@ -291,6 +296,7 @@ fun MeterScreen(onBack: () -> Unit) {
                 Button(
                     onClick = {
                         foundDevices.clear()
+                        scanFehler = null
                         isScanning = true
                         scope.launch {
                             val scanner = BleScanner(context)
@@ -313,6 +319,18 @@ fun MeterScreen(onBack: () -> Unit) {
                                         foundDevices[device.address] = device
                                     }
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // Geraetetest-Rueckmeldung: "Scannen crashed die App." Ursache:
+                                // BleScanner.onScanFailed() schliesst den Flow ueber
+                                // close(IllegalStateException(...)) - z.B. bei
+                                // SCAN_FAILED_SCANNING_TOO_FREQUENTLY, wenn manche Hersteller
+                                // schnell aufeinanderfolgende Scan-Starts drosseln. Das vorherige
+                                // try{}finally{} OHNE catch fing das nicht ab: die Exception lief
+                                // unbehandelt aus dieser Coroutine heraus und beendete den Prozess.
+                                Log.w(TAG, "Scan fehlgeschlagen", e)
+                                scanFehler = scanFehlermeldung(e)
                             } finally {
                                 isScanning = false
                             }
@@ -322,6 +340,11 @@ fun MeterScreen(onBack: () -> Unit) {
                     modifier = Modifier.testTag(SCAN_BUTTON_TAG),
                 ) {
                     Text(if (isScanning) "Suche läuft…" else "Scannen (10s)")
+                }
+
+                scanFehler?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -396,6 +419,16 @@ private fun timeWeightingLabel(timeWeighting: TimeWeighting?): String = when (ti
     TimeWeighting.FAST -> "Fast"
     TimeWeighting.SLOW -> "Slow"
     null -> "unbekannter Wert"
+}
+
+/**
+ * Uebersetzt eine beim Scan aufgetretene Exception in eine fuer den Nutzer verstaendliche
+ * Meldung, statt die App abstuerzen zu lassen (Geraetetest-Rueckmeldung: "Scannen crashed die
+ * App"). Als reine Funktion ohne Android-/Compose-Abhaengigkeit per JVM-Test pruefbar.
+ */
+internal fun scanFehlermeldung(fehler: Throwable): String = when (fehler) {
+    is SecurityException -> "Bluetooth-Berechtigung wurde entzogen - bitte erneut erteilen."
+    else -> "Scan fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
 }
 
 private fun rangeLabel(range: MeasurementRange?): String = when (range) {
