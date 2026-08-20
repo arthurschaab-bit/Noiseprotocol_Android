@@ -33,7 +33,9 @@ class AppDatabaseV11MigrationTest {
     )
 
     private fun erzeugeV10Datenbank() {
-        helper.createDatabase(V10_DB_NAME, 10).use { db ->
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbPath = context.getDatabasePath(V10_DB_NAME).path
+        helper.createDatabase(dbPath, 10).use { db ->
             db.execSQL(
                 "INSERT INTO sessions (id, startedAt, endedAt, deviceAddress, deviceName, weighting, timeWeighting) " +
                     "VALUES (1, 1700000000000, NULL, 'AA:BB:CC:DD:EE:FF', 'PCE-323', 'A', 'FAST')"

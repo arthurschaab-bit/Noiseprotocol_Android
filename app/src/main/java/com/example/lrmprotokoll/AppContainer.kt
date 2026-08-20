@@ -62,6 +62,15 @@ class AppContainer(context: Context) {
     private val connectionSupervisorScope by lazy {
         val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
             Log.e("AppContainer", "Unerwarteter Fehler im ConnectionSupervisor-Scope", throwable)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.APP_UNCAUGHT,
+                component = "AppContainer",
+                operation = "connectionSupervisorScope",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                handled = false,
+                cause = throwable,
+                message = "Unerwarteter Fehler im ConnectionSupervisor-Scope"
+            )
         }
         CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
     }
@@ -104,10 +113,27 @@ class AppContainer(context: Context) {
         )
     }
 
-    // ---------------------------------------------------------------- M6: Sicherheit
+    // ---------------------------------------------------------------- M6: Sicherheit & Diagnose
 
     val diagnosticLogger: DiagnosticLogger by lazy {
         DiagnosticLogger(dao = database.diagnosticLogDao(), aktiv = { settingsManager.diagnoseLoggingAktiv })
+    }
+
+    val localDiagnosticSink: com.example.lrmprotokoll.diagnose.LocalDiagnosticSink by lazy {
+        com.example.lrmprotokoll.diagnose.LocalDiagnosticSink(
+            dao = database.diagnosticLogDao(),
+            aktiv = { settingsManager.diagnoseLoggingAktiv }
+        )
+    }
+
+    val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter by lazy {
+        com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
+            sinks = listOf(localDiagnosticSink),
+            initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(
+                appVersion = "1.0",
+                buildType = "debug",
+            )
+        )
     }
 
     val diagnosticLogCleanupCoordinator: DiagnosticLogCleanupCoordinator by lazy {
