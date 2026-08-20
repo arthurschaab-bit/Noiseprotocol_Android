@@ -141,12 +141,24 @@ für BLE-Scans, keine `maxSdkVersion`-Altlasten, nur noch `BLUETOOTH_SCAN` +
   (CEM „SuperMeterBox“) — das PCE-323 ist ein OEM-Gerät von CEM/Shenzhen Everbest
 - Gemeinsames Handbuch mit PCE-322A und PCE-MSM 4 → sehr wahrscheinlich gemeinsame Protokollfamilie
 
-### 2.2 Protokoll der Gerätefamilie (aus libsigrok, Treiber `pce-322a`)
+### 2.2 ~~Protokoll der Gerätefamilie~~ — ÜBERHOLT durch M0
+
+> 🛑 **Diese Hypothese ist widerlegt.** Die Protokoll-Discovery (M0) hat am realen Gerät ein
+> vollkommen anderes Format gefunden. Verbindlich ist ausschließlich
+> **[`docs/PROTOKOLL_PCE-323.md`](PROTOKOLL_PCE-323.md)** bzw. im Code
+> `meter/ble/Pce323Profile.kt`.
+>
+> Kurzfassung des tatsächlichen Protokolls: Custom-Service `0000fff0`, Notify auf `0000fff2`,
+> Write auf `0000fff1`, kein CONNECT-Kommando nötig. Logisches Frame 23 Byte, wegen
+> Default-MTU auf zwei Notifications (20 + 3 Byte) aufgeteilt, Messwert als
+> **IEEE-754-float32 big endian** in dB. Intervall rund 515 ms.
+>
+> Der folgende Abschnitt bleibt stehen, weil er dokumentiert, woher die ursprüngliche Annahme
+> kam und warum sie plausibel war — **nicht als Umsetzungsgrundlage.**
 
 libsigrok hat das PCE-322A über dessen serielle Schnittstelle (CP210x, 9600 Bd) reverse-engineered.
-Das PCE-323 ist der Bluetooth-Nachfolger derselben Familie; die Wahrscheinlichkeit, dass die
-Bluetooth-Strecke exakt diesen Byte-Strom tunnelt, ist hoch — **muss aber in Phase 0 verifiziert
-werden**.
+Weil sich PCE-322A und PCE-323 ein Handbuch teilen, wurde angenommen, die Bluetooth-Strecke tunnele
+denselben Byte-Strom. Diese Annahme hat sich nicht bestätigt.
 
 **Live-Messframe (6 Byte):**
 
@@ -519,8 +531,9 @@ jedem. Sicherheit muss deshalb überwiegend auf App-Seite hergestellt werden.
 **Auf Datenebene:**
 - Rufnummern und Alarmkonfiguration in **EncryptedSharedPreferences / DataStore mit Tink**,
   Schlüssel im Android Keystore.
-- Messdatenbank optional mit **SQLCipher**, Passphrase aus dem Keystore. Empfehlung: standardmäßig
-  an, wenn die Protokolle personen- oder betriebsbezogen sind.
+- ~~Messdatenbank optional mit SQLCipher~~ — **entschieden (Plan 13.2): nein.** Die App-Sandbox
+  von Android schützt bereits gegen andere Apps, der SQLCipher-Aufwand beim Öffnen/Migrieren der
+  Datenbank stand dazu nicht im Verhältnis.
 - `android:allowBackup="false"` und `android:dataExtractionRules`, damit Rufnummern und
   Messprotokolle nicht über Auto-Backup abfließen.
 - Export-Dateien über einen `FileProvider` teilen, niemals über `file://`-URIs oder externen
@@ -767,8 +780,14 @@ SMS-Verwaltung ist (also genau unser Fall), wird bei Veröffentlichung im Play S
 sofern nicht eine Ausnahmegenehmigung über das Declaration Form erteilt wird — die für diesen
 Anwendungsfall erfahrungsgemäß selten gewährt wird.
 
-**Status: bewusst vertagt** (Entscheidung 1 in 0.1). Bis auf Weiteres wird intern verteilt
-(Sideload), damit ist der direkte `SmsManager`-Versand uneingeschränkt möglich.
+**Status: erledigt durch Streichung.** Der SMS-Kanal wurde in M5 nicht gebaut — der Owner hat sich
+gegen ihn entschieden, statt auf die interne Verteilung zu setzen. Der Abschnitt bleibt stehen,
+weil er die Begründung trägt und weil die `AlertChannel`-Abstraktion, die er verlangt hat, sich
+genau dabei bewährt hat: Das Streichen war eine Zeile in der Kanalliste des `AppContainer` und
+kein Eingriff in die Alarmlogik.
+
+Was dadurch fehlt, steht in 13.4: Der Fall „kein Internet" hat keinen zweiten Alarmkanal mehr und
+wird von der Totmannschaltung (7.5) getragen.
 
 Damit diese Entscheidung reversibel bleibt, wird die Alarmierung von Anfang an hinter eine
 Abstraktion gelegt:
@@ -1113,11 +1132,12 @@ Anmerkungen:
 | **M1** | Umbau statt Neubau | Paketstruktur (4.2), `AppContainer`, minSdk 29 → 31, `MeterTransport` + Fake, erste Unit-Tests | 1,5 d |
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
-| **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
-| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `SmsAlertChannel` mit Zustellnachweis + Retry, `NtfyAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** | 4 d |
-| **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
-| **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
-| **M7b** | **Google-Drive-Sync (F-10)** | OAuth `drive.file`, Ordneranlage, 10-s-Aggregation, CSV-Erzeugung, `DriveSyncWorker`, `DailyFileRegistry`, Fehlerbehandlung, Sync-Status im UI | 3–4 d |
+| **M4** | **Persistenz — erledigt** | Room (`sessions`/`measurements`/`connection_events`/`minute_aggregates`, Migration 8→9), Batch-Writer (`MeasurementRecorder`), Trigger-Umstellung (`MeterTriggerSource`), Leq/Max/Min/L10/L50/L90 (`AkustischeKennwerte`), Retention-Job (`RetentionCoordinator`/`-Worker`, 90 Tage) | 2–3 d |
+| **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `NtfyAlertChannel`, `LocalNotificationAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** — `SmsAlertChannel` gestrichen (Owner-Entscheidung, siehe 13.4) | 4 d |
+| **M6** | **Sicherheit — erledigt** | Bonding-Verzicht ehrlich gekennzeichnet (kein erneuter `createBond()`-Versuch, M0 hat den Fehlschlag belegt), Geräte-Pinning gehärtet (`GeraetePinning`, Namensspoofing-Warnung), Stream-Plausibilisierung (Kadenz-Watcher in `ConnectionSupervisor`), verschlüsselte Ablage für ntfy-Konfiguration (`EncryptedSharedPreferences`, Keystore), Backup-Regeln um `sharedpref` ergänzt, Diagnose-Log-Backend (standardmäßig aus, 7-Tage-Löschung) — SQLCipher entfällt (13.2) | 2 d |
+| **M7** | **UI-Ausbau — erledigt** | Protokollansicht (`ProtokollScreen`/`ProtokollDetailScreen`: Sessions, Kennwerte, Ausfallbänder), Diagnose-Screen (`DiagnoseScreen`: Zustand live, Reconnect-Zähler, Decode-Fehlerrate, Diagnose-Log, Sync-Historie), Export CSV/PDF (`MessreiheCsv`, `MessreiheExport`), Einstellungen bereits konsolidiert (keine Änderung nötig) | 3–4 d |
+| **M7b** | **Google-Drive-Sync (F-10)** — erledigt, ohne M4 | OAuth `drive.file`, Ordneranlage, konfigurierbare Aggregation (Default 1 s), CSV-Erzeugung, `DriveSyncWorker`, `DriveDailyFileEntity`, Fehlerbehandlung, Sync-Status als Notification | 3–4 d |
+| **M7c** | UI-Überarbeitung (Feedback erster Gerätetest) | Live-Status-Dashboard statt gepolltem `ServiceControl`, Aufzeichnungs-Chart (Pegel über Zeit, Ausfallbänder), konsolidierte Navigation, Scroll-Fix `MeterScreen` — siehe `docs/BESTANDSAUFNAHME_UI.md`/`docs/PROMPT_M7C.md` | 2–3 d |
 | **M8** | Härtung | Chaos-Checkliste, 24-h-Dauerlauf, Herstellerspezifika, Release-Build | 2–3 d |
 | **M9** | *(optional)* FCM-Zielbild | Google Sign-In, Firestore, Cloud-Function-Relay, `FcmAlertChannel`, serverseitiger Heartbeat | 3–4 d |
 
@@ -1145,7 +1165,8 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 | Risiko | Auswirkung | Gegenmaßnahme |
 |--------|-----------|---------------|
-| Bluetooth-Profil weicht von der Annahme ab (kein 0x7F-Framing) | M2 verzögert sich | M0 vorgeschaltet; Decoder ist gekapselt und austauschbar |
+| ~~Bluetooth-Profil weicht von der Annahme ab~~ — **EINGETRETEN** | Der in M1 gebaute Decoder passt nicht und muss in M2 umgebaut werden | M0 war vorgeschaltet und hat es vor der Transport-Implementierung aufgedeckt; die Kapselung hinter `MeterTransport` begrenzt den Schaden auf eine Klasse |
+| Funkverbindung verfälscht die Messung — bei einem baugleich aufgebauten Fremdgerät (Uni-T UT353BT) sind ~15 dB Abweichung dokumentiert | Plausibel aussehende, aber falsche Pegel im Protokoll | Einmalige Gegenmessung: Pegel ohne Bluetooth ablesen, dann verbunden gegenprüfen. Zehn Minuten Aufwand, sonst unentdeckbar |
 | PCE-323 nutzt Bluetooth Classic SPP statt BLE | Transport neu zu implementieren | `MeterTransport`-Abstraktion; SPP-Variante ist die einfachere Implementierung |
 | `SEND_SMS` blockiert Play-Veröffentlichung | Vertriebsweg | Abschnitt 7.4, `AlertChannel`-Abstraktion |
 | Hersteller-ROM killt den Foreground Service | Stiller Überwachungsausfall | Akku-Ausnahme, Boot-Receiver, Heartbeat-Selbstüberwachung, Nutzerhinweise |
@@ -1162,19 +1183,41 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 **Noch offene Entscheidungen:**
 
-1. **Entwarnungsmeldung bei Wiederkehr** — gewünscht oder nicht? (verdoppelt das Meldungsaufkommen;
-   bei Push unkritisch, bei SMS spürbar). *Vorschlag: bei Push an, bei SMS aus.*
-2. **Aufbewahrungsdauer** der Rohmesswerte (Vorschlag: 90 Tage Rohwerte, danach Minutenaggregate)
-   und ob die Datenbank per SQLCipher verschlüsselt wird.
-3. **Cooldown und Eskalation** — Vorschlag: Cooldown 30 min, Eskalation nach 60 min, max. 3
-   Wiederholungen.
-4. **Push-Kanal für M5** — ntfy öffentlich oder self-hosted?
-5. **Drive-Aggregationsintervall** — Vorschlag 10 s (8.4.1). Feiner geht, kostet aber
-   überproportional Upload-Volumen.
-6. **Drive-Ordnerwahl** — reicht ein von der App angelegter Ordner (`drive.file`, keine
-   Google-Verifizierung), oder muss es zwingend ein beliebiger bestehender Ordner sein
-   (voller `drive`-Scope, jährliche CASA-Prüfung)? *Vorschlag: `drive.file`.*
-7. **Sollen die WAV-Aufnahmen ebenfalls nach Drive?** *Vorschlag: nein, nur Pegeldaten.*
+1. ~~**Entwarnungsmeldung bei Wiederkehr**~~ — **entschieden: je Kanal umstellbar.** Ursprünglich
+   „bei Push an, bei SMS aus"; mit dem Wegfall des SMS-Kanals (Punkt 4) ist sie bei beiden
+   verbliebenen Kanälen voreingestellt an, weil sie dort nichts kostet. Der Schalter bleibt, weil
+   der Grund für ihn — ein Kanal, bei dem jede Nachricht zählt — mit jedem künftigen Kanal
+   wiederkommen kann.
+2. ~~**Aufbewahrungsdauer**~~ — **entschieden: 90 Tage Rohwerte, danach Minutenaggregate**, wie
+   vorgeschlagen. ~~**SQLCipher**~~ — **entschieden: nein, unverschlüsselt.** Die App-Sandbox von
+   Android schützt bereits gegen andere Apps; der zusätzliche Aufwand beim Öffnen/Migrieren der
+   Datenbank steht dazu nicht im Verhältnis. M6 setzt dementsprechend nur EncryptedSharedPreferences
+   für Alarmkonfiguration/Rufnummern und die Keystore-Anbindung um, nicht die Datenbank selbst.
+3. ~~**Cooldown und Eskalation**~~ — **entschieden: Cooldown 30 min, Eskalation nach 60 min,
+   max. 3 Wiederholungen.**
+4. ~~**Push-Kanal für M5**~~ — **entschieden: ntfy**, für den ersten Wurf der öffentliche Server
+   `ntfy.sh` mit langem Zufalls-Topic; die Basis-URL liegt in den Einstellungen, ein Wechsel auf
+   eine self-hosted Instanz bleibt damit eine Konfigurationsänderung.
+   **Der SMS-Kanal wurde gestrichen** (Owner-Entscheidung, `SEND_SMS` ist eine eingeschränkte
+   Berechtigung, siehe 7.6). Folge: Die Kanaltabelle in 7.4 stimmt nicht mehr — der Fall
+   „kein Internet" ist durch keinen zweiten Alarmkanal mehr abgedeckt. Getragen wird er jetzt
+   von der Totmannschaltung (7.5): Ohne Internet bleibt auch der Heartbeat aus, und die
+   Gegenseite alarmiert. Damit ist 7.5 nicht mehr nur die wichtigste Einzelmaßnahme, sondern
+   für diesen Ausfall die einzige.
+5. ~~**Drive-Aggregationsintervall**~~ — **entschieden: konfigurierbar, Default 1 s** (so fein
+   wie technisch sinnvoll) statt der vorgeschlagenen 10 s — Owner-Entscheidung. Dafür WLAN-only
+   (8.4.5) default AN, um das dadurch höhere Uploadvolumen abzufangen.
+6. ~~**Drive-Ordnerwahl**~~ — **entschieden: `drive.file`**, wie vorgeschlagen. Die App legt beim
+   Einrichten selbst einen Ordner an.
+7. ~~**Sollen die WAV-Aufnahmen ebenfalls nach Drive?**~~ — **entschieden: als Option vorhanden,
+   Default AN.** Abweichend vom Vorschlag „nein" — der Owner wollte die Möglichkeit erhalten,
+   nicht WAV-Upload komplett ausschließen. (Ursprünglich Default AUS; nach Rückmeldung aus dem
+   ersten Gerätetest auf Default AN umgestellt.)
+
+**Neu hinzugekommen bei der Umsetzung:** Google Sign-In braucht eine echte OAuth-Client-ID aus
+der Google Cloud Console, die kein Agent selbst anlegen kann (braucht Browser-Zugriff auf ein
+Google-Konto). Entschieden: Code vollständig fertig, Client-ID bleibt ein dokumentierter
+Platzhalter (`GoogleClientConfig.SERVER_CLIENT_ID`) bis der Owner sie selbst einrichtet.
 
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
@@ -1206,6 +1249,16 @@ Messgerät noch nicht verfügbar ist.
 - [libsigrok `src/hardware/pce-322a/protocol.c`](https://raw.githubusercontent.com/sigrokproject/libsigrok/master/src/hardware/pce-322a/protocol.c)
 - [PCE-323 App im Google Play Store](https://play.google.com/store/apps/details?id=com.pceinstruments.pce323)
 - [PCE-322A Bedienungsanleitung](https://www.pce-instruments.com/api/getartfile?_fnr=1045398)
+
+Protokollrecherche 2026-08-16/17 — warum die Hypothese danebenlag:
+
+- [libsigrok `cem-dt-885x/protocol.h`](https://raw.githubusercontent.com/sigrokproject/libsigrok/master/src/hardware/cem-dt-885x/protocol.h) und
+  [sigrok-Wiki: CEM DT-8852](https://sigrok.org/wiki/CEM_DT-8852) — belegen, dass CEM ein
+  eigenes, zum PCE-322A inkompatibles Protokoll fährt (`0xA5`/BCD statt `0x7F`/binär).
+  Damit ist auch die frühere Annahme widerlegt, das PCE-323 sei ein CEM-Rebadge
+- [`dt8852` auf PyPI](https://pypi.org/project/dt8852/) — Referenzimplementierung der CEM-Familie
+- [Reverse Engineering des Uni-T UT353BT](https://www.blog.yofukashi-works.com/?p=2764) — Quelle
+  des oben genannten Messfehler-Risikos durch die Funkverbindung
 
 Alarmierung:
 

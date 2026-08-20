@@ -4,10 +4,34 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Wiederaufnahme der Ueberwachung nach Neustart (Plan Abschnitt 5.4). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Ehrlich abgefragt in den Einstellungen, nicht automatisch erzwungen (Plan 5.4): ohne
+         Ausnahme drosseln Hersteller-ROMs den Foreground Service aggressiv. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Ab minSdk 31 die einzigen noetigen Bluetooth-Berechtigungen (Plan Abschnitt 10):
+         kein ACCESS_FINE_LOCATION, da die Scan-Ergebnisse nicht zur Standortbestimmung
+         genutzt werden (neverForLocation). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- M5: ntfy-Push und das Lebenszeichen der Totmannschaltung sind HTTP-Aufrufe. Ohne diese
+         Berechtigung scheitert jeder Versand still - die App wuerde melden, dass sie alarmiert
+         hat, und es waere nie etwas rausgegangen. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- M5: Die Karenzzeit laeuft ueber setExactAndAllowWhileIdle(). USE_EXACT_ALARM wird
+         bewusst NICHT verwendet - die ist Kalender- und Weckerapps vorbehalten. Ohne die
+         Genehmigung faellt der Alarm auf einen ungenauen zurueck, und der Einstellungsbildschirm
+         zeigt das an, statt es zu verschweigen. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
+        android:name=".LaermprotokollApp"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -17,8 +41,19 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Laermprotokoll">
 
+        <!-- M5: Weckruf fuer Karenzzeit und Eskalation. Nicht exportiert - die Action ist
+             app-intern, niemand von aussen soll einen Alarm ausloesen oder unterdruecken
+             koennen. -->
+        <receiver
+            android:name=".alert.AlarmDeadlineReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.lrmprotokoll.ALARM_DEADLINE" />
+            </intent-filter>
+        </receiver>
+
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,9 +62,19 @@
         </activity>
 
         <service
-            android:name=".AudioRecordingService"
-            android:foregroundServiceType="microphone"
+            android:name=".audio.AudioRecordingService"
+            android:foregroundServiceType="microphone|connectedDevice"
             android:exported="false" />
+
+        <!-- exported=true ist hier vertretbar: BOOT_COMPLETED ist ein geschuetzter
+             Systembroadcast, den keine App faelschen kann. -->
+        <receiver
+            android:name=".audio.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"
