@@ -29,8 +29,8 @@ class AppDatabaseMigrationTest {
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
         AppDatabase::class.java,
-        emptyList(),
-        FrameworkSQLiteOpenHelperFactory()
+        emptyList<androidx.room.migration.AutoMigrationSpec>(),
+        RobolectricOpenHelperFactory()
     )
 
     @Test

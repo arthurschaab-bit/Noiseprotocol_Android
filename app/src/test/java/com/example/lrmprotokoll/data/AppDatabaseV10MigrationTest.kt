@@ -24,8 +24,8 @@ class AppDatabaseV10MigrationTest {
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
         AppDatabase::class.java,
-        emptyList(),
-        FrameworkSQLiteOpenHelperFactory()
+        emptyList<androidx.room.migration.AutoMigrationSpec>(),
+        RobolectricOpenHelperFactory()
     )
 
     private fun erzeugeV9Datenbank() {

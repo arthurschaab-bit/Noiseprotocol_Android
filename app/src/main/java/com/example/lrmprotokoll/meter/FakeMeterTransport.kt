@@ -151,7 +151,7 @@ class FakeMeterTransport(
             range = null,
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.now(),
+            receivedAt = Instant.now().plusNanos(validFrameCount),
         )
     }
 }
