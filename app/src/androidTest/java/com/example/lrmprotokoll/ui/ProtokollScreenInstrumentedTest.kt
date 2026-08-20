@@ -28,7 +28,8 @@ class ProtokollScreenInstrumentedTest {
 
     @Before
     fun setUp() {
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.database.clearAllTables()
     }
 
     @Test
@@ -49,7 +50,7 @@ class ProtokollScreenInstrumentedTest {
 
         // 2. Leerzustandstext sichtbar
         composeRule.onNodeWithText(
-            "Noch keine aufgezeichnete Überwachungsperiode. Eine Session beginnt, sobald ein Messgerät gekoppelt und die Überwachung gestartet wird.",
+            "Noch keine aufgezeichnete Überwachungsperiode",
             substring = true
         ).assertIsDisplayed()
 

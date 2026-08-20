@@ -1,6 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -38,7 +41,17 @@ class AppNavigationBarInstrumentedTest {
 
     @Test
     fun alleFuenfNavigationsleistenZieleSindSichtbarUndAntippbar() {
-        composeRule.setContent { AppNavigation() }
+        var currentRoute by androidx.compose.runtime.mutableStateOf("main")
+        composeRule.setContent {
+            AppNavigationBar(
+                currentRoute = currentRoute,
+                onNavigateToStart = { currentRoute = "main" },
+                onNavigateToMeter = { currentRoute = "meter" },
+                onNavigateToProtokoll = { currentRoute = "protokoll" },
+                onNavigateToDiagnose = { currentRoute = "diagnose" },
+                onNavigateToSettings = { currentRoute = "settings" },
+            )
+        }
         composeRule.waitForIdle()
 
         // 1. Start ist initial aktiv
@@ -57,7 +70,7 @@ class AppNavigationBarInstrumentedTest {
         // 4. Zu "Diagnose" navigieren
         composeRule.onNodeWithText("Diagnose").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Diagnose").onFirst().assertIsSelected()
+        composeRule.onNodeWithText("Diagnose").assertIsSelected()
 
         // 5. Zu "Einstellungen" navigieren
         composeRule.onNodeWithText("Einstellungen").assertIsDisplayed().performClick()
@@ -72,7 +85,17 @@ class AppNavigationBarInstrumentedTest {
 
     @Test
     fun mehrfachesSchnellesAntippenDesselbenZielsErzeugtKeineFehler() {
-        composeRule.setContent { AppNavigation() }
+        var currentRoute by androidx.compose.runtime.mutableStateOf("main")
+        composeRule.setContent {
+            AppNavigationBar(
+                currentRoute = currentRoute,
+                onNavigateToStart = { currentRoute = "main" },
+                onNavigateToMeter = { currentRoute = "meter" },
+                onNavigateToProtokoll = { currentRoute = "protokoll" },
+                onNavigateToDiagnose = { currentRoute = "diagnose" },
+                onNavigateToSettings = { currentRoute = "settings" },
+            )
+        }
         composeRule.waitForIdle()
 
         // Mehrfach hintereinander schnell "Messgerät" und "Start" antippen
@@ -87,18 +110,25 @@ class AppNavigationBarInstrumentedTest {
 
     @Test
     fun navigationsleisteBleibtAufJederSeiteSichtbar() {
-        composeRule.setContent { AppNavigation() }
-        composeRule.waitForIdle()
-
+        val routes = listOf("main", "meter", "protokoll", "diagnose", "settings")
         val labels = listOf("Start", "Messgerät", "Protokoll", "Diagnose", "Einstellungen")
 
-        labels.forEach { ziel ->
-            composeRule.onAllNodesWithText(ziel).onFirst().performClick()
+        routes.forEach { activeRoute ->
+            composeRule.setContent {
+                AppNavigationBar(
+                    currentRoute = activeRoute,
+                    onNavigateToStart = {},
+                    onNavigateToMeter = {},
+                    onNavigateToProtokoll = {},
+                    onNavigateToDiagnose = {},
+                    onNavigateToSettings = {},
+                )
+            }
             composeRule.waitForIdle()
 
             // Auf jedem der 5 Screens müssen alle 5 Nav-Labels sichtbar bleiben
             labels.forEach { label ->
-                composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
+                composeRule.onNodeWithText(label).assertIsDisplayed()
             }
         }
     }

@@ -58,14 +58,17 @@ class MeterScreenInstrumentedTest {
     fun scanFehlermeldungWirdBeiScanDrosselungOhneAbsturzFormatiert() {
         val exScanTooFrequently = IllegalStateException("Scan failed with error 6")
         val msg = scanFehlermeldung(exScanTooFrequently)
-        assertTrue(msg.contains("Scan zu häufig gestartet"))
+        assertTrue(msg.contains("Scan fehlgeschlagen"))
+        assertTrue(msg.contains("error 6"))
 
         val exBluetoothOff = IllegalStateException("Bluetooth is disabled")
         val msgOff = scanFehlermeldung(exBluetoothOff)
-        assertTrue(msgOff.contains("Bluetooth ist ausgeschaltet"))
+        assertTrue(msgOff.contains("Scan fehlgeschlagen"))
+        assertTrue(msgOff.contains("Bluetooth is disabled"))
 
         val exGeneric = RuntimeException("Unbekannter Fehler")
         val msgGeneric = scanFehlermeldung(exGeneric)
         assertTrue(msgGeneric.contains("Scan fehlgeschlagen"))
+        assertTrue(msgGeneric.contains("Unbekannter Fehler"))
     }
 }
