@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Button
@@ -39,6 +45,9 @@ import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
+import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
+import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.report.MessreiheExport
 import kotlinx.coroutines.Dispatchers
@@ -122,6 +131,19 @@ fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
         }
 
         val formatierer = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+        // Solange die Session noch läuft (endedAt == null), ist "jetzt" die einzig sinnvolle
+        // rechte Achsengrenze für den Chart - dieselbe Wahl wie oben für die Ausfallbänder.
+        val sessionEndeFuerChart = s.endedAt ?: System.currentTimeMillis()
+        // Rohwerte bevorzugt (volle Auflösung), Aggregate nur als Rückfalloption, wenn der
+        // Retention-Job schon verdichtet hat - dieselbe Priorisierung wie bei den Kennwerten oben.
+        val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
+            if (messwerte.isNotEmpty()) {
+                downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
+            } else {
+                downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+            }
+        }
+
         // EIN LazyColumn statt Column+verschachteltem LazyColumn fuer die Ausfallliste: ein
         // vertikal scrollbares Element ohne begrenzte Hoehe innerhalb eines nicht scrollbaren
         // Column crasht zur Laufzeit ("infinity maximum height constraint").
@@ -136,6 +158,11 @@ fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
                 Text("Kennwerte", style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 KennwerteBlock(kennwerte)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Pegelverlauf", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                PegelChart(chartSpalten, ausfallbaender, s.startedAt, sessionEndeFuerChart)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row {
@@ -202,6 +229,72 @@ private fun KennwerteBlock(kennwerte: AkustischeKennwerte.Kennwerte?) {
 private fun KennwertZeile(label: String, wertDb: Double?) {
     if (wertDb == null) return
     Text("$label: ${String.format(Locale.getDefault(), "%.1f", wertDb)} dB", style = MaterialTheme.typography.bodyMedium)
+}
+
+/**
+ * Grober Pegelverlauf einer Session (M7c Aufgabe 2, Bestandsaufnahme-Vorschlag "ein Graf der
+ * zeigt seit wann läuft die Aufzeichnung, welche Werte wurden gemessen, gab es
+ * Verbindungsprobleme"). Zeichnet je Zeitfenster ([ChartSpalte]) ein Min/Max-Band und eine
+ * Mittelwert-Linie (LAeq), dahinter die Ausfallbänder als rote Fläche - dieselbe Datengrundlage
+ * wie die Liste unterhalb ("Ausfälle"), nur als Zeitachse statt als Text.
+ *
+ * Bewusst kein Zoom/Pan/Tooltip (siehe PROMPT_M7C.md "NICHT TEIL VON M7c": kein neues
+ * Chart-Framework) - ein statisches Canvas reicht für "grobe Aufzeichnungsdarstellung".
+ */
+@Composable
+private fun PegelChart(spalten: List<ChartSpalte>, ausfallbaender: List<Ausfallband>, sessionStart: Long, sessionEnde: Long) {
+    if (spalten.isEmpty()) {
+        Text("Keine Messwerte für den Pegelverlauf.", style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+
+    val minDb = spalten.minOf { it.minDb }
+    val maxDb = spalten.maxOf { it.maxDb }
+    // coerceAtLeast(1.0): eine Session mit konstantem Pegel (minDb == maxDb) darf nicht durch
+    // Division durch 0 die y-Koordinaten kaputt machen.
+    val dbSpanne = (maxDb - minDb).coerceAtLeast(1.0)
+    val gesamtSekunden = ((sessionEnde - sessionStart) / 1000).coerceAtLeast(1)
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+        val breite = size.width
+        val hoehe = size.height
+
+        fun x(sekunden: Long): Float = (sekunden.toFloat() / gesamtSekunden) * breite
+        fun y(db: Double): Float = hoehe - ((db - minDb) / dbSpanne * hoehe).toFloat()
+
+        ausfallbaender.forEach { band ->
+            val vonSekunden = ((band.von - sessionStart) / 1000).coerceIn(0, gesamtSekunden)
+            val bisSekunden = (((band.bis ?: sessionEnde) - sessionStart) / 1000).coerceIn(0, gesamtSekunden)
+            drawRect(
+                color = Color.Red.copy(alpha = 0.15f),
+                topLeft = Offset(x(vonSekunden), 0f),
+                size = Size(x(bisSekunden) - x(vonSekunden), hoehe),
+            )
+        }
+
+        // Min/Max-Band: Weg entlang der Maxima hin, entlang der Minima (rückwärts) zurück, dann
+        // schließen - ergibt eine gefüllte Fläche zwischen beiden Kurven.
+        val bandPfad = Path().apply {
+            spalten.forEachIndexed { index, spalte ->
+                val px = x(spalte.zeitOffsetSekunden)
+                if (index == 0) moveTo(px, y(spalte.maxDb)) else lineTo(px, y(spalte.maxDb))
+            }
+            for (index in spalten.indices.reversed()) {
+                lineTo(x(spalten[index].zeitOffsetSekunden), y(spalten[index].minDb))
+            }
+            close()
+        }
+        drawPath(bandPfad, color = Color(0xFF1976D2).copy(alpha = 0.25f))
+
+        val mittelPfad = Path().apply {
+            spalten.forEachIndexed { index, spalte ->
+                val px = x(spalte.zeitOffsetSekunden)
+                val py = y(spalte.mittelDb)
+                if (index == 0) moveTo(px, py) else lineTo(px, py)
+            }
+        }
+        drawPath(mittelPfad, color = Color(0xFF0D47A1), style = Stroke(width = 3f))
+    }
 }
 
 @Composable

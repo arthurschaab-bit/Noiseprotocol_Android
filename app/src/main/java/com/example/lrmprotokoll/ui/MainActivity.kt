@@ -1,7 +1,6 @@
 package com.example.lrmprotokoll.ui
 
 import android.Manifest
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -46,7 +45,9 @@ import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
+import com.example.lrmprotokoll.messreihe.leiteDashboardAnzeigeAb
 import com.example.lrmprotokoll.report.ReportManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -174,7 +175,48 @@ fun NoiseProtocolApp(
         permissionLauncher.launch(permissionsToRequest.toTypedArray())
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    // M7c Aufgabe 3 (Bestandsaufnahme Verbesserungsvorschlag 3): erkennbare Struktur mit klar
+    // benannten Zielen statt verstreuter Text-/Icon-Buttons in der Kopfzeile - Diagnose war zuvor
+    // nur ueber ein Info-Icon ohne Text erreichbar (Befund 4, explizit zu beheben). Nur auf dem
+    // Home-Screen: die Zielscreens bleiben bei Zurueck-Pfeil + TopAppBar, kein globaler Umbau
+    // aller Screens noetig.
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {},
+                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    label = { Text("Start") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToMeter,
+                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                    label = { Text("Messgerät") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToProtokoll,
+                    icon = { Icon(Icons.Default.List, contentDescription = null) },
+                    label = { Text("Protokoll") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToDiagnose,
+                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                    label = { Text("Diagnose") },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToSettings,
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Einstellungen") },
+                )
+            }
+        }
+    ) { scaffoldPadding ->
+    Column(modifier = Modifier.padding(scaffoldPadding).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Lärmprotokoll", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             if (selectedIds.isNotEmpty()) {
@@ -185,20 +227,8 @@ fun NoiseProtocolApp(
                     Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error)
                 }
             }
-            TextButton(onClick = onNavigateToMeter) {
-                Text("Messgerät")
-            }
-            TextButton(onClick = onNavigateToProtokoll) {
-                Text("Protokoll")
-            }
-            IconButton(onClick = onNavigateToDiagnose) {
-                Icon(Icons.Default.Info, contentDescription = "Diagnose")
-            }
-            IconButton(onClick = onNavigateToSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
-            }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
 
         ServiceControl(context, hasPermissions)
@@ -384,6 +414,7 @@ fun NoiseProtocolApp(
             }
         }
     }
+    }
 
     if (showReferenceDialog != null) {
         AlertDialog(
@@ -466,9 +497,47 @@ fun NoiseProtocolApp(
     }
 }
 
+/**
+ * Live-Status-Dashboard (M7c Aufgabe 1, Bestandsaufnahme-Befund 4.1/Verbesserungsvorschlag 1):
+ * ersetzt den frueheren einmaligen ActivityManager.getRunningServices()-Poll durch echte,
+ * beobachtete Zustaende - [AudioRecordingService.laeuft] (StateFlow), den
+ * Messgeraet-Verbindungszustand und den Live-Pegel. Reine Anzeigelogik steht in
+ * [leiteDashboardAnzeigeAb] und ist dort ohne Emulator per JVM-Test geprueft; hier nur die
+ * Zusammensetzung der Quellen und die Live-Uhr fuer die Laufzeit.
+ */
 @Composable
 fun ServiceControl(context: Context, hasPermissions: Boolean) {
-    var isServiceRunning by remember { mutableStateOf(isServiceRunning(context)) }
+    val container = remember { (context.applicationContext as LaermprotokollApp).container }
+
+    val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
+    val verbindungszustand by container.connectionSupervisor.state.collectAsState()
+    val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
+    val geraetGepinnt = container.settingsManager.meterDeviceAddress != null
+
+    // Nicht live per Flow (SessionDao liefert keinen), aber bei jedem Verbindungswechsel neu
+    // geladen - eine Session beginnt/endet genau dann, wenn sich verbindungszustand aendert
+    // (MeasurementRecorder.onState), das haelt den Wert praktisch aktuell.
+    var sessionStartedAt by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(verbindungszustand, geraetGepinnt) {
+        sessionStartedAt = if (geraetGepinnt) container.database.sessionDao().offeneSession()?.startedAt else null
+    }
+
+    var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(sessionStartedAt) {
+        while (sessionStartedAt != null) {
+            jetzt = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+
+    val anzeige = leiteDashboardAnzeigeAb(
+        dienstAktiv = dienstAktiv,
+        geraetGepinnt = geraetGepinnt,
+        verbindungszustand = verbindungszustand,
+        sessionStartedAtMillis = sessionStartedAt,
+        jetztMillis = jetzt,
+        letzterPegel = letzterFrame?.level,
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -476,10 +545,10 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Monitoring Status:", style = MaterialTheme.typography.titleSmall)
+                Text("Überwachung:", style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.width(8.dp))
-                
-                if (isServiceRunning) {
+
+                if (anzeige.dienstAktiv) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -494,9 +563,20 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                     Text("Inaktiv", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            
+
+            if (anzeige.dienstAktiv) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(anzeige.betriebsartText, style = MaterialTheme.typography.bodyMedium)
+                anzeige.laufzeitText?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+                anzeige.pegelText?.let {
+                    Text(it, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
@@ -508,27 +588,25 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                             putExtra(EXTRA_START_AUDIO_MONITORING, true)
                         }
                         context.startForegroundService(intent)
-                        isServiceRunning = true
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !isServiceRunning,
+                    enabled = !anzeige.dienstAktiv,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                 ) {
                     Text("Aufnahme starten")
                 }
-                
+
                 Spacer(modifier = Modifier.width(8.dp))
-                
+
                 Button(
                     onClick = {
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
                             action = "STOP_SERVICE"
                         }
                         context.startService(intent)
-                        isServiceRunning = false
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = isServiceRunning,
+                    enabled = anzeige.dienstAktiv,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Aufnahme beenden")
@@ -602,13 +680,4 @@ fun NoiseRecordItem(
             }
         }
     }
-}
-
-fun isServiceRunning(context: Context): Boolean {
-    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    @Suppress("DEPRECATION")
-    for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-        if (AudioRecordingService::class.java.name == service.service.className) return true
-    }
-    return false
 }

@@ -26,6 +26,9 @@ import com.example.lrmprotokoll.meter.label
 import com.example.lrmprotokoll.messreihe.RetentionPlanung
 import java.time.Instant
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -43,6 +46,21 @@ private const val NOTIFICATION_CHANNEL_ID = "noise_monitoring_channel"
 const val EXTRA_START_AUDIO_MONITORING = "start_audio_monitoring"
 
 class AudioRecordingService : LifecycleService() {
+
+    companion object {
+        // M7c Aufgabe 1: Live-Status-Dashboard braucht einen echten, beobachtbaren "laeuft
+        // der Dienst"-Zustand statt des bisherigen einmaligen ActivityManager.getRunningServices()
+        // -Polls (Bestandsaufnahme-Befund 4.1/Verbesserungsvorschlag 1) - true, sobald der
+        // Foreground-Zustand steht (deckt sowohl reine Mikrofon- als auch Messgeraet-Ueberwachung
+        // ab), false nach explizitem Stop oder onDestroy.
+        private val _laeuft = MutableStateFlow(false)
+        val laeuft: StateFlow<Boolean> = _laeuft.asStateFlow()
+
+        /** Nur fuer Compose-UI-Tests, die den Servicestart nicht real ausloesen koennen (kein
+         * Mikrofon unter Robolectric) - internal statt private, damit das Testmodul zugreifen
+         * kann, ohne den Setter Teil der eigentlichen Produktions-API zu machen. */
+        internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
+    }
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -187,6 +205,7 @@ class AudioRecordingService : LifecycleService() {
             HeartbeatPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(applicationContext)
+            _laeuft.value = false
             stopSelf()
             return START_NOT_STICKY
         }
@@ -195,6 +214,7 @@ class AudioRecordingService : LifecycleService() {
             isForegroundActive = true
             startForegroundService()
             settingsManager.monitoringWasActive = true
+            _laeuft.value = true
         }
         if (!isRunning && intent?.getBooleanExtra(EXTRA_START_AUDIO_MONITORING, false) == true) {
             isRunning = true
@@ -485,6 +505,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onDestroy() {
         isRunning = false
+        _laeuft.value = false
         connectionSupervisor.stop()
         // Der Koordinator wird gestoppt, der Heartbeat aber NICHT: Er meldet "App und Gerät
         // leben" und ist gerade dann aussagekraeftig, wenn dieser Dienst nicht mehr laeuft. Er

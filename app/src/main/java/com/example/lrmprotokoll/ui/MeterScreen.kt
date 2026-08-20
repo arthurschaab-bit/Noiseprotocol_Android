@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -165,193 +166,203 @@ fun MeterScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(
+        // Ein einziges LazyColumn statt einer Column mit verschachteltem LazyColumn fuer die
+        // Geraeteliste (M7c Aufgabe 4, Bestandsaufnahme-Befund 4.2): dasselbe Muster wie
+        // ProtokollDetailScreen/DiagnoseScreen - item{} fuer den festen Kopfbereich, items() fuer
+        // die Geraeteliste. Ohne diese Absicherung koennen Verbindungszustand, Warnungen und die
+        // Live-Pegel-Karte zusammen mehr Platz beanspruchen als der Bildschirm hoch ist, ohne
+        // dass man zur Geraeteliste oder zum "Verbinden"-Button scrollen kann.
+        val sortierteGefundeneGeraete = foundDevices.values.sortedByDescending { it.rssi }
+        LazyColumn(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
-            val (icon, label, color) = connectionStateDisplay(connectionState)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = color)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(label, style = MaterialTheme.typography.titleMedium)
-            }
-
-            // Plan Abschnitt 6: createBond() fuehrte in der M0-Aufzeichnung zu einem sofortigen
-            // Disconnect (Pce323Profile.BONDING_SUPPORTED-KDoc) - ein erneuter Versuch wuerde die
-            // Verbindung nur wieder gefaehrden. Die Konsequenz aus dem Plan ist deshalb nicht ein
-            // Bonding-Versuch, sondern die ehrliche Kennzeichnung: Sicherheit vorzutaeuschen waere
-            // schlimmer als eine dokumentierte Luecke.
-            if (!Pce323Profile.BONDING_SUPPORTED) {
-                Spacer(modifier = Modifier.height(4.dp))
+            item {
+                val (icon, label, color) = connectionStateDisplay(connectionState)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.height(16.dp).width(16.dp),
-                    )
+                    Icon(icon, contentDescription = null, tint = color)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Unverschlüsselte Verbindung – dieses Gerät unterstützt kein Bonding",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            val frame = latestFrame
-            if (frame != null && connectionState == ConnectionState.STREAMING) {
-                // Die Annahme-Zuordnung darf den Pegel erst dann als "dB(A)"/"dB(C)"
-                // beschriften, wenn sie am Geraet bestaetigt ist (Review PR #15, Befund 1) -
-                // solange modeAssumptionConfirmed false ist, gilt weighting != null als
-                // "angenommen", nicht als gesichertes Wissen.
-                val confirmedWeighting = frame.weighting.takeIf { frame.modeAssumptionConfirmed }
-                Text(
-                    if (confirmedWeighting != null) {
-                        "${String.format("%.1f", frame.level)} dB(${weightingLabel(confirmedWeighting)})"
-                    } else {
-                        "${String.format("%.1f", frame.level)} dB"
-                    },
-                    style = MaterialTheme.typography.displayLarge
-                )
-                if (confirmedWeighting == null) {
-                    Text(
-                        "Frequenzbewertung unbekannt – kein bestätigtes dBA",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Text(label, style = MaterialTheme.typography.titleMedium)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            if (frame.modeAssumptionConfirmed) {
-                                "Bestätigt am Gerät"
-                            } else {
-                                "Annahme, unbestätigt – bitte gegen die Geräteanzeige prüfen"
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (frame.modeAssumptionConfirmed) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
+                // Plan Abschnitt 6: createBond() fuehrte in der M0-Aufzeichnung zu einem
+                // sofortigen Disconnect (Pce323Profile.BONDING_SUPPORTED-KDoc) - ein erneuter
+                // Versuch wuerde die Verbindung nur wieder gefaehrden. Die Konsequenz aus dem
+                // Plan ist deshalb nicht ein Bonding-Versuch, sondern die ehrliche
+                // Kennzeichnung: Sicherheit vorzutaeuschen waere schlimmer als eine
+                // dokumentierte Luecke.
+                if (!Pce323Profile.BONDING_SUPPORTED) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.height(16.dp).width(16.dp),
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Bewertung: ${weightingLabel(frame.weighting)}", style = MaterialTheme.typography.bodyMedium)
-                        Text("Zeitbewertung: ${timeWeightingLabel(frame.timeWeighting)}", style = MaterialTheme.typography.bodyMedium)
-                        Text("Messbereich: ${rangeLabel(frame.range)}", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Unverschlüsselte Verbindung – dieses Gerät unterstützt kein Bonding",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (pairedAddress != null) {
-                Text(
-                    "Gekoppelt: ${pairedName ?: "Unbekannt"} ($pairedAddress)",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { ensureConnected() },
-                    enabled = hasBluetoothPermissions
-                ) {
-                    Text("Verbinden")
-                }
                 Spacer(modifier = Modifier.height(16.dp))
-            }
 
-            Text("Neues Gerät koppeln", style = MaterialTheme.typography.titleSmall)
-            if (!hasBluetoothPermissions) {
-                Text(
-                    "Bluetooth-Berechtigung erforderlich",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    foundDevices.clear()
-                    isScanning = true
-                    scope.launch {
-                        val scanner = BleScanner(context)
-                        try {
-                            withTimeoutOrNull(SCAN_DURATION_MS) {
-                                scanner.scan().collect { device ->
-                                    if (!foundDevices.containsKey(device.address)) {
-                                        val befund = GeraetePinning.beurteile(
-                                            device.address, device.name, pairedAddress, pairedName,
-                                        )
-                                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
-                                            Log.w(
-                                                TAG,
-                                                "Advertiser ${device.address} traegt denselben Namen " +
-                                                    "wie das gepinnte Geraet ($pairedAddress), aber " +
-                                                    "eine andere Adresse - moeglicher Spoofing-Versuch",
-                                            )
-                                        }
-                                    }
-                                    foundDevices[device.address] = device
+                val frame = latestFrame
+                if (frame != null && connectionState == ConnectionState.STREAMING) {
+                    // Die Annahme-Zuordnung darf den Pegel erst dann als "dB(A)"/"dB(C)"
+                    // beschriften, wenn sie am Geraet bestaetigt ist (Review PR #15, Befund 1) -
+                    // solange modeAssumptionConfirmed false ist, gilt weighting != null als
+                    // "angenommen", nicht als gesichertes Wissen.
+                    val confirmedWeighting = frame.weighting.takeIf { frame.modeAssumptionConfirmed }
+                    Text(
+                        if (confirmedWeighting != null) {
+                            "${String.format("%.1f", frame.level)} dB(${weightingLabel(confirmedWeighting)})"
+                        } else {
+                            "${String.format("%.1f", frame.level)} dB"
+                        },
+                        style = MaterialTheme.typography.displayLarge
+                    )
+                    if (confirmedWeighting == null) {
+                        Text(
+                            "Frequenzbewertung unbekannt – kein bestätigtes dBA",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                if (frame.modeAssumptionConfirmed) {
+                                    "Bestätigt am Gerät"
+                                } else {
+                                    "Annahme, unbestätigt – bitte gegen die Geräteanzeige prüfen"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (frame.modeAssumptionConfirmed) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
                                 }
-                            }
-                        } finally {
-                            isScanning = false
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Bewertung: ${weightingLabel(frame.weighting)}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Zeitbewertung: ${timeWeightingLabel(frame.timeWeighting)}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Messbereich: ${rangeLabel(frame.range)}", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
-                },
-                enabled = hasBluetoothPermissions && !isScanning
-            ) {
-                Text(if (isScanning) "Suche läuft…" else "Scannen (10s)")
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (pairedAddress != null) {
+                    Text(
+                        "Gekoppelt: ${pairedName ?: "Unbekannt"} ($pairedAddress)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { ensureConnected() },
+                        enabled = hasBluetoothPermissions
+                    ) {
+                        Text("Verbinden")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Text("Neues Gerät koppeln", style = MaterialTheme.typography.titleSmall)
+                if (!hasBluetoothPermissions) {
+                    Text(
+                        "Bluetooth-Berechtigung erforderlich",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        foundDevices.clear()
+                        isScanning = true
+                        scope.launch {
+                            val scanner = BleScanner(context)
+                            try {
+                                withTimeoutOrNull(SCAN_DURATION_MS) {
+                                    scanner.scan().collect { device ->
+                                        if (!foundDevices.containsKey(device.address)) {
+                                            val befund = GeraetePinning.beurteile(
+                                                device.address, device.name, pairedAddress, pairedName,
+                                            )
+                                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                                                Log.w(
+                                                    TAG,
+                                                    "Advertiser ${device.address} traegt denselben Namen " +
+                                                        "wie das gepinnte Geraet ($pairedAddress), aber " +
+                                                        "eine andere Adresse - moeglicher Spoofing-Versuch",
+                                                )
+                                            }
+                                        }
+                                        foundDevices[device.address] = device
+                                    }
+                                }
+                            } finally {
+                                isScanning = false
+                            }
+                        }
+                    },
+                    enabled = hasBluetoothPermissions && !isScanning,
+                    modifier = Modifier.testTag(SCAN_BUTTON_TAG),
+                ) {
+                    Text(if (isScanning) "Suche läuft…" else "Scannen (10s)")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(foundDevices.values.sortedByDescending { it.rssi }) { device ->
-                    val befund = GeraetePinning.beurteile(device.address, device.name, pairedAddress, pairedName)
-                    Card(
-                        onClick = {
-                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
-                                verdaechtigesGeraet = device
-                            } else {
-                                pinne(device)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(device.name ?: "(ohne Namen)", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                "${device.address} · ${device.rssi} dBm",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.height(16.dp).width(16.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Gleicher Name wie das gekoppelte Gerät, andere Adresse",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
+            itemsIndexed(sortierteGefundeneGeraete) { index, device ->
+                val befund = GeraetePinning.beurteile(device.address, device.name, pairedAddress, pairedName)
+                Card(
+                    onClick = {
+                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                            verdaechtigesGeraet = device
+                        } else {
+                            pinne(device)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .let { if (index == sortierteGefundeneGeraete.lastIndex) it.testTag(GERAETE_LISTE_ENDE_TAG) else it },
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(device.name ?: "(ohne Namen)", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${device.address} · ${device.rssi} dBm",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.height(16.dp).width(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Gleicher Name wie das gekoppelte Gerät, andere Adresse",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
                             }
                         }
                     }
@@ -360,6 +371,14 @@ fun MeterScreen(onBack: () -> Unit) {
         }
     }
 }
+
+/** Fuer den Compose-Regressionstest (M7c Aufgabe 4): markiert die letzte Zeile der
+ * Geraeteliste, damit ein Test pruefen kann, dass sie per Scroll erreichbar ist. */
+const val GERAETE_LISTE_ENDE_TAG = "meter_geraete_liste_ende"
+
+/** Fuer denselben Regressionstest: markiert den Scan-Button am Ende des festen Kopfbereichs,
+ * erreichbar unabhaengig davon, ob die Geraeteliste gerade Eintraege enthaelt. */
+const val SCAN_BUTTON_TAG = "meter_scan_button"
 
 /**
  * Beschriftungen fuer die drei Annahme-Werte aus [Pce323Profile] (Bereich/Fast-Slow/A-C) - ein

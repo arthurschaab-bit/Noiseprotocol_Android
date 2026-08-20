@@ -26,10 +26,12 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
 | **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen, Gerätetest offen |
-| **Gerätetest** M2, M3, M4, M5, M6, M7 + M7b am realen Gerät | ⬜ **als Nächstes** |
+| **M7c** UI-Überarbeitung (Live-Dashboard, Navigationsstruktur, Pegelverlauf-Chart) | ✅ abgeschlossen, Gerätetest offen |
+| **Gerätetest** M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät | ⬜ **als Nächstes** |
 
 **Gesamtfortschritt Bluetooth-Vorhaben: 10 von 10 Meilensteinen.** (M8 Härtung ist im Plan
-zusätzlich vorgesehen, siehe „Nächste Schritte".)
+zusätzlich vorgesehen, M7c war eine zusätzliche, nicht im ursprünglichen Plan gezählte
+UI-Überarbeitung nach dem ersten Gerätetest, siehe „Nächste Schritte".)
 
 ---
 
@@ -108,6 +110,19 @@ aus dem SDK, kein neuer Dependency), geteilt über denselben FileProvider-Weg wi
 Tagesbericht. Einstellungen waren bereits konsolidiert (durchgängig betitelte Abschnitte) —
 keine Änderung nötig.
 
+**Aus M7c:** Nach Rückmeldung aus dem ersten Gerätetest überarbeitet — vier Befunde aus
+[`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) behoben. Der Home-Screen zeigt jetzt
+ein Live-Status-Dashboard (`AudioRecordingService.laeuft` als `StateFlow` statt einmaligem
+`ActivityManager`-Snapshot): läuft die Überwachung gerade, über Mikrofon oder Messgerät, seit
+wann, mit welchem letzten Pegel. Diagnose-Log und Drive-Sync-Historie im Diagnose-Screen
+aktualisieren sich live (`Flow` statt einmaligem Laden). Die Navigation ist auf eine durchgängig
+beschriftete `NavigationBar` mit fünf Zielen konsolidiert, `MeterScreen` verliert sein
+Scroll-Risiko (echte `LazyColumn` statt `Column` mit fester Höhe). Neu in der Protokollansicht:
+ein **Pegelverlauf-Chart** je Session (`messreihe/ChartDaten.kt`, `PegelChart` in
+`ProtokollDetailScreen`) — Min/Max-Band mit energetischer Mittelwertlinie (LAeq) über Zeitfenster,
+Verbindungsausfälle als rote Fläche darüber; deckt sowohl Rohwerte als auch bereits vom
+Retention-Job verdichtete Minutenaggregate ab.
+
 ### Nicht vorhanden
 
 Nichts mehr aus dem ursprünglichen Plan-Umfang (M-1 bis M7 sowie M7b) — offen sind nur noch der
@@ -135,7 +150,7 @@ Gerätetest (siehe unten) und M8 (Härtung, Plan Abschnitt 12).
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
-| **Gerätetest** | M2, M3, M4, M5, M6, M7 + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M8 | Härtung (Plan Abschnitt 12) | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -203,8 +218,12 @@ Abhängigkeits-Stil des Projekts.
   closed!`, reproduzierbar auch isoliert — ein verifiziertes Robolectric-Limit, keine Aussage
   über die Korrektheit von `MessreiheExport.exportierePdf`. Nur durch `assembleDebug` verifiziert,
   Inhalt und Layout müssen am echten Gerät geprüft werden (siehe `docs/PROMPT_M7.md`).
-- **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) sind mangels Emulator in dieser
-  Entwicklungsumgebung nur kompiliert, nicht visuell geprüft.**
+- **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) und M7c (Live-Dashboard,
+  NavigationBar, Pegelverlauf-Chart) sind mangels Emulator in dieser Entwicklungsumgebung nicht
+  visuell geprüft** — wohl aber durch echte Compose-UI-Tests unter Robolectric gegen die
+  produktiven Screen-Funktionen mit vollem `AppContainer` (nicht nur kompiliert). Die konkrete
+  Optik (Icon-Wahl für „Messgerät"/„Protokoll" in der `NavigationBar`, Chart-Farben/-Proportionen)
+  bleibt eine visuelle Entscheidung für eine Emulator-Session.
 
 ---
 
@@ -250,7 +269,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M6.md`](docs/PROMPT_M6.md) | Auftrag für M6 (erledigt) — Bonding-Kennzeichnung, Geräte-Pinning, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log |
 | [`docs/PROMPT_M7.md`](docs/PROMPT_M7.md) | Auftrag für M7 (erledigt) — Protokollansicht, Diagnose-Screen, CSV/PDF-Export |
 | [`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) | Bestandsaufnahme der App-UI nach dem ersten Gerätetest — Screen-Inventar, Live-Status-Lücken, fehlende Chart-Infrastruktur, Verbesserungsvorschläge |
-| [`docs/PROMPT_M7C.md`](docs/PROMPT_M7C.md) | Auftrag für M7c (offen) — Live-Status-Dashboard, Aufzeichnungs-Chart, Navigationsstruktur, Scroll-Fix `MeterScreen` |
+| [`docs/PROMPT_M7C.md`](docs/PROMPT_M7C.md) | Auftrag für M7c (erledigt) — Live-Status-Dashboard, Aufzeichnungs-Chart, Navigationsstruktur, Scroll-Fix `MeterScreen` |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
