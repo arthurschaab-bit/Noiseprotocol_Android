@@ -47,7 +47,13 @@ class DriveSyncCoordinator(
         val ordnerId = settings.driveFolderId ?: return SyncErgebnis.KeinOrdnerEingerichtet
 
         val jetzt = now.now()
-        val heute = LocalDate.now(zone)
+        // LocalDate.ofInstant(jetzt, zone) statt LocalDate.now(zone): "heute" muss aus derselben
+        // injizierten Uhr wie "jetzt" kommen, sonst kann "von" (Tagesbeginn nach der echten
+        // Systemuhr) nach "jetzt" (fixe Testuhr) liegen, sobald das echte Kalenderdatum den in
+        // einem Test fest verdrahteten Zeitpunkt ueberholt hat - ein "bis darf nicht vor von
+        // liegen" in PegelAggregator.aggregiere(), das rein vom aktuellen Tagesdatum abhaengt,
+        // nicht vom Testinhalt.
+        val heute = LocalDate.ofInstant(jetzt, zone)
         val von = heute.atStartOfDay(zone).toInstant()
         val datumSchluessel = heute.toString()
 

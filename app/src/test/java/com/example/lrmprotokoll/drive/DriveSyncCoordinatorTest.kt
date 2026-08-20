@@ -228,6 +228,25 @@ class DriveSyncCoordinatorTest {
         assertTrue(zweitesErgebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
     }
 
+    /**
+     * Regressionstest fuer eine "Zeitbombe": [DriveSyncCoordinator.syncEinenZyklus] leitete
+     * "heute" frueher per `LocalDate.now(zone)` aus der ECHTEN Systemuhr ab, obwohl "jetzt" aus
+     * der injizierten [TestUhr] kam. Das lief nur solange gut, wie das echte Kalenderdatum noch
+     * nicht ueber das fixe Testuhr-Datum hinaus war - real am 2026-08-20 eingetreten und in 11
+     * Tests fehlgeschlagen ("bis darf nicht vor von liegen" in [PegelAggregator.aggregiere]).
+     * Hier absichtlich acht Jahre Abstand, damit der Test unabhaengig vom tatsaechlichen
+     * Aufrufdatum stabil bleibt.
+     */
+    @Test
+    fun syncFunktioniertAuchWennDasEchteKalenderdatumWeitVonDerTestuhrAbweicht() = runTest {
+        uhr = TestUhr(Instant.parse("2018-01-01T07:00:00Z"))
+        fuegeSampleHinzu(0, 55.0)
+
+        val ergebnis = baueKoordinator().syncEinenZyklus()
+
+        assertTrue(ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+    }
+
     @Test
     fun waiseAusVorherigemAbgebrochenemZyklusWirdGefundenStattDoppeltAngelegt() = runTest {
         // Simuliert: ein frueherer Zyklus hat dateiAnlegen serverseitig abgeschlossen, aber die

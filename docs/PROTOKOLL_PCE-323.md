@@ -205,8 +205,40 @@ tieffrequenten Quelle (Brummen, tiefer Ton, Rauschen) muss der angezeigte Pegel 
 auf C spürbar **steigen**. Steigt der Pegel genau dann, wenn das Byte auf `0x2D` wechselt, ist
 `0x2D`→C bewiesen statt vermutet — unabhängig davon, ob der Ausgangszustand wirklich A war.
 
-Der Code (`Pce323Profile.kt`, `Pce323FrameDecoder.kt`) setzt seit dieser Aufzeichnung eine
-konkrete Annahme für die Werte-Zuordnung um (0x00→30–130 dB, 0x0F→Fast, 0x2C→A, jeweils naheliegendste Deutung des Ausgangszustands) und markiert sie in der App
+Der Code (`Pce323Profile.kt`, `Pce323FrameDecoder.kt`) setzte seit dieser Aufzeichnung eine
+konkrete Annahme für die Werte-Zuordnung um (0x00→30–130 dB, 0x0F→Fast, 0x2C→A, jeweils naheliegendste Deutung des Ausgangszustands) und markierte sie in der App
 (`MeterScreen`) ausdrücklich als unbestätigt, damit sie am realen Gerät gegengeprüft werden
-kann. Bis eine Rückmeldung vom Owner vorliegt, gilt sie **nicht** als gesichert — insbesondere
-darf der Pegel weiterhin nirgends als „dBA" beschriftet werden.
+kann.
+
+## 10. Gerätetest des Owners (2026-08-20): Fast/Slow und A/C bestätigt, Messbereich korrigiert
+
+Erster Test der App mit dem realen PCE-323 im Alltag (kein isolierter Umschalt-Log wie in
+Abschnitt 9, sondern laufender Vergleich App-Anzeige gegen Geräte-Display). Ergebnis:
+
+- **dB(A), dB(C), Fast, Slow und der reine dB-Messwert** stimmten in der Live-Anzeige exakt mit
+  der Geräteanzeige überein — die Annahmen `0x0F→Fast`/`0x10→Slow` und `0x2C→A`/`0x2D→C` aus
+  Abschnitt 9 sind damit **bestätigt**.
+- **Messbereich war falsch:** Der Rundlauf der vier Werte existierte wie erwartet, aber die
+  Zuordnung war um zwei Positionen verschoben:
+
+  | Byte (`RANGE_BYTE_OFFSET`) | zeigte die App | tatsächlicher Gerätebereich |
+  |---|---|---|
+  | (vormals `RANGE_VALUE_30_130` = `0x00`) | 30–130 dB | 50–100 dB |
+  | (vormals `RANGE_VALUE_30_80` = `0x01`) | 30–80 dB | 80–130 dB |
+  | (vormals `RANGE_VALUE_50_100` = `0x02`) | 50–100 dB | 30–130 dB |
+  | (vormals `RANGE_VALUE_80_130` = `0x03`) | 80–130 dB | 30–80 dB |
+
+  In `Pce323Profile.kt` korrigiert: `RANGE_VALUE_50_100=0x00`, `RANGE_VALUE_80_130=0x01`,
+  `RANGE_VALUE_30_130=0x02`, `RANGE_VALUE_30_80=0x03`. Der Rundlauf selbst (Byte-Positionen,
+  vier Werte) war also korrekt erkannt — nur die Label-Zuordnung innerhalb des Rundlaufs war
+  falsch, vermutlich weil der Ausgangszustand in der M0-Aufzeichnung (Abschnitt 9) fälschlich
+  als „kleinster/größter Standardbereich" statt anhand des tatsächlich am Gerät sichtbaren
+  Displays interpretiert wurde.
+
+Mit dieser Bestätigung kann `Pce323Profile.MODE_ASSUMPTION_CONFIRMED` auf `true` gesetzt werden
+— das ist eine bewusste Owner-Entscheidung (Plan §13-Charakter, einziger Schalter für
+`weighting`/`timeWeighting`/`range` gemeinsam) und wird separat abgefragt, bevor sie im Code
+umgesetzt wird.
+
+Weiterhin ungetestet: **Hold** (siehe Abschnitt 9) sowie B1 (Verfälscht die Funkverbindung die
+Messung? — Checkliste `docs/CHECKLISTE_GERAETETEST.md` Teil B1).
