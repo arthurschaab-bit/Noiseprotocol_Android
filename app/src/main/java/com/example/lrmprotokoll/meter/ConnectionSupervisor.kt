@@ -85,6 +85,13 @@ class ConnectionSupervisor(
      * gesetzt, muss die Zeit zwischen zwei Frames innerhalb von ±[cadenceTolerance] liegen -
      * wiederholte Abweichung (Framing/Kadenz eines untergeschobenen Geraets liesse sich kaum
      * exakt nachbilden) trennt die Verbindung wie ein Datenstillstand.
+     *
+     * ⚠ Der Default hier (0.2) ist bewusst NICHT der Produktionswert - AppContainer setzt ihn
+     * explizit hoeher (Owner-Entscheidung nach Geraetetest, siehe Diagnose-Log: reale Deltas
+     * schwankten zwischen ~180ms und ~630ms um die erwarteten 515ms, deutlich mehr als ±20%
+     * Jitter, und loesten dadurch fast bei jedem Reconnect faelschlich DEGRADED aus). Bestehende
+     * Tests pruefen weiterhin explizit gegen diesen 0.2-Default, deshalb bleibt er hier
+     * unveraendert.
      */
     private val expectedFramePeriod: Duration? = null,
     private val cadenceTolerance: Double = 0.2,
