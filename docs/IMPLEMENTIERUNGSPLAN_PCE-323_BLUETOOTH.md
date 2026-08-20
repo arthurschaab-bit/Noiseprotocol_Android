@@ -1216,8 +1216,12 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 
 **Neu hinzugekommen bei der Umsetzung:** Google Sign-In braucht eine echte OAuth-Client-ID aus
 der Google Cloud Console, die kein Agent selbst anlegen kann (braucht Browser-Zugriff auf ein
-Google-Konto). Entschieden: Code vollständig fertig, Client-ID bleibt ein dokumentierter
-Platzhalter (`GoogleClientConfig.SERVER_CLIENT_ID`) bis der Owner sie selbst einrichtet.
+Google-Konto). Der Owner hat sie inzwischen eingerichtet und eingetragen
+(`GoogleClientConfig.SERVER_CLIENT_ID`) - damit für die Android-Client-ID (zweite, separate
+Client-ID vom Typ „Android", nicht im Code) ein über alle Baumaschinen stabiler SHA-1-
+Fingerabdruck registriert werden kann, ist der Debug-Signierschlüssel jetzt als
+`app/debug.keystore` fest eingecheckt statt pro Maschine zufällig neu erzeugt zu werden (siehe
+`app/build.gradle.kts`, `signingConfigs.debug`).
 
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
