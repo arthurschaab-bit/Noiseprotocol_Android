@@ -124,6 +124,10 @@ dependencies {
     // Prueft den ntfy-Versand gegen einen echten HTTP-Server statt gegen einen Fake-Client:
     // Nur so ist belegt, dass Pfad, Header und Rumpf tatsaechlich so rausgehen wie gedacht.
     testImplementation(libs.okhttp.mockwebserver)
+    // Spike (Owner-Auftrag nach dem SettingsScreen-Scroll-Bug): Compose-UI-Tests unter
+    // Robolectric statt androidTest, damit sie ohne Emulator in derselben JVM-Testsuite laufen.
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
