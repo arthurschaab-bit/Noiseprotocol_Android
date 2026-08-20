@@ -28,6 +28,11 @@ import org.robolectric.annotation.GraphicsMode
  * allein drainiert diese nicht zuverlässig (dasselbe Timing-Problem wie bei
  * DiagnoseScreenComposeTest, dort mit Room-Flow-Invalidierung statt hier mit dem initialen
  * Laden). waitUntil pollt, bis "geladen" tatsächlich true geworden ist.
+ *
+ * timeoutMillis = 15_000 statt der ursprünglichen 5_000: auf einem voll ausgelasteten
+ * CI-Runner (voller ./gradlew test-Lauf, ~300 Tests) reichten 5 s nicht immer aus und der Test
+ * schlug mit ComposeTimeoutException fehl, obwohl er lokal zuverlässig grün lief - kein
+ * Logikfehler, sondern ein zu knapp bemessenes Zeitbudget für den langsamsten realistischen Fall.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -50,7 +55,7 @@ class ProtokollDetailScreenComposeTest {
         }
 
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -78,7 +83,7 @@ class ProtokollDetailScreenComposeTest {
         }
 
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
         }
 
