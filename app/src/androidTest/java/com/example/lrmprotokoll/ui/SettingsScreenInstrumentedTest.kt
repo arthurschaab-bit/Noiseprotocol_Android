@@ -72,7 +72,7 @@ class SettingsScreenInstrumentedTest {
 
         // 2. Abtastrate-Chips prüfen (nach Scrollen)
         composeRule.onNodeWithText("16000 Hz (KI Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
-        composeRule.onNodeWithText("44100 Hz (Standard)", substring = true).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("44100 Hz (Qualität)", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
         // 3. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
         composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()
