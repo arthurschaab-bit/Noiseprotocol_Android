@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -579,6 +580,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Text("Akku-Optimierung deaktivieren")
                 }
             }
+
+            // Fuer den Compose-Regressionstest (M7c Aufgabe 4): unbedingt am Bildschirmende
+            // vorhanden, unabhaengig vom batteryOptimizationIgnored-Zweig oben. fillMaxWidth()
+            // noetig, sonst hat der Spacer Breite 0 und assertIsDisplayed() haelt ihn faelschlich
+            // fuer nicht sichtbar.
+            Spacer(modifier = Modifier.fillMaxWidth().height(8.dp).testTag(BILDSCHIRM_ENDE_TAG))
         }
     }
 }
+
+const val BILDSCHIRM_ENDE_TAG = "settings_bildschirm_ende"
