@@ -101,17 +101,22 @@ Owners, hier nicht vorwegnehmen. Keine neue Chart-Bibliothek als Dependency ohne
 beim Owner — Canvas reicht laut Bestandsaufnahme für den Umfang. Keine Änderung an
 Onboarding-/Kopplungs-Screens. Kein Bluetooth-Protokoll-Code.
 
-REGRESSIONSTEST FÜR DAS SCROLL-MUSTER (siehe auch die CI-Diskussion mit dem Owner)
+REGRESSIONSTEST FÜR DAS SCROLL-MUSTER
 Mindestens ein Compose-UI-Test unter Robolectric, der das genau in Aufgabe 4 behobene
 Strukturproblem als Regression absichert: Screen in einem festen, kleinen Viewport rendern
-(@Config(qualifiers = "w360dp-h640dp") o. ä.) und prüfen, dass ein Element weit unten im Inhalt
-(z. B. der letzte Eintrag der Geräteliste oder ein testTag am Bildschirmende) erreichbar bzw.
-sichtbar ist. Dafür fehlen aktuell die Compose-Test-Dependencies (androidx.compose.ui:
-ui-test-junit4 u. a.) im Projekt — vor dem produktiven Einsatz mit einem einzelnen Test
-verifizieren, dass Compose-Tests unter der hier verwendeten Robolectric-Version (4.16.1)
-tatsächlich sauber laufen (das Projekt hat mit AndroidKeyStore und PdfDocument bereits zwei
-echte Robolectric-Lücken erlebt, siehe M6/M7-Retrospektiven — nicht blind annehmen, dass es
-hier funktioniert).
+und prüfen, dass ein Element weit unten im Inhalt (z. B. der letzte Eintrag der Geräteliste
+oder ein testTag am Bildschirmende) per performScrollTo().assertIsDisplayed() erreichbar ist.
+
+Die Machbarkeit ist bereits geklärt, nicht mehr offen: PR #29 (test/compose-ui-robolectric-
+spike, Branch test/compose-ui-robolectric-spike) hat mit einem generischen Beispiel belegt,
+dass Compose-UI-Tests unter der hier verwendeten Robolectric-Version (4.16.1) sauber laufen —
+inklusive des wichtigen Befunds, dass assertIsDisplayed() allein NICHT automatisch scrollt und
+performScrollTo() davor stehen muss. Dependencies (androidx.compose.ui:ui-test-junit4 als
+testImplementation, androidx.compose.ui:ui-test-manifest als debugImplementation) sind dort
+bereits eingeführt, nach dem Mergen von PR #29 in dieser Session einfach weiterverwenden statt
+neu einzurichten. Offen ist nur noch, ob ein Test gegen eine ECHTE, produktive Screen-Funktion
+(mit vollem AppContainer statt des trivialen Spike-Beispiels) genauso sauber läuft — das war
+bewusst nicht Teil des Spikes und ist hier zum ersten Mal zu klären.
 
 TESTS
 - Aufgabe 1 (Dashboard): Logik (welcher Text/Zustand bei welchem ConnectionState/welcher
