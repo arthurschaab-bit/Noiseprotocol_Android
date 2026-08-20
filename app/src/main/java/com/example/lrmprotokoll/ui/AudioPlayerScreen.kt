@@ -4,19 +4,48 @@ import android.media.MediaPlayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
+val PauseIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Pause",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 19f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(5f)
+            horizontalLineTo(6f)
+            verticalLineToRelative(14f)
+            close()
+            moveTo(14f, 5f)
+            verticalLineToRelative(14f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(5f)
+            horizontalLineToRelative(-4f)
+            close()
+        }
+    }.build()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,28 +54,58 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
     val amplitudes = remember(filePath) { loadAmplitudes(file) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentProgress by remember { mutableFloatStateOf(0f) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     
     val mediaPlayer = remember { MediaPlayer() }
     
     DisposableEffect(filePath) {
-        mediaPlayer.setDataSource(filePath)
-        mediaPlayer.prepare()
+        var initialized = false
+        try {
+            if (!file.exists()) {
+                loadError = "Audiodatei existiert nicht mehr."
+            } else if (file.length() < 44) {
+                loadError = "Audiodatei ist beschädigt (zu kurz)."
+            } else {
+                mediaPlayer.setDataSource(filePath)
+                mediaPlayer.prepare()
+                initialized = true
+            }
+        } catch (e: Exception) {
+            loadError = "Audiodatei konnte nicht geladen werden: ${e.message ?: e.javaClass.simpleName}"
+        }
         onDispose {
-            mediaPlayer.release()
+            if (initialized) {
+                try {
+                    mediaPlayer.release()
+                } catch (_: Exception) {}
+            }
         }
     }
 
     LaunchedEffect(isPlaying) {
-        if (isPlaying) {
-            mediaPlayer.start()
-            while (mediaPlayer.isPlaying) {
-                currentProgress = mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration
-                delay(50)
-            }
+        if (loadError != null) {
             isPlaying = false
-            currentProgress = 1f
+            return@LaunchedEffect
+        }
+        if (isPlaying) {
+            try {
+                mediaPlayer.start()
+                while (mediaPlayer.isPlaying) {
+                    val duration = mediaPlayer.duration
+                    if (duration > 0) {
+                        currentProgress = (mediaPlayer.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
+                    }
+                    delay(50)
+                }
+                isPlaying = false
+                currentProgress = 1f
+            } catch (_: Exception) {
+                isPlaying = false
+            }
         } else {
-            if (mediaPlayer.isPlaying) mediaPlayer.pause()
+            try {
+                if (mediaPlayer.isPlaying) mediaPlayer.pause()
+            } catch (_: Exception) {}
         }
     }
 
@@ -56,7 +115,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
                 title = { Text("Aufnahme abspielen") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 }
             )
@@ -71,33 +130,68 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
         ) {
             Text(file.name, style = MaterialTheme.typography.bodyLarge)
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // Wellenform-Anzeige
-            WaveformDisplay(
-                amplitudes = amplitudes,
-                progress = currentProgress,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            IconButton(
-                onClick = { 
-                    if (currentProgress >= 0.99f) {
-                        mediaPlayer.seekTo(0)
-                        currentProgress = 0f
+
+            val error = loadError
+            if (error != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Fehler",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onBack,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Zurück")
+                        }
                     }
-                    isPlaying = !isPlaying 
-                },
-                modifier = Modifier.size(64.dp)
-            ) {
-                Icon(
-                    if (isPlaying) Icons.Default.PlayArrow else Icons.Default.PlayArrow, // TODO: Add Pause Icon
-                    contentDescription = if (isPlaying) "Pause" else "Abspielen",
-                    modifier = Modifier.size(48.dp)
+                }
+            } else {
+                // Wellenform-Anzeige
+                WaveformDisplay(
+                    amplitudes = amplitudes,
+                    progress = currentProgress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
                 )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                IconButton(
+                    onClick = { 
+                        if (currentProgress >= 0.99f) {
+                            try {
+                                mediaPlayer.seekTo(0)
+                            } catch (_: Exception) {}
+                            currentProgress = 0f
+                        }
+                        isPlaying = !isPlaying 
+                    },
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) PauseIcon else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Abspielen",
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
             }
         }
     }
