@@ -20,8 +20,8 @@ import java.util.Locale
  */
 object MessreiheCsv {
 
-    private const val KOPFZEILE_MESSWERTE = "Zeit;Pegel_dB;Bewertung;Flags"
-    private const val KOPFZEILE_AGGREGATE = "Minute;LAeq_dB;Max_dB;Min_dB;Samples;Bewertung"
+    private const val KOPFZEILE_MESSWERTE = "Zeit;Pegel_dB;Bewertung;Zeitbewertung;Bereich;Flags"
+    private const val KOPFZEILE_AGGREGATE = "Minute;LAeq_dB;Max_dB;Min_dB;Samples;Bewertung;Zeitbewertung;Bereich"
     private val ZEITFORMAT: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
     fun ausMesswerten(messwerte: List<MeasurementEntity>, zone: ZoneId = ZoneId.systemDefault()): String {
@@ -33,6 +33,8 @@ object MessreiheCsv {
                 ZEITFORMAT.format(Instant.ofEpochMilli(messwert.timestamp).atZone(zone)),
                 formatiereDezimalkomma(messwert.levelDb),
                 messwert.weighting.orEmpty(),
+                messwert.timeWeighting.orEmpty(),
+                messwert.range.orEmpty(),
                 messwert.flags.toString(),
             )
             sb.append(spalten.joinToString(";")).append("\r\n")
@@ -52,6 +54,8 @@ object MessreiheCsv {
                 formatiereDezimalkomma(aggregat.minDb),
                 aggregat.sampleCount.toString(),
                 aggregat.weighting.orEmpty(),
+                aggregat.timeWeighting.orEmpty(),
+                aggregat.range.orEmpty(),
             )
             sb.append(spalten.joinToString(";")).append("\r\n")
         }

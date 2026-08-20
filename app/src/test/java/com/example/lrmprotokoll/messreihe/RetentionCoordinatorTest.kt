@@ -137,6 +137,36 @@ class RetentionCoordinatorTest {
         )
     }
 
+    @Test
+    fun einheitlicheZeitbewertungUndBereichBleibenImAggregatErhalten() = runTest {
+        val basis = messwert(alterTage = 91, sekundeInnerhalbDerMinute = 0, level = 50.0)
+        measurementDao.zeilen += basis.copy(timeWeighting = "FAST", range = "RANGE_30_130")
+        measurementDao.zeilen += basis.copy(
+            timestamp = basis.timestamp + 1000, timeWeighting = "FAST", range = "RANGE_30_130",
+        )
+
+        koordinator().verdichte()
+
+        val aggregat = minuteAggregateDao.geschrieben.single()
+        assertEquals("FAST", aggregat.timeWeighting)
+        assertEquals("RANGE_30_130", aggregat.range)
+    }
+
+    @Test
+    fun gemischteZeitbewertungUndBereichInnerhalbEinerMinuteWerdenNichtAlsEinzelwertVorgetaeuscht() = runTest {
+        val basis = messwert(alterTage = 91, sekundeInnerhalbDerMinute = 0, level = 50.0)
+        measurementDao.zeilen += basis.copy(timeWeighting = "FAST", range = "RANGE_30_130")
+        measurementDao.zeilen += basis.copy(
+            timestamp = basis.timestamp + 1000, timeWeighting = "SLOW", range = "RANGE_50_100",
+        )
+
+        koordinator().verdichte()
+
+        val aggregat = minuteAggregateDao.geschrieben.single()
+        assertNull("Gemischte Zeitbewertung darf nicht als ein Wert erscheinen", aggregat.timeWeighting)
+        assertNull("Gemischter Bereich darf nicht als ein Wert erscheinen", aggregat.range)
+    }
+
     /**
      * Der Endzustand allein beweist die Reihenfolge nicht - bei einem Fake ohne simulierten
      * Abbruch sehen "erst schreiben, dann loeschen" und "erst loeschen, dann schreiben" am Ende
