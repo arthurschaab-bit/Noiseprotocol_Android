@@ -1,5 +1,8 @@
 package com.example.lrmprotokoll.meter
 
+import com.example.lrmprotokoll.data.DiagnosticLogDao
+import com.example.lrmprotokoll.data.DiagnosticLogEntity
+import com.example.lrmprotokoll.diagnose.DiagnosticLogger
 import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
@@ -63,6 +66,13 @@ class ConnectionSupervisorTest {
     private fun TestScope.newTransport(frameRateHz: Double = 2.0): FakeMeterTransport =
         FakeMeterTransport(scope = backgroundScope, frameRateHz = frameRateHz)
 
+    private class FakeDiagnosticLogDao : DiagnosticLogDao {
+        val zeilen = mutableListOf<DiagnosticLogEntity>()
+        override suspend fun insert(eintrag: DiagnosticLogEntity) { zeilen += eintrag }
+        override suspend fun alle() = zeilen.sortedByDescending { it.timestamp }
+        override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
+    }
+
     private fun TestScope.newSupervisor(
         transport: MeterTransport,
         adapterEnabled: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
@@ -72,6 +82,7 @@ class ConnectionSupervisorTest {
         minStableSession: Duration = Duration.ofSeconds(5),
         random: Random = Random(1),
         expectedFramePeriod: Duration? = null,
+        diagnosticLogger: DiagnosticLogger? = null,
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -85,6 +96,7 @@ class ConnectionSupervisorTest {
             maxAttempts = maxAttempts,
             minStableSession = minStableSession,
             expectedFramePeriod = expectedFramePeriod,
+            diagnosticLogger = diagnosticLogger,
         )
     }
 
@@ -446,5 +458,122 @@ class ConnectionSupervisorTest {
             states.contains(ConnectionState.DEGRADED)
         )
         assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+    }
+
+    /**
+     * Owner-Auftrag: "mehr Debuginformationen ... bzgl der Bluetooth Verbindungs Robustheit".
+     * Bislang protokollierte [com.example.lrmprotokoll.diagnose.DiagnosticLogger] nur DEGRADED-
+     * Ursachen und Verbindungsversuche, die mit einer Exception scheiterten - der komplette
+     * restliche Lebenszyklus (erfolgreicher Verbindungsaufbau, Reconnect-Versuche mit Backoff,
+     * endgueltiger Fehlschlag, Wiederherstellung, Adapter-Pause) blieb unsichtbar, obwohl
+     * [ConnectionSupervisor] all das bereits selbst weiss.
+     */
+    @Test
+    fun erfolgreicherVerbindungsaufbauWirdProtokolliert() = runTest {
+        val transport = newTransport()
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
+        val supervisor = newSupervisor(transport, diagnosticLogger = logger)
+
+        supervisor.start(device)
+        runCurrent()
+
+        assertTrue(
+            "Erwartete einen Log-Eintrag zum erfolgreichen Verbindungsaufbau, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Verbunden, Streaming gestartet") },
+        )
+    }
+
+    @Test
+    fun reconnectVersucheMitBackoffWerdenProtokolliert() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
+        val supervisor = newSupervisor(
+            transport, staleAfter = Duration.ofMillis(1), random = zeroJitterRandom, diagnosticLogger = logger,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(1_100) // deckt den ersten Backoff-Schritt (1s) ab
+        runCurrent()
+
+        assertTrue(
+            "Erwartete einen Reconnect-Log-Eintrag mit Backoff-Angabe, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Reconnect-Versuch 1") && it.message.contains("Backoff") },
+        )
+    }
+
+    @Test
+    fun endgueltigerFehlschlagWirdProtokolliert() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
+        val supervisor = newSupervisor(
+            transport, staleAfter = Duration.ofMillis(1), maxAttempts = 3,
+            random = zeroJitterRandom, diagnosticLogger = logger,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000) // deckt die 2 Luecken (1s, 2s) ab, siehe nachErschoepftenVersuchenWirdFailedGemeldet
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertTrue(
+            "Erwartete einen Log-Eintrag zum endgueltigen Fehlschlag, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("endgueltig fehlgeschlagen nach 3 Versuchen") },
+        )
+    }
+
+    @Test
+    fun wiederherstellungNachFehlversuchWirdProtokolliert() = runTest {
+        // simulateConnectException(true) laesst throwOnConnect gesetzt, bis es wieder auf false
+        // geschaltet wird (siehe FakeMeterTransport) - hier bewusst nur fuer den ersten Versuch
+        // aktiv, um eine kurze Funkstoerung zu simulieren, die sich von selbst erholt.
+        val transport = newTransport()
+        transport.simulateConnectException(true)
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
+        val supervisor = newSupervisor(transport, random = zeroJitterRandom, diagnosticLogger = logger)
+
+        supervisor.start(device)
+        runCurrent() // erster Versuch scheitert an der Exception
+        transport.simulateConnectException(false) // erholt sich vor dem naechsten Versuch
+        advanceTimeBy(1_100) // deckt den ersten Backoff-Schritt (1s) vor dem erfolgreichen Versuch ab
+        runCurrent()
+
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        assertTrue(
+            "Erwartete einen Log-Eintrag zur Wiederherstellung, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("wiederhergestellt") },
+        )
+    }
+
+    @Test
+    fun selbstAusgeloesterDisconnectWirdNichtZusaetzlichAlsFremdAbbruchProtokolliert() = runTest {
+        // Ohne die done.complete()-Absicherung in disconnectWatcher wuerde ein DEGRADED-
+        // ausgeloester transport.disconnect() (hier: Stall) zusaetzlich zur spezifischen
+        // "DEGRADED: Datenstillstand"-Zeile faelschlich auch eine generische "vom Geraet/System
+        // beendet"-Zeile erzeugen, obwohl die App selbst getrennt hat.
+        val transport = newTransport()
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
+        val supervisor = newSupervisor(transport, staleAfter = Duration.ofSeconds(5), diagnosticLogger = logger)
+
+        supervisor.start(device)
+        runCurrent()
+        transport.simulateStall(true)
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        assertTrue(
+            "Erwartete die spezifische DEGRADED-Ursache, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("DEGRADED: Datenstillstand") },
+        )
+        assertFalse(
+            "Ein selbst ausgeloester Abbruch darf nicht zusaetzlich als Fremdabbruch erscheinen, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("vom Geraet/System beendet") },
+        )
     }
 }

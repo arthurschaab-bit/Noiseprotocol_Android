@@ -163,12 +163,18 @@ class ConnectionSupervisor(
             while (isActive) {
                 if (!adapterEnabled.value) {
                     setOverride(ConnectionState.DISCONNECTED)
+                    diagnosticLogger?.protokolliere("Bluetooth-Adapter aus - Ueberwachung pausiert")
                     adapterEnabled.first { it } // pausiert, bis der Adapter wieder an ist
+                    diagnosticLogger?.protokolliere("Bluetooth-Adapter wieder an - Ueberwachung wird fortgesetzt")
                 }
 
                 if (!isFirstAttempt) {
                     setOverride(ConnectionState.RECONNECTING)
-                    delay(backoffDelayMillis(consecutiveFailures))
+                    val backoffMillis = backoffDelayMillis(consecutiveFailures)
+                    diagnosticLogger?.protokolliere(
+                        "Reconnect-Versuch $consecutiveFailures nach ${backoffMillis}ms Backoff"
+                    )
+                    delay(backoffMillis)
                     if (!adapterEnabled.value) continue // waehrend der Wartezeit wieder ausgeschaltet
                 }
                 isFirstAttempt = false
@@ -180,7 +186,7 @@ class ConnectionSupervisor(
                 // letzten Wert einfrieren und nie wieder FAILED oder ein Retry melden. Zaehlt
                 // hier bewusst wie ein normaler Fehlschlag statt eigener Fehlerbehandlung.
                 val outcome = try {
-                    attemptOnce(device)
+                    attemptOnce(device, consecutiveFailures)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -199,6 +205,9 @@ class ConnectionSupervisor(
                     AttemptOutcome.STREAMED_BRIEFLY, AttemptOutcome.NEVER_STREAMED -> {
                         consecutiveFailures++
                         if (consecutiveFailures >= maxAttempts) {
+                            diagnosticLogger?.protokolliere(
+                                "Verbindung endgueltig fehlgeschlagen nach $consecutiveFailures Versuchen"
+                            )
                             setOverride(ConnectionState.FAILED)
                             return@coroutineScope
                         }
@@ -220,7 +229,7 @@ class ConnectionSupervisor(
 
     private enum class StreamEndReason { LOST, ADAPTER_OFF }
 
-    private suspend fun attemptOnce(device: BoundDevice): AttemptOutcome {
+    private suspend fun attemptOnce(device: BoundDevice, consecutiveFailuresSoFar: Int): AttemptOutcome {
         clearOverride() // ein neuer Versuch beginnt, ein alter Override-Zustand ist ueberholt
         transport.connect(device)
         // transport.connect() kehrt erst zurueck, wenn der GATT-Aufbau (inkl. eigener Timeouts
@@ -233,9 +242,23 @@ class ConnectionSupervisor(
             }
         }
         if (reached != ConnectionState.STREAMING) {
+            diagnosticLogger?.protokolliere(
+                "Kein Frame innerhalb von ${staleAfter.toMillis()}ms nach Verbindungsaufbau - Versuch verworfen"
+            )
             transport.disconnect()
             return AttemptOutcome.NEVER_STREAMED
         }
+        // Sofort beim Erreichen von STREAMING protokolliert, nicht erst nach Sitzungsende (Plan/
+        // Owner-Wunsch: die Wiederherstellung soll sichtbar sein, sobald sie passiert, nicht erst
+        // rueckwirkend beim naechsten Abbruch) - deshalb hier bereits mit dem Fehlschlagszaehler
+        // VOR diesem Versuch, nicht erst im STREAMED_STABLY-Zweig unten.
+        diagnosticLogger?.protokolliere(
+            if (consecutiveFailuresSoFar > 0) {
+                "Verbindung nach $consecutiveFailuresSoFar Fehlversuch(en) wiederhergestellt"
+            } else {
+                "Verbunden, Streaming gestartet"
+            }
+        )
         val streamingStartedAt = now.now()
         val endReason = monitorStreamingSession()
         if (endReason == StreamEndReason.ADAPTER_OFF) return AttemptOutcome.ADAPTER_OFF
@@ -243,6 +266,9 @@ class ConnectionSupervisor(
         return if (sessionDuration >= minStableSession) {
             AttemptOutcome.STREAMED_STABLY
         } else {
+            diagnosticLogger?.protokolliere(
+                "Streaming nach nur ${sessionDuration.toMillis()}ms beendet - zaehlt als Fehlversuch"
+            )
             AttemptOutcome.STREAMED_BRIEFLY
         }
     }
@@ -252,7 +278,14 @@ class ConnectionSupervisor(
 
         val disconnectWatcher = launch {
             transport.state.first { it == ConnectionState.DISCONNECTED || it == ConnectionState.FAILED }
-            done.complete(StreamEndReason.LOST)
+            // done.complete() gibt false zurueck, wenn ein anderer Watcher (Staleness/Fehlerrate/
+            // Kadenz) das Ergebnis bereits gesetzt hat - dessen eigener transport.disconnect()
+            // fuehrt kurz danach ebenfalls zu genau diesem DISCONNECTED/FAILED-Zustand. Ohne diese
+            // Pruefung wuerde ein selbst ausgeloester Abbruch faelschlich zusaetzlich als "vom
+            // Geraet/System beendet" protokolliert, obwohl die App selbst getrennt hat.
+            if (done.complete(StreamEndReason.LOST)) {
+                diagnosticLogger?.protokolliere("Verbindung vom Geraet/System beendet (Transport meldete Abbruch)")
+            }
         }
 
         // Watchdog-Timer: jedes neue lastFrameAt bricht den laufenden delay() ab und startet ihn

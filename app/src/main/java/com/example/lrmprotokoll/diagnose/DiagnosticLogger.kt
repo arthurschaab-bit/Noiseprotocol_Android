@@ -18,10 +18,14 @@ private const val TAG = "DiagnosticLogger"
  *
  * Bewusst kein Rohframe-Byte-Capture (das waere die woertliche Lesart von "Rohdaten-Log"): dafuer
  * gibt es aktuell noch keinen sinnvollen Konsumenten - der Diagnose-Screen, der ein Rohframe-Log
- * anzeigen soll, ist M7 (Plan Abschnitt 9). Was M6 bereits protokolliert, sind die Ereignisse, die
- * [com.example.lrmprotokoll.meter.ConnectionSupervisor] ohnehin erkennt (Datenstillstand, hohe
- * Fehlerrate, Kadenz-Abweichung, gescheiterte Verbindungsversuche) - genau die Rohdaten, die der
- * geplante "Reconnect-Zaehler"/"Decode-Fehlerrate"-Teil des Diagnose-Screens braucht.
+ * anzeigen soll, ist M7 (Plan Abschnitt 9). Was protokolliert wird, sind die Ereignisse, die
+ * [com.example.lrmprotokoll.meter.ConnectionSupervisor] ohnehin erkennt: erfolgreicher
+ * Verbindungsaufbau, Datenstillstand, hohe Fehlerrate, Kadenz-Abweichung, gescheiterte
+ * Verbindungsversuche, Reconnect-Versuche samt Backoff-Wartezeit, Bluetooth-Adapter aus/an,
+ * endgueltiger Fehlschlag nach ausgeschoepften Versuchen und Wiederherstellung nach
+ * Fehlversuchen (Owner-Wunsch nach mehr Debuginformationen zur Verbindungsrobustheit, siehe
+ * PR-Historie) - genau die Rohdaten, die der "Reconnect-Zaehler"/"Decode-Fehlerrate"-Teil des
+ * Diagnose-Screens (M7) braucht.
  */
 class DiagnosticLogger(
     private val dao: DiagnosticLogDao,

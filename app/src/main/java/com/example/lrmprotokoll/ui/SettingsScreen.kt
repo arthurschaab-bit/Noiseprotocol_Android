@@ -525,10 +525,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Diagnose-Log", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Zeichnet technische Ereignisse (Datenstillstand, hohe Fehlerrate, auffällige " +
-                    "Framekadenz, gescheiterte Verbindungsversuche) im App-internen Speicher auf, " +
-                    "zur Fehlersuche bei Verbindungsproblemen. Einträge werden nach 7 Tagen " +
-                    "automatisch gelöscht. Standardmäßig aus.",
+                "Zeichnet technische Ereignisse rund um die Bluetooth-Verbindung im App-internen " +
+                    "Speicher auf, zur Fehlersuche bei Verbindungsproblemen: erfolgreiche und " +
+                    "gescheiterte Verbindungsversuche, Reconnect-Versuche mit Backoff-Wartezeit, " +
+                    "Datenstillstand, hohe Fehlerrate, auffällige Framekadenz, " +
+                    "Bluetooth-Adapter aus/an sowie endgültige Fehlschläge und Wiederherstellungen. " +
+                    "Einträge werden nach 7 Tagen automatisch gelöscht. Standardmäßig aus.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Spacer(modifier = Modifier.height(8.dp))
