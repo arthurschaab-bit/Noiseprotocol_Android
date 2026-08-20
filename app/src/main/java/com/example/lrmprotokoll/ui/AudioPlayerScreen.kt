@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import android.media.MediaPlayer
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,8 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+private const val TAG = "AudioPlayerScreen"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
@@ -25,19 +28,33 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
     val amplitudes = remember(filePath) { loadAmplitudes(file) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentProgress by remember { mutableFloatStateOf(0f) }
-    
+    // Testplan-Befund (docs/TESTPLAN_INSTRUMENTIERT.md): eine zwischenzeitlich geloeschte oder
+    // beschaedigte Datei liess setDataSource()/prepare() unten mit einer unbehandelten
+    // IOException/IllegalArgumentException den Screen abstuerzen. wiedergabeFehler haelt fest,
+    // dass die Wiedergabe nicht nutzbar ist, statt den Absturz auszuloesen.
+    var wiedergabeFehler by remember { mutableStateOf<String?>(null) }
+
     val mediaPlayer = remember { MediaPlayer() }
-    
+
     DisposableEffect(filePath) {
-        mediaPlayer.setDataSource(filePath)
-        mediaPlayer.prepare()
+        try {
+            mediaPlayer.setDataSource(filePath)
+            mediaPlayer.prepare()
+        } catch (e: Exception) {
+            Log.w(TAG, "Wiedergabe fehlgeschlagen fuer $filePath", e)
+            wiedergabeFehler = wiedergabeFehlermeldung(e)
+        }
         onDispose {
             mediaPlayer.release()
         }
     }
 
     LaunchedEffect(isPlaying) {
-        if (isPlaying) {
+        // wiedergabeFehler != null bedeutet: mediaPlayer wurde nie erfolgreich prepare()d - start()
+        // wuerde eine IllegalStateException werfen. isPlaying kann diesen Zustand trotzdem
+        // erreichen, wenn der Klick vor dem Setzen von wiedergabeFehler ausgeloest wurde; die
+        // Pruefung hier ist deshalb die verbindliche Absicherung, nicht nur die im Button.
+        if (isPlaying && wiedergabeFehler == null) {
             mediaPlayer.start()
             while (mediaPlayer.isPlaying) {
                 currentProgress = mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration
@@ -46,6 +63,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
             isPlaying = false
             currentProgress = 1f
         } else {
+            isPlaying = false
             if (mediaPlayer.isPlaying) mediaPlayer.pause()
         }
     }
@@ -71,7 +89,12 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
         ) {
             Text(file.name, style = MaterialTheme.typography.bodyLarge)
             Spacer(modifier = Modifier.height(32.dp))
-            
+
+            wiedergabeFehler?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Wellenform-Anzeige
             WaveformDisplay(
                 amplitudes = amplitudes,
@@ -80,17 +103,18 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .height(200.dp)
             )
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
+
             IconButton(
-                onClick = { 
+                onClick = {
                     if (currentProgress >= 0.99f) {
                         mediaPlayer.seekTo(0)
                         currentProgress = 0f
                     }
-                    isPlaying = !isPlaying 
+                    isPlaying = !isPlaying
                 },
+                enabled = wiedergabeFehler == null,
                 modifier = Modifier.size(64.dp)
             ) {
                 Icon(
@@ -138,6 +162,19 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
             strokeWidth = 2.dp.toPx()
         )
     }
+}
+
+/**
+ * Uebersetzt einen beim Vorbereiten der Wiedergabe aufgetretenen Fehler in eine fuer den Nutzer
+ * verstaendliche Meldung, statt die App abstuerzen zu lassen (Testplan-Befund
+ * docs/TESTPLAN_INSTRUMENTIERT.md: eine geloeschte oder beschaedigte Datei liess
+ * `mediaPlayer.setDataSource()`/`.prepare()` unbehandelt werfen). Reine Funktion ohne
+ * Android-/Compose-Abhaengigkeit, per JVM-Test pruefbar - analog zu `scanFehlermeldung()` in
+ * MeterScreen.kt.
+ */
+internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) {
+    is java.io.IOException -> "Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?"
+    else -> "Wiedergabe fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
 }
 
 fun loadAmplitudes(file: File): List<Float> {
