@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.lrmprotokoll"
-        minSdk = 29
+        minSdk = 31
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -90,13 +90,44 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    implementation("org.tensorflow:tensorflow-lite-task-audio:0.4.4")
+    // B-11: Nachfolger fuer org.tensorflow:tensorflow-lite-task-audio (abgekuendigt, nicht
+    // 16-KB-seitenausgerichtet). tasks-audio zieht tasks-core mit dem eigentlichen nativen
+    // Klassifikations-Code (libmediapipe_tasks_jni.so); dessen LOAD-Segmente sind 0x4000
+    // (16 KB) ausgerichtet statt der 0x1000 (4 KB) der alten Bibliothek - per readelf -lW
+    // gegen beide AARs geprueft.
+    implementation(libs.mediapipe.tasks.audio)
+
+    // M5: ntfy-Versand (ein HTTP-POST, kein SDK) und der Heartbeat der Totmannschaltung.
+    implementation(libs.okhttp)
+    // M5: Wiederholung fehlgeschlagener Versendungen und der periodische Heartbeat.
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // M7b: Google-Anmeldung fuer den Drive-Sync (Plan 8.4.3). Nur die Anmeldung selbst braucht
+    // ein Geraet mit echten Play-Services zur Pruefung - die Bibliotheken lassen sich ohne
+    // google-services.json und ohne echte Client-ID kompilieren, ausschliesslich zur Laufzeit
+    // wird eine echte OAuth-Client-ID benoetigt (siehe GoogleClientConfig).
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
+
+    // M6: verschluesselte Ablage fuer ntfy-Topic/-Server und die Heartbeat-URL (Plan Abschnitt
+    // 6) - EncryptedSharedPreferences, Schluessel im Android Keystore, Tink darunter.
+    implementation(libs.androidx.security.crypto)
 
     // Testen
     testImplementation(libs.junit)
     testImplementation("androidx.room:room-testing:2.8.4")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Prueft den ntfy-Versand gegen einen echten HTTP-Server statt gegen einen Fake-Client:
+    // Nur so ist belegt, dass Pfad, Header und Rumpf tatsaechlich so rausgehen wie gedacht.
+    testImplementation(libs.okhttp.mockwebserver)
+    // Spike (Owner-Auftrag nach dem SettingsScreen-Scroll-Bug): Compose-UI-Tests unter
+    // Robolectric statt androidTest, damit sie ohne Emulator in derselben JVM-Testsuite laufen.
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
