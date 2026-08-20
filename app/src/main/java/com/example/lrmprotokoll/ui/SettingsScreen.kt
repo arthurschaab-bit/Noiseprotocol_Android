@@ -76,7 +76,24 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     // Google verlangt beim allerersten Autorisieren des drive.file-Scopes (oder nach einem
     // Widerruf) einen expliziten Zustimmungsbildschirm (siehe AutorisierungBenoetigtException-
-    // KDoc) - ohne diesen Launcher konnte "Mit Google verbinden" diesen Fall nie beheben.
+    // KDoc). ausstehendeZustimmung + der LaunchedEffect darunter starten ihn, sobald er gesetzt
+    // wird - statt den Launcher direkt aus seinem eigenen Ergebnis-Callback heraus erneut
+    // aufzurufen (das waere ein unaufloesbarer Selbstbezug auf eine lokale val, kein gueltiger
+    // Kotlin-Code).
+    var ausstehendeZustimmung by remember { mutableStateOf<IntentSender?>(null) }
+
+    suspend fun verarbeiteDriveEinrichtungsVersuch() {
+        when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
+            is DriveEinrichtungsVersuch.Erfolg -> {
+                driveOrdnerId = versuch.folderId
+                driveOrdnerBlockiert = false
+                driveEinrichtungsErgebnis = versuch.nachricht
+            }
+            is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
+            is DriveEinrichtungsVersuch.ZustimmungNoetig -> ausstehendeZustimmung = versuch.intentSender
+        }
+    }
+
     val driveZustimmungLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) {
@@ -84,17 +101,13 @@ fun SettingsScreen(onBack: () -> Unit) {
         // Abschluss des Zustimmungsbildschirms - egal ob erteilt oder abgebrochen - erneut
         // authorize() aufzurufen; bei Erteilung liefert das dann direkt ein Token, sonst wieder
         // denselben (oder gar keinen) Zustimmungsbedarf.
-        scope.launch {
-            when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
-                is DriveEinrichtungsVersuch.Erfolg -> {
-                    driveOrdnerId = versuch.folderId
-                    driveOrdnerBlockiert = false
-                    driveEinrichtungsErgebnis = versuch.nachricht
-                }
-                is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
-                is DriveEinrichtungsVersuch.ZustimmungNoetig ->
-                    driveZustimmungLauncher.launch(IntentSenderRequest.Builder(versuch.intentSender).build())
-            }
+        scope.launch { verarbeiteDriveEinrichtungsVersuch() }
+    }
+
+    LaunchedEffect(ausstehendeZustimmung) {
+        ausstehendeZustimmung?.let { intentSender ->
+            driveZustimmungLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            ausstehendeZustimmung = null
         }
     }
 
@@ -467,18 +480,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(onClick = {
-                    scope.launch {
-                        when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
-                            is DriveEinrichtungsVersuch.Erfolg -> {
-                                driveOrdnerId = versuch.folderId
-                                driveOrdnerBlockiert = false
-                                driveEinrichtungsErgebnis = versuch.nachricht
-                            }
-                            is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
-                            is DriveEinrichtungsVersuch.ZustimmungNoetig ->
-                                driveZustimmungLauncher.launch(IntentSenderRequest.Builder(versuch.intentSender).build())
-                        }
-                    }
+                    scope.launch { verarbeiteDriveEinrichtungsVersuch() }
                 }) {
                     Text(if (driveOrdnerId == null) "Mit Google verbinden" else "Ordner neu einrichten")
                 }
