@@ -231,9 +231,10 @@ Abhängigkeits-Stil des Projekts.
 ## Entwicklung
 
 ```bash
-./gradlew assembleDebug      # bauen
-./gradlew test               # Unit-Tests inkl. Migrationstests
-./gradlew installDebug       # auf verbundenes Gerät installieren
+./gradlew assembleDebug              # bauen
+./gradlew test                       # Unit-Tests inkl. Migrationstests
+./gradlew connectedDebugAndroidTest  # Instrumentierte UI-Tests auf Emulator/Gerät
+./gradlew installDebug               # auf verbundenes Gerät installieren
 ```
 
 Fehlt `JAVA_HOME`, auf das JBR von Android Studio zeigen:
@@ -258,6 +259,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 |-------|--------|
 | [`AGENTS.md`](AGENTS.md) | Arbeitsregeln für Coding-Agents (Claude Code, Codex, Antigravity/Gemini): Branches, Commits, Verifikation, Zuständigkeiten |
 | [`docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md`](docs/IMPLEMENTIERUNGSPLAN_PCE-323_BLUETOOTH.md) | Der vollständige Plan: Protokoll, Architektur, Robustheit, Sicherheit, Alarmierung, Drive-Sync, Meilensteine, Risiken |
+| [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | **Testplan für instrumentierte UI-Tests** — Positiv- und Negativtests für alle 7 Screens |
 | [`docs/PROMPT_UMSETZUNG.md`](docs/PROMPT_UMSETZUNG.md) | Prompt-Vorlage für Umsetzungs-Sessions, ein Meilenstein pro Session |
 | [`docs/PROMPT_REVIEW.md`](docs/PROMPT_REVIEW.md) | Prompt für die Fortschrittskontrolle nach jedem Meilenstein |
 | [`docs/PROMPT_M1.md`](docs/PROMPT_M1.md) | Auftrag für M1 (erledigt) |

@@ -51,7 +51,16 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+          script: |
+            adb logcat -c
+            ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace || (adb logcat -d > logcat-failure.txt && exit 1)
+
+      - name: Collect ADB Logs
+        if: always()
+        run: |
+          mkdir -p logs
+          adb logcat -d > logs/adb-logcat.txt 2>/dev/null || true
+          adb shell dumpsys activity > logs/dumpsys-activity.txt 2>/dev/null || true
 
       - name: Upload Test Reports
         if: always()
@@ -61,4 +70,14 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+          retention-days: 7
+
+      - name: Upload ADB Diagnostics on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-diagnostics-api-${{ matrix.api-level }}
+          path: |
+            logs/
+            logcat-failure.txt
           retention-days: 7
