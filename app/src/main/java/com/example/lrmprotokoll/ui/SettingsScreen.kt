@@ -65,6 +65,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var driveUploadWav by remember { mutableStateOf(settings.driveUploadWav) }
     var driveEinrichtungsErgebnis by remember { mutableStateOf<String?>(null) }
 
+    var diagnoseLoggingAktiv by remember { mutableStateOf(settings.diagnoseLoggingAktiv) }
+
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
     fun kannExakteAlarme() =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -509,6 +511,35 @@ fun SettingsScreen(onBack: () -> Unit) {
                         "Datenschutzkategorie als reine Pegelwerte - standardmäßig aus.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text("Diagnose-Log", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Zeichnet technische Ereignisse (Datenstillstand, hohe Fehlerrate, auffällige " +
+                    "Framekadenz, gescheiterte Verbindungsversuche) im App-internen Speicher auf, " +
+                    "zur Fehlersuche bei Verbindungsproblemen. Einträge werden nach 7 Tagen " +
+                    "automatisch gelöscht. Standardmäßig aus.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = diagnoseLoggingAktiv,
+                    onCheckedChange = {
+                        diagnoseLoggingAktiv = it
+                        settings.diagnoseLoggingAktiv = it
+                        if (it) {
+                            com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.plane(context)
+                        } else {
+                            com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(context)
+                        }
+                    },
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Diagnose-Log aktiv")
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))

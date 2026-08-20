@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -49,16 +52,20 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
+import com.example.lrmprotokoll.meter.GeraetePinning
 import com.example.lrmprotokoll.meter.MeasurementRange
+import com.example.lrmprotokoll.meter.PinningBefund
 import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleScanner
+import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import com.example.lrmprotokoll.meter.label
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val SCAN_DURATION_MS = 10_000L
+private const val TAG = "MeterScreen"
 
 /**
  * Kopplung und Live-Anzeige fuer das PCE-323 (Plan Abschnitt 9, minimale Ausbaustufe M2).
@@ -101,12 +108,49 @@ fun MeterScreen(onBack: () -> Unit) {
     var pairedName by remember { mutableStateOf(settings.meterDeviceName) }
     var isScanning by remember { mutableStateOf(false) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
+    // Plan Abschnitt 6, Geraete-Pinning: ein Advertiser mit demselben Namen wie das gepinnte
+    // Geraet, aber anderer Adresse, wird nicht kommentarlos wie jedes andere gefundene Geraet
+    // angeboten - siehe GeraetePinning-KDoc.
+    var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
 
     // Startet (falls noetig) den Foreground Service, der den Supervisor mit dem aktuell in
     // SettingsManager gepinnten Geraet verbindet - ohne EXTRA_START_AUDIO_MONITORING, das
     // Koppeln eines Messgeraets soll nicht ungefragt die Mikrofon-Ueberwachung mitstarten.
     fun ensureConnected() {
         context.startForegroundService(Intent(context, AudioRecordingService::class.java))
+    }
+
+    fun pinne(device: BleDevice) {
+        settings.meterDeviceAddress = device.address
+        settings.meterDeviceName = device.name ?: device.address
+        pairedAddress = device.address
+        pairedName = device.name ?: device.address
+        ensureConnected()
+    }
+
+    if (verdaechtigesGeraet != null) {
+        val device = verdaechtigesGeraet!!
+        AlertDialog(
+            onDismissRequest = { verdaechtigesGeraet = null },
+            title = { Text("Anderes Gerät mit gleichem Namen") },
+            text = {
+                Text(
+                    "„${device.name}“ (${device.address}) trägt denselben Namen wie das " +
+                        "gekoppelte Gerät ($pairedAddress), hat aber eine andere Adresse. " +
+                        "Das kann ein zweites, echtes Gerät sein – oder ein untergeschobenes. " +
+                        "Wirklich zu diesem Gerät wechseln?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pinne(device)
+                    verdaechtigesGeraet = null
+                }) { Text("Trotzdem koppeln") }
+            },
+            dismissButton = {
+                TextButton(onClick = { verdaechtigesGeraet = null }) { Text("Abbrechen") }
+            },
+        )
     }
 
     Scaffold(
@@ -132,6 +176,29 @@ fun MeterScreen(onBack: () -> Unit) {
                 Icon(icon, contentDescription = null, tint = color)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.titleMedium)
+            }
+
+            // Plan Abschnitt 6: createBond() fuehrte in der M0-Aufzeichnung zu einem sofortigen
+            // Disconnect (Pce323Profile.BONDING_SUPPORTED-KDoc) - ein erneuter Versuch wuerde die
+            // Verbindung nur wieder gefaehrden. Die Konsequenz aus dem Plan ist deshalb nicht ein
+            // Bonding-Versuch, sondern die ehrliche Kennzeichnung: Sicherheit vorzutaeuschen waere
+            // schlimmer als eine dokumentierte Luecke.
+            if (!Pce323Profile.BONDING_SUPPORTED) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.height(16.dp).width(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Unverschlüsselte Verbindung – dieses Gerät unterstützt kein Bonding",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -219,7 +286,22 @@ fun MeterScreen(onBack: () -> Unit) {
                         val scanner = BleScanner(context)
                         try {
                             withTimeoutOrNull(SCAN_DURATION_MS) {
-                                scanner.scan().collect { device -> foundDevices[device.address] = device }
+                                scanner.scan().collect { device ->
+                                    if (!foundDevices.containsKey(device.address)) {
+                                        val befund = GeraetePinning.beurteile(
+                                            device.address, device.name, pairedAddress, pairedName,
+                                        )
+                                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                                            Log.w(
+                                                TAG,
+                                                "Advertiser ${device.address} traegt denselben Namen " +
+                                                    "wie das gepinnte Geraet ($pairedAddress), aber " +
+                                                    "eine andere Adresse - moeglicher Spoofing-Versuch",
+                                            )
+                                        }
+                                    }
+                                    foundDevices[device.address] = device
+                                }
                             }
                         } finally {
                             isScanning = false
@@ -235,13 +317,14 @@ fun MeterScreen(onBack: () -> Unit) {
 
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(foundDevices.values.sortedByDescending { it.rssi }) { device ->
+                    val befund = GeraetePinning.beurteile(device.address, device.name, pairedAddress, pairedName)
                     Card(
                         onClick = {
-                            settings.meterDeviceAddress = device.address
-                            settings.meterDeviceName = device.name ?: device.address
-                            pairedAddress = device.address
-                            pairedName = device.name ?: device.address
-                            ensureConnected()
+                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                                verdaechtigesGeraet = device
+                            } else {
+                                pinne(device)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -253,6 +336,23 @@ fun MeterScreen(onBack: () -> Unit) {
                                 "${device.address} · ${device.rssi} dBm",
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.height(16.dp).width(16.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Gleicher Name wie das gekoppelte Gerät, andere Adresse",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

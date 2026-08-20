@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.meter
 
 import android.util.Log
+import com.example.lrmprotokoll.diagnose.DiagnosticLogger
 import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
@@ -37,6 +38,13 @@ private const val BACKOFF_JITTER_FRACTION = 0.2
 private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 
 /**
+ * Zwei aufeinanderfolgende Kadenz-Abweichungen, nicht eine - ein einzelner verspaeteter
+ * OS-Scheduler-Tick darf keinen Reconnect ausloesen (dasselbe Prinzip wie
+ * [MIN_SAMPLES_FOR_ERROR_RATE] bei der Fehlerrate: kein Einzelwert reicht).
+ */
+private const val MIN_CADENCE_VIOLATIONS = 2
+
+/**
  * Treibt den Verbindungs-Zustandsautomaten aus Plan Abschnitt 5.1 ueber die reine
  * [MeterTransport]-Schnittstelle - kennt NICHT [com.example.lrmprotokoll.meter.ble.BleMeterTransport],
  * nur so bleibt sie vollstaendig gegen [FakeMeterTransport] testbar (PROMPT_M3 Aufgabe 1).
@@ -69,6 +77,25 @@ class ConnectionSupervisor(
     private val errorRateThreshold: Double = 0.2,
     private val maxAttempts: Int = 8,
     private val minStableSession: Duration = Duration.ofSeconds(5),
+    /**
+     * Stream-Plausibilisierung als Spoofing-Erkennung (Plan Abschnitt 6): `null` (Default)
+     * schaltet die Pruefung ab - ohne eine geraetespezifische Erwartung (nur AppContainer kennt
+     * [com.example.lrmprotokoll.meter.ble.Pce323Profile.EXPECTED_FRAME_PERIOD_MS], diese Klasse
+     * bleibt bewusst frei von BLE-Details) gibt es nichts, wogegen zu pruefen waere. Ist ein Wert
+     * gesetzt, muss die Zeit zwischen zwei Frames innerhalb von ±[cadenceTolerance] liegen -
+     * wiederholte Abweichung (Framing/Kadenz eines untergeschobenen Geraets liesse sich kaum
+     * exakt nachbilden) trennt die Verbindung wie ein Datenstillstand.
+     */
+    private val expectedFramePeriod: Duration? = null,
+    private val cadenceTolerance: Double = 0.2,
+    /**
+     * Optionale Senke fuer das Diagnose-Log (Plan Abschnitt 6, standardmaessig aus - siehe
+     * [DiagnosticLogger]-KDoc). `null` (Default) haelt bestehende Aufrufer/Tests unveraendert;
+     * [DiagnosticLogger] selbst prueft bei jedem Aufruf erneut, ob das Log ueberhaupt
+     * eingeschaltet ist, ein `null` hier ist also nur eine zusaetzliche, gaenzlich kostenlose
+     * Abkuerzung fuer Aufrufer, die gar keine Senke haben (z.B. Tests).
+     */
+    private val diagnosticLogger: DiagnosticLogger? = null,
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -158,6 +185,7 @@ class ConnectionSupervisor(
                     throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "Verbindungsversuch mit Ausnahme gescheitert", e)
+                    diagnosticLogger?.protokolliere("Verbindungsversuch gescheitert: ${e.javaClass.simpleName}: ${e.message}")
                     runCatching { transport.disconnect() }
                     AttemptOutcome.NEVER_STREAMED
                 }
@@ -234,6 +262,7 @@ class ConnectionSupervisor(
                 if (last == null) return@collectLatest
                 delay(staleAfter.toMillis())
                 setOverride(ConnectionState.DEGRADED)
+                diagnosticLogger?.protokolliere("DEGRADED: Datenstillstand seit ${staleAfter.toMillis()}ms")
                 transport.disconnect()
                 done.complete(StreamEndReason.LOST)
             }
@@ -260,6 +289,9 @@ class ConnectionSupervisor(
                     val rate = errorDelta.toDouble() / totalDelta
                     if (rate > errorRateThreshold) {
                         setOverride(ConnectionState.DEGRADED)
+                        diagnosticLogger?.protokolliere(
+                            "DEGRADED: Fehlerrate ${(rate * 100).toInt()}% ueber $errorRateWindow"
+                        )
                         transport.disconnect()
                         done.complete(StreamEndReason.LOST)
                     }
@@ -273,11 +305,53 @@ class ConnectionSupervisor(
             done.complete(StreamEndReason.ADAPTER_OFF)
         }
 
+        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung): misst die Zeit zwischen
+        // zwei Frame-Ankuenften ueber [now] statt ueber die im Frame mitgelieferte Zeit - wie
+        // errorRateWatcher oben, damit die Pruefung synchron zur injizierten Uhr laeuft und in
+        // Tests ueber advanceTimeBy steuerbar ist, unabhaengig davon, welche Zeit der Transport
+        // selbst in lastFrameAt eintraegt.
+        val cadenceWatcher = expectedFramePeriod?.let { erwartet ->
+            launch {
+                var vorherigeAnkunft: Instant? = null
+                var abweichungenInFolge = 0
+                transport.lastFrameAt.collect { letzter ->
+                    if (letzter == null) return@collect
+                    val ankunft = now.now()
+                    val vorherige = vorherigeAnkunft
+                    vorherigeAnkunft = ankunft
+                    if (vorherige == null) return@collect
+
+                    val deltaMillis = Duration.between(vorherige, ankunft).toMillis()
+                    val minMillis = (erwartet.toMillis() * (1 - cadenceTolerance)).toLong()
+                    val maxMillis = (erwartet.toMillis() * (1 + cadenceTolerance)).toLong()
+                    if (deltaMillis < minMillis || deltaMillis > maxMillis) {
+                        abweichungenInFolge++
+                        if (abweichungenInFolge >= MIN_CADENCE_VIOLATIONS) {
+                            Log.w(
+                                TAG,
+                                "Framekadenz ${deltaMillis}ms wiederholt ausserhalb der Toleranz " +
+                                    "[$minMillis, $maxMillis]ms - moeglicher Spoofing-Verdacht",
+                            )
+                            setOverride(ConnectionState.DEGRADED)
+                            diagnosticLogger?.protokolliere(
+                                "DEGRADED: Framekadenz ${deltaMillis}ms wiederholt ausserhalb [$minMillis, $maxMillis]ms"
+                            )
+                            transport.disconnect()
+                            done.complete(StreamEndReason.LOST)
+                        }
+                    } else {
+                        abweichungenInFolge = 0
+                    }
+                }
+            }
+        }
+
         val result = done.await()
         disconnectWatcher.cancel()
         stalenessWatcher.cancel()
         errorRateWatcher.cancel()
         adapterWatcher.cancel()
+        cadenceWatcher?.cancel()
         result
     }
 

@@ -23,6 +23,11 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     suspend fun offeneSession(): SessionEntity?
 
+    /** Fuer den Diagnose-Screen (Plan Abschnitt 9): der diagnostisch relevante Zeitraum ist die
+     * laufende Session, falls es eine gibt, sonst die zuletzt beendete. */
+    @Query("SELECT * FROM sessions ORDER BY startedAt DESC LIMIT 1")
+    suspend fun letzte(): SessionEntity?
+
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
     fun alle(): Flow<List<SessionEntity>>
 }

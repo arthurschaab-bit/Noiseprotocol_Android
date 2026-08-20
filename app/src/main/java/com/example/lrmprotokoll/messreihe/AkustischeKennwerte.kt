@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.data.MeasurementEntity
+import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -73,6 +74,30 @@ object AkustischeKennwerte {
         val index = (anteil * (nachPegelSortiert.size - 1)).roundToInt()
             .coerceIn(0, nachPegelSortiert.size - 1)
         return nachPegelSortiert[index]
+    }
+
+    /**
+     * Näherungsweise Kennwerte, wenn die Rohwerte einer Session bereits durch den Retention-Job
+     * (Plan 13.2) zu [MinuteAggregateEntity] verdichtet wurden - für die Protokollansicht (Plan
+     * Abschnitt 9), die auch für ältere Sessions noch etwas Sinnvolles anzeigen soll. Ohne
+     * Rohwerte lassen sich L10/L50/L90 und die Überschreitungsdauer nicht mehr rekonstruieren
+     * (bleiben `null`/0) - Leq bleibt exakt (energetischer Mittelwert über die bereits
+     * energetisch gemittelten Minuten-LAeq-Werte), Max/Min bleiben exakt, weil pro Minute
+     * mitgeführt.
+     */
+    fun ausAggregaten(aggregate: List<MinuteAggregateEntity>): Kennwerte {
+        if (aggregate.isEmpty()) return LEER
+        val leq = 10.0 * log10(aggregate.sumOf { 10.0.pow(it.leqDb / 10.0) } / aggregate.size)
+        return Kennwerte(
+            leqDb = leq,
+            maxDb = aggregate.maxOf { it.maxDb },
+            minDb = aggregate.minOf { it.minDb },
+            l10Db = null,
+            l50Db = null,
+            l90Db = null,
+            ueberschreitungsdauerMs = 0L,
+            sampleCount = aggregate.sumOf { it.sampleCount },
+        )
     }
 
     private fun ueberschreitungsdauer(nachZeitSortiert: List<MeasurementEntity>, schwelle: Double): Long {

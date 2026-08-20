@@ -71,6 +71,7 @@ class ConnectionSupervisorTest {
         maxAttempts: Int = 8,
         minStableSession: Duration = Duration.ofSeconds(5),
         random: Random = Random(1),
+        expectedFramePeriod: Duration? = null,
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -83,6 +84,7 @@ class ConnectionSupervisorTest {
             errorRateWindow = errorRateWindow,
             maxAttempts = maxAttempts,
             minStableSession = minStableSession,
+            expectedFramePeriod = expectedFramePeriod,
         )
     }
 
@@ -397,5 +399,52 @@ class ConnectionSupervisorTest {
         runCurrent()
 
         assertEquals(ConnectionState.FAILED, supervisor.state.value)
+    }
+
+    @Test
+    fun kadenzWeitAusserhalbDerErwartungFuehrtZuDegraded() = runTest {
+        // Plan Abschnitt 6, Stream-Plausibilisierung: 10 Hz (100ms Periode) liegt weit ausserhalb
+        // von 515ms +-20% (412-618ms) - genau das Muster, das ein untergeschobenes Geraet mit
+        // abweichender Framerate erzeugen wuerde.
+        val transport = newTransport(frameRateHz = 10.0)
+        val supervisor = newSupervisor(transport, expectedFramePeriod = Duration.ofMillis(515))
+        val states = observeStates(supervisor)
+
+        supervisor.start(device)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        advanceTimeBy(300) // deckt mindestens zwei aufeinanderfolgende 100ms-Deltas ab
+        runCurrent()
+
+        assertTrue(
+            "Stark abweichende Kadenz haette DEGRADED ausloesen muessen, war $states",
+            states.contains(ConnectionState.DEGRADED)
+        )
+        assertNoSpuriousDisconnectAroundDegraded(states)
+    }
+
+    @Test
+    fun kadenzInnerhalbDerToleranzLoestKeinDegradedAus() = runTest {
+        // Gegentest zu kadenzWeitAusserhalbDerErwartungFuehrtZuDegraded: die nominale 2-Hz-Rate
+        // des Fakes (500ms) liegt innerhalb von 515ms +-20% (412-618ms) und darf die Verbindung
+        // nicht trennen - sonst wuerde die Pruefung bereits das reale Geraet bei normalem Jitter
+        // aussperren (M0-Aufzeichnung: 449-586ms, Mittel ~515ms).
+        val transport = newTransport()
+        val supervisor = newSupervisor(transport, expectedFramePeriod = Duration.ofMillis(515))
+        val states = observeStates(supervisor)
+
+        supervisor.start(device)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertFalse(
+            "Kadenz innerhalb der Toleranz haette kein DEGRADED ausloesen duerfen, war $states",
+            states.contains(ConnectionState.DEGRADED)
+        )
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
     }
 }

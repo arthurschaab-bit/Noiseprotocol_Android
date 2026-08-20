@@ -187,16 +187,31 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         )
     }
 }
-val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+/**
+ * Migration von Schema-Version 9 auf 10: die Tabelle `diagnostic_log_entries` fuer M6
+ * (standardmaessig abgeschaltetes Diagnose-Log, Plan Abschnitt 6). Rein additiv wie die
+ * Migrationen zuvor.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `diagnostic_log_entries` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`timestamp` INTEGER NOT NULL, " +
+                "`message` TEXT NOT NULL)"
+        )
+    }
+}
+val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
 
 @Database(
     entities = [
         NoiseRecord::class, ReferenceSound::class, AlertEntity::class,
         LevelSampleEntity::class, DriveDailyFileEntity::class,
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
-        MinuteAggregateEntity::class,
+        MinuteAggregateEntity::class, DiagnosticLogEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -215,6 +230,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun connectionEventDao(): ConnectionEventDao
 
     abstract fun minuteAggregateDao(): MinuteAggregateDao
+
+    abstract fun diagnosticLogDao(): DiagnosticLogDao
 
     companion object {
         @Volatile

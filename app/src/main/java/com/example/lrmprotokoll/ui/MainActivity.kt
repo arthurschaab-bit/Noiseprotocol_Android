@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -70,7 +71,9 @@ class MainActivity : ComponentActivity() {
                             NoiseProtocolApp(
                                 onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
                                 onNavigateToSettings = { navController.navigate("settings") },
-                                onNavigateToMeter = { navController.navigate("meter") }
+                                onNavigateToMeter = { navController.navigate("meter") },
+                                onNavigateToProtokoll = { navController.navigate("protokoll") },
+                                onNavigateToDiagnose = { navController.navigate("diagnose") },
                             )
                         }
                         composable(
@@ -86,6 +89,22 @@ class MainActivity : ComponentActivity() {
                         composable("meter") {
                             MeterScreen(onBack = { navController.popBackStack() })
                         }
+                        composable("protokoll") {
+                            ProtokollScreen(
+                                onBack = { navController.popBackStack() },
+                                onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
+                            )
+                        }
+                        composable(
+                            "protokoll/{sessionId}",
+                            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+                        ) { backStackEntry ->
+                            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+                            ProtokollDetailScreen(sessionId = sessionId, onBack = { navController.popBackStack() })
+                        }
+                        composable("diagnose") {
+                            DiagnoseScreen(onBack = { navController.popBackStack() })
+                        }
                     }
                 }
             }
@@ -98,7 +117,9 @@ class MainActivity : ComponentActivity() {
 fun NoiseProtocolApp(
     onNavigateToPlayer: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToMeter: () -> Unit
+    onNavigateToMeter: () -> Unit,
+    onNavigateToProtokoll: () -> Unit,
+    onNavigateToDiagnose: () -> Unit,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -166,6 +187,12 @@ fun NoiseProtocolApp(
             }
             TextButton(onClick = onNavigateToMeter) {
                 Text("Messgerät")
+            }
+            TextButton(onClick = onNavigateToProtokoll) {
+                Text("Protokoll")
+            }
+            IconButton(onClick = onNavigateToDiagnose) {
+                Icon(Icons.Default.Info, contentDescription = "Diagnose")
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(Icons.Default.Settings, contentDescription = "Einstellungen")

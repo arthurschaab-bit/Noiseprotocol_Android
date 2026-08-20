@@ -56,6 +56,7 @@ class DriveSyncCoordinatorTest {
         override suspend fun update(entity: DriveDailyFileEntity) { zeilen[entity.date] = entity }
         override suspend fun letzterFehlschlag(): DriveDailyFileEntity? =
             zeilen.values.filter { it.state == DriveSyncState.FAILED }.maxByOrNull { it.date }
+        override suspend fun alle(): List<DriveDailyFileEntity> = zeilen.values.sortedByDescending { it.date }
     }
 
     private class FakeNoiseDao : NoiseDao {

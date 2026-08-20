@@ -11,6 +11,8 @@ import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import com.example.lrmprotokoll.alert.ntfy.NtfyAlertChannel
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupCoordinator
+import com.example.lrmprotokoll.diagnose.DiagnosticLogger
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.example.lrmprotokoll.drive.DriveApiClient
@@ -27,6 +29,7 @@ import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.ble.BleMeterTransport
 import com.example.lrmprotokoll.meter.ble.BluetoothAdapterStateObserver
+import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,11 +104,25 @@ class AppContainer(context: Context) {
         )
     }
 
+    // ---------------------------------------------------------------- M6: Sicherheit
+
+    val diagnosticLogger: DiagnosticLogger by lazy {
+        DiagnosticLogger(dao = database.diagnosticLogDao(), aktiv = { settingsManager.diagnoseLoggingAktiv })
+    }
+
+    val diagnosticLogCleanupCoordinator: DiagnosticLogCleanupCoordinator by lazy {
+        DiagnosticLogCleanupCoordinator(dao = database.diagnosticLogDao())
+    }
+
     val connectionSupervisor: ConnectionSupervisor by lazy {
         ConnectionSupervisor(
             transport = meterTransport,
             scope = connectionSupervisorScope,
             adapterEnabled = bluetoothAdapterStateObserver.enabled,
+            // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
+            // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
+            expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
+            diagnosticLogger = diagnosticLogger,
         )
     }
 

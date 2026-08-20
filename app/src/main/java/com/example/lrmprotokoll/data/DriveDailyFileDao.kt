@@ -20,4 +20,8 @@ interface DriveDailyFileDao {
 
     @Query("SELECT * FROM drive_daily_files WHERE state = 'FAILED' ORDER BY date DESC LIMIT 1")
     suspend fun letzterFehlschlag(): DriveDailyFileEntity?
+
+    /** Sync-Historie fuer den Diagnose-Screen (Plan Abschnitt 9). */
+    @Query("SELECT * FROM drive_daily_files ORDER BY date DESC")
+    suspend fun alle(): List<DriveDailyFileEntity>
 }

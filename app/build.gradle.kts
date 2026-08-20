@@ -111,6 +111,10 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.play.services.auth)
 
+    // M6: verschluesselte Ablage fuer ntfy-Topic/-Server und die Heartbeat-URL (Plan Abschnitt
+    // 6) - EncryptedSharedPreferences, Schluessel im Android Keystore, Tink darunter.
+    implementation(libs.androidx.security.crypto)
+
     // Testen
     testImplementation(libs.junit)
     testImplementation("androidx.room:room-testing:2.8.4")
