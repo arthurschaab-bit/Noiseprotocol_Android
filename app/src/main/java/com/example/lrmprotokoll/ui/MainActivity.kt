@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
@@ -46,11 +47,21 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.data.MeasurementEntity
+import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
+import com.example.lrmprotokoll.data.SessionEntity
+import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
+import com.example.lrmprotokoll.messreihe.Ausfallband
+import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
+import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
+import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.messreihe.leiteDashboardAnzeigeAb
 import com.example.lrmprotokoll.report.ReportManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -294,6 +305,14 @@ fun NoiseProtocolApp(
     Column(modifier = Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Lärmprotokoll", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            val supervisor = container.connectionSupervisor
+            val verbindungszustand by supervisor.state.collectAsState()
+            BluetoothStatusBadge(
+                state = verbindungszustand,
+                deviceName = container.settingsManager.meterDeviceName,
+                onClick = onNavigateToMeter,
+                modifier = Modifier.padding(end = 4.dp)
+            )
             if (selectedIds.isNotEmpty()) {
                 IconButton(onClick = {
                     val targets = records.filter { selectedIds.contains(it.id) }
@@ -588,21 +607,52 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
     val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
     val geraetGepinnt = container.settingsManager.meterDeviceAddress != null
 
-    // Nicht live per Flow (SessionDao liefert keinen), aber bei jedem Verbindungswechsel neu
-    // geladen - eine Session beginnt/endet genau dann, wenn sich verbindungszustand aendert
-    // (MeasurementRecorder.onState), das haelt den Wert praktisch aktuell.
-    var sessionStartedAt by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(verbindungszustand, geraetGepinnt) {
-        sessionStartedAt = if (geraetGepinnt) container.database.sessionDao().offeneSession()?.startedAt else null
-    }
+    val db = container.database
+    val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+    var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
+    var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
+    var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
+    var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
 
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(sessionStartedAt) {
-        while (sessionStartedAt != null) {
+
+    LaunchedEffect(letzteSession?.id) {
+        val s = letzteSession
+        if (s != null) {
+            launch {
+                db.measurementDao().fuerSessionFlow(s.id).collectLatest { geladeneMesswerte ->
+                    messwerte = geladeneMesswerte
+                    if (geladeneMesswerte.isNotEmpty()) {
+                        kennwerte = AkustischeKennwerte.berechne(geladeneMesswerte)
+                    } else {
+                        val geladeneAggregate = db.minuteAggregateDao().fuerSession(s.id)
+                        aggregate = geladeneAggregate
+                        kennwerte = AkustischeKennwerte.ausAggregaten(geladeneAggregate)
+                    }
+                }
+            }
+            launch {
+                db.connectionEventDao().fuerSessionFlow(s.id).collectLatest { events ->
+                    ausfallbaender = leiteAusfallbaenderAb(events, s.endedAt)
+                }
+            }
+        } else {
+            messwerte = emptyList()
+            aggregate = emptyList()
+            kennwerte = null
+            ausfallbaender = emptyList()
+        }
+    }
+
+    LaunchedEffect(letzteSession?.endedAt) {
+        while (letzteSession != null && letzteSession?.endedAt == null) {
             jetzt = System.currentTimeMillis()
             delay(1000)
         }
     }
+
+    val s = letzteSession
+    val sessionStartedAt = if (s?.endedAt == null) s?.startedAt else null
 
     val anzeige = leiteDashboardAnzeigeAb(
         dienstAktiv = dienstAktiv,
@@ -647,6 +697,63 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                 anzeige.pegelText?.let {
                     Text(it, style = MaterialTheme.typography.bodyLarge)
                 }
+            }
+
+            // Live Pegelverlauf Chart direkt im Hauptmenüpunkt ("Start")
+            if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
+                val isLive = s.endedAt == null
+                val sessionEndeFuerChart = s.endedAt ?: jetzt
+                val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
+                    if (messwerte.isNotEmpty()) {
+                        downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
+                    } else {
+                        downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (isLive) "Live-Pegelverlauf" else "Pegelverlauf",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (isLive) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2E7D32))
+                            )
+                        }
+                    }
+                    kennwerte?.let { kw ->
+                        Text(
+                            "LAeq: ${String.format(Locale.getDefault(), "%.1f", kw.leqDb)} dB",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                PegelverlaufChart(
+                    spalten = chartSpalten,
+                    ausfallbaender = ausfallbaender,
+                    sessionStart = s.startedAt,
+                    sessionEnde = sessionEndeFuerChart,
+                    isLive = isLive,
+                    height = 140.dp
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
