@@ -123,9 +123,11 @@ object Pce323Profile {
      * Einziger Umschaltpunkt fuer den Bestaetigungsstatus der obigen Werte-Zuordnung
      * (Review PR #15, Befund 1): [Pce323FrameDecoder] setzt [MeterFrame.modeAssumptionConfirmed]
      * hierauf, [MeterScreen] zeigt den Annahme-Hinweis nur, solange dieser Wert `false` ist.
-     * Erst wenn der Owner die Zuordnung am realen Geraet bestaetigt hat, wird dies auf `true`
-     * gesetzt - vorher gilt jeder non-null-Wert in [weighting]/[timeWeighting]/[range] als
-     * angenommen, nicht als gesichert.
+     *
+     * Vom Owner am 2026-08-20 im Geraetetest bestaetigt (dB(A)/dB(C) und Fast/Slow stimmten live
+     * exakt mit der Geraeteanzeige ueberein, siehe docs/PROTOKOLL_PCE-323.md Abschnitt 10) - ab
+     * hier gilt jeder non-null-Wert in [weighting]/[timeWeighting]/[range] als gesichert, nicht
+     * mehr nur als angenommen.
      */
-    const val MODE_ASSUMPTION_CONFIRMED = false
+    const val MODE_ASSUMPTION_CONFIRMED = true
 }
