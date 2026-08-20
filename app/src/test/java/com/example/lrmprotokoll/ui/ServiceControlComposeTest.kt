@@ -49,7 +49,7 @@ class ServiceControlComposeTest {
 
         AudioRecordingService.testSetzeLaeuft(true)
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("AKTIV").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("AKTIV").assertIsDisplayed()

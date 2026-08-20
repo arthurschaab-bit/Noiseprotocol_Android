@@ -26,6 +26,23 @@ android {
         buildConfigField("String", "SENTRY_DSN", "\"\"")
     }
 
+    signingConfigs {
+        // Fest eingecheckter Debug-Keystore statt des von AGP pro Maschine automatisch neu
+        // erzeugten ~/.android/debug.keystore: die Google-Cloud-Console-Registrierung der
+        // Android-OAuth-Client-ID (siehe GoogleClientConfig.kt) braucht einen SHA-1-
+        // Fingerabdruck, der ueber alle Baumaschinen hinweg (lokal, diese Sandbox, GitHub
+        // Actions) STABIL bleibt - sonst funktioniert "Mit Google verbinden" nur zufaellig auf
+        // genau der Maschine, die den zuletzt registrierten Fingerabdruck erzeugt hat. Passwort/
+        // Alias/Schluesselpasswort sind die von der Android-Tooling selbst verwendeten,
+        // oeffentlich bekannten Standardwerte fuer Debug-Keystores - kein Geheimnis, das hier
+        // preisgegeben wuerde.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false

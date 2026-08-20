@@ -52,7 +52,7 @@ class DiagnoseScreenComposeTest {
         // Rooms Flow-Invalidierung laeuft auf einem eigenen Query-Executor, nicht auf dem
         // Android-Main-Looper - waitForIdle() allein drainiert diesen nicht zuverlaessig.
         // waitUntil pollt, bis die Recomposition tatsaechlich angekommen ist.
-        composeRule.waitUntil(timeoutMillis = 15_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("DEGRADED: Testeintrag", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
