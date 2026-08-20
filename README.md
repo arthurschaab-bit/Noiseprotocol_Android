@@ -22,7 +22,7 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
 | **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
-| **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code abgeschlossen, Google-Anmeldung braucht noch eine echte Client-ID + Gerätetest |
+| **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code + echte OAuth-Client-ID eingerichtet, Gerätetest offen |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
 | **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen, Gerätetest offen |
@@ -131,9 +131,10 @@ Gerätetest (siehe unten) und M8 (Härtung, Plan Abschnitt 12).
 > ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5, M6, M7 *und* M7b.** Der gesamte BLE-Pfad und die
 > gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
 > geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
-> nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung)
-> und die Google-Anmeldung braucht zusätzlich eine echte OAuth-Client-ID, die nur der Kontoinhaber
-> über die Google Cloud Console anlegen kann (siehe `GoogleClientConfig`-KDoc). Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
+> nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung).
+> Die echte OAuth-Client-ID für die Google-Anmeldung ist inzwischen eingerichtet (siehe
+> `GoogleClientConfig`) - der eigentliche Sign-in-Flow ist aber weiterhin nur am echten Gerät
+> prüfbar. Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
 
 > ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Die Byte-Position der Frequenzbewertung ist seit
 > der Folgeaufzeichnung bekannt, welcher Bytewert aber A und welcher C bedeutet, ist eine
@@ -149,8 +150,7 @@ Gerätetest (siehe unten) und M8 (Härtung, Plan Abschnitt 12).
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **Google Cloud Console** | Echte OAuth-Client-ID für den Drive-Sync anlegen (nur der Kontoinhaber kann das) — Anleitung in `GoogleClientConfig` | nein, aber ein Google-Konto im Browser |
-| **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
+| **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen und der Google-Anmeldung mit der jetzt echten Client-ID — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M8 | Härtung (Plan Abschnitt 12) | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
