@@ -11,14 +11,21 @@ class MessreiheCsvTest {
 
     private val zone = ZoneId.of("Europe/Berlin")
 
-    private fun messwert(zeitMs: Long, level: Double, weighting: String? = null, flags: Int = 0) =
-        MeasurementEntity(sessionId = 1, timestamp = zeitMs, levelDb = level, weighting = weighting, flags = flags)
+    private fun messwert(
+        zeitMs: Long, level: Double, weighting: String? = null, flags: Int = 0,
+        timeWeighting: String? = null, range: String? = null,
+    ) = MeasurementEntity(
+        sessionId = 1, timestamp = zeitMs, levelDb = level, weighting = weighting, flags = flags,
+        timeWeighting = timeWeighting, range = range,
+    )
 
-    private fun aggregat(minuteStart: Long, leq: Double, max: Double, min: Double, samples: Int, weighting: String? = null) =
-        MinuteAggregateEntity(
-            sessionId = 1, minuteStart = minuteStart, leqDb = leq, maxDb = max, minDb = min,
-            sampleCount = samples, weighting = weighting,
-        )
+    private fun aggregat(
+        minuteStart: Long, leq: Double, max: Double, min: Double, samples: Int, weighting: String? = null,
+        timeWeighting: String? = null, range: String? = null,
+    ) = MinuteAggregateEntity(
+        sessionId = 1, minuteStart = minuteStart, leqDb = leq, maxDb = max, minDb = min,
+        sampleCount = samples, weighting = weighting, timeWeighting = timeWeighting, range = range,
+    )
 
     @Test
     fun kopfzeileNenntDbNichtDba() {
@@ -34,18 +41,21 @@ class MessreiheCsvTest {
     }
 
     @Test
-    fun messwertZeileEnthaeltZeitPegelBewertungFlags() {
+    fun messwertZeileEnthaeltZeitPegelBewertungZeitbewertungBereichFlags() {
         // 1755324000000 ms = 2025-08-16T06:00:00Z = 08:00 MESZ
         val csv = MessreiheCsv.ausMesswerten(
-            listOf(messwert(1755324000000, 52.3, weighting = "A", flags = 5)), zone,
+            listOf(
+                messwert(1755324000000, 52.3, weighting = "A", flags = 5, timeWeighting = "FAST", range = "RANGE_30_130"),
+            ),
+            zone,
         )
-        assertTrue(csv.contains("2025-08-16T08:00:00+02:00;52,3;A;5"))
+        assertTrue(csv.contains("2025-08-16T08:00:00+02:00;52,3;A;FAST;RANGE_30_130;5"))
     }
 
     @Test
-    fun unbekannteBewertungBleibtLeerstringNichtNullText() {
+    fun unbekannteEinstellungenBleibenLeerstringNichtNullText() {
         val csv = MessreiheCsv.ausMesswerten(listOf(messwert(0, 52.3, weighting = null)), zone)
-        assertTrue(csv.contains(";52,3;;0"))
+        assertTrue(csv.contains(";52,3;;;;0"))
         assertTrue(!csv.contains("null"))
     }
 
@@ -81,9 +91,15 @@ class MessreiheCsvTest {
     @Test
     fun aggregatZeileEnthaeltAlleSpalten() {
         val csv = MessreiheCsv.ausAggregaten(
-            listOf(aggregat(1755324000000, leq = 55.5, max = 60.0, min = 50.0, samples = 118, weighting = "A")), zone,
+            listOf(
+                aggregat(
+                    1755324000000, leq = 55.5, max = 60.0, min = 50.0, samples = 118,
+                    weighting = "A", timeWeighting = "SLOW", range = "RANGE_50_100",
+                ),
+            ),
+            zone,
         )
-        assertTrue(csv.contains("2025-08-16T08:00:00+02:00;55,5;60,0;50,0;118;A"))
+        assertTrue(csv.contains("2025-08-16T08:00:00+02:00;55,5;60,0;50,0;118;A;SLOW;RANGE_50_100"))
     }
 
     @Test

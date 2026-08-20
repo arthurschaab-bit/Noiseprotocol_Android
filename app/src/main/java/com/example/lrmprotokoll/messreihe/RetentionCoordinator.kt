@@ -51,7 +51,6 @@ class RetentionCoordinator(
     private fun bildeMinutenaggregat(sessionId: Long, minutenIndex: Long, werte: List<MeasurementEntity>): MinuteAggregateEntity {
         val pegel = werte.map { it.levelDb }
         val leq = 10.0 * log10(pegel.sumOf { 10.0.pow(it / 10.0) } / pegel.size)
-        val bewertungen = werte.mapNotNull { it.weighting }.toSet()
 
         return MinuteAggregateEntity(
             sessionId = sessionId,
@@ -60,10 +59,12 @@ class RetentionCoordinator(
             maxDb = pegel.max(),
             minDb = pegel.min(),
             sampleCount = werte.size,
-            // Nur uebernehmen, wenn ALLE Rohwerte derselben Minute dieselbe Bewertung trugen -
-            // sonst waere ein gemischtes "A und C in einer Minute" als ein einzelner Wert
+            // Je Spalte nur uebernehmen, wenn ALLE Rohwerte derselben Minute uebereinstimmten -
+            // sonst waere z.B. ein gemischtes "A und C in einer Minute" als ein einzelner Wert
             // gespeichert und die Mischung ginge unter.
-            weighting = bewertungen.singleOrNull(),
+            weighting = werte.mapNotNull { it.weighting }.toSet().singleOrNull(),
+            timeWeighting = werte.mapNotNull { it.timeWeighting }.toSet().singleOrNull(),
+            range = werte.mapNotNull { it.range }.toSet().singleOrNull(),
         )
     }
 

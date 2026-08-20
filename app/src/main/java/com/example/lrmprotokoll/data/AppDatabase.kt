@@ -202,7 +202,24 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         )
     }
 }
-val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+/**
+ * Migration von Schema-Version 10 auf 11: `timeWeighting` und `range` auf `measurements` und
+ * `minute_aggregates`, `range` auf `sessions` - vervollstaendigt die bereits vorhandenen
+ * `weighting`-Spalten um die beiden anderen Geraeteeinstellungen (Owner-Wunsch: vollstaendige
+ * Einstellungen im CSV-Export). Rein additiv wie die Migrationen zuvor.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sessions` ADD COLUMN `range` TEXT")
+        db.execSQL("ALTER TABLE `measurements` ADD COLUMN `timeWeighting` TEXT")
+        db.execSQL("ALTER TABLE `measurements` ADD COLUMN `range` TEXT")
+        db.execSQL("ALTER TABLE `minute_aggregates` ADD COLUMN `timeWeighting` TEXT")
+        db.execSQL("ALTER TABLE `minute_aggregates` ADD COLUMN `range` TEXT")
+    }
+}
+val ALLE_MIGRATIONEN = arrayOf(
+    MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+)
 
 @Database(
     entities = [
@@ -211,7 +228,7 @@ val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGR
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

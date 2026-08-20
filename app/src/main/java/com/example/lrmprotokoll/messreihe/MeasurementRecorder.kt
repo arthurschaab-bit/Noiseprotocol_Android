@@ -59,6 +59,12 @@ class MeasurementRecorder(
     private var warJemalsVerbunden = false
     private var zuletztImAusfall = false
 
+    // Letzter bestaetigter Frame-Kontext, fuer SessionEntity.weighting/timeWeighting/range beim
+    // Sitzungsende (SessionEntity-KDoc: "speichert den zuletzt bekannten Wert als Kontext").
+    private var letzteBewertung: String? = null
+    private var letzteZeitbewertung: String? = null
+    private var letzterBereich: String? = null
+
     /** Die laufende Session-ID, falls [start] bereits eine Session eroeffnet hat - fuer
      * Aufrufer, die Messwerte einer Session zuordnen wollen, ohne selbst Buch zu fuehren. */
     val laufendeSessionId: Long? get() = aktiveSessionId
@@ -86,6 +92,9 @@ class MeasurementRecorder(
             )
             warJemalsVerbunden = false
             zuletztImAusfall = false
+            letzteBewertung = null
+            letzteZeitbewertung = null
+            letzterBereich = null
 
             coroutineScope {
                 launch { states.collect { onState(it) } }
@@ -111,19 +120,35 @@ class MeasurementRecorder(
         scope.launch {
             pufferMutex.withLock { flushOhneSperre() }
             val session = sessionDao.byId(sessionId) ?: return@launch
-            sessionDao.update(session.copy(endedAt = now.now().toEpochMilli()))
+            sessionDao.update(
+                session.copy(
+                    endedAt = now.now().toEpochMilli(),
+                    weighting = letzteBewertung,
+                    timeWeighting = letzteZeitbewertung,
+                    range = letzterBereich,
+                )
+            )
         }
     }
 
     private suspend fun onFrame(frame: MeterFrame) {
         val sessionId = aktiveSessionId ?: return
+        // null, solange die jeweilige Annahme unbestaetigt ist - siehe MeasurementEntity-KDoc.
+        val bewertung = frame.weighting?.takeIf { frame.modeAssumptionConfirmed }?.name
+        val zeitbewertung = frame.timeWeighting?.takeIf { frame.modeAssumptionConfirmed }?.name
+        val bereich = frame.range?.takeIf { frame.modeAssumptionConfirmed }?.name
+        if (bewertung != null) letzteBewertung = bewertung
+        if (zeitbewertung != null) letzteZeitbewertung = zeitbewertung
+        if (bereich != null) letzterBereich = bereich
+
         val eintrag = MeasurementEntity(
             sessionId = sessionId,
             timestamp = frame.receivedAt.toEpochMilli(),
             levelDb = frame.level,
-            // null, solange die A/C-Bewertung unbestaetigt ist - siehe MeasurementEntity-KDoc.
-            weighting = frame.weighting?.takeIf { frame.modeAssumptionConfirmed }?.name,
+            weighting = bewertung,
             flags = flagsAus(frame),
+            timeWeighting = zeitbewertung,
+            range = bereich,
         )
         pufferMutex.withLock {
             puffer += eintrag

@@ -80,6 +80,14 @@ class MeasurementRecorderTest {
         modeAssumptionConfirmed = bewertungBestaetigt,
     )
 
+    private fun vollerFrame(level: Double) = MeterFrame(
+        level = level,
+        weighting = com.example.lrmprotokoll.meter.Weighting.A,
+        timeWeighting = com.example.lrmprotokoll.meter.TimeWeighting.FAST,
+        range = com.example.lrmprotokoll.meter.MeasurementRange.RANGE_30_130,
+        holdMax = false, holdMin = false, receivedAt = uhr.now(), modeAssumptionConfirmed = true,
+    )
+
     @Test
     fun startLegtEineSessionAnBevorDieBeobachtungBeginnt() = runTest(UnconfinedTestDispatcher()) {
         val recorder = MeasurementRecorder(
@@ -170,6 +178,64 @@ class MeasurementRecorderTest {
         val bestaetigt = measurementDao.geschrieben.first { it.levelDb == 56.0 }
         assertNull("Unbestaetigte Bewertung darf nicht als Tatsache gespeichert werden", unbestaetigt.weighting)
         assertEquals("A", bestaetigt.weighting)
+    }
+
+    @Test
+    fun zeitbewertungUndBereichWerdenNurBeiBestaetigterAnnahmeGespeichert() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, flushInterval = Duration.ofMinutes(10), flushBatchSize = 1,
+        )
+        recorder.start(device)
+
+        frames.tryEmit(vollerFrame(55.0))
+        runCurrent()
+
+        val eintrag = measurementDao.geschrieben.single()
+        assertEquals("FAST", eintrag.timeWeighting)
+        assertEquals("RANGE_30_130", eintrag.range)
+    }
+
+    @Test
+    fun stopSchreibtDenLetztenBekanntenFrameKontextInDieSession() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, flushInterval = Duration.ofMinutes(10), flushBatchSize = 1,
+        )
+        recorder.start(device)
+
+        frames.tryEmit(vollerFrame(55.0))
+        runCurrent()
+        recorder.stop()
+        runCurrent()
+
+        val session = sessionDao.zeilen.values.single()
+        assertEquals("A", session.weighting)
+        assertEquals("FAST", session.timeWeighting)
+        assertEquals("RANGE_30_130", session.range)
+    }
+
+    @Test
+    fun stopBehaeltDenLetztenBekanntenWertAuchWennDerAllerletzteFrameUnbestaetigtWar() = runTest(UnconfinedTestDispatcher()) {
+        // Ein Session-Kontext, der bei jedem unbestaetigten Frame auf null zurueckfaellt, waere
+        // schlechter als gar keine Aktualisierung - siehe SessionEntity-KDoc "zuletzt bekannter
+        // Wert". Der letzte GESICHERTE Wert muss ueberleben, nicht der allerletzte Frame roh.
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, flushInterval = Duration.ofMinutes(10), flushBatchSize = 2,
+        )
+        recorder.start(device)
+
+        frames.tryEmit(vollerFrame(55.0))
+        frames.tryEmit(frame(56.0, bewertungBestaetigt = false))
+        runCurrent()
+        recorder.stop()
+        runCurrent()
+
+        val session = sessionDao.zeilen.values.single()
+        assertEquals("A", session.weighting)
+        assertEquals("FAST", session.timeWeighting)
+        assertEquals("RANGE_30_130", session.range)
     }
 
     @Test

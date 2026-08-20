@@ -10,11 +10,13 @@ import androidx.room.PrimaryKey
  * erzeugen keine neue Session, sondern [ConnectionEventEntity]-Zeilen - eine Session ist die
  * Klammer um "wie lange wurde überwacht", nicht "wie lange stand die Verbindung".
  *
- * [weighting] und [timeWeighting] sind nullable und bleiben `null`, solange
+ * [weighting], [timeWeighting] und [range] sind nullable und bleiben `null`, solange
  * [com.example.lrmprotokoll.meter.MeterFrame.modeAssumptionConfirmed] `false` ist - siehe
  * [MeasurementEntity] für die ausführliche Begründung. Eine Session speichert ohnehin nur den
- * *zuletzt* bekannten Wert als Kontext für den Export; die verbindliche Angabe je Messwert steht
- * in [MeasurementEntity.weighting].
+ * *zuletzt* bekannten Wert als Kontext für den Export (von
+ * [com.example.lrmprotokoll.messreihe.MeasurementRecorder.stop] beim Sitzungsende aus dem
+ * letzten empfangenen Frame übernommen); die verbindliche Angabe je Messwert steht in
+ * [MeasurementEntity.weighting]/[MeasurementEntity.timeWeighting]/[MeasurementEntity.range].
  */
 @Entity(tableName = "sessions")
 data class SessionEntity(
@@ -25,6 +27,7 @@ data class SessionEntity(
     val deviceName: String,
     val weighting: String?,
     val timeWeighting: String?,
+    val range: String? = null,
 )
 
 /**
@@ -35,10 +38,11 @@ data class SessionEntity(
  * Export und Kennwerte. Beide bestehen bewusst nebeneinander (siehe M7b-PR); eine Konsolidierung
  * ist ein möglicher Folgeschritt, kein Teil dieses Auftrags.
  *
- * [weighting] bleibt `null`, solange die A/C-Bewertung unbestätigt ist (siehe README "Bekannte
- * Einschränkungen" und `MeterFrame.modeAssumptionConfirmed`-KDoc): Ein erfundener oder
- * angenommener Wert wäre hier eine gespeicherte Tatsachenbehauptung, die es nicht gibt. Jede
- * Stelle, die diese Spalte liest, MUSS `null` als "unbekannt" behandeln, nicht als Fehler.
+ * [weighting], [timeWeighting] und [range] bleiben `null`, solange die zugehörige Annahme
+ * unbestätigt ist (siehe README "Bekannte Einschränkungen" und
+ * `MeterFrame.modeAssumptionConfirmed`-KDoc): Ein erfundener oder angenommener Wert wäre hier
+ * eine gespeicherte Tatsachenbehauptung, die es nicht gibt. Jede Stelle, die diese Spalten liest,
+ * MUSS `null` als "unbekannt" behandeln, nicht als Fehler.
  */
 @Entity(tableName = "measurements")
 data class MeasurementEntity(
@@ -48,6 +52,8 @@ data class MeasurementEntity(
     val levelDb: Double,
     val weighting: String?,
     val flags: Int,
+    val timeWeighting: String? = null,
+    val range: String? = null,
 )
 
 /** Bit-Flags für [MeasurementEntity.flags] - eine Ganzzahl statt mehrerer Boolean-Spalten, damit
@@ -84,6 +90,10 @@ object ConnectionEventType {
  * [MeasurementEntity] entfernt hat. `sampleCount` bleibt erhalten, damit auch nach der
  * Verdichtung sichtbar ist, wie viele Rohwerte in die Minute eingeflossen sind - eine Minute mit
  * einem einzigen Sample ist etwas anderes als eine mit 120.
+ *
+ * [weighting], [timeWeighting] und [range] werden von [com.example.lrmprotokoll.messreihe.RetentionCoordinator]
+ * je Minute nur übernommen, wenn ALLE verdichteten Rohwerte übereinstimmen - sonst `null`, damit
+ * ein Wechsel innerhalb einer Minute nicht als ein einzelner, falscher Wert verschwindet.
  */
 @Entity(tableName = "minute_aggregates")
 data class MinuteAggregateEntity(
@@ -95,4 +105,6 @@ data class MinuteAggregateEntity(
     val minDb: Double,
     val sampleCount: Int,
     val weighting: String?,
+    val timeWeighting: String? = null,
+    val range: String? = null,
 )
