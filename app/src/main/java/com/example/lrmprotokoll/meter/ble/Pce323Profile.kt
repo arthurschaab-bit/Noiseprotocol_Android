@@ -94,21 +94,24 @@ object Pce323Profile {
      *             unveraendert blieben -> A/C-Bewertung.
      *
      * Die BYTE-POSITIONEN sind damit durch wiederholte, sich gegenseitig nicht ueberlappende
-     * Umschaltungen belegt. Die WERTE-ZUORDNUNG (welcher Bytewert welchem Anzeigezustand
-     * entspricht) ist dagegen eine ANNAHME, keine Bestaetigung: 0x00/0x0F/0x2C waren in jeder
-     * Aufzeichnung vor jedem Umschalten der Ausgangszustand und werden hier als jeweiliger
-     * Default interpretiert (A, Fast, groesster Bereich). Diese Annahme wird ueber
-     * [MeterScreen] am realen Geraet gegengeprueft - erst nach Bestaetigung durch den Owner
-     * gilt sie als gesichert. Ein nicht erkannter Bytewert liefert bewusst `null`, keinen Default.
+     * Umschaltungen belegt.
+     *
+     * Die WERTE-ZUORDNUNG fuer Fast/Slow und A/C hat der Owner am 2026-08-20 im Gerätetest
+     * bestätigt (dB(A)/dB(C) und Fast/Slow stimmten in der Live-Anzeige exakt mit der
+     * Geräteanzeige überein). Die Messbereichs-Zuordnung war dagegen falsch - der Gerätetest
+     * ergab eine um zwei Positionen verschobene Zuordnung innerhalb desselben Rundlaufs
+     * (Geraet 30-130 -> App zeigte 50-100, Geraet 30-80 -> App zeigte 80-130, Geraet 50-100 ->
+     * App zeigte 30-130, Geraet 80-130 -> App zeigte 30-80), unten korrigiert. Ein nicht
+     * erkannter Bytewert liefert weiterhin bewusst `null`, keinen Default.
      */
     const val RANGE_BYTE_OFFSET = 7
     const val TIME_WEIGHTING_BYTE_OFFSET = 19
     const val WEIGHTING_BYTE_OFFSET = 20
 
-    const val RANGE_VALUE_30_130: Byte = 0x00
-    const val RANGE_VALUE_30_80: Byte = 0x01
-    const val RANGE_VALUE_50_100: Byte = 0x02
-    const val RANGE_VALUE_80_130: Byte = 0x03
+    const val RANGE_VALUE_50_100: Byte = 0x00
+    const val RANGE_VALUE_80_130: Byte = 0x01
+    const val RANGE_VALUE_30_130: Byte = 0x02
+    const val RANGE_VALUE_30_80: Byte = 0x03
 
     const val TIME_WEIGHTING_VALUE_FAST: Byte = 0x0F
     const val TIME_WEIGHTING_VALUE_SLOW: Byte = 0x10
