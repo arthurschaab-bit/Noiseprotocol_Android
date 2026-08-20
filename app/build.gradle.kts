@@ -21,6 +21,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("boolean", "DIAGNOSTICS_REMOTE_ENABLED", "true")
+        buildConfigField("String", "SENTRY_DSN", "\"\"")
     }
 
     buildTypes {
@@ -41,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     androidResources {
         noCompress += "tflite"
@@ -114,6 +118,9 @@ dependencies {
     // M6: verschluesselte Ablage fuer ntfy-Topic/-Server und die Heartbeat-URL (Plan Abschnitt
     // 6) - EncryptedSharedPreferences, Schluessel im Android Keystore, Tink darunter.
     implementation(libs.androidx.security.crypto)
+
+    // Diagnose & Fehleranalyse (Konzept DIAGNOSE_OBSERVABILITY_KONZEPT.md)
+    implementation(libs.sentry.android)
 
     // Testen
     testImplementation(libs.junit)

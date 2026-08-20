@@ -255,6 +255,21 @@ class SettingsManager(
     var diagnoseLoggingAktiv: Boolean
         get() = prefs.getBoolean("diagnose_logging_enabled", false)
         set(value) = prefs.edit().putBoolean("diagnose_logging_enabled", value).apply()
+
+    // ---------------------------------------------------------------- Diagnose & Observability (Konzept)
+
+    /**
+     * Steuert die Remote-Uebertragung technischer Fehler an Sentry (Konzept Abschnitt 8.3).
+     * Standardmaessig AUS (Opt-In), erfordert ausdrueckliche Zustimmung des Nutzers.
+     */
+    var remoteDiagnoseAktiv: Boolean
+        get() = prefs.getBoolean("remote_diagnose_enabled", false)
+        set(value) = prefs.edit().putBoolean("remote_diagnose_enabled", value).apply()
+
+    /** Letzte erzeugte oder empfangene Diagnose-ID fuer die UI. */
+    var letzteDiagnoseId: String?
+        get() = prefs.getString("letzte_diagnose_id", null)
+        set(value) = prefs.edit().putString("letzte_diagnose_id", value).apply()
 }
 
 /**

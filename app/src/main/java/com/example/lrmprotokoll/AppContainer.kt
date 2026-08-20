@@ -126,9 +126,15 @@ class AppContainer(context: Context) {
         )
     }
 
+    val sentryDiagnosticSink: com.example.lrmprotokoll.diagnose.sentry.SentryDiagnosticSink by lazy {
+        com.example.lrmprotokoll.diagnose.sentry.SentryDiagnosticSink(
+            aktiv = { settingsManager.remoteDiagnoseAktiv }
+        )
+    }
+
     val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter by lazy {
         com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
-            sinks = listOf(localDiagnosticSink),
+            sinks = listOf(localDiagnosticSink, sentryDiagnosticSink),
             initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(
                 appVersion = "1.0",
                 buildType = "debug",
