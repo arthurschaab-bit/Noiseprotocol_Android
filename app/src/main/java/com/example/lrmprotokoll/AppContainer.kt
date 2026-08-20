@@ -146,6 +146,13 @@ class AppContainer(context: Context) {
         DiagnosticLogCleanupCoordinator(dao = database.diagnosticLogDao())
     }
 
+    val supportBundleExporter: com.example.lrmprotokoll.diagnose.export.SupportBundleExporter by lazy {
+        com.example.lrmprotokoll.diagnose.export.SupportBundleExporter(
+            context = context.applicationContext,
+            reporter = diagnosticsReporter
+        )
+    }
+
     val connectionSupervisor: ConnectionSupervisor by lazy {
         ConnectionSupervisor(
             transport = meterTransport,
