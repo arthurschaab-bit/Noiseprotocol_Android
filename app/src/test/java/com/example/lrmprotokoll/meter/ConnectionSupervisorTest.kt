@@ -83,6 +83,7 @@ class ConnectionSupervisorTest {
         minStableSession: Duration = Duration.ofSeconds(5),
         random: Random = Random(1),
         expectedFramePeriod: Duration? = null,
+        cadenceTolerance: Double = 0.2,
         diagnosticLogger: DiagnosticLogger? = null,
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
@@ -97,6 +98,7 @@ class ConnectionSupervisorTest {
             maxAttempts = maxAttempts,
             minStableSession = minStableSession,
             expectedFramePeriod = expectedFramePeriod,
+            cadenceTolerance = cadenceTolerance,
             diagnosticLogger = diagnosticLogger,
         )
     }
@@ -459,6 +461,61 @@ class ConnectionSupervisorTest {
             states.contains(ConnectionState.DEGRADED)
         )
         assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+    }
+
+    /**
+     * Owner-Rueckmeldung nach Geraetetest: Das Diagnose-Log zeigte reale Deltas von ~180-630ms um
+     * die erwarteten 515ms - deutlich mehr als die urspruenglichen ±20% (412-618ms) und loeste
+     * dadurch bei nahezu jedem Reconnect faelschlich DEGRADED aus. AppContainer setzt seither
+     * ±50% (siehe dortiger Kommentar). 650ms liegt ausserhalb der alten, aber innerhalb der neuen
+     * Toleranz - Gegentest zu [kadenzAusserhalbGelockerterToleranzLoestWeiterhinDegradedAus]
+     * unten, damit nicht einfach die Pruefung komplett wirkungslos wurde.
+     */
+    @Test
+    fun kadenzInnerhalbGelockerterToleranzLoestKeinDegradedAus() = runTest {
+        val transport = newTransport(frameRateHz = 1000.0 / 650.0)
+        val supervisor = newSupervisor(
+            transport,
+            expectedFramePeriod = Duration.ofMillis(515),
+            cadenceTolerance = 0.5,
+        )
+        val states = observeStates(supervisor)
+
+        supervisor.start(device)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertFalse(
+            "650ms haette bei ±50% Toleranz kein DEGRADED ausloesen duerfen, war $states",
+            states.contains(ConnectionState.DEGRADED)
+        )
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+    }
+
+    /** Gegentest zu [kadenzInnerhalbGelockerterToleranzLoestKeinDegradedAus]: dieselben 650ms
+     * loesen unter der urspruenglichen ±20%-Toleranz (Standardwert des Konstruktors) weiterhin
+     * DEGRADED aus - die Lockerung ist eine bewusste AppContainer-Entscheidung, kein
+     * Verhaltenswechsel der Klasse selbst. */
+    @Test
+    fun kadenzAusserhalbGelockerterToleranzLoestWeiterhinDegradedAus() = runTest {
+        val transport = newTransport(frameRateHz = 1000.0 / 650.0)
+        val supervisor = newSupervisor(transport, expectedFramePeriod = Duration.ofMillis(515))
+        val states = observeStates(supervisor)
+
+        supervisor.start(device)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertTrue(
+            "650ms haette bei ±20% Toleranz weiterhin DEGRADED ausloesen muessen, war $states",
+            states.contains(ConnectionState.DEGRADED)
+        )
     }
 
     /**

@@ -161,6 +161,11 @@ class AppContainer(context: Context) {
             // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
             // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
             expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
+            // Owner-Entscheidung nach Geraetetest ("Toleranz lockern"): Der urspruengliche
+            // ±20%-Default (ConnectionSupervisor-KDoc) loeste bei nahezu jedem Reconnect
+            // faelschlich DEGRADED aus - das Diagnose-Log zeigte reale Deltas von ~180-630ms um
+            // die erwarteten 515ms. ±50% deckt das ab, ohne die Kadenzpruefung ganz abzuschalten.
+            cadenceTolerance = 0.5,
             diagnosticLogger = diagnosticLogger,
             diagnosticsReporter = diagnosticsReporter,
         )
