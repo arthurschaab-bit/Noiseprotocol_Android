@@ -1236,6 +1236,15 @@ gesetzt war - `LocalNotificationAlertChannel` vibriert jetzt mindestens 60 s in 
 (`alarmVibrationsmuster()`); da Kanal-Einstellungen nach der ersten Erstellung unveränderlich sind,
 lief die Channel-ID auf `noise_alarm_channel_v2`, der alte Kanal wird beim nächsten Alarm gelöscht.
 
+**Owner-Entscheidung zum Kadenz-Watcher (6, Stream-Plausibilisierung):** Das Diagnose-Log aus dem
+laufenden Gerätetest zeigte reale Deltas von ~180-630ms um die erwarteten 515ms - deutlich mehr als
+die ursprünglichen ±20% (412-618ms) - und löste dadurch bei nahezu jedem Reconnect fälschlich
+DEGRADED aus (vermutlich auch Ursache für "Reconnect manchmal nur nach Neustart der Aufnahme
+möglich": jeder Kadenz-Abbruch zählt als Fehlversuch, nach `maxAttempts` gibt der Supervisor
+komplett auf). Auf Owner-Wunsch ("Toleranz lockern") setzt `AppContainer` jetzt `cadenceTolerance
+= 0.5` statt des Klassen-Defaults 0.2 - die Spoofing-Erkennung bleibt aktiv, reagiert aber deutlich
+seltener auf normalen Real-Geräte-Jitter.
+
 **Google-Drive-Autorisierung (8.4.3): fehlender Zustimmungsbildschirm nachgerüstet.**
 "Mit Google verbinden" scheiterte auf dem Geraet dauerhaft mit "Verbindung fehlgeschlagen: Kein
 Zugriffstoken verfügbar (Autorisierung ohne Zugriffstoken - erneute Zustimmung nötig)". Ursache:
