@@ -1,9 +1,13 @@
 package com.example.lrmprotokoll.ui
 
 import android.content.Intent
+import android.content.IntentSender
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,10 +29,13 @@ import android.content.ClipboardManager
 import android.os.Build
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
+import com.example.lrmprotokoll.drive.auth.AutorisierungBenoetigtException
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -66,6 +73,30 @@ fun SettingsScreen(onBack: () -> Unit) {
     var driveWlanOnly by remember { mutableStateOf(settings.driveWlanOnly) }
     var driveUploadWav by remember { mutableStateOf(settings.driveUploadWav) }
     var driveEinrichtungsErgebnis by remember { mutableStateOf<String?>(null) }
+
+    // Google verlangt beim allerersten Autorisieren des drive.file-Scopes (oder nach einem
+    // Widerruf) einen expliziten Zustimmungsbildschirm (siehe AutorisierungBenoetigtException-
+    // KDoc) - ohne diesen Launcher konnte "Mit Google verbinden" diesen Fall nie beheben.
+    val driveZustimmungLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) {
+        // Ergebnis bewusst nicht ausgewertet: Google verlangt fuer die Authorization API, nach
+        // Abschluss des Zustimmungsbildschirms - egal ob erteilt oder abgebrochen - erneut
+        // authorize() aufzurufen; bei Erteilung liefert das dann direkt ein Token, sonst wieder
+        // denselben (oder gar keinen) Zustimmungsbedarf.
+        scope.launch {
+            when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
+                is DriveEinrichtungsVersuch.Erfolg -> {
+                    driveOrdnerId = versuch.folderId
+                    driveOrdnerBlockiert = false
+                    driveEinrichtungsErgebnis = versuch.nachricht
+                }
+                is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
+                is DriveEinrichtungsVersuch.ZustimmungNoetig ->
+                    driveZustimmungLauncher.launch(IntentSenderRequest.Builder(versuch.intentSender).build())
+            }
+        }
+    }
 
     var diagnoseLoggingAktiv by remember { mutableStateOf(settings.diagnoseLoggingAktiv) }
 
@@ -437,16 +468,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(onClick = {
                     scope.launch {
-                        driveEinrichtungsErgebnis = container.driveEinrichtung
-                            .richteEin(driveOrdnerName.ifBlank { "Lärmprotokoll" })
-                            .fold(
-                                onSuccess = {
-                                    driveOrdnerId = settings.driveFolderId
-                                    driveOrdnerBlockiert = false
-                                    "Verbunden. Ordner \"$driveOrdnerName\" wurde angelegt."
-                                },
-                                onFailure = { formatiereDriveFehler(it) },
-                            )
+                        when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
+                            is DriveEinrichtungsVersuch.Erfolg -> {
+                                driveOrdnerId = versuch.folderId
+                                driveOrdnerBlockiert = false
+                                driveEinrichtungsErgebnis = versuch.nachricht
+                            }
+                            is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
+                            is DriveEinrichtungsVersuch.ZustimmungNoetig ->
+                                driveZustimmungLauncher.launch(IntentSenderRequest.Builder(versuch.intentSender).build())
+                        }
                     }
                 }) {
                     Text(if (driveOrdnerId == null) "Mit Google verbinden" else "Ordner neu einrichten")
@@ -598,3 +629,62 @@ internal fun formatiereDriveFehler(fehler: Throwable): String {
         "Verbindung fehlgeschlagen: ${fehler.message}"
     }
 }
+
+/**
+ * Ergebnis eines Versuchs, den Drive-Sync-Ordner einzurichten (siehe [versucheDriveEinrichtung]).
+ * Eigener Typ statt eines simplen `Result<String>`, weil [ZustimmungNoetig] kein Fehler im
+ * ueblichen Sinn ist - der Aufrufer muss stattdessen den Zustimmungsbildschirm anzeigen, siehe
+ * [AutorisierungBenoetigtException].
+ */
+internal sealed interface DriveEinrichtungsVersuch {
+    data class Erfolg(val nachricht: String, val folderId: String?) : DriveEinrichtungsVersuch
+    data class Fehler(val nachricht: String) : DriveEinrichtungsVersuch
+    data class ZustimmungNoetig(val intentSender: IntentSender) : DriveEinrichtungsVersuch
+}
+
+/**
+ * Owner-Rückmeldung nach Geraetetest: "Mit Google verbinden" scheiterte dauerhaft mit
+ * "Verbindung fehlgeschlagen: Kein Zugriffstoken verfügbar (Autorisierung ohne Zugriffstoken -
+ * erneute Zustimmung nötig)", weil Google beim allerersten Autorisieren des drive.file-Scopes
+ * einen expliziten Zustimmungsbildschirm verlangt (siehe [AutorisierungBenoetigtException]) - die
+ * App zeigte dafuer aber nur eine generische Fehlermeldung an, ohne diesen Bildschirm je zu
+ * starten. Wird sowohl vom Button-`onClick` als auch nach Rueckkehr aus dem Zustimmungsbildschirm
+ * aufgerufen (siehe `driveZustimmungLauncher` in [SettingsScreen]), deshalb als eigene Funktion
+ * statt inline im Composable.
+ */
+internal suspend fun versucheDriveEinrichtung(
+    container: AppContainer,
+    settings: SettingsManager,
+    ordnerName: String,
+): DriveEinrichtungsVersuch {
+    val name = ordnerName.ifBlank { "Lärmprotokoll" }
+    return container.driveEinrichtung.richteEin(name).fold(
+        onSuccess = {
+            DriveEinrichtungsVersuch.Erfolg(
+                nachricht = "Verbunden. Ordner \"$name\" wurde angelegt.",
+                folderId = settings.driveFolderId,
+            )
+        },
+        onFailure = { fehler ->
+            val zustimmung = findeAutorisierungBenoetigt(fehler)
+            if (zustimmung != null) {
+                DriveEinrichtungsVersuch.ZustimmungNoetig(zustimmung.intentSender)
+            } else {
+                DriveEinrichtungsVersuch.Fehler(formatiereDriveFehler(fehler))
+            }
+        },
+    )
+}
+
+/**
+ * Sucht die komplette `cause`-Kette nach einer [AutorisierungBenoetigtException] ab, statt nur den
+ * unmittelbaren `cause` zu pruefen - [com.example.lrmprotokoll.drive.GoogleDriveApiClient]s
+ * `mitToken()` verpackt sie bereits einmal in eine `DriveApiException`, und ein zukuenftiger
+ * weiterer Wrapper soll diese Pruefung nicht stillschweigend brechen.
+ */
+internal tailrec fun findeAutorisierungBenoetigt(fehler: Throwable?): AutorisierungBenoetigtException? =
+    when (fehler) {
+        null -> null
+        is AutorisierungBenoetigtException -> fehler
+        else -> findeAutorisierungBenoetigt(fehler.cause)
+    }

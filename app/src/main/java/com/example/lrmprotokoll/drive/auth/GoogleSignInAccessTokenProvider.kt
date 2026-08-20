@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.drive.auth
 
 import android.content.Context
+import android.content.IntentSender
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.example.lrmprotokoll.drive.AccessTokenProvider
@@ -12,6 +13,24 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+
+/**
+ * Signalisiert, dass Google einen expliziten Zustimmungsbildschirm verlangt, bevor
+ * [GoogleSignInAccessTokenProvider] ein Zugriffstoken bekommen kann (Identity Services
+ * "Authorization API": `AuthorizationResult.hasResolution() == true`) - typischerweise beim
+ * allerersten Autorisieren des drive.file-Scopes oder wenn eine vorherige Zustimmung widerrufen
+ * wurde. Bislang fehlte diese Fallunterscheidung komplett: [autorisiereDriveZugriff] warf in
+ * genau diesem Fall pauschal `IllegalStateException("Autorisierung ohne Zugriffstoken - erneute
+ * Zustimmung nötig")`, ohne der UI eine Moeglichkeit zu geben, den noetigen Zustimmungsbildschirm
+ * ueberhaupt zu zeigen - "Mit Google verbinden" konnte diesen Fall dadurch nie beheben, egal wie
+ * oft man es antippte (Owner-Rueckmeldung nach Geraetetest).
+ *
+ * [intentSender] muss ueber `ActivityResultContracts.StartIntentSenderForResult` in einer
+ * Activity/Compose-UI gestartet werden (siehe `SettingsScreen`); nach erfolgreicher Zustimmung
+ * liefert ein erneuter [GoogleSignInAccessTokenProvider.holeToken]-Aufruf direkt ein Token.
+ */
+class AutorisierungBenoetigtException(val intentSender: IntentSender) :
+    Exception("Zustimmung des Nutzers erforderlich, um Drive-Zugriff zu autorisieren")
 
 /**
  * Holt vor jedem Upload ein frisches Drive-Zugriffstoken - bewusst kein eigenes Caching, siehe
@@ -65,10 +84,16 @@ class GoogleSignInAccessTokenProvider(private val context: Context) : AccessToke
             client.authorize(anfrage)
                 .addOnSuccessListener { ergebnis ->
                     val token = ergebnis.accessToken
-                    if (token != null) {
-                        fortsetzung.resume(token)
-                    } else {
-                        fortsetzung.resumeWithException(
+                    val pendingIntent = ergebnis.pendingIntent
+                    when {
+                        token != null -> fortsetzung.resume(token)
+                        // hasResolution(): Google verlangt einen Zustimmungsbildschirm, bevor ein
+                        // Token ausgestellt wird - siehe KDoc von [AutorisierungBenoetigtException].
+                        ergebnis.hasResolution() && pendingIntent != null ->
+                            fortsetzung.resumeWithException(
+                                AutorisierungBenoetigtException(pendingIntent.intentSender)
+                            )
+                        else -> fortsetzung.resumeWithException(
                             IllegalStateException("Autorisierung ohne Zugriffstoken - erneute Zustimmung nötig")
                         )
                     }
