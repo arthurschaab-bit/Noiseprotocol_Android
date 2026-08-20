@@ -21,7 +21,7 @@ class MeterTriggerSourceTest {
     @Test
     fun ohneMessgeraetFaelltAufMikrofonZurueck() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = null, mikrofonDb = 65.0, mikrofonSchwelle = 60f, meterSchwelle = 55f,
+            letzterMeterFrame = null, mikrofonDb = 65.0, mikrofonSchwelle = 60f,
         )
         assertTrue(ergebnis.ausgeloest)
         assertEquals(65.0, ergebnis.pegel, 0.0001)
@@ -30,36 +30,44 @@ class MeterTriggerSourceTest {
     }
 
     @Test
-    fun mitMessgeraetGiltDessenPegelUndDessenSchwelle() {
-        // Mikrofonwert liegt UNTER dessen Schwelle, Messgeraet-Wert liegt UEBER seiner eigenen -
-        // nur der Messgeraet-Pfad darf ausloesen.
+    fun ohneMessgeraetUnterhalbDerMikrofonSchwelleLoestNichtAus() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0), mikrofonDb = 10.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
-        )
-        assertTrue(ergebnis.ausgeloest)
-        assertEquals(70.0, ergebnis.pegel, 0.0001)
-        assertTrue(ergebnis.meterConnected)
-        assertEquals(70.0, ergebnis.calibratedDbA)
-    }
-
-    @Test
-    fun mikrofonSchwelleWirdBeiVerbundenemMessgeraetNichtMehrGeprueft() {
-        // Gegenprobe zum vorigen Test: Mikrofonwert liegt WEIT ueber seiner Schwelle, aber das
-        // Messgeraet liegt unter seiner - es darf trotzdem NICHT ausloesen, weil bei
-        // verbundenem Messgeraet die Mikrofon-Schwelle irrelevant ist (Plan 4.5).
-        val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(50.0), mikrofonDb = 99.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
+            letzterMeterFrame = null, mikrofonDb = 10.0, mikrofonSchwelle = 60f,
         )
         assertFalse(ergebnis.ausgeloest)
     }
 
     @Test
+    fun mitMessgeraetLoestImmerAusUnabhaengigVomPegel() {
+        // Owner-Korrektur zu Plan 4.5: bei bestehender Messgeraet-Verbindung wird durchgehend
+        // aufgezeichnet - ein eigener Schwellenwert fuers Messgeraet ergab keinen Sinn. Der Pegel
+        // hier liegt bewusst sehr niedrig und loest trotzdem aus.
+        val ergebnis = MeterTriggerSource.auswerten(
+            letzterMeterFrame = frame(20.0), mikrofonDb = 0.0, mikrofonSchwelle = 60f,
+        )
+        assertTrue(ergebnis.ausgeloest)
+        assertEquals(20.0, ergebnis.pegel, 0.0001)
+        assertTrue(ergebnis.meterConnected)
+        assertEquals(20.0, ergebnis.calibratedDbA)
+    }
+
+    @Test
+    fun mikrofonSchwelleWirdBeiVerbundenemMessgeraetNichtGeprueft() {
+        // Gegenprobe zum vorigen Test: Mikrofonwert liegt UNTER seiner Schwelle - trotzdem loest
+        // es aus, weil bei verbundenem Messgeraet die Mikrofon-Schwelle irrelevant ist.
+        val ergebnis = MeterTriggerSource.auswerten(
+            letzterMeterFrame = frame(50.0), mikrofonDb = 0.0, mikrofonSchwelle = 60f,
+        )
+        assertTrue(ergebnis.ausgeloest)
+    }
+
+    @Test
     fun weightingWirdNurBeiBestaetigterBewertungDurchgereicht() {
         val unbestaetigt = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0, bestaetigt = false), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
+            letzterMeterFrame = frame(70.0, bestaetigt = false), mikrofonDb = 0.0, mikrofonSchwelle = 60f,
         )
         val bestaetigt = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0, bestaetigt = true), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
+            letzterMeterFrame = frame(70.0, bestaetigt = true), mikrofonDb = 0.0, mikrofonSchwelle = 60f,
         )
         assertNull("Unbestaetigte Bewertung darf nicht als Tatsache durchgereicht werden", unbestaetigt.meterWeighting)
         assertEquals("A", bestaetigt.meterWeighting)
@@ -69,16 +77,8 @@ class MeterTriggerSourceTest {
     fun fehlendeWeightingBleibtNullAuchBeiBestaetigterMessung() {
         val ergebnis = MeterTriggerSource.auswerten(
             letzterMeterFrame = frame(70.0, weighting = null, bestaetigt = true),
-            mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
+            mikrofonDb = 0.0, mikrofonSchwelle = 60f,
         )
         assertNull(ergebnis.meterWeighting)
-    }
-
-    @Test
-    fun genauAufDerSchwelleLoestNichtAus() {
-        val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(65.0), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 65f,
-        )
-        assertFalse("Die Schwelle selbst zaehlt noch nicht als Ueberschreitung", ergebnis.ausgeloest)
     }
 }
