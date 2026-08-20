@@ -139,7 +139,11 @@ class FakeMeterTransport(
         emitJob = null
     }
 
+    private var lastEmittedEpochMs: Long = 0L
+
     private fun nextFrame(): MeterFrame {
+        val nowMs = System.currentTimeMillis().coerceAtLeast(lastEmittedEpochMs + 1)
+        lastEmittedEpochMs = nowMs
         val level = baseLevel + Random.nextDouble(-3.0, 3.0)
         // Spiegelt das reale BleMeterTransport-Verhalten: Bewertung, Zeitbewertung, Bereich
         // und Hold-Status sind beim echten Geraet unbekannt (siehe MeterFrame-Doc), der Fake
@@ -151,7 +155,7 @@ class FakeMeterTransport(
             range = null,
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.now(),
+            receivedAt = Instant.ofEpochMilli(nowMs),
         )
     }
 }

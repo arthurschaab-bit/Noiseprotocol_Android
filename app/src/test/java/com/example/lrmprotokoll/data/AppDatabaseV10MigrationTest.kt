@@ -29,7 +29,9 @@ class AppDatabaseV10MigrationTest {
     )
 
     private fun erzeugeV9Datenbank() {
-        helper.createDatabase(V9_DB_NAME, 9).use { db ->
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbPath = context.getDatabasePath(V9_DB_NAME).path
+        helper.createDatabase(dbPath, 9).use { db ->
             db.execSQL(
                 "INSERT INTO noise_records (id, timestamp, amplitude, dbValue, filePath, label, detectedLabel, meterConnected) " +
                     "VALUES (1, 1700000000000, 0.42, 63.5, '/data/rec1.wav', 'Bohren', 'Bohren', 0)"

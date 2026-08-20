@@ -86,8 +86,17 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
                 .setRunningMode(RunningMode.AUDIO_CLIPS)
                 .build()
             classifier = AudioClassifier.createFromOptions(context, options)
+            container.diagnosticsReporter.breadcrumb("AI", "YAMNet-Klassifikator erfolgreich initialisiert")
         } catch (e: Throwable) {
             Log.e(TAG, "Error loading model: ${e.message}", e)
+            container.diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AI_MODEL_INIT_FAILED,
+                component = "NoiseClassifier",
+                operation = "init",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                cause = e,
+                message = "YAMNet Modell konnte nicht geladen werden: ${e.message}"
+            )
         }
     }
 
@@ -161,6 +170,14 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
                 .distinct()
         } catch (e: Throwable) {
             Log.e(TAG, "Error during detailed classification: ${e.message}", e)
+            container.diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AI_INFERENCE_FAILED,
+                component = "NoiseClassifier",
+                operation = "classifyDetailed",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                cause = e,
+                message = "Inferenz auf Audiodatei fehlgeschlagen: ${e.message}"
+            )
             return null
         }
     }

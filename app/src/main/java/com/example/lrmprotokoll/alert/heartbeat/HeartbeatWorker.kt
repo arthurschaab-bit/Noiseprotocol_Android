@@ -28,14 +28,26 @@ class HeartbeatWorker(
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
-        return when (container.heartbeatPinger.ping()) {
-            HeartbeatPinger.Ergebnis.GESENDET,
+        return when (val ergebnis = container.heartbeatPinger.ping()) {
+            HeartbeatPinger.Ergebnis.GESENDET -> {
+                container.diagnosticsReporter.breadcrumb("Heartbeat", "Heartbeat erfolgreich gesendet")
+                Result.success()
+            }
             HeartbeatPinger.Ergebnis.UEBERSPRUNGEN -> Result.success()
 
             // retry() statt failure(): Ein einzelner misslungener Ping ist meistens ein
             // kurzer Netzausfall. Waere das ein endgueltiger Fehlschlag, bliebe die
             // Totmannschaltung bis zum naechsten regulaeren Lauf stumm.
-            HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN -> Result.retry()
+            HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN -> {
+                container.diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.HEARTBEAT_SEND_FAILED,
+                    component = "HeartbeatWorker",
+                    operation = "doWork",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                    message = "Heartbeat-Ping fehlgeschlagen"
+                )
+                Result.retry()
+            }
         }
     }
 }

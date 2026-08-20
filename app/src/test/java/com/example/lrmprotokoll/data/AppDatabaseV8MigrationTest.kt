@@ -35,7 +35,9 @@ class AppDatabaseV8MigrationTest {
     )
 
     private fun erzeugeV7Datenbank() {
-        helper.createDatabase(V7_DB_NAME, 7).use { db ->
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbPath = context.getDatabasePath(V7_DB_NAME).path
+        helper.createDatabase(dbPath, 7).use { db ->
             db.execSQL(
                 "INSERT INTO noise_records (id, timestamp, amplitude, dbValue, filePath, label, detectedLabel) " +
                     "VALUES (1, 1700000000000, 0.42, 63.5, '/data/rec1.wav', 'Bohren', 'Bohren')"

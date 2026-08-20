@@ -96,6 +96,7 @@ class ConnectionSupervisor(
      * Abkuerzung fuer Aufrufer, die gar keine Senke haben (z.B. Tests).
      */
     private val diagnosticLogger: DiagnosticLogger? = null,
+    private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -295,7 +296,15 @@ class ConnectionSupervisor(
                 if (last == null) return@collectLatest
                 delay(staleAfter.toMillis())
                 setOverride(ConnectionState.DEGRADED)
-                diagnosticLogger?.protokolliere("DEGRADED: Datenstillstand seit ${staleAfter.toMillis()}ms")
+                val msg = "DEGRADED: Datenstillstand seit ${staleAfter.toMillis()}ms"
+                diagnosticLogger?.protokolliere(msg)
+                diagnosticsReporter?.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_STREAM_STALLED,
+                    component = "ConnectionSupervisor",
+                    operation = "stalenessWatcher",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                    message = msg
+                )
                 transport.disconnect()
                 done.complete(StreamEndReason.LOST)
             }
@@ -322,8 +331,14 @@ class ConnectionSupervisor(
                     val rate = errorDelta.toDouble() / totalDelta
                     if (rate > errorRateThreshold) {
                         setOverride(ConnectionState.DEGRADED)
-                        diagnosticLogger?.protokolliere(
-                            "DEGRADED: Fehlerrate ${(rate * 100).toInt()}% ueber $errorRateWindow"
+                        val msg = "DEGRADED: Fehlerrate ${(rate * 100).toInt()}% ueber $errorRateWindow"
+                        diagnosticLogger?.protokolliere(msg)
+                        diagnosticsReporter?.report(
+                            code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_DECODE_RATE_HIGH,
+                            component = "ConnectionSupervisor",
+                            operation = "errorRateWatcher",
+                            severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                            message = msg
                         )
                         transport.disconnect()
                         done.complete(StreamEndReason.LOST)
@@ -365,9 +380,15 @@ class ConnectionSupervisor(
                                 "Framekadenz ${deltaMillis}ms wiederholt ausserhalb der Toleranz " +
                                     "[$minMillis, $maxMillis]ms - moeglicher Spoofing-Verdacht",
                             )
+                            val msg = "DEGRADED: Framekadenz ${deltaMillis}ms wiederholt ausserhalb [$minMillis, $maxMillis]ms"
                             setOverride(ConnectionState.DEGRADED)
-                            diagnosticLogger?.protokolliere(
-                                "DEGRADED: Framekadenz ${deltaMillis}ms wiederholt ausserhalb [$minMillis, $maxMillis]ms"
+                            diagnosticLogger?.protokolliere(msg)
+                            diagnosticsReporter?.report(
+                                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_CADENCE_INVALID,
+                                component = "ConnectionSupervisor",
+                                operation = "cadenceWatcher",
+                                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                message = msg
                             )
                             transport.disconnect()
                             done.complete(StreamEndReason.LOST)

@@ -62,6 +62,15 @@ class AppContainer(context: Context) {
     private val connectionSupervisorScope by lazy {
         val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
             Log.e("AppContainer", "Unerwarteter Fehler im ConnectionSupervisor-Scope", throwable)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.APP_UNCAUGHT,
+                component = "AppContainer",
+                operation = "connectionSupervisorScope",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                handled = false,
+                cause = throwable,
+                message = "Unerwarteter Fehler im ConnectionSupervisor-Scope"
+            )
         }
         CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
     }
@@ -104,14 +113,44 @@ class AppContainer(context: Context) {
         )
     }
 
-    // ---------------------------------------------------------------- M6: Sicherheit
+    // ---------------------------------------------------------------- M6: Sicherheit & Diagnose
 
     val diagnosticLogger: DiagnosticLogger by lazy {
         DiagnosticLogger(dao = database.diagnosticLogDao(), aktiv = { settingsManager.diagnoseLoggingAktiv })
     }
 
+    val localDiagnosticSink: com.example.lrmprotokoll.diagnose.LocalDiagnosticSink by lazy {
+        com.example.lrmprotokoll.diagnose.LocalDiagnosticSink(
+            dao = database.diagnosticLogDao(),
+            aktiv = { settingsManager.diagnoseLoggingAktiv }
+        )
+    }
+
+    val sentryDiagnosticSink: com.example.lrmprotokoll.diagnose.sentry.SentryDiagnosticSink by lazy {
+        com.example.lrmprotokoll.diagnose.sentry.SentryDiagnosticSink(
+            aktiv = { settingsManager.remoteDiagnoseAktiv }
+        )
+    }
+
+    val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter by lazy {
+        com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
+            sinks = listOf(localDiagnosticSink, sentryDiagnosticSink),
+            initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(
+                appVersion = "1.0",
+                buildType = "debug",
+            )
+        )
+    }
+
     val diagnosticLogCleanupCoordinator: DiagnosticLogCleanupCoordinator by lazy {
         DiagnosticLogCleanupCoordinator(dao = database.diagnosticLogDao())
+    }
+
+    val supportBundleExporter: com.example.lrmprotokoll.diagnose.export.SupportBundleExporter by lazy {
+        com.example.lrmprotokoll.diagnose.export.SupportBundleExporter(
+            context = context.applicationContext,
+            reporter = diagnosticsReporter
+        )
     }
 
     val connectionSupervisor: ConnectionSupervisor by lazy {
@@ -123,6 +162,7 @@ class AppContainer(context: Context) {
             // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
             expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
             diagnosticLogger = diagnosticLogger,
+            diagnosticsReporter = diagnosticsReporter,
         )
     }
 

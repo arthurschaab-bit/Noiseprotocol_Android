@@ -35,9 +35,11 @@ class AppDatabaseMigrationTest {
 
     @Test
     fun bestandsdatenUeberlebenDasOeffnenOhneDestruktivenFallback() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val dbPath = context.getDatabasePath(TEST_DB_NAME).path
         // Simuliert eine v6-Datenbank, wie sie auf einem echten Geraet nach laengerem
         // Gebrauch vorliegen wuerde, inkl. NULL-Werten in optionalen Spalten.
-        helper.createDatabase(TEST_DB_NAME, 6).use { db ->
+        helper.createDatabase(dbPath, 6).use { db ->
             db.execSQL(
                 "INSERT INTO noise_records (id, timestamp, amplitude, dbValue, filePath, label, detectedLabel) " +
                     "VALUES (1, 1700000000000, 0.42, 63.5, '/data/rec1.wav', 'Bohren', 'Bohren')"
@@ -52,7 +54,6 @@ class AppDatabaseMigrationTest {
         }
 
         // Oeffnet dieselbe Datenbankdatei ueber den echten Produktionscode-Pfad.
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val database = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB_NAME)
             .addMigrations(*ALLE_MIGRATIONEN)
             .allowMainThreadQueries()
