@@ -71,16 +71,6 @@ class SettingsManager(
         get() = prefs.getFloat("db_threshold", 60.0f)
         set(value) = prefs.edit().putFloat("db_threshold", value).apply()
 
-    /**
-     * Eigene Schwelle fuer das Messgeraet (Plan 4.5) - NICHT dieselbe Zahl wie [dbThreshold]:
-     * Eine bisher eingestellte Mikrofon-Schwelle von 60 ("dBFS+100") bedeutet etwas voellig
-     * anderes als 60 dBA vom PCE-323. Getrennter Default, damit ein frisch gekoppeltes
-     * Messgeraet nicht versehentlich die Mikrofon-Zahl erbt.
-     */
-    var meterDbThreshold: Float
-        get() = prefs.getFloat("meter_db_threshold", 60.0f)
-        set(value) = prefs.edit().putFloat("meter_db_threshold", value).apply()
-
     var preRollSeconds: Int
         get() = prefs.getInt("pre_roll", 2)
         set(value) = prefs.edit().putInt("pre_roll", value).apply()

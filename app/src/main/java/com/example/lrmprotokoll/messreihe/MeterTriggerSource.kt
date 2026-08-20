@@ -3,18 +3,16 @@ package com.example.lrmprotokoll.messreihe
 import com.example.lrmprotokoll.meter.MeterFrame
 
 /**
- * Entscheidet, welche Quelle den Aufnahme-Trigger auslöst (Plan Abschnitt 4.5).
+ * Entscheidet, welche Quelle den Aufnahme-Trigger auslöst (Plan Abschnitt 4.5, Owner-Korrektur
+ * siehe unten).
  *
  * "PCE-323 als Pegelwahrheit und Auslöser, das Mikrofon als Beweismittel und Klassifikator": Ist
- * ein Messgerät verbunden und liefert Werte, gilt dessen kalibrierter Pegel und dessen eigene
- * Schwelle - sonst fällt die Prüfung auf die bisherige Mikrofonberechnung zurück, unverändert
- * wie vor M4. Absichtlich rein und ohne jede Android-Abhängigkeit: Der Aufrufer
- * ([com.example.lrmprotokoll.audio.AudioRecordingService]) reicht nur Werte durch, die er
- * ohnehin schon hat.
- *
- * ⚠ Eine bisher eingestellte Mikrofon-Schwelle (Beispiel 60, "dBFS+100") ist NICHT dieselbe Zahl
- * wie 60 dBA vom Messgerät (Plan 4.5) - deshalb zwei getrennte Schwellenwerte, [mikrofonSchwelle]
- * und [meterSchwelle], nie ein gemeinsamer.
+ * ein Messgerät verbunden und liefert Werte, löst das IMMER aus - ein eigener Schwellenwert fürs
+ * Messgerät ergab keinen Sinn (Owner-Feedback: bei einer bestehenden Verbindung soll durchgehend
+ * aufgezeichnet werden, nicht erst ab einem Pegel). Ohne Messgerät fällt die Prüfung weiterhin auf
+ * die bisherige Mikrofon-Schwelle zurück, unverändert wie vor M4. Absichtlich rein und ohne jede
+ * Android-Abhängigkeit: Der Aufrufer ([com.example.lrmprotokoll.audio.AudioRecordingService])
+ * reicht nur Werte durch, die er ohnehin schon hat.
  */
 object MeterTriggerSource {
 
@@ -38,11 +36,10 @@ object MeterTriggerSource {
         letzterMeterFrame: MeterFrame?,
         mikrofonDb: Double,
         mikrofonSchwelle: Float,
-        meterSchwelle: Float,
     ): Auswertung {
         if (letzterMeterFrame != null) {
             return Auswertung(
-                ausgeloest = letzterMeterFrame.level > meterSchwelle,
+                ausgeloest = true,
                 pegel = letzterMeterFrame.level,
                 calibratedDbA = letzterMeterFrame.level,
                 // null, solange die A/C-Bewertung unbestaetigt ist - dieselbe Regel wie bei

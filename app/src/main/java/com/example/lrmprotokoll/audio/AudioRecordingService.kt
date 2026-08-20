@@ -357,15 +357,15 @@ class AudioRecordingService : LifecycleService() {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
 
-                    // M4 (Plan 4.5): bei verbundenem Messgeraet gilt dessen kalibrierter Pegel
-                    // und dessen eigene Schwelle als Ausloeser - das Mikrofon bleibt nur
-                    // Beweismittel (WAV) und Klassifikator, faellt aber automatisch zurueck,
-                    // sobald kein Messgeraet (mehr) verbunden ist.
+                    // Plan 4.5 (Owner-Korrektur): bei verbundenem Messgeraet wird durchgehend
+                    // aufgezeichnet - ein eigener Schwellenwert fuers Messgeraet ergab keinen
+                    // Sinn. Das Mikrofon bleibt nur Beweismittel (WAV) und Klassifikator, faellt
+                    // aber automatisch auf seine eigene Schwelle zurueck, sobald kein Messgeraet
+                    // (mehr) verbunden ist.
                     val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
                         letzterMeterFrame = letzterMeterFrame,
                         mikrofonDb = currentDb,
                         mikrofonSchwelle = settingsManager.dbThreshold,
-                        meterSchwelle = settingsManager.meterDbThreshold,
                     )
                     if (auswertung.ausgeloest) {
                         Log.d(

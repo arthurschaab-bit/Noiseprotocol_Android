@@ -1223,6 +1223,19 @@ Fingerabdruck registriert werden kann, ist der Debug-Signierschlüssel jetzt als
 `app/debug.keystore` fest eingecheckt statt pro Maschine zufällig neu erzeugt zu werden (siehe
 `app/build.gradle.kts`, `signingConfigs.debug`).
 
+**Owner-Korrektur zu 4.5:** Der eigene Schwellenwert fürs Messgerät (`meterDbThreshold`) ist
+entfallen. Bei bestehender Messgerät-Verbindung wird jetzt durchgehend aufgezeichnet statt erst ab
+Pegelüberschreitung - "es soll immer aufgezeichnet werden bei einer Verbindung". Die
+Mikrofon-Schwelle (`dbThreshold`) bleibt unverändert als Fallback, solange kein Messgerät verbunden
+ist. Siehe `MeterTriggerSource.auswerten()`.
+
+**Geräteetest-Rückmeldungen (laufend):** Text auf keiner Seite markier-/kopierbar (u.a.
+Diagnose-Log) - behoben durch `SelectionContainer` um den gesamten `NavHost` in `MainActivity`.
+Verbindungsalarm (7.6) fiel im Klingelton-Modus "Lautlos" nicht auf, weil kein Vibrationsmuster
+gesetzt war - `LocalNotificationAlertChannel` vibriert jetzt mindestens 60 s in kurzen Stößen
+(`alarmVibrationsmuster()`); da Kanal-Einstellungen nach der ersten Erstellung unveränderlich sind,
+lief die Channel-ID auf `noise_alarm_channel_v2`, der alte Kanal wird beim nächsten Alarm gelöscht.
+
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
 

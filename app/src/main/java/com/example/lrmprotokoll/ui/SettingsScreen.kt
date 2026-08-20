@@ -39,7 +39,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     val settings = remember { (context.applicationContext as LaermprotokollApp).container.settingsManager }
     
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
-    var meterDbThreshold by remember { mutableFloatStateOf(settings.meterDbThreshold) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
     var duration by remember { mutableFloatStateOf(settings.recordDurationSeconds.toFloat()) }
     
@@ -118,7 +117,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         ) {
             Text("Aufnahme-Schwellenwert (Mikrofon): ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB")
             Text(
-                "Gilt nur, solange kein Messgerät verbunden ist.",
+                "Gilt nur, solange kein Messgerät verbunden ist. Bei bestehender Messgerät-" +
+                    "Verbindung wird durchgehend aufgezeichnet, unabhängig vom Pegel.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Slider(
@@ -126,21 +126,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onValueChange = { dbThreshold = it },
                 onValueChangeFinished = { settings.dbThreshold = dbThreshold },
                 valueRange = 30f..100f
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("Aufnahme-Schwellenwert (Messgerät): ${String.format(Locale.getDefault(), "%.1f", meterDbThreshold)} dB")
-            Text(
-                "Eigene Schwelle für das PCE-323 - ist NICHT dieselbe Zahl wie die " +
-                    "Mikrofon-Schwelle oben. Gilt automatisch, sobald ein Messgerät verbunden ist.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Slider(
-                value = meterDbThreshold,
-                onValueChange = { meterDbThreshold = it },
-                onValueChangeFinished = { settings.meterDbThreshold = meterDbThreshold },
-                valueRange = 30f..130f
             )
 
             Spacer(modifier = Modifier.height(16.dp))

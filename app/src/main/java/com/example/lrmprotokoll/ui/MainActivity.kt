@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -68,7 +69,14 @@ class MainActivity : ComponentActivity() {
                         .windowInsetsPadding(WindowInsets.safeDrawing),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    // Owner-Rueckmeldung: Text auf keiner Seite markier-/kopierbar (u.a.
+                    // Diagnose-Log). SelectionContainer um den gesamten NavHost macht jeden
+                    // Text app-weit auswaehlbar, ohne Klicks auf Buttons/Slider/NavigationBar zu
+                    // beeintraechtigen - Compose behandelt Long-Press-Selektion und Klick-Gesten
+                    // getrennt.
+                    SelectionContainer {
+                        AppNavigation()
+                    }
                 }
             }
         }
