@@ -65,6 +65,12 @@ plausibel aussehen und trotzdem falsch sind.
 **Bewertung:** Unterschiede unter etwa 1 dB sind normale Schwankung. Alles darüber — vor allem
 wenn es mit dem Abstand kleiner wird — ist ein echter Befund und muss dokumentiert werden.
 
+> **Update 2026-08-20:** Ein erster Alltagstest des Owners hat dB(A)/dB(C) und Fast/Slow bereits
+> gegen das Geräte-Display bestätigt (siehe `docs/PROTOKOLL_PCE-323.md` Abschnitt 10) — die
+> formale B2-Messung mit 63 Hz/1000 Hz unten ist dadurch nicht mehr zwingend nötig, schadet aber
+> nicht als zusätzliche Absicherung. Der Messbereich war dabei falsch zugeordnet und wurde in
+> `Pce323Profile.kt` korrigiert.
+
 ### B2 — Stimmt die A/C-Annahme?
 
 Die App interpretiert Byte `0x2C` als A-Bewertung und `0x2D` als C. Das ist bislang **nur eine
