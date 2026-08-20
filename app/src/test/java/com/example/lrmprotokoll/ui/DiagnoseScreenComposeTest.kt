@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
@@ -22,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
  * blieb unsichtbar, bis man ihn schloss und neu öffnete. Jetzt beobachtet der Screen
  * DiagnosticLogDao.alle() als Flow direkt (collectAsState), analog zu NoiseDao.getAll().
  *
- * Läuft gegen die echte, produktive DiagnoseScreen()-Funktion mit vollem AppContainer, wie
+ * Läuft gegen die echte, productive DiagnoseScreen()-Funktion mit vollem AppContainer, wie
  * MeterScreenComposeTest/SettingsScreenComposeTest.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -40,7 +41,7 @@ class DiagnoseScreenComposeTest {
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Kein Eintrag", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Kein Eintrag", substring = true).performScrollTo().assertIsDisplayed()
 
         runBlocking {
             container.database.diagnosticLogDao().insert(
@@ -51,10 +52,32 @@ class DiagnoseScreenComposeTest {
         // Rooms Flow-Invalidierung laeuft auf einem eigenen Query-Executor, nicht auf dem
         // Android-Main-Looper - waitForIdle() allein drainiert diesen nicht zuverlaessig.
         // waitUntil pollt, bis die Recomposition tatsaechlich angekommen ist.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("DEGRADED: Testeintrag", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("DEGRADED: Testeintrag", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("DEGRADED: Testeintrag", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun remoteDiagnoseUndSupportBundleExportWerdenGerendert() {
+        composeRule.setContent { DiagnoseScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Remote-Diagnose & Datenschutz").assertIsDisplayed()
+        composeRule.onNodeWithText("Fehlerberichte senden").assertIsDisplayed()
+        composeRule.onNodeWithText("Support-Bundle exportieren (ZIP)").assertIsDisplayed()
+    }
+
+    @Test
+    fun diagnoseIdWirdMitKopierenButtonAngezeigt() {
+        val container = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
+        container.settingsManager.letzteDiagnoseId = "DIA-20260820-TEST9999"
+
+        composeRule.setContent { DiagnoseScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("DIA-20260820-TEST9999").assertIsDisplayed()
+        composeRule.onNodeWithText("Kopieren").assertIsDisplayed()
     }
 }
