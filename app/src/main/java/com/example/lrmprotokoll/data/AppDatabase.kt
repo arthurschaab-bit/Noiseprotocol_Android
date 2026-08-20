@@ -129,14 +129,74 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         )
     }
 }
-val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8)
+/**
+ * Migration von Schema-Version 8 auf 9: die Messreihe fuer M4 (`sessions`, `measurements`,
+ * `connection_events`, `minute_aggregates`) und drei neue Spalten auf `noise_records`
+ * (`calibratedDbA`, `meterWeighting`, `meterConnected` - Plan 4.5, Trigger-Umstellung).
+ *
+ * Rein additiv wie die Migrationen zuvor.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `noise_records` ADD COLUMN `calibratedDbA` REAL"
+        )
+        db.execSQL(
+            "ALTER TABLE `noise_records` ADD COLUMN `meterWeighting` TEXT"
+        )
+        db.execSQL(
+            "ALTER TABLE `noise_records` ADD COLUMN `meterConnected` INTEGER NOT NULL DEFAULT 0"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sessions` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`startedAt` INTEGER NOT NULL, " +
+                "`endedAt` INTEGER, " +
+                "`deviceAddress` TEXT NOT NULL, " +
+                "`deviceName` TEXT NOT NULL, " +
+                "`weighting` TEXT, " +
+                "`timeWeighting` TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `measurements` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER NOT NULL, " +
+                "`timestamp` INTEGER NOT NULL, " +
+                "`levelDb` REAL NOT NULL, " +
+                "`weighting` TEXT, " +
+                "`flags` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `connection_events` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER NOT NULL, " +
+                "`at` INTEGER NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`reason` TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `minute_aggregates` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER NOT NULL, " +
+                "`minuteStart` INTEGER NOT NULL, " +
+                "`leqDb` REAL NOT NULL, " +
+                "`maxDb` REAL NOT NULL, " +
+                "`minDb` REAL NOT NULL, " +
+                "`sampleCount` INTEGER NOT NULL, " +
+                "`weighting` TEXT)"
+        )
+    }
+}
+val ALLE_MIGRATIONEN = arrayOf(MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
 
 @Database(
     entities = [
         NoiseRecord::class, ReferenceSound::class, AlertEntity::class,
         LevelSampleEntity::class, DriveDailyFileEntity::class,
+        SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
+        MinuteAggregateEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -147,6 +207,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun levelSampleDao(): LevelSampleDao
 
     abstract fun driveDailyFileDao(): DriveDailyFileDao
+
+    abstract fun sessionDao(): SessionDao
+
+    abstract fun measurementDao(): MeasurementDao
+
+    abstract fun connectionEventDao(): ConnectionEventDao
+
+    abstract fun minuteAggregateDao(): MinuteAggregateDao
 
     companion object {
         @Volatile

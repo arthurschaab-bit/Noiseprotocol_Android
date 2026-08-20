@@ -19,6 +19,8 @@ import com.example.lrmprotokoll.drive.GoogleDriveApiClient
 import com.example.lrmprotokoll.drive.LevelSampleCollector
 import com.example.lrmprotokoll.drive.auth.DriveEinrichtung
 import com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider
+import com.example.lrmprotokoll.messreihe.MeasurementRecorder
+import com.example.lrmprotokoll.messreihe.RetentionCoordinator
 import java.time.Duration
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
@@ -132,6 +134,26 @@ class AppContainer(context: Context) {
             dailyFileDao = database.driveDailyFileDao(),
             noiseDao = database.noiseDao(),
             settings = settingsManager,
+        )
+    }
+
+    // ---------------------------------------------------------------- M4: Messreihe
+
+    val measurementRecorder: MeasurementRecorder by lazy {
+        MeasurementRecorder(
+            states = connectionSupervisor.state,
+            frames = meterTransport.frames,
+            sessionDao = database.sessionDao(),
+            measurementDao = database.measurementDao(),
+            connectionEventDao = database.connectionEventDao(),
+            scope = connectionSupervisorScope,
+        )
+    }
+
+    val retentionCoordinator: RetentionCoordinator by lazy {
+        RetentionCoordinator(
+            measurementDao = database.measurementDao(),
+            minuteAggregateDao = database.minuteAggregateDao(),
         )
     }
 }

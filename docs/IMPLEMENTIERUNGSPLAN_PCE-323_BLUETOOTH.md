@@ -531,8 +531,9 @@ jedem. Sicherheit muss deshalb überwiegend auf App-Seite hergestellt werden.
 **Auf Datenebene:**
 - Rufnummern und Alarmkonfiguration in **EncryptedSharedPreferences / DataStore mit Tink**,
   Schlüssel im Android Keystore.
-- Messdatenbank optional mit **SQLCipher**, Passphrase aus dem Keystore. Empfehlung: standardmäßig
-  an, wenn die Protokolle personen- oder betriebsbezogen sind.
+- ~~Messdatenbank optional mit SQLCipher~~ — **entschieden (Plan 13.2): nein.** Die App-Sandbox
+  von Android schützt bereits gegen andere Apps, der SQLCipher-Aufwand beim Öffnen/Migrieren der
+  Datenbank stand dazu nicht im Verhältnis.
 - `android:allowBackup="false"` und `android:dataExtractionRules`, damit Rufnummern und
   Messprotokolle nicht über Auto-Backup abfließen.
 - Export-Dateien über einen `FileProvider` teilen, niemals über `file://`-URIs oder externen
@@ -1131,9 +1132,9 @@ Anmerkungen:
 | **M1** | Umbau statt Neubau | Paketstruktur (4.2), `AppContainer`, minSdk 29 → 31, `MeterTransport` + Fake, erste Unit-Tests | 1,5 d |
 | **M2** | BLE-Basis | Scan, Verbindung, GattQueue, Notify, `FrameDecoder`, Live-Anzeige | 3–4 d |
 | **M3** | Robustheit | Zustandsautomat, Backoff, Adapter-Beobachtung, Foreground Service, Boot-Receiver | 3 d |
-| **M4** | Persistenz | Room, Batch-Writer, Sessions, Verbindungsereignisse, Leq/Max/Min | 2–3 d |
+| **M4** | **Persistenz — erledigt** | Room (`sessions`/`measurements`/`connection_events`/`minute_aggregates`, Migration 8→9), Batch-Writer (`MeasurementRecorder`), Trigger-Umstellung (`MeterTriggerSource`), Leq/Max/Min/L10/L50/L90 (`AkustischeKennwerte`), Retention-Job (`RetentionCoordinator`/`-Worker`, 90 Tage) | 2–3 d |
 | **M5** | Alarmierung | Watchdog, Karenzzeit via AlarmManager, `AlertChannel`-Abstraktion, `NtfyAlertChannel`, `LocalNotificationAlertChannel`, **Heartbeat/Totmannschaltung (7.5)** — `SmsAlertChannel` gestrichen (Owner-Entscheidung, siehe 13.4) | 4 d |
-| **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, SQLCipher, Backup-Regeln | 2 d |
+| **M6** | Sicherheit | Bonding, Geräte-Pinning, Keystore, verschlüsselter DataStore, Backup-Regeln — SQLCipher entfällt (13.2) | 2 d |
 | **M7** | UI-Ausbau | Protokollansicht, Einstellungen, Diagnose, Export CSV/PDF | 3–4 d |
 | **M7b** | **Google-Drive-Sync (F-10)** — erledigt, ohne M4 | OAuth `drive.file`, Ordneranlage, konfigurierbare Aggregation (Default 1 s), CSV-Erzeugung, `DriveSyncWorker`, `DriveDailyFileEntity`, Fehlerbehandlung, Sync-Status als Notification | 3–4 d |
 | **M8** | Härtung | Chaos-Checkliste, 24-h-Dauerlauf, Herstellerspezifika, Release-Build | 2–3 d |
@@ -1186,8 +1187,11 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
    verbliebenen Kanälen voreingestellt an, weil sie dort nichts kostet. Der Schalter bleibt, weil
    der Grund für ihn — ein Kanal, bei dem jede Nachricht zählt — mit jedem künftigen Kanal
    wiederkommen kann.
-2. **Aufbewahrungsdauer** der Rohmesswerte (Vorschlag: 90 Tage Rohwerte, danach Minutenaggregate)
-   und ob die Datenbank per SQLCipher verschlüsselt wird.
+2. ~~**Aufbewahrungsdauer**~~ — **entschieden: 90 Tage Rohwerte, danach Minutenaggregate**, wie
+   vorgeschlagen. ~~**SQLCipher**~~ — **entschieden: nein, unverschlüsselt.** Die App-Sandbox von
+   Android schützt bereits gegen andere Apps; der zusätzliche Aufwand beim Öffnen/Migrieren der
+   Datenbank steht dazu nicht im Verhältnis. M6 setzt dementsprechend nur EncryptedSharedPreferences
+   für Alarmkonfiguration/Rufnummern und die Keystore-Anbindung um, nicht die Datenbank selbst.
 3. ~~**Cooldown und Eskalation**~~ — **entschieden: Cooldown 30 min, Eskalation nach 60 min,
    max. 3 Wiederholungen.**
 4. ~~**Push-Kanal für M5**~~ — **entschieden: ntfy**, für den ersten Wurf der öffentliche Server
