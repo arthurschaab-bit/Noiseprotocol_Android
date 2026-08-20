@@ -48,10 +48,9 @@ class SettingsScreenInstrumentedTest {
         // 1. Titel in TopAppBar
         composeRule.onNodeWithText("Einstellungen").assertIsDisplayed()
 
-        // 2. Wichtige Abschnitte oben sichtbar
-        composeRule.onNodeWithText("Aufnahme", substring = false).assertIsDisplayed()
-        composeRule.onNodeWithText("Mikrofon-Schwellenwert", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Messgerät-Schwellenwert", substring = true).assertIsDisplayed()
+        // 2. Wichtige Abschnitte oben sichtbar / auffindbar
+        composeRule.onNodeWithText("Aufnahme-Schwellenwert (Mikrofon)", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Aufnahme-Schwellenwert (Messgerät)", substring = true).performScrollTo().assertIsDisplayed()
 
         // 3. Bis zum Bildschirmende scrollen
         composeRule.onNodeWithTag(BILDSCHIRM_ENDE_TAG).performScrollTo().assertIsDisplayed()
@@ -68,12 +67,12 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Abtastrate-Chips prüfen
-        composeRule.onAllNodesWithText("16000 Hz", substring = true).onFirst().assertIsDisplayed().performClick()
-        composeRule.onAllNodesWithText("44100 Hz", substring = true).onFirst().assertIsDisplayed().performClick()
+        // 1. KI-Erkennung Switch prüfen
+        composeRule.onNodeWithText("KI-Erkennung aktivieren", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
-        // 2. KI-Erkennung Switch prüfen
-        composeRule.onNodeWithText("KI-Erkennung aktivieren", substring = true).assertIsDisplayed().performClick()
+        // 2. Abtastrate-Chips prüfen (nach Scrollen)
+        composeRule.onNodeWithText("16000 Hz (KI Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("44100 Hz (Standard)", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
         // 3. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
         composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()

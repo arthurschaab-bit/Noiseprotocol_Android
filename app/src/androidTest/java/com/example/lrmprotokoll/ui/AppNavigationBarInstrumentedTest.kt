@@ -113,17 +113,21 @@ class AppNavigationBarInstrumentedTest {
         val routes = listOf("main", "meter", "protokoll", "diagnose", "settings")
         val labels = listOf("Start", "Messgerät", "Protokoll", "Diagnose", "Einstellungen")
 
+        var currentRoute by mutableStateOf("main")
+        composeRule.setContent {
+            AppNavigationBar(
+                currentRoute = currentRoute,
+                onNavigateToStart = { currentRoute = "main" },
+                onNavigateToMeter = { currentRoute = "meter" },
+                onNavigateToProtokoll = { currentRoute = "protokoll" },
+                onNavigateToDiagnose = { currentRoute = "diagnose" },
+                onNavigateToSettings = { currentRoute = "settings" },
+            )
+        }
+        composeRule.waitForIdle()
+
         routes.forEach { activeRoute ->
-            composeRule.setContent {
-                AppNavigationBar(
-                    currentRoute = activeRoute,
-                    onNavigateToStart = {},
-                    onNavigateToMeter = {},
-                    onNavigateToProtokoll = {},
-                    onNavigateToDiagnose = {},
-                    onNavigateToSettings = {},
-                )
-            }
+            currentRoute = activeRoute
             composeRule.waitForIdle()
 
             // Auf jedem der 5 Screens müssen alle 5 Nav-Labels sichtbar bleiben
