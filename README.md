@@ -271,6 +271,9 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M7.md`](docs/PROMPT_M7.md) | Auftrag für M7 (erledigt) — Protokollansicht, Diagnose-Screen, CSV/PDF-Export |
 | [`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) | Bestandsaufnahme der App-UI nach dem ersten Gerätetest — Screen-Inventar, Live-Status-Lücken, fehlende Chart-Infrastruktur, Verbesserungsvorschläge |
 | [`docs/PROMPT_M7C.md`](docs/PROMPT_M7C.md) | Auftrag für M7c (erledigt) — Live-Status-Dashboard, Aufzeichnungs-Chart, Navigationsstruktur, Scroll-Fix `MeterScreen` |
+| [`docs/PROMPT_M8.md`](docs/PROMPT_M8.md) | Auftrag für M8, hardwarefreier Teil (offen) — Release-Build härten (R8/Minify), Herstellerspezifika |
+| [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code |
+| [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Plan für eine Release-Pipeline (offen) — signierte APKs über GitHub Releases, Voraussetzung: Owner richtet Keystore + Secrets ein |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
