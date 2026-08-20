@@ -214,12 +214,14 @@ class SettingsManager(
         set(value) = prefs.edit().putBoolean("drive_wlan_only", value).apply()
 
     /**
-     * WAV-Upload ist Owner-Entscheidung: als Option vorhanden, aber Default AUS. WAVs sind gross
-     * und koennen Sprache Dritter enthalten - eine andere Datenschutzkategorie als reine
-     * Pegelwerte (Plan 8.4.1).
+     * WAV-Upload ist Owner-Entscheidung: als Option vorhanden, Default AN (Gerätetest-
+     * Rückmeldung - kehrt die frühere Entscheidung "Default AUS" aus Plan 13, Punkt 7 um). WAVs
+     * sind gross und koennen Sprache Dritter enthalten - eine andere Datenschutzkategorie als
+     * reine Pegelwerte (Plan 8.4.1) - deshalb bleibt es eine abschaltbare Option, nur der Default
+     * hat sich geaendert.
      */
     var driveUploadWav: Boolean
-        get() = prefs.getBoolean("drive_upload_wav", false)
+        get() = prefs.getBoolean("drive_upload_wav", true)
         set(value) = prefs.edit().putBoolean("drive_upload_wav", value).apply()
 
     var driveSyncLastSuccessAt: Long

@@ -168,7 +168,8 @@ Ping aus, und der Dienst auf der Gegenseite meldet sich.
 wie technisch sinnvoll (1 s)** statt der im Plan vorgeschlagenen 10 s — dafür WLAN-only per
 Default an, um das dadurch höhere Uploadvolumen abzufangen. OAuth-Scope **`drive.file`** (App legt
 eigenen Ordner an, keine Google-Verifizierung nötig). WAV-Upload **als Option vorhanden, Default
-aus** — Owner-Entscheidung, abweichend vom Plan-Vorschlag „nein", der WAVs komplett ausschließt.
+an** — Owner-Entscheidung, abweichend vom Plan-Vorschlag „nein", der WAVs komplett ausschließt.
+(Ursprünglich Default aus; nach Rückmeldung aus dem ersten Gerätetest auf Default an umgestellt.)
 
 **Für M4 entschieden und umgesetzt:** Aufbewahrungsdauer der Rohmesswerte **90 Tage**, wie im Plan
 vorgeschlagen, danach Verdichtung zu Minutenaggregaten. **SQLCipher explizit gestrichen** —

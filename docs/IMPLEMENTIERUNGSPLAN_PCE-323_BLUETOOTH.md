@@ -1210,8 +1210,9 @@ Berichtserzeugung bereits existieren und nur erweitert werden.
 6. ~~**Drive-Ordnerwahl**~~ — **entschieden: `drive.file`**, wie vorgeschlagen. Die App legt beim
    Einrichten selbst einen Ordner an.
 7. ~~**Sollen die WAV-Aufnahmen ebenfalls nach Drive?**~~ — **entschieden: als Option vorhanden,
-   Default AUS.** Abweichend vom Vorschlag „nein" — der Owner wollte die Möglichkeit erhalten,
-   nicht WAV-Upload komplett ausschließen.
+   Default AN.** Abweichend vom Vorschlag „nein" — der Owner wollte die Möglichkeit erhalten,
+   nicht WAV-Upload komplett ausschließen. (Ursprünglich Default AUS; nach Rückmeldung aus dem
+   ersten Gerätetest auf Default AN umgestellt.)
 
 **Neu hinzugekommen bei der Umsetzung:** Google Sign-In braucht eine echte OAuth-Client-ID aus
 der Google Cloud Console, die kein Agent selbst anlegen kann (braucht Browser-Zugriff auf ein

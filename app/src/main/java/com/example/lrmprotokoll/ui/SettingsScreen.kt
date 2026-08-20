@@ -516,7 +516,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Text(
                     "WAV-Dateien können Sprache Dritter enthalten und sind eine andere " +
-                        "Datenschutzkategorie als reine Pegelwerte - standardmäßig aus.",
+                        "Datenschutzkategorie als reine Pegelwerte - standardmäßig an, bei Bedarf hier abschaltbar.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
