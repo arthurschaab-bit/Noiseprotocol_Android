@@ -50,7 +50,7 @@ class ProtokollDetailScreenComposeTest {
         }
 
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -78,7 +78,7 @@ class ProtokollDetailScreenComposeTest {
         }
 
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
         }
 

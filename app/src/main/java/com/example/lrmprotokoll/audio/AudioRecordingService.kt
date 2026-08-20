@@ -77,6 +77,7 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var alarmCoordinator: AlarmCoordinator
     private lateinit var meterTransport: MeterTransport
     private lateinit var levelSampleCollector: LevelSampleCollector
+    private lateinit var diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter
     private var classifier: SoundClassifier? = null
 
     private var rollingBuffer: ByteArray = ByteArray(0)
@@ -103,7 +104,9 @@ class AudioRecordingService : LifecycleService() {
         alarmCoordinator = container.alarmCoordinator
         meterTransport = container.meterTransport
         levelSampleCollector = container.levelSampleCollector
+        diagnosticsReporter = container.diagnosticsReporter
         classifier = NoiseClassifier(applicationContext)
+        diagnosticsReporter.breadcrumb("AudioService", "AudioRecordingService erstellt")
 
         // M7b: Pegelwerte des Messgeraets fuer den Drive-Sync einsammeln - unabhaengig vom
         // Aufnahme-Trigger, der weiterhin am Mikrofon haengt (Trigger-Umstellung ist M4). Nur
@@ -242,11 +245,24 @@ class AudioRecordingService : LifecycleService() {
         // connectedDevice zusaetzlich zu microphone deklariert (Plan Abschnitt 4.5): der
         // Dienst nutzt das PCE-323 als Trigger-Quelle erst ab M4, aber Manifest und
         // startForeground() muessen von Anfang an zusammenpassen.
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification(connectionSupervisor.state.value),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        )
+        try {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(connectionSupervisor.state.value),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+            diagnosticsReporter.breadcrumb("AudioService", "Foreground-Service erfolgreich gestartet")
+        } catch (e: Throwable) {
+            Log.e("AudioRecordingService", "Foreground Service konnte nicht gestartet werden", e)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FOREGROUND_SERVICE_FAILED,
+                component = "AudioRecordingService",
+                operation = "startForegroundService",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                cause = e
+            )
+            throw e
+        }
     }
 
     /**
@@ -286,7 +302,8 @@ class AudioRecordingService : LifecycleService() {
         serviceScope.launch {
             val sampleRate = settingsManager.audioSampleRate
             bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            
+            diagnosticsReporter.breadcrumb("AudioService", "Mikrofon-Monitoring gestartet (sampleRate=$sampleRate)")
+
             val audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 sampleRate,
@@ -297,6 +314,14 @@ class AudioRecordingService : LifecycleService() {
 
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e("AudioRecordingService", "AudioRecord initialization failed")
+                diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_INIT_FAILED,
+                    component = "AudioRecordingService",
+                    operation = "startMonitoring",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                    message = "AudioRecord Initialisierung fehlgeschlagen (sampleRate=$sampleRate, bufferSize=$bufferSize)",
+                    details = mapOf("sampleRate" to sampleRate, "bufferSize" to bufferSize)
+                )
                 isRunning = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -423,33 +448,46 @@ class AudioRecordingService : LifecycleService() {
         val file = File(getExternalFilesDir(null), fileName)
         
         val durationMs = settingsManager.recordDurationSeconds * 1000L
-        val outputStream = FileOutputStream(file)
-        
-        writeWavHeader(outputStream, channelConfig, sampleRate, audioFormat, 0)
+        try {
+            val outputStream = FileOutputStream(file)
+            
+            writeWavHeader(outputStream, channelConfig, sampleRate, audioFormat, 0)
 
-        val preRollData = getPreRollData()
-        outputStream.write(preRollData)
-        var totalDataLen = preRollData.size.toLong()
+            val preRollData = getPreRollData()
+            outputStream.write(preRollData)
+            var totalDataLen = preRollData.size.toLong()
 
-        val buffer = ShortArray(bufferSize / 2)
-        val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
-        val startTime = System.currentTimeMillis()
-        
-        while (System.currentTimeMillis() - startTime < durationMs && isRunning) {
-            val read = audioRecord.read(buffer, 0, buffer.size)
-            if (read > 0) {
-                tempByteBuffer.clear()
-                for (i in 0 until read) {
-                    tempByteBuffer.putShort(buffer[i])
+            val buffer = ShortArray(bufferSize / 2)
+            val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
+            val startTime = System.currentTimeMillis()
+            
+            while (System.currentTimeMillis() - startTime < durationMs && isRunning) {
+                val read = audioRecord.read(buffer, 0, buffer.size)
+                if (read > 0) {
+                    tempByteBuffer.clear()
+                    for (i in 0 until read) {
+                        tempByteBuffer.putShort(buffer[i])
+                    }
+                    outputStream.write(tempByteBuffer.array(), 0, read * 2)
+                    totalDataLen += (read * 2)
+                    writeToRollingBuffer(tempByteBuffer.array(), read * 2)
                 }
-                outputStream.write(tempByteBuffer.array(), 0, read * 2)
-                totalDataLen += (read * 2)
-                writeToRollingBuffer(tempByteBuffer.array(), read * 2)
             }
+            
+            outputStream.close()
+            updateWavHeader(file, totalDataLen)
+        } catch (e: Throwable) {
+            Log.e("AudioRecordingService", "Fehler beim Speichern der WAV-Datei", e)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FILE_WRITE_FAILED,
+                component = "AudioRecordingService",
+                operation = "saveRecording",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                cause = e,
+                details = mapOf("fileName" to fileName)
+            )
+            return
         }
-        
-        outputStream.close()
-        updateWavHeader(file, totalDataLen)
 
         // Klassifikator-Aufruf darf die Aufnahme nie verhindern (Prompt B-11, Problem 2):
         // classifySafely() faengt jede Ausnahme ab und liefert dann nur ein fehlendes Label.
@@ -506,6 +544,7 @@ class AudioRecordingService : LifecycleService() {
     override fun onDestroy() {
         isRunning = false
         _laeuft.value = false
+        diagnosticsReporter.breadcrumb("AudioService", "AudioRecordingService wird beendet")
         connectionSupervisor.stop()
         // Der Koordinator wird gestoppt, der Heartbeat aber NICHT: Er meldet "App und Gerät
         // leben" und ist gerade dann aussagekraeftig, wenn dieser Dienst nicht mehr laeuft. Er

@@ -28,17 +28,30 @@ class DriveSyncWorker(
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
+        container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync-Zyklus gestartet")
         return when (val ergebnis = container.driveSyncCoordinator.syncEinenZyklus()) {
-            is DriveSyncCoordinator.SyncErgebnis.Erfolgreich,
-            DriveSyncCoordinator.SyncErgebnis.KeineAenderung,
-            DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet,
-            DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet,
-            DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> {
+            is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> {
+                container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync erfolgreich: ${ergebnis.zeilen} Zeilen")
+                DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
+                Result.success()
+            }
+            is DriveSyncCoordinator.SyncErgebnis.KeineAenderung,
+            is DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet,
+            is DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet,
+            is DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> {
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
                 Result.success()
             }
 
             is DriveSyncCoordinator.SyncErgebnis.OrdnerNichtGefunden -> {
+                container.diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_FOLDER_NOT_FOUND,
+                    component = "DriveSyncWorker",
+                    operation = "doWork",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                    message = "Drive-Ordner nicht gefunden (HTTP ${ergebnis.httpCode})",
+                    details = mapOf("httpCode" to (ergebnis.httpCode ?: -1))
+                )
                 DriveSyncNotifier(applicationContext).ordnerNichtGefunden()
                 Result.failure()
             }
@@ -49,6 +62,14 @@ class DriveSyncWorker(
             // sich damit im naechsten Zyklus von selbst, wenn die Zustimmung noch besteht. Bleibt
             // es bestehen, greift wie bei jedem anderen Fehlschlag die Warnung nach n Zyklen.
             is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen -> {
+                container.diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_SYNC_FAILED,
+                    component = "DriveSyncWorker",
+                    operation = "doWork",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                    message = "Drive-Sync fehlgeschlagen: ${ergebnis.grund} (HTTP ${ergebnis.httpCode})",
+                    details = mapOf("grund" to ergebnis.grund, "httpCode" to (ergebnis.httpCode ?: -1))
+                )
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
                 Result.retry()
             }

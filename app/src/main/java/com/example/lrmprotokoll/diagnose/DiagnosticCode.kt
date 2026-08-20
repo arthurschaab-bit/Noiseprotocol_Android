@@ -49,6 +49,7 @@ enum class DiagnosticCode {
     DRIVE_AUTH_FAILED,
     DRIVE_SYNC_FAILED,
     DRIVE_UPLOAD_FAILED,
+    DRIVE_FOLDER_NOT_FOUND,
 
     // Berichte, Export & Wiedergabe
     REPORT_CREATE_FAILED,

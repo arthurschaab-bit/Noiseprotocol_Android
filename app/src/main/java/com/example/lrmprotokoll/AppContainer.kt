@@ -155,6 +155,7 @@ class AppContainer(context: Context) {
             // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
             expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
             diagnosticLogger = diagnosticLogger,
+            diagnosticsReporter = diagnosticsReporter,
         )
     }
 
