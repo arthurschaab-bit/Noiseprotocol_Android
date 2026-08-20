@@ -1245,6 +1245,19 @@ komplett auf). Auf Owner-Wunsch ("Toleranz lockern") setzt `AppContainer` jetzt 
 = 0.5` statt des Klassen-Defaults 0.2 - die Spoofing-Erkennung bleibt aktiv, reagiert aber deutlich
 seltener auf normalen Real-Geräte-Jitter.
 
+**Google-Drive-Autorisierung (8.4.3): fehlender Zustimmungsbildschirm nachgerüstet.**
+"Mit Google verbinden" scheiterte auf dem Geraet dauerhaft mit "Verbindung fehlgeschlagen: Kein
+Zugriffstoken verfügbar (Autorisierung ohne Zugriffstoken - erneute Zustimmung nötig)". Ursache:
+Die Identity-Services-"Authorization API" liefert beim allerersten Autorisieren des
+`drive.file`-Scopes (oder nach einem Widerruf) kein Token, sondern `hasResolution() == true` samt
+`pendingIntent` fuer einen expliziten Zustimmungsbildschirm - `GoogleSignInAccessTokenProvider`
+pruefte das bisher gar nicht und warf stattdessen immer denselben generischen Fehler, egal wie oft
+man den Button antippte. Jetzt wirft `autorisiereDriveZugriff()` in diesem Fall eine neue
+`AutorisierungBenoetigtException(intentSender)`; `SettingsScreen` faengt sie ueber die komplette
+`cause`-Kette ab (`findeAutorisierungBenoetigt()`), zeigt den Zustimmungsbildschirm ueber
+`ActivityResultContracts.StartIntentSenderForResult` und wiederholt `richteEin()` danach
+automatisch. Nur am echten Geraet endgueltig verifizierbar (siehe PR).
+
 **Bereits entschieden** (siehe 0.1): Vertriebsweg vertagt / interne Verteilung · Karenzzeit 60 s ·
 minSdk 31 · Mehrkanal-Alarmierung statt SMS allein.
 
