@@ -44,32 +44,29 @@ class AppStartupSmokeInstrumentedTest {
         // 1. Startscreen (Home) ist geladen
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
 
-        // 2. Navigation zum Messgerät über Menü-Drawer
-        composeRule.onNodeWithContentDescription("Menü").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Messgerät").performClick()
+        // 2. Navigation zum Messgerät
+        composeRule.onAllNodesWithText("Messgerät").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("PCE-323", substring = true).assertIsDisplayed()
 
         // 3. Navigation zu Protokoll
-        composeRule.onNodeWithContentDescription("Menü").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Protokoll").performClick()
+        composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Messreihen", substring = true).assertIsDisplayed()
 
         // 4. Navigation zu Diagnose
-        composeRule.onNodeWithContentDescription("Menü").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Diagnose").performClick()
+        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Diagnose & Systemstatus", substring = true).assertIsDisplayed()
 
         // 5. Navigation zu Einstellungen
-        composeRule.onNodeWithContentDescription("Menü").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Einstellungen").performClick()
+        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).assertIsDisplayed()
+
+        // 6. Navigation zurück zum Startscreen
+        composeRule.onAllNodesWithText("Start").onFirst().performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
     }
 }
