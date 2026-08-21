@@ -39,8 +39,12 @@ class ServiceControlComposeTest {
 
         composeRule.setContent {
             NoiseProtocolApp(
-                onNavigateToPlayer = {}, onNavigateToSettings = {}, onNavigateToMeter = {},
-                onNavigateToProtokoll = {}, onNavigateToDiagnose = {},
+                onOpenDrawer = {},
+                onNavigateToPlayer = {},
+                onNavigateToSettings = {},
+                onNavigateToMeter = {},
+                onNavigateToProtokoll = {},
+                onNavigateToDiagnose = {},
             )
         }
         composeRule.waitForIdle()

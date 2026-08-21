@@ -61,11 +61,21 @@ class DriveSyncCoordinatorTest {
 
     private class FakeNoiseDao : NoiseDao {
         override fun getAll(): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override suspend fun zwischenZeitpunkt(von: Long, bis: Long): List<NoiseRecord> = emptyList()
         override suspend fun insert(record: NoiseRecord) {}
         override suspend fun update(record: NoiseRecord) {}
+        override suspend fun softDelete(id: Long, deletedAt: Long) {}
+        override suspend fun softDeleteMultiple(ids: List<Long>, deletedAt: Long) {}
+        override suspend fun restore(id: Long) {}
+        override suspend fun restoreMultiple(ids: List<Long>) {}
         override suspend fun deleteById(id: Long) {}
         override suspend fun deleteMultiple(ids: List<Long>) {}
+        override suspend fun deleteTrashAelterAls(cutoff: Long): Int = 0
+        override suspend fun getTrashAelterAls(cutoff: Long): List<NoiseRecord> = emptyList()
+        override suspend fun getAutoRetentionCandidates(cutoff: Long): List<NoiseRecord> = emptyList()
+        override suspend fun setFavorite(id: Long, isFavorite: Boolean) {}
+        override suspend fun setNotes(id: Long, notes: String?) {}
         override fun getAllReferences(): Flow<List<ReferenceSound>> = flowOf(emptyList())
         override suspend fun insertReference(sound: ReferenceSound) {}
         override suspend fun deleteReference(id: Long) {}

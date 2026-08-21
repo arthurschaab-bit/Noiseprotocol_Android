@@ -7,6 +7,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.lrmprotokoll.LaermprotokollApp
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 private const val WORK_NAME = "retention"
@@ -22,8 +23,33 @@ class RetentionWorker(
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
-        return runCatching { container.retentionCoordinator.verdichte() }
-            .fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+        val settings = container.settingsManager
+        val db = container.database
+        val dao = db.noiseDao()
+
+        return runCatching {
+            // 1. Messreihen-Verdichtung (M4)
+            container.retentionCoordinator.verdichte()
+
+            // 2. F5: Automatische Aufbewahrungs-Bereinigung (Favoriten bleiben geschützt)
+            if (settings.autoRetentionEnabled && settings.autoRetentionDays > 0) {
+                val cutoff = System.currentTimeMillis() - (settings.autoRetentionDays * 24L * 60 * 60 * 1000)
+                val candidates = dao.getAutoRetentionCandidates(cutoff)
+                if (candidates.isNotEmpty()) {
+                    dao.softDeleteMultiple(candidates.map { it.id })
+                }
+            }
+
+            // 3. F9: Papierkorb älter als 30 Tage endgültig löschen (inkl. WAV-Dateien)
+            val trashCutoff = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+            val toDelete = dao.getTrashAelterAls(trashCutoff)
+            toDelete.forEach { record ->
+                val f = File(record.filePath)
+                if (f.exists()) f.delete()
+            }
+            dao.deleteTrashAelterAls(trashCutoff)
+            Unit
+        }.fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
     }
 }
 

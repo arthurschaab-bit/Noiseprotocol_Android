@@ -256,6 +256,74 @@ class SettingsManager(
         get() = prefs.getBoolean("remote_diagnose_enabled", false)
         set(value) = prefs.edit().putBoolean("remote_diagnose_enabled", value).apply()
 
+    // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean("onboarding_completed", true)
+        set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    // ---------------------------------------------------------------- F2: Filter-Zustand Persistenz (M10)
+    var filterDbMin: Float
+        get() = prefs.getFloat("filter_db_min", 0.0f)
+        set(value) = prefs.edit().putFloat("filter_db_min", value).apply()
+
+    var filterDbMax: Float
+        get() = prefs.getFloat("filter_db_max", 120.0f)
+        set(value) = prefs.edit().putFloat("filter_db_max", value).apply()
+
+    var filterSearchQuery: String
+        get() = prefs.getString("filter_search_query", "") ?: ""
+        set(value) = prefs.edit().putString("filter_search_query", value).apply()
+
+    var filterOnlyMeter: Boolean
+        get() = prefs.getBoolean("filter_only_meter", false)
+        set(value) = prefs.edit().putBoolean("filter_only_meter", value).apply()
+
+    var filterOnlyCalibrated: Boolean
+        get() = prefs.getBoolean("filter_only_calibrated", false)
+        set(value) = prefs.edit().putBoolean("filter_only_calibrated", value).apply()
+
+    var filterOnlyFavorites: Boolean
+        get() = prefs.getBoolean("filter_only_favorites", false)
+        set(value) = prefs.edit().putBoolean("filter_only_favorites", value).apply()
+
+    var filterOnlyQuietHours: Boolean
+        get() = prefs.getBoolean("filter_only_quiet_hours", false)
+        set(value) = prefs.edit().putBoolean("filter_only_quiet_hours", value).apply()
+
+    // ---------------------------------------------------------------- F5: Auto-Retention / Speicherbereinigung (M10)
+    var autoRetentionEnabled: Boolean
+        get() = prefs.getBoolean("auto_retention_enabled", false)
+        set(value) = prefs.edit().putBoolean("auto_retention_enabled", value).apply()
+
+    var autoRetentionDays: Int
+        get() = prefs.getInt("auto_retention_days", 30).coerceAtLeast(1)
+        set(value) = prefs.edit().putInt("auto_retention_days", value.coerceAtLeast(1)).apply()
+
+    // ---------------------------------------------------------------- F8: Ruhezeiten (M10)
+    var quietHoursEnabled: Boolean
+        get() = prefs.getBoolean("quiet_hours_enabled", false)
+        set(value) = prefs.edit().putBoolean("quiet_hours_enabled", value).apply()
+
+    var quietHoursStartHour: Int
+        get() = prefs.getInt("quiet_hours_start_hour", 22).coerceIn(0, 23)
+        set(value) = prefs.edit().putInt("quiet_hours_start_hour", value.coerceIn(0, 23)).apply()
+
+    var quietHoursStartMinute: Int
+        get() = prefs.getInt("quiet_hours_start_min", 0).coerceIn(0, 59)
+        set(value) = prefs.edit().putInt("quiet_hours_start_min", value.coerceIn(0, 59)).apply()
+
+    var quietHoursEndHour: Int
+        get() = prefs.getInt("quiet_hours_end_hour", 6).coerceIn(0, 23)
+        set(value) = prefs.edit().putInt("quiet_hours_end_hour", value.coerceIn(0, 23)).apply()
+
+    var quietHoursEndMinute: Int
+        get() = prefs.getInt("quiet_hours_end_min", 0).coerceIn(0, 59)
+        set(value) = prefs.edit().putInt("quiet_hours_end_min", value.coerceIn(0, 59)).apply()
+
+    var quietHoursThreshold: Float
+        get() = prefs.getFloat("quiet_hours_threshold", 45.0f)
+        set(value) = prefs.edit().putFloat("quiet_hours_threshold", value).apply()
+
     /** Letzte erzeugte oder empfangene Diagnose-ID fuer die UI. */
     var letzteDiagnoseId: String?
         get() = prefs.getString("letzte_diagnose_id", null)
