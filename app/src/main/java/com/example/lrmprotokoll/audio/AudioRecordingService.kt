@@ -1,13 +1,16 @@
 package com.example.lrmprotokoll.audio
 
+import android.Manifest
 import android.app.*
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.IBinder
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -300,6 +303,14 @@ class AudioRecordingService : LifecycleService() {
 
     private fun startMonitoring() {
         serviceScope.launch {
+            if (ActivityCompat.checkSelfPermission(this@AudioRecordingService, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                Log.e("AudioRecordingService", "Mikrofon-Berechtigung nicht erteilt - Monitoring wird nicht gestartet")
+                isRunning = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return@launch
+            }
+
             val sampleRate = settingsManager.audioSampleRate
             bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
             diagnosticsReporter.breadcrumb("AudioService", "Mikrofon-Monitoring gestartet (sampleRate=$sampleRate)")

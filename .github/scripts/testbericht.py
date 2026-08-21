@@ -1,46 +1,77 @@
 #!/usr/bin/env python3
-"""Fasst die JUnit-XML-Ergebnisse als Markdown fuer die GitHub-Zusammenfassung zusammen.
+"""Fasst die JUnit-XML-Ergebnisse als Markdown für die GitHub-Zusammenfassung zusammen.
 
-Ohne diese Aufbereitung steht das Testergebnis nur im hochgeladenen Artefakt: Man muss es
-herunterladen und entpacken, um zu erfahren, welcher Test warum gescheitert ist. Das macht in
-der Praxis niemand - stattdessen wird der Test lokal noch einmal ausgefuehrt, und genau das
-soll die CI ja ersparen.
+Unterstützt sowohl JVM-Unit-Tests als auch instrumentierte Android-Emulator-Tests.
 """
 
 import glob
 import os
+import sys
 import xml.etree.ElementTree as ET
 
-WURZEL = "app/build/test-results"
 
-
-def sammle():
+def sammle(suchpfad):
     """Liefert (Variante, Suite-Name, Tests, Fehler, [Fehlschlaege]) je XML-Datei."""
     ergebnisse = []
-    for pfad in sorted(glob.glob(f"{WURZEL}/*/TEST-*.xml")):
+    suchmuster = [
+        os.path.join(suchpfad, "TEST-*.xml"),
+        os.path.join(suchpfad, "*", "TEST-*.xml"),
+        os.path.join(suchpfad, "*", "*", "TEST-*.xml"),
+        os.path.join(suchpfad, "*", "*", "*", "TEST-*.xml"),
+    ]
+    gefundene_dateien = set()
+    for muster in suchmuster:
+        for pfad in glob.glob(muster):
+            gefundene_dateien.add(pfad)
+
+    for pfad in sorted(gefundene_dateien):
+        try:
+            wurzel = ET.parse(pfad).getroot()
+        except Exception:
+            continue
+        
+        # Testsuite Name
+        suite_name = (wurzel.get("name") or "").split(".")[-1]
+        if not suite_name and wurzel.tag == "testsuites":
+            # Einige Formate kapseln testsuite-Tags
+            for subsuite in wurzel.findall("testsuite"):
+                suite_name = (subsuite.get("name") or "").split(".")[-1]
+                break
+
         variante = os.path.basename(os.path.dirname(pfad))
-        wurzel = ET.parse(pfad).getroot()
         fehlschlaege = []
         for fall in wurzel.iter("testcase"):
             for kind in fall:
                 if kind.tag in ("failure", "error"):
                     erste_zeile = (kind.text or "").strip().split("\n")[0]
                     fehlschlaege.append((fall.get("name"), erste_zeile))
-        ergebnisse.append((
-            variante,
-            (wurzel.get("name") or "").split(".")[-1],
-            int(wurzel.get("tests") or 0),
-            int(wurzel.get("failures") or 0) + int(wurzel.get("errors") or 0),
-            int(wurzel.get("skipped") or 0),
-            fehlschlaege,
-        ))
+        
+        tests = int(wurzel.get("tests") or 0)
+        fehler = int(wurzel.get("failures") or 0) + int(wurzel.get("errors") or 0)
+        skipped = int(wurzel.get("skipped") or 0)
+
+        if tests > 0 or fehler > 0 or fehlschlaege:
+            ergebnisse.append((
+                variante,
+                suite_name or "Unbekannt",
+                tests,
+                fehler,
+                skipped,
+                fehlschlaege,
+            ))
     return ergebnisse
 
 
 def main():
-    ergebnisse = sammle()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    titel = sys.argv[1] if len(sys.argv) > 1 else "Testbericht"
+    suchpfad = sys.argv[2] if len(sys.argv) > 2 else "app/build/test-results"
+
+    ergebnisse = sammle(suchpfad)
     if not ergebnisse:
-        print("## Testbericht\n")
+        print(f"## {titel}\n")
         print("Keine Testergebnisse gefunden - der Testlauf ist vermutlich vor der Ausführung "
               "abgebrochen (Kompilierfehler?). Siehe Schrittprotokoll.")
         return
@@ -50,7 +81,7 @@ def main():
     uebersprungen = sum(e[4] for e in ergebnisse)
 
     kopf = "✅" if fehler == 0 else "❌"
-    print(f"## {kopf} Testbericht: {gesamt} Tests, {fehler} Fehler"
+    print(f"## {kopf} {titel}: {gesamt} Tests, {fehler} Fehler"
           + (f", {uebersprungen} übersprungen" if uebersprungen else ""))
     print()
 

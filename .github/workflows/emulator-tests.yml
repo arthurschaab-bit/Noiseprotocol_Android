@@ -2,10 +2,9 @@ name: Android Emulator Tests
 
 on:
   pull_request:
-    paths:
-      - 'app/src/androidTest/**'
-      - 'app/src/main/**'
-      - '.github/workflows/emulator-tests.yml'
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -62,6 +61,10 @@ jobs:
             adb shell input keyevent 82 || true
             adb logcat -c
             ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace || (timeout 10s adb logcat -d > logcat-failure.txt && exit 1)
+
+      - name: Testbericht in die Zusammenfassung schreiben
+        if: always()
+        run: python3 .github/scripts/testbericht.py "Instrumentierte Tests (Emulator API ${{ matrix.api-level }})" "app/build/outputs/androidTest-results" >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Collect ADB Logs
         if: always()
