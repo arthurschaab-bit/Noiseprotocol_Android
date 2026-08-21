@@ -28,18 +28,32 @@ class BleScanner(private val context: Context) {
     @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_SCAN vor jedem Zugriff
     fun scan(): Flow<BleDevice> = callbackFlow {
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
-        val scanner = adapter?.bluetoothLeScanner
+        if (adapter == null) {
+            close(IllegalStateException("Kein Bluetooth-Adapter verfügbar."))
+            return@callbackFlow
+        }
+        if (!adapter.isEnabled) {
+            close(IllegalStateException("Bluetooth ist deaktiviert. Bitte in den Systemeinstellungen aktivieren."))
+            return@callbackFlow
+        }
+
+        val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            close()
+            close(IllegalStateException("Bluetooth-LE-Scanner ist nicht verfügbar."))
             return@callbackFlow
         }
 
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val deviceName = try {
+                    result.device.name
+                } catch (e: SecurityException) {
+                    null
+                }
                 trySend(
                     BleDevice(
                         address = result.device.address,
-                        name = result.device.name,
+                        name = deviceName,
                         rssi = result.rssi,
                     )
                 )
@@ -50,7 +64,19 @@ class BleScanner(private val context: Context) {
             }
         }
 
-        scanner.startScan(callback)
-        awaitClose { scanner.stopScan(callback) }
+        try {
+            scanner.startScan(callback)
+        } catch (e: SecurityException) {
+            close(IllegalStateException("Bluetooth-Berechtigung (BLUETOOTH_SCAN) fehlt oder wurde verweigert.", e))
+            return@callbackFlow
+        }
+
+        awaitClose {
+            try {
+                scanner.stopScan(callback)
+            } catch (e: Throwable) {
+                // Ignore errors during flow cancellation / shutdown
+            }
+        }
     }
 }

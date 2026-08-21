@@ -55,18 +55,26 @@ class HeartbeatWorker(
 object HeartbeatPlanung {
 
     fun plane(context: Context) {
-        val anfrage = PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            // UPDATE statt KEEP: Sonst bliebe nach einer Aenderung an der Konfiguration der alte
-            // Auftrag stehen, und der Nutzer haette keine Moeglichkeit zu erkennen, dass seine
-            // Aenderung nicht greift.
-            ExistingPeriodicWorkPolicy.UPDATE,
-            anfrage,
-        )
+        try {
+            val anfrage = PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES).build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                // UPDATE statt KEEP: Sonst bliebe nach einer Aenderung an der Konfiguration der alte
+                // Auftrag stehen, und der Nutzer haette keine Moeglichkeit zu erkennen, dass seine
+                // Aenderung nicht greift.
+                ExistingPeriodicWorkPolicy.UPDATE,
+                anfrage,
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("HeartbeatPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 
     fun stoppe(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        } catch (e: Throwable) {
+            android.util.Log.w("HeartbeatPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 }

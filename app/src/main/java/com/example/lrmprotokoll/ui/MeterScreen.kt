@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -124,11 +126,6 @@ fun MeterScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        hasBluetoothPermissions = permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
-            permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
-    }
-
     // Der Verbindungszustand kommt vom ConnectionSupervisor, nicht direkt vom Transport (PROMPT_M3
     // Aufgabe 3): nur der Supervisor kennt RECONNECTING/DEGRADED/FAILED, und nur er - vom
     // AudioRecordingService betrieben - ueberlebt das Schliessen dieses Screens. Die UI
@@ -145,6 +142,64 @@ fun MeterScreen(
 
     fun ensureConnected() {
         context.startForegroundService(Intent(context, AudioRecordingService::class.java))
+    }
+
+    fun starteScan() {
+        foundDevices.clear()
+        scanFehler = null
+        isScanning = true
+        scope.launch {
+            val scanner = BleScanner(context)
+            try {
+                withTimeoutOrNull(SCAN_DURATION_MS) {
+                    scanner.scan().collect { device ->
+                        if (!foundDevices.containsKey(device.address)) {
+                            val befund = GeraetePinning.beurteile(
+                                device.address, device.name, pairedAddress, pairedName,
+                            )
+                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
+                                Log.w(
+                                    TAG,
+                                    "Advertiser ${device.address} traegt denselben Namen " +
+                                        "wie das gepinnte Geraet ($pairedAddress), aber " +
+                                        "eine andere Adresse - moeglicher Spoofing-Versuch",
+                                )
+                            }
+                        }
+                        foundDevices[device.address] = device
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Scan fehlgeschlagen", e)
+                scanFehler = scanFehlermeldung(e)
+            } finally {
+                isScanning = false
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val scanOk = permissions[Manifest.permission.BLUETOOTH_SCAN] == true
+        val connectOk = permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
+        hasBluetoothPermissions = scanOk && connectOk
+        if (hasBluetoothPermissions) {
+            starteScan()
+        }
+    }
+
+    fun requestPermissionsUndScanne() {
+        if (hasBluetoothPermissions) {
+            starteScan()
+        } else {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                )
+            )
+        }
     }
 
     fun pinne(device: BleDevice) {
@@ -308,8 +363,18 @@ fun MeterScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { ensureConnected() },
-                        enabled = hasBluetoothPermissions
+                        onClick = {
+                            if (hasBluetoothPermissions) {
+                                ensureConnected()
+                            } else {
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.BLUETOOTH_SCAN,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    )
+                                )
+                            }
+                        }
                     ) {
                         Text("Verbinden")
                     }
@@ -318,57 +383,49 @@ fun MeterScreen(
 
                 Text("Neues Gerät koppeln", style = MaterialTheme.typography.titleSmall)
                 if (!hasBluetoothPermissions) {
-                    Text(
-                        "Bluetooth-Berechtigung erforderlich",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                stringResource(R.string.permission_bluetooth_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                stringResource(R.string.permission_bluetooth_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.BLUETOOTH_SCAN,
+                                            Manifest.permission.BLUETOOTH_CONNECT
+                                        )
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text(stringResource(R.string.permission_grant_button))
+                            }
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = {
-                        foundDevices.clear()
-                        scanFehler = null
-                        isScanning = true
-                        scope.launch {
-                            val scanner = BleScanner(context)
-                            try {
-                                withTimeoutOrNull(SCAN_DURATION_MS) {
-                                    scanner.scan().collect { device ->
-                                        if (!foundDevices.containsKey(device.address)) {
-                                            val befund = GeraetePinning.beurteile(
-                                                device.address, device.name, pairedAddress, pairedName,
-                                            )
-                                            if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
-                                                Log.w(
-                                                    TAG,
-                                                    "Advertiser ${device.address} traegt denselben Namen " +
-                                                        "wie das gepinnte Geraet ($pairedAddress), aber " +
-                                                        "eine andere Adresse - moeglicher Spoofing-Versuch",
-                                                )
-                                            }
-                                        }
-                                        foundDevices[device.address] = device
-                                    }
-                                }
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                // Geraetetest-Rueckmeldung: "Scannen crashed die App." Ursache:
-                                // BleScanner.onScanFailed() schliesst den Flow ueber
-                                // close(IllegalStateException(...)) - z.B. bei
-                                // SCAN_FAILED_SCANNING_TOO_FREQUENTLY, wenn manche Hersteller
-                                // schnell aufeinanderfolgende Scan-Starts drosseln. Das vorherige
-                                // try{}finally{} OHNE catch fing das nicht ab: die Exception lief
-                                // unbehandelt aus dieser Coroutine heraus und beendete den Prozess.
-                                Log.w(TAG, "Scan fehlgeschlagen", e)
-                                scanFehler = scanFehlermeldung(e)
-                            } finally {
-                                isScanning = false
-                            }
-                        }
-                    },
-                    enabled = hasBluetoothPermissions && !isScanning,
+                    onClick = { requestPermissionsUndScanne() },
+                    enabled = !isScanning,
                     modifier = Modifier.testTag(SCAN_BUTTON_TAG),
                 ) {
                     Text(if (isScanning) "Suche läuft…" else "Scannen (10s)")
