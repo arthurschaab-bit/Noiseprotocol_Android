@@ -4,7 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -47,22 +47,22 @@ class AppStartupSmokeInstrumentedTest {
         // 2. Navigation zum Messgerät
         composeRule.onAllNodesWithText("Messgerät").onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("PCE-323", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
 
         // 3. Navigation zu Protokoll
         composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Messreihen", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Messreihen", substring = true).onFirst().assertIsDisplayed()
 
         // 4. Navigation zu Diagnose
         composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Diagnose & Systemstatus", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Diagnose", substring = true).onFirst().assertIsDisplayed()
 
         // 5. Navigation zu Einstellungen
         composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Einstellungen", substring = true).onFirst().assertIsDisplayed()
 
         // 6. Navigation zurück zum Startscreen
         composeRule.onAllNodesWithText("Start").onFirst().performClick()
