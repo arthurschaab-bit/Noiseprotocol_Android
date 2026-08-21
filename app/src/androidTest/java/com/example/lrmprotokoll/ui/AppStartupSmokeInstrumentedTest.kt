@@ -2,6 +2,8 @@ package com.example.lrmprotokoll.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -40,7 +42,7 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
 
         // 1. Startscreen (Home) ist geladen
-        composeRule.onNodeWithText("Lärmprotokoll", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
 
         // 2. Navigation zum Messgerät über Menü-Drawer
         composeRule.onNodeWithContentDescription("Menü").performClick()
