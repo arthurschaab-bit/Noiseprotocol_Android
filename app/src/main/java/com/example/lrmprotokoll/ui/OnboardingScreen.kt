@@ -1,6 +1,5 @@
 package com.example.lrmprotokoll.ui
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -88,12 +87,11 @@ fun OnboardingScreen(
             }
 
             // Pager Content
-            AnimatedContent(
-                targetState = currentPage,
-                label = "OnboardingPageAnimation",
-                modifier = Modifier.weight(1f)
-            ) { pageIdx ->
-                val page = pages[pageIdx]
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                val page = pages[currentPage]
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

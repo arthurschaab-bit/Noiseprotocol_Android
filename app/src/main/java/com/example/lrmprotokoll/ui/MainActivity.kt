@@ -82,9 +82,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SelectionContainer {
-                        AppNavigation()
-                    }
+                    AppNavigation()
                 }
             }
         }
@@ -125,13 +123,11 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            if (drawerState.isOpen || drawerState.isAnimationRunning || drawerState.targetValue == DrawerValue.Open) {
-                AppDrawerContent(
-                    currentRoute = currentRoute,
-                    onNavigate = { route -> navigiereZuTab(route) },
-                    onCloseDrawer = { scope.launch { drawerState.close() } }
-                )
-            }
+            AppDrawerContent(
+                currentRoute = currentRoute,
+                onNavigate = { route -> navigiereZuTab(route) },
+                onCloseDrawer = { scope.launch { drawerState.close() } }
+            )
         }
     ) {
         val showBottomNav = currentRoute == null || currentRoute in listOf("main", "meter", "protokoll", "diagnose", "settings")

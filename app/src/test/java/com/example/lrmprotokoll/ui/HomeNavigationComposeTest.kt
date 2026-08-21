@@ -42,8 +42,8 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Diagnose").assertIsDisplayed()
-        composeRule.onNodeWithText("Diagnose").performClick()
+        composeRule.onAllNodesWithText("Diagnose").onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
         composeRule.waitForIdle()
 
         // "Diagnose-Log (" statt nur "Diagnose-Log": der Leerzustandstext auf demselben Screen
@@ -60,7 +60,7 @@ class HomeNavigationComposeTest {
         composeRule.waitForIdle()
 
         listOf("Start", "Messgerät", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
-            composeRule.onNodeWithText(label).assertIsDisplayed()
+            composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
 
@@ -71,7 +71,7 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Diagnose").performClick()
+        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
         composeRule.waitForIdle()
 
         // Der eigentliche Regressionsfall: auf JEDER Seite, nicht nur auf "Start", muessen
