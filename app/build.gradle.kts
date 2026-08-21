@@ -83,6 +83,13 @@ android {
             assets.srcDirs("$projectDir/schemas")
         }
     }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = false
+        warningsAsErrors = false
+        textReport = true
+        htmlReport = true
+    }
 }
 
 room {
