@@ -357,23 +357,29 @@ class AudioRecordingService : LifecycleService() {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
 
-                    // Plan 4.5 (Owner-Korrektur): bei verbundenem Messgeraet wird durchgehend
-                    // aufgezeichnet - ein eigener Schwellenwert fuers Messgeraet ergab keinen
-                    // Sinn. Das Mikrofon bleibt nur Beweismittel (WAV) und Klassifikator, faellt
-                    // aber automatisch auf seine eigene Schwelle zurueck, sobald kein Messgeraet
-                    // (mehr) verbunden ist.
+                    val cal = java.util.Calendar.getInstance()
+                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                    val start = settingsManager.quietHoursStartHour
+                    val end = settingsManager.quietHoursEndHour
+                    val isQuiet = if (settingsManager.quietHoursEnabled) {
+                        if (start <= end) (hour >= start && hour < end)
+                        else (hour >= start || hour < end)
+                    } else false
+
+                    val activeSchwelle = if (isQuiet) settingsManager.quietHoursThreshold else settingsManager.dbThreshold
+
                     val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
                         letzterMeterFrame = letzterMeterFrame,
                         mikrofonDb = currentDb,
-                        mikrofonSchwelle = settingsManager.dbThreshold,
+                        mikrofonSchwelle = activeSchwelle,
                     )
                     if (auswertung.ausgeloest) {
                         Log.d(
                             "AudioRecordingService",
                             "Schwelle überschritten: ${String.format("%.1f", auswertung.pegel)} dB " +
-                                "(Quelle: ${if (auswertung.meterConnected) "Messgerät" else "Mikrofon"})",
+                                "(Quelle: ${if (auswertung.meterConnected) "Messgerät" else "Mikrofon"}, Ruhezeit=$isQuiet)",
                         )
-                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate, auswertung)
+                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate, auswertung, isQuiet)
                     }
                 }
                 delay(50)
@@ -442,6 +448,7 @@ class AudioRecordingService : LifecycleService() {
         dbValue: Double,
         sampleRate: Int,
         auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
+        isQuiet: Boolean,
     ) {
         val timestamp = System.currentTimeMillis()
         val fileName = "noise_$timestamp.wav"
@@ -503,6 +510,7 @@ class AudioRecordingService : LifecycleService() {
             calibratedDbA = auswertung.calibratedDbA,
             meterWeighting = auswertung.meterWeighting,
             meterConnected = auswertung.meterConnected,
+            isQuietHour = isQuiet,
         ))
     }
 

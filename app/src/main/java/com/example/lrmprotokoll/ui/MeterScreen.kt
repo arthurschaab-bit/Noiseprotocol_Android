@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -35,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -47,10 +52,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.GeraetePinning
@@ -84,7 +94,10 @@ private const val TAG = "MeterScreen"
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MeterScreen(onBack: () -> Unit) {
+fun MeterScreen(
+    onBack: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val transport = container.meterTransport
@@ -92,11 +105,28 @@ fun MeterScreen(onBack: () -> Unit) {
     val settings = container.settingsManager
     val scope = rememberCoroutineScope()
 
-    // Die Berechtigungsabfrage selbst laeuft beim App-Start in NoiseProtocolApp; hier wird nur
-    // der aktuelle Stand gelesen, um Scan/Verbinden-Buttons entsprechend zu sperren.
-    val hasBluetoothPermissions = remember {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasBluetoothPermissions by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasBluetoothPermissions = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        hasBluetoothPermissions = permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
+            permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
     }
 
     // Der Verbindungszustand kommt vom ConnectionSupervisor, nicht direkt vom Transport (PROMPT_M3
@@ -109,19 +139,10 @@ fun MeterScreen(onBack: () -> Unit) {
     var pairedAddress by remember { mutableStateOf(settings.meterDeviceAddress) }
     var pairedName by remember { mutableStateOf(settings.meterDeviceName) }
     var isScanning by remember { mutableStateOf(false) }
-    // Geraetetest-Rueckmeldung: "Wenn ich Scannen crashed die App." - siehe scanFehlermeldung()
-    // fuer die Ursache und den Grund, warum eine reine try{}finally{} (ohne catch) das nicht
-    // abfing.
     var scanFehler by remember { mutableStateOf<String?>(null) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
-    // Plan Abschnitt 6, Geraete-Pinning: ein Advertiser mit demselben Namen wie das gepinnte
-    // Geraet, aber anderer Adresse, wird nicht kommentarlos wie jedes andere gefundene Geraet
-    // angeboten - siehe GeraetePinning-KDoc.
     var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
 
-    // Startet (falls noetig) den Foreground Service, der den Supervisor mit dem aktuell in
-    // SettingsManager gepinnten Geraet verbindet - ohne EXTRA_START_AUDIO_MONITORING, das
-    // Koppeln eines Messgeraets soll nicht ungefragt die Mikrofon-Ueberwachung mitstarten.
     fun ensureConnected() {
         context.startForegroundService(Intent(context, AudioRecordingService::class.java))
     }
@@ -138,13 +159,11 @@ fun MeterScreen(onBack: () -> Unit) {
         val device = verdaechtigesGeraet!!
         AlertDialog(
             onDismissRequest = { verdaechtigesGeraet = null },
-            title = { Text("Anderes Gerät mit gleichem Namen") },
+            title = { Text("Mögliches Ersatzgerät gefunden") },
             text = {
                 Text(
-                    "„${device.name}“ (${device.address}) trägt denselben Namen wie das " +
-                        "gekoppelte Gerät ($pairedAddress), hat aber eine andere Adresse. " +
-                        "Das kann ein zweites, echtes Gerät sein – oder ein untergeschobenes. " +
-                        "Wirklich zu diesem Gerät wechseln?"
+                    "Das gefundene Gerät '${device.name}' hat die Adresse ${device.address}. " +
+                        "Gepinnt ist bisher ${pairedAddress}. Möchten Sie die Bindung auf das neue Gerät übertragen?"
                 )
             },
             confirmButton = {
@@ -162,11 +181,24 @@ fun MeterScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Messgerät") },
+                title = { Text(stringResource(R.string.nav_meter)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    if (onOpenDrawer != null) {
+                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
+                        }
+                    } else {
+                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        }
                     }
+                },
+                actions = {
+                    BluetoothStatusBadge(
+                        state = connectionState,
+                        deviceName = pairedName,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 }
             )
         }

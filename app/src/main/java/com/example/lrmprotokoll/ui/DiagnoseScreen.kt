@@ -4,32 +4,19 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,16 +28,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.HealthStatus
+import com.example.lrmprotokoll.diagnose.SystemHealthParams
+import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.zaehleReconnects
 import com.example.lrmprotokoll.meter.label
+import com.example.lrmprotokoll.ui.theme.statusColors
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -61,26 +57,61 @@ import kotlinx.coroutines.withContext
  * Der Diagnose-Screen (Plan Abschnitt 9) - "kein Luxus": bei einer Dauerüberwachung, die
  * alarmiert, muss nachvollziehbar sein, warum ein Alarm ausgelöst wurde oder ausblieb.
  *
- * Zustandsautomat, Decode-Fehlerrate, Diagnose-Log und Sync-Historie sind alle live
- * (StateFlow/Flow-basiert, M7c Aufgabe 5) - neue Einträge erscheinen, ohne den Screen neu zu
- * öffnen.
+ * Enthält Live-Status, Remote-Diagnose, Diagnose-Log, F3 System-Selbstprüfung, F15 Alarm-Historie
+ * und Google Drive Sync-Historie.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiagnoseScreen(onBack: () -> Unit) {
+fun DiagnoseScreen(
+    onBack: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
+    onShowSnackbar: ((String) -> Unit)? = null
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
+    val supervisor = container.connectionSupervisor
+    val transport = container.meterTransport
     val scope = rememberCoroutineScope()
 
-    val verbindungszustand by container.connectionSupervisor.state.collectAsState()
-    val frameQuality by container.meterTransport.frameQuality.collectAsState()
+    val verbindungszustand by supervisor.state.collectAsState()
+    val frameQuality by transport.frameQuality.collectAsState()
     val diagnoseLog by container.database.diagnosticLogDao().alle().collectAsState(initial = emptyList())
     val syncHistorie by container.database.driveDailyFileDao().alle().collectAsState(initial = emptyList())
+    val alarmHistorie by container.database.alertDao().alle().collectAsState(initial = emptyList())
 
     var remoteDiagnoseAktiv by remember { mutableStateOf(container.settingsManager.remoteDiagnoseAktiv) }
     var letzteDiagnoseId by remember { mutableStateOf(container.settingsManager.letzteDiagnoseId) }
     var reconnectZaehler by remember { mutableStateOf(0) }
     var exportiertGerade by remember { mutableStateOf(false) }
+
+    val hasAudioPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } else true
+    val hasBluetoothPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+    val isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+    val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
+
+    val healthOverview = remember(hasAudioPermission, hasNotificationPermission, hasBluetoothPermission, isBatteryOptimizationIgnored, verbindungszustand, dienstAktiv) {
+        bewerteSystemZustand(
+            SystemHealthParams(
+                hasAudioPermission = hasAudioPermission,
+                hasNotificationPermission = hasNotificationPermission,
+                hasBluetoothPermission = hasBluetoothPermission,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                canScheduleExactAlarms = true,
+                isBluetoothAdapterEnabled = true,
+                isMeterPinned = container.settingsManager.meterDeviceAddress != null,
+                meterConnectionState = verbindungszustand,
+                isAlertingConfigured = container.settingsManager.alarmierungAktiv,
+                isDriveSyncConfigured = container.settingsManager.driveSyncEnabled,
+                isDiagnoseLoggingActive = container.settingsManager.diagnoseLoggingAktiv,
+                isMonitoringActive = dienstAktiv
+            )
+        )
+    }
 
     LaunchedEffect(Unit) {
         val db = container.database
@@ -99,11 +130,24 @@ fun DiagnoseScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Diagnose & Support") },
+                title = { Text(stringResource(R.string.nav_diagnose)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    if (onOpenDrawer != null) {
+                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
+                        }
+                    } else {
+                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        }
                     }
+                },
+                actions = {
+                    BluetoothStatusBadge(
+                        state = verbindungszustand,
+                        deviceName = container.settingsManager.meterDeviceName,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 }
             )
         }
@@ -244,6 +288,102 @@ fun DiagnoseScreen(onBack: () -> Unit) {
             }
             items(diagnoseLog) { eintrag -> DiagnoseLogZeile(eintrag) }
 
+            // Sektion: F3 System-Selbstprüfung Checkliste
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("System-Selbstprüfung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        healthOverview.items.forEach { checkItem ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(
+                                        imageVector = when (checkItem.status) {
+                                            HealthStatus.OK -> Icons.Default.Check
+                                            HealthStatus.WARNING -> Icons.Default.Warning
+                                            HealthStatus.ERROR -> Icons.Default.Close
+                                        },
+                                        contentDescription = null,
+                                        tint = when (checkItem.status) {
+                                            HealthStatus.OK -> MaterialTheme.colorScheme.statusColors.connected
+                                            HealthStatus.WARNING -> MaterialTheme.colorScheme.statusColors.warning
+                                            HealthStatus.ERROR -> MaterialTheme.colorScheme.error
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(checkItem.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(checkItem.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+
+                                checkItem.actionLabel?.let { label ->
+                                    TextButton(onClick = {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", context.packageName, null)
+                                        }
+                                        context.startActivity(intent)
+                                    }) {
+                                        Text(label)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sektion: Alarm-Historie (F15)
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Alarm-Historie (${alarmHistorie.size})", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                if (alarmHistorie.isEmpty()) {
+                    Text(
+                        "Bisher wurden keine Alarme ausgelöst.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(alarmHistorie) { alarm ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        val formatierer = SimpleDateFormat("dd.MM. HH:mm:ss", Locale.getDefault())
+                        Text(
+                            text = "${formatierer.format(alarm.outageSince)} · ${alarm.reason}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Status: ${alarm.deliveryState} · Versuche: ${alarm.attempts} · Empfänger: ${alarm.recipients}" +
+                                (if (alarm.resolvedAt != null) " · Entwarnt: ${formatierer.format(alarm.resolvedAt)}" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Sektion: Sync-Historie
             item {
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()

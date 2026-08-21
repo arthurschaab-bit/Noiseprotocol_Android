@@ -217,8 +217,23 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         db.execSQL("ALTER TABLE `minute_aggregates` ADD COLUMN `range` TEXT")
     }
 }
+
+/**
+ * Migration von Schema-Version 11 auf 12: `isQuietHour`, `deletedAt`, `favorite`, `notes` auf `noise_records`
+ * fuer M10 (F8 Ruhezeiten, F9 Papierkorb / Soft-Delete, F2 Filter & Favoriten).
+ * Rein additiv wie die Migrationen zuvor.
+ */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `isQuietHour` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `deletedAt` INTEGER")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `favorite` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `notes` TEXT")
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
-    MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+    MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
 )
 
 @Database(
@@ -228,7 +243,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

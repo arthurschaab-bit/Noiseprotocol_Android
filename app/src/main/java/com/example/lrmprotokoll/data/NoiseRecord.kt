@@ -26,6 +26,10 @@ data class NoiseRecord(
     val calibratedDbA: Double? = null,
     val meterWeighting: String? = null,
     val meterConnected: Boolean = false,
+    val isQuietHour: Boolean = false,
+    val deletedAt: Long? = null,
+    val favorite: Boolean = false,
+    val notes: String? = null,
 )
 
 @Entity(tableName = "reference_sounds")

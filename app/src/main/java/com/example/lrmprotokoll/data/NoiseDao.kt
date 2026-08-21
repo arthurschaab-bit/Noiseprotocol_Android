@@ -8,11 +8,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NoiseDao {
-    @Query("SELECT * FROM noise_records ORDER BY timestamp DESC")
+    @Query("SELECT * FROM noise_records WHERE deletedAt IS NULL ORDER BY timestamp DESC")
     fun getAll(): Flow<List<NoiseRecord>>
 
+    @Query("SELECT * FROM noise_records WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
+    fun getTrash(): Flow<List<NoiseRecord>>
+
     /** Fuer den Drive-Sync (M7b): Ereignis-Abgleich der Tages-CSV mit den Aufnahme-Ereignissen. */
-    @Query("SELECT * FROM noise_records WHERE timestamp >= :von AND timestamp < :bis ORDER BY timestamp")
+    @Query("SELECT * FROM noise_records WHERE timestamp >= :von AND timestamp < :bis AND deletedAt IS NULL ORDER BY timestamp")
     suspend fun zwischenZeitpunkt(von: Long, bis: Long): List<NoiseRecord>
 
     @Insert
@@ -21,11 +24,38 @@ interface NoiseDao {
     @Update
     suspend fun update(record: NoiseRecord)
 
+    @Query("UPDATE noise_records SET deletedAt = :deletedAt WHERE id = :id")
+    suspend fun softDelete(id: Long, deletedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE noise_records SET deletedAt = :deletedAt WHERE id IN (:ids)")
+    suspend fun softDeleteMultiple(ids: List<Long>, deletedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE noise_records SET deletedAt = NULL WHERE id = :id")
+    suspend fun restore(id: Long)
+
+    @Query("UPDATE noise_records SET deletedAt = NULL WHERE id IN (:ids)")
+    suspend fun restoreMultiple(ids: List<Long>)
+
     @Query("DELETE FROM noise_records WHERE id = :id")
     suspend fun deleteById(id: Long)
 
     @Query("DELETE FROM noise_records WHERE id IN (:ids)")
     suspend fun deleteMultiple(ids: List<Long>)
+
+    @Query("DELETE FROM noise_records WHERE deletedAt IS NOT NULL AND deletedAt < :cutoff")
+    suspend fun deleteTrashAelterAls(cutoff: Long): Int
+
+    @Query("SELECT * FROM noise_records WHERE deletedAt IS NOT NULL AND deletedAt < :cutoff")
+    suspend fun getTrashAelterAls(cutoff: Long): List<NoiseRecord>
+
+    @Query("SELECT * FROM noise_records WHERE timestamp < :cutoff AND label IS NULL AND detectedLabel IS NULL AND favorite = 0 AND deletedAt IS NULL")
+    suspend fun getAutoRetentionCandidates(cutoff: Long): List<NoiseRecord>
+
+    @Query("UPDATE noise_records SET favorite = :isFavorite WHERE id = :id")
+    suspend fun setFavorite(id: Long, isFavorite: Boolean)
+
+    @Query("UPDATE noise_records SET notes = :notes WHERE id = :id")
+    suspend fun setNotes(id: Long, notes: String?)
 
     // Reference Sounds
     @Query("SELECT * FROM reference_sounds")

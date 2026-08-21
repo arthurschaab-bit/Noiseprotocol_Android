@@ -1,3 +1,71 @@
 <resources>
-    <string name="app_name">Laermprotokoll</string>
+    <string name="app_name">Lärmprotokoll</string>
+
+    <!-- Navigation & Tabs -->
+    <string name="nav_start">Start</string>
+    <string name="nav_meter">Messgerät</string>
+    <string name="nav_protocol">Protokoll</string>
+    <string name="nav_diagnose">Diagnose</string>
+    <string name="nav_settings">Einstellungen</string>
+    <string name="nav_trash">Papierkorb</string>
+
+    <!-- Actions & Common -->
+    <string name="action_start_recording">Aufnahme starten</string>
+    <string name="action_stop_recording">Aufnahme beenden</string>
+    <string name="action_delete">Löschen</string>
+    <string name="action_restore">Wiederherstellen</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_save">Speichern</string>
+    <string name="action_apply">Übernehmen</string>
+    <string name="action_retry">Wiederholen</string>
+    <string name="action_share">Teilen</string>
+    <string name="action_export_csv">CSV exportieren</string>
+    <string name="action_export_pdf">PDF exportieren</string>
+    <string name="action_back">Zurück</string>
+    <string name="action_menu">Menü</string>
+    <string name="action_options">Weitere Optionen</string>
+    <string name="action_undo">Rückgängig</string>
+    <string name="action_close">Schließen</string>
+
+    <!-- Status & Labels -->
+    <string name="status_monitoring">Überwachung</string>
+    <string name="status_active">AKTIV</string>
+    <string name="status_inactive">Inaktiv</string>
+    <string name="status_live">LIVE</string>
+    <string name="status_ended">BEENDET</string>
+    <string name="status_connected">Verbunden</string>
+    <string name="status_disconnected">Getrennt</string>
+    <string name="status_connecting">Verbinde…</string>
+    <string name="status_scanning">Suche…</string>
+    <string name="status_off">Aus</string>
+
+    <!-- Empty States & Warnings -->
+    <string name="empty_records_title">Noch keine Aufnahmen</string>
+    <string name="empty_records_desc">Starten Sie die Überwachung, um Lärmereignisse automatisch aufzuzeichnen.</string>
+    <string name="empty_filtered_records_title">Keine Treffer für den Filter</string>
+    <string name="empty_filtered_records_desc">Passen Sie die Filterkriterien an oder setzen Sie den Filter zurück.</string>
+    <string name="action_reset_filter">Filter zurücksetzen</string>
+    <string name="empty_protocol_title">Keine Messreihen vorhanden</string>
+    <string name="empty_protocol_desc">Messreihen entstehen automatisch, sobald ein PCE-323 verbunden ist.</string>
+    <string name="empty_trash_title">Papierkorb ist leer</string>
+    <string name="empty_trash_desc">Gelöschte Aufnahmen verbleiben 30 Tage im Papierkorb, bevor sie endgültig entfernt werden.</string>
+
+    <!-- Permissions & Onboarding -->
+    <string name="permission_audio_title">Mikrofon-Berechtigung erforderlich</string>
+    <string name="permission_audio_desc">Die App benötigt Zugriff auf das Mikrofon, um Audio-Aufnahmen bei Überschreitung des Schwellenwerts aufzuzeichnen.</string>
+    <string name="permission_bluetooth_title">Bluetooth-Berechtigung erforderlich</string>
+    <string name="permission_bluetooth_desc">Die App benötigt Bluetooth, um sich mit dem Schallpegelmesser PCE-323 zu verbinden.</string>
+    <string name="permission_settings_button">Einstellungen öffnen</string>
+    <string name="permission_grant_button">Berechtigung erteilen</string>
+    <string name="onboarding_skip">Überspringen</string>
+    <string name="onboarding_next">Weiter</string>
+    <string name="onboarding_finish">Starten</string>
+
+    <!-- Units & Calibration -->
+    <string name="unit_db">dB</string>
+    <string name="unit_dba">dBA</string>
+    <string name="unit_hz">Hz</string>
+    <string name="unit_ms">ms</string>
+    <string name="source_microphone">Mikrofon (unkalibriert)</string>
+    <string name="source_pce323">PCE-323 (kalibriert)</string>
 </resources>
