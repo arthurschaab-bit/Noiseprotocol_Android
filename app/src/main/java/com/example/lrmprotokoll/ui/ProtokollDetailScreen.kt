@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -79,7 +80,11 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
+fun ProtokollDetailScreen(
+    sessionId: Long,
+    onBack: () -> Unit,
+    onShowSnackbar: ((String) -> Unit)? = null
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
@@ -166,8 +171,13 @@ fun ProtokollDetailScreen(sessionId: Long, onBack: () -> Unit) {
         }
     ) { padding ->
         if (!geladen) {
-            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
-                Text("Lädt…", style = MaterialTheme.typography.bodyMedium)
+            Box(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
             return@Scaffold
         }
