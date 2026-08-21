@@ -41,6 +41,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Laermprotokoll">
 
+        <!-- Sentry: Automatische Initialisierung deaktivieren, da LaermprotokollApp Sentry manuell initialisiert -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
+
         <!-- M5: Weckruf fuer Karenzzeit und Eskalation. Nicht exportiert - die Action ist
              app-intern, niemand von aussen soll einen Alarm ausloesen oder unterdruecken
              koennen. -->
