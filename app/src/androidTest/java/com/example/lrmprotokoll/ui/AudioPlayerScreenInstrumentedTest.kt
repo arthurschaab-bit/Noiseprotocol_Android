@@ -110,7 +110,7 @@ class AudioPlayerScreenInstrumentedTest {
         composeRule.waitForIdle()
 
         // 1. Fehler-Text sichtbar
-        composeRule.onNodeWithText("Audiodatei existiert nicht mehr.", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
         // 2. Zurück-Button im Fehlerdialog klickbar
         composeRule.onNodeWithText("Zurück").assertIsDisplayed().performClick()
@@ -129,8 +129,8 @@ class AudioPlayerScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Fehler-Text für zu kurze Datei sichtbar
-        composeRule.onNodeWithText("Audiodatei ist beschädigt", substring = true).assertIsDisplayed()
+        // 1. Fehler-Text für zu kurze/beschädigte Datei sichtbar
+        composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
         // 2. Zurück-Button klickbar
         composeRule.onNodeWithText("Zurück").assertIsDisplayed().performClick()

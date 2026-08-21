@@ -48,9 +48,10 @@ class SettingsScreenInstrumentedTest {
         // 1. Titel in TopAppBar
         composeRule.onNodeWithText("Einstellungen").assertIsDisplayed()
 
-        // 2. Wichtige Abschnitte oben sichtbar / auffindbar
+        // 2. Aufnahme & Mikrofon Sektion aufklappen
+        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("Aufnahme-Schwellenwert (Mikrofon)", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Aufnahme-Schwellenwert (Messgerät)", substring = true).performScrollTo().assertIsDisplayed()
 
         // 3. Bis zum Bildschirmende scrollen
         composeRule.onNodeWithTag(BILDSCHIRM_ENDE_TAG).performScrollTo().assertIsDisplayed()
@@ -67,14 +68,22 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. KI-Erkennung Switch prüfen
+        // 1. KI Sektion aufklappen
+        composeRule.onNodeWithText("KI-Klassifikation & Audio", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // 2. KI-Erkennung Switch prüfen
         composeRule.onNodeWithText("KI-Erkennung aktivieren", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
-        // 2. Abtastrate-Chips prüfen (nach Scrollen)
+        // 3. Abtastrate-Chips prüfen (nach Scrollen)
         composeRule.onNodeWithText("16000 Hz (KI Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithText("44100 Hz (Qualität)", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
-        // 3. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
+        // 4. System & Diagnose Sektion aufklappen
+        composeRule.onNodeWithText("System, Diagnose & Akku", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // 5. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
         composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()
     }
 

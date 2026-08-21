@@ -50,7 +50,7 @@ class ProtokollScreenInstrumentedTest {
 
         // 2. Leerzustandstext sichtbar
         composeRule.onNodeWithText(
-            "Noch keine aufgezeichnete Überwachungsperiode",
+            "Messreihen entstehen automatisch",
             substring = true
         ).assertIsDisplayed()
 

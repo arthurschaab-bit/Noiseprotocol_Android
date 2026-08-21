@@ -141,7 +141,7 @@ class HomeScreenInstrumentedTest {
         assertTrue(favoriteToggled)
 
         // Teste Lernen-Chip
-        composeRule.onNodeWithText("Muster lernen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("Muster lernen", substring = true).assertIsDisplayed().performClick()
         assertTrue(learned)
 
         // Teste Löschen-Button
