@@ -68,22 +68,22 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. KI Sektion aufklappen
-        composeRule.onNodeWithText("KI-Klassifikation & Audio", substring = true).performScrollTo().performClick()
+        // 1. Aufnahme & Mikrofon Sektion aufklappen & Abtastrate-Chips prüfen
+        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
         composeRule.waitForIdle()
-
-        // 2. KI-Erkennung Switch prüfen
-        composeRule.onNodeWithText("KI-Erkennung aktivieren", substring = true).performScrollTo().assertIsDisplayed().performClick()
-
-        // 3. Abtastrate-Chips prüfen (nach Scrollen)
-        composeRule.onNodeWithText("16000 Hz (KI Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("16000 Hz (KI-Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithText("44100 Hz (Qualität)", substring = true).performScrollTo().assertIsDisplayed().performClick()
 
-        // 4. System & Diagnose Sektion aufklappen
+        // 2. KI Sektion aufklappen & Schalter prüfen
+        composeRule.onNodeWithText("KI-Erkennung (YAMNet)", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Automatische KI-Erkennung", substring = true).performScrollTo().assertIsDisplayed()
+
+        // 3. System & Diagnose Sektion aufklappen
         composeRule.onNodeWithText("System, Diagnose & Akku", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        // 5. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
+        // 4. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
         composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()
     }
 

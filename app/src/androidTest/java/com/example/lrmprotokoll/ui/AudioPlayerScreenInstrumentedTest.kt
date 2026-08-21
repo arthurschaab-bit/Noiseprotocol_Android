@@ -112,8 +112,8 @@ class AudioPlayerScreenInstrumentedTest {
         // 1. Fehler-Text sichtbar
         composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
-        // 2. Zurück-Button im Fehlerdialog klickbar
-        composeRule.onNodeWithText("Zurück").assertIsDisplayed().performClick()
+        // 2. Zurück-Button in TopAppBar klickbar
+        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
@@ -132,8 +132,8 @@ class AudioPlayerScreenInstrumentedTest {
         // 1. Fehler-Text für zu kurze/beschädigte Datei sichtbar
         composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
-        // 2. Zurück-Button klickbar
-        composeRule.onNodeWithText("Zurück").assertIsDisplayed().performClick()
+        // 2. Zurück-Button in TopAppBar klickbar
+        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
         assertTrue(backed)
 
         korrupteDatei.delete()
