@@ -62,11 +62,15 @@ object RetentionPlanung {
      * sich nie zur Laufzeit, ein taeglich neu aufgesetzter Auftrag braechte nichts.
      */
     fun plane(context: Context) {
-        val anfrage = PeriodicWorkRequestBuilder<RetentionWorker>(1, TimeUnit.DAYS).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            anfrage,
-        )
+        try {
+            val anfrage = PeriodicWorkRequestBuilder<RetentionWorker>(1, TimeUnit.DAYS).build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                anfrage,
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("RetentionPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 }

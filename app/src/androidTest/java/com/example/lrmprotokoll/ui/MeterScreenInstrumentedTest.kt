@@ -45,7 +45,7 @@ class MeterScreenInstrumentedTest {
         // 1. Titel "Messgerät" in TopAppBar sichtbar
         composeRule.onNodeWithText("Messgerät").assertIsDisplayed()
 
-        // 2. Scan-Button vorhanden
+        // 2. Scan-Button vorhanden und klickbar
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
         composeRule.onNodeWithText("Scannen (10s)").assertIsDisplayed()
 

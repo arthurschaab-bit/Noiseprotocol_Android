@@ -148,6 +148,13 @@ class AudioRecordingService : LifecycleService() {
      */
     private fun ensureMeterMonitoringStarted() {
         val address = settingsManager.meterDeviceAddress ?: return
+        val hasBluetoothConnect = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasBluetoothConnect) {
+            Log.w("AudioRecordingService", "BLUETOOTH_CONNECT Berechtigung fehlt - Meter-Monitoring wird übersprungen")
+            return
+        }
         val device = BoundDevice(address, settingsManager.meterDeviceName ?: address)
         connectionSupervisor.start(device)
 
@@ -245,18 +252,38 @@ class AudioRecordingService : LifecycleService() {
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
-        // connectedDevice zusaetzlich zu microphone deklariert (Plan Abschnitt 4.5): der
-        // Dienst nutzt das PCE-323 als Trigger-Quelle erst ab M4, aber Manifest und
-        // startForeground() muessen von Anfang an zusammenpassen.
+        val hasBluetoothConnect = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val hasRecordAudio = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        var serviceType = 0
+        if (hasRecordAudio) {
+            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        if (hasBluetoothConnect && settingsManager.meterDeviceAddress != null) {
+            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        }
+
         try {
-            startForeground(
-                NOTIFICATION_ID,
-                buildNotification(connectionSupervisor.state.value),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
-            diagnosticsReporter.breadcrumb("AudioService", "Foreground-Service erfolgreich gestartet")
+            if (serviceType != 0) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(connectionSupervisor.state.value),
+                    serviceType
+                )
+            } else {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(connectionSupervisor.state.value)
+                )
+            }
+            diagnosticsReporter.breadcrumb("AudioService", "Foreground-Service erfolgreich gestartet (types=$serviceType)")
         } catch (e: Throwable) {
-            Log.e("AudioRecordingService", "Foreground Service konnte nicht gestartet werden", e)
+            Log.e("AudioRecordingService", "Foreground Service konnte nicht mit Typen gestartet werden", e)
             diagnosticsReporter.report(
                 code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FOREGROUND_SERVICE_FAILED,
                 component = "AudioRecordingService",
@@ -264,7 +291,15 @@ class AudioRecordingService : LifecycleService() {
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
                 cause = e
             )
-            throw e
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(connectionSupervisor.state.value)
+                )
+            } catch (fallbackEx: Throwable) {
+                Log.e("AudioRecordingService", "Fallback startForeground fehlgeschlagen", fallbackEx)
+                stopSelf()
+            }
         }
     }
 
@@ -315,13 +350,28 @@ class AudioRecordingService : LifecycleService() {
             bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
             diagnosticsReporter.breadcrumb("AudioService", "Mikrofon-Monitoring gestartet (sampleRate=$sampleRate)")
 
-            val audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                bufferSize
-            )
+            val audioRecord = try {
+                AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    channelConfig,
+                    audioFormat,
+                    bufferSize
+                )
+            } catch (e: Exception) {
+                Log.e("AudioRecordingService", "AudioRecord konnte nicht instanziiert werden", e)
+                diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_INIT_FAILED,
+                    component = "AudioRecordingService",
+                    operation = "startMonitoring",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                    cause = e
+                )
+                isRunning = false
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return@launch
+            }
 
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e("AudioRecordingService", "AudioRecord initialization failed")
@@ -334,6 +384,7 @@ class AudioRecordingService : LifecycleService() {
                     details = mapOf("sampleRate" to sampleRate, "bufferSize" to bufferSize)
                 )
                 isRunning = false
+                audioRecord.release()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return@launch
