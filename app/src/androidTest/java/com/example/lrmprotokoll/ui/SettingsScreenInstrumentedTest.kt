@@ -80,7 +80,7 @@ class SettingsScreenInstrumentedTest {
         composeRule.onNodeWithText("Automatische KI-Erkennung", substring = true).performScrollTo().assertIsDisplayed()
 
         // 3. System & Diagnose Sektion aufklappen
-        composeRule.onNodeWithText("System, Diagnose & Akku", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText("System, Logging & Energie", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
 
         // 4. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
