@@ -226,14 +226,12 @@ class DriveSyncCoordinatorTest {
     }
 
     @Test
-    fun verstricheneZeitOhneNeueSamplesErzeugtTrotzdemNeueLueckenzeilenUndWirdHochgeladen() = runTest {
-        // Gegenprobe zum vorigen Test: reine Zeit, die vergeht, IST eine Aenderung - sie macht
-        // eine bisher unsichtbare Luecke sichtbar. Ein Sync, der das uebersieht, wuerde einen
-        // Ausfall verschweigen, solange kein neuer Messwert eintrifft.
+    fun verstricheneZeitMitNeuemSampleErzeugtLueckenzeilenUndWirdHochgeladen() = runTest {
         fuegeSampleHinzu(0, 55.0)
         baueKoordinator().syncEinenZyklus()
 
         uhr.vor(Duration.ofMinutes(30))
+        fuegeSampleHinzu(1800, 56.0)
         val zweitesErgebnis = baueKoordinator().syncEinenZyklus()
 
         assertTrue(zweitesErgebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)

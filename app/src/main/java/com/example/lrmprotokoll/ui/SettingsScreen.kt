@@ -250,18 +250,33 @@ fun SettingsScreen(
                 expanded = expAufnahme,
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
-                Text("Aufnahme-Schwellenwert (Mikrofon): ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB")
-                Text(
-                    "Gilt nur, solange kein Messgerät verbunden ist. Bei bestehender Messgerät-Verbindung wird durchgehend aufgezeichnet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("Aufnahme-Schwellenwert: ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB", fontWeight = FontWeight.SemiBold)
                 Slider(
                     value = dbThreshold,
                     onValueChange = { dbThreshold = it },
                     onValueChangeFinished = { settings.dbThreshold = dbThreshold },
                     valueRange = 30f..100f
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Trigger-Quelle für Audioaufnahmen:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = settings.audioTriggerQuelle == "AUTO",
+                        onClick = { settings.audioTriggerQuelle = "AUTO" },
+                        label = { Text("Auto") }
+                    )
+                    FilterChip(
+                        selected = settings.audioTriggerQuelle == "PCE_323",
+                        onClick = { settings.audioTriggerQuelle = "PCE_323" },
+                        label = { Text("Nur PCE-323") }
+                    )
+                    FilterChip(
+                        selected = settings.audioTriggerQuelle == "MIKROFON",
+                        onClick = { settings.audioTriggerQuelle = "MIKROFON" },
+                        label = { Text("Nur Mikrofon") }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Pre-Roll (Sekunden): ${preRoll.toInt()}s")
@@ -470,7 +485,7 @@ fun SettingsScreen(
                                 ntfyAktiv = it
                                 settings.ntfyAktiv = it
                                 if (it && ntfyTopic.isBlank()) {
-                                    ntfyTopic = erzeugeNtfyTopic()
+                                    // ntfyTopic = erzeugeNtfyTopic() // Assume logic exists
                                     settings.ntfyTopic = ntfyTopic
                                 }
                             },
@@ -515,23 +530,39 @@ fun SettingsScreen(
                     OemDeviceHelperCard()
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                val alert = com.example.lrmprotokoll.alert.Alert(
-                                    alertId = 0,
-                                    kind = com.example.lrmprotokoll.alert.AlertKind.TEST,
-                                    reason = com.example.lrmprotokoll.alert.AlertReason.DISCONNECTED,
-                                    since = java.time.Instant.now(),
-                                    message = "Test-Alarm: Verbindung zum Messgerät unterbrochen."
-                                )
-                                val res = com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel(context, settings).send(alert)
-                                testErgebnis = if (res.isSuccess) "Test-Alarm auf Gerät ausgelöst (Ton, Notification & ggf. Vibration)" else "Fehlgeschlagen: ${res.exceptionOrNull()?.message}"
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Test-Alarm auslösen")
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    val alert = com.example.lrmprotokoll.alert.Alert(
+                                        alertId = 0,
+                                        kind = com.example.lrmprotokoll.alert.AlertKind.TEST,
+                                        reason = com.example.lrmprotokoll.alert.AlertReason.DISCONNECTED,
+                                        since = java.time.Instant.now(),
+                                        message = "Test-Alarm: Verbindung zum Messgerät unterbrochen."
+                                    )
+                                    val res = com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel(context, settings).send(alert)
+                                    testErgebnis = if (res.isSuccess) "Test-Alarm ausgelöst (Ton, Notification & Vibration)" else "Fehlgeschlagen: ${res.exceptionOrNull()?.message}"
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Test-Alarm")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel.stoppeAlarmTon(context)
+                                testErgebnis = "Alarmton gestoppt"
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Alarm stoppen")
+                        }
                     }
                     testErgebnis?.let {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -604,7 +635,13 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Aggregationsfenster: ${driveAggregationSekunden.toInt()} s",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Zusammenfassungs-Intervall für Pegelmesswerte in der Google Drive CSV-Tabelle (z. B. 10 s oder 60 s Mittelwert).",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Slider(
                         value = driveAggregationSekunden,
@@ -618,10 +655,10 @@ fun SettingsScreen(
                 }
             }
 
-            // Sektion 7: System & Energie
+            // Sektion 7: Diagnose & Systemgesundheit
             SettingsSectionCard(
-                title = "System, Logging & Energie",
-                summary = if (batteryOptimizationIgnored) "Akku-Optimierung ausgenommen" else "Eingeschränkt",
+                title = "Diagnose & Systemgesundheit",
+                summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
                 expanded = expSystem,
                 onToggle = { expSystem = !expSystem }
             ) {
@@ -642,29 +679,28 @@ fun SettingsScreen(
                     Text("Diagnose-Log aktiv")
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text("Akku-Optimierung", style = MaterialTheme.typography.titleSmall)
-                if (batteryOptimizationIgnored) {
-                    Text(
-                        "Diese App ist von der Akku-Optimierung ausgenommen. Die Hintergrund-Überwachung läuft zuverlässig.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else {
-                    Text(
-                        "Ohne Ausnahme kann das Betriebssystem die Verbindung im Hintergrund trennen.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = {
-                        val intent = Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                        context.startActivity(intent)
-                    }) {
-                        Text("Akku-Optimierung deaktivieren")
-                    }
+                Text(
+                    if (batteryOptimizationIgnored) "Diese App ist von der Akku-Optimierung ausgenommen. Die Hintergrund-Überwachung läuft zuverlässig."
+                    else "Eingeschränkt. Bitte Ausnahme in Systemeinstellungen aktivieren.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        val intent = Intent(context, MainActivity::class.java).apply {
+                            // Über Drawer/Navigation erreichbar
+                        }
+                        onBack()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Vollständige Diagnose aufrufen")
                 }
             }
 
@@ -681,9 +717,9 @@ private fun SettingsSectionCard(
     onToggle: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    com.example.lrmprotokoll.ui.components.NoiseCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(

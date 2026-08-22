@@ -243,8 +243,8 @@ fun AppNavigationBar(
     currentRoute: String?,
     onNavigateToStart: () -> Unit,
     onNavigateToProtokoll: () -> Unit,
-    onNavigateToDiagnose: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToDiagnose: (() -> Unit)? = null,
     onNavigateToMeter: (() -> Unit)? = null,
 ) {
     NavigationBar {
@@ -260,13 +260,6 @@ fun AppNavigationBar(
             onClick = onNavigateToProtokoll,
             icon = { Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.nav_protocol)) },
             label = { Text(stringResource(R.string.nav_protocol)) },
-            modifier = Modifier.heightIn(min = 48.dp)
-        )
-        NavigationBarItem(
-            selected = istBottomNavZielAktiv(currentRoute, "diagnose"),
-            onClick = onNavigateToDiagnose,
-            icon = { Icon(AppIcons.Diagnose, contentDescription = stringResource(R.string.nav_diagnose)) },
-            label = { Text(stringResource(R.string.nav_diagnose)) },
             modifier = Modifier.heightIn(min = 48.dp)
         )
         NavigationBarItem(
@@ -532,16 +525,25 @@ fun NoiseProtocolApp(
             }
         }
 
-        // 3. Live-Cockpit (1-Sekunden Header, Live-Kurve, Messung starten/stoppen, Quick-Tagger)
+        // 3. 1. Sektion: Smartphone-Mikrofon Aufnahme & Live-dB Anzeige
         item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                MicrophoneControlCard(
+                    onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
+                )
+            }
+        }
+
+        // 4. 2. Sektion: PCE-323 Messgeräte Aufnahme & Live-Pegelverlauf
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 LiveCockpitCard(
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
                 )
             }
         }
 
-        // 4. PCE-323 Messgerät Steuerung & Kopplung (direkt auf der Startseite)
+        // 5. PCE-323 Messgerät Steuerung & Kopplung (direkt auf der Startseite)
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 MeterControlCard(
@@ -1065,9 +1067,10 @@ fun NoiseRecordItem(
 
                 // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts
                 if (record.calibratedDbA != null) {
+                    val unit = if (record.meterWeighting != null) "dB(${record.meterWeighting})" else "dBA"
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} dBA",
+                            text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} $unit",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary

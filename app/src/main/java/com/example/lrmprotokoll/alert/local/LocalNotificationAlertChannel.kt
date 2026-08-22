@@ -3,7 +3,9 @@ package com.example.lrmprotokoll.alert.local
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.Ringtone
@@ -74,11 +76,23 @@ class LocalNotificationAlertChannel(
     companion object {
         @Volatile
         private var aktiverAlarmTon: Ringtone? = null
+        @Volatile
+        private var aktiverVibrator: Vibrator? = null
 
-        fun stoppeAlarmTon() {
+        fun stoppeAlarmTon(context: Context? = null) {
             try {
                 aktiverAlarmTon?.stop()
                 aktiverAlarmTon = null
+                aktiverVibrator?.cancel()
+                aktiverVibrator = null
+                context?.let { ctx ->
+                    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        (ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+                    } else {
+                        ctx.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    }
+                    vibrator?.cancel()
+                }
             } catch (_: Exception) {}
         }
     }
@@ -118,6 +132,16 @@ class LocalNotificationAlertChannel(
             }
         )
 
+        val stopIntent = Intent(context, AlarmDismissReceiver::class.java).apply {
+            action = ACTION_STOP_ALARM
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            context,
+            ALARM_NOTIFICATION_ID,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val meldung = NotificationCompat.Builder(context, ALARM_NOTIFICATION_CHANNEL_ID)
             .setContentTitle(AlertMessages.titel(alert.kind))
             .setContentText(alert.message)
@@ -126,6 +150,8 @@ class LocalNotificationAlertChannel(
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDeleteIntent(stopPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Alarm stoppen", stopPendingIntent)
             .setAutoCancel(true)
             .build()
 
