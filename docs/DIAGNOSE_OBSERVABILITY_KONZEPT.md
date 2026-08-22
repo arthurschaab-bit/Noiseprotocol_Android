@@ -1,8 +1,8 @@
 # Diagnose-, Fehleranalyse- und Observability-Konzept
 
-**Stand:** 20. August 2026
+**Stand:** August 2026
 
-**Status:** Umsetzungsplan, noch keine Sentry-Implementierung
+**Status:** Vollständig implementiert (`com.example.lrmprotokoll.diagnose.*`), getestet und integriert
 
 **Zugehörige externe Checkliste:** [EXTERNE_DIENSTE_EINRICHTUNG.md](EXTERNE_DIENSTE_EINRICHTUNG.md)
 
@@ -12,7 +12,7 @@ Jeder relevante Fehler soll möglichst nah am Entstehungsort mit dem notwendigen
 
 Das System kombiniert drei unterschiedliche Signale:
 
-1. **Fehlerdiagnose:** Sentry erfasst Abstürze, ANRs und ausgewählte behandelte Fehler.
+1. **Fehlerdiagnose:** Sentry erfasst Abstürze, ANRs und ausgewählte behandelte Fehler (`SentryDiagnosticSink`).
 2. **Lebenszeichen:** Der bereits vorhandene Heartbeat/Totmannschalter meldet das Ausbleiben einer laufenden Überwachung über einen externen Dienst.
 3. **Fachliche Alarme:** Das bereits vorhandene ntfy-System meldet Grenzwertüberschreitungen.
 
@@ -25,25 +25,23 @@ Diese Signale dürfen nicht vermischt werden. Ein fachlicher Alarm ist kein Soft
 - lokales Zwischenspeichern bis wieder Netzwerk verfügbar ist,
 - Abruf von Informationen zum vorherigen Prozessende beim nächsten Start,
 - Heartbeat als externes Signal für eine verstummte laufende Überwachung,
-- Support-Paket als kontrollierter manueller Rückkanal.
+- Support-Paket als kontrollierter manueller Rückkanal (`SupportBundleExporter`).
 
-## 2. Bereits vorhandener Stand auf `main`
+## 2. Implementierungsstand auf `main`
 
-Die folgenden Bausteine werden weiterverwendet und nicht neu erfunden:
+Die folgenden Bausteine sind vollständig umgesetzt:
 
-| Vorhandener Baustein | Aufgabe | Einbindung in das neue Konzept |
+| Baustein | Aufgabe | Status |
 |---|---|---|
-| `DiagnosticLogger` | Technisches lokales Diagnoseprotokoll in Room | Wird lokaler Sink des zentralen Reporters |
-| `DiagnosticLogCleanupWorker` | Sieben Tage Aufbewahrung und tägliche Bereinigung | Bleibt für lokale Diagnoseereignisse bestehen |
-| `DiagnoseScreen` | Live-Status, Reconnects, Decoderfehler und Drive-Verlauf | Wird um Übertragungsstatus, Diagnose-ID und Support-Aktionen ergänzt |
-| `HeartbeatPinger` und `HeartbeatWorker` | Totmannschalter über eine externe Ping-URL | Bleiben als separates Verfügbarkeitssignal bestehen |
-| `HeartbeatPlanung` | 15-Minuten-WorkManager-Planung während Überwachung | Bleibt unverändert, wird nur diagnostisch beobachtet |
-| `NtfyAlertChannel` und lokale Meldung | Fachliche Alarmierung | Bleibt von technischen Fehler-E-Mails getrennt |
-| `DriveSyncWorker` und Drive-Historie | Berichtssynchronisierung | Erhalten gezielte Fehlercodes und Breadcrumbs |
-| `AppContainer.appExceptionHandler` | App-weiter Coroutine-Fehlerhandler | Meldet künftig zentral statt nur `Log.e` |
-| Verschlüsselte Einstellungen | Schutz von ntfy- und Heartbeat-Konfiguration | Bleibt erhalten; Geheimnisse werden nie diagnostisch übertragen |
-
-Noch nicht vorhanden sind ein Remote-Crash-Backend, ein einheitliches Ereignisschema, stabile Fehlercodes, zentrale Redaction, Duplikatbegrenzung, Diagnose-IDs und ein datensparsames Support-Paket.
+| `DiagnosticsReporter` | Zentrales Interface für strukturierte Breadcrumbs, Fehlerberichte & Kontext | ✅ Implementiert (`CompositeDiagnosticsReporter`) |
+| `SentryDiagnosticSink` | Anbindung an Sentry Remote Crash-Reporting | ✅ Implementiert (DSN konfigurierbar) |
+| `DiagnosticLogger` / `DiagnosticLogDao` | Technisches lokales Diagnoseprotokoll in Room (V12) | ✅ Implementiert |
+| `DiagnosticRedactor` | Bereinigung von sensiblen Daten (Tokens, MACs, Passwörtern) | ✅ Implementiert & getestet |
+| `DiagnosticFingerprint` & `DiagnosticRateLimiter` | Stabile Fehlergruppierung & Sentry-Kontingentschutz | ✅ Implementiert & getestet |
+| `SupportBundleExporter` | Kontrollierter ZIP-Export (Logs, System-Health, Metriken) | ✅ Implementiert & getestet |
+| `SystemHealthChecker` | Health-Prüfung (Speicher, Akku-Optimierung, Berechtigungen) | ✅ Implementiert |
+| `DiagnosticLogCleanupCoordinator` | Automatische 7-Tage-Bereinigung lokaler Diagnose-Logs | ✅ Implementiert |
+| `DiagnoseScreen` | Live-Status, Reconnects, Volltextsuche im Diagnose-Log, Drive-Verlauf & Support-Export | ✅ Implementiert |
 
 ## 3. Architektur
 

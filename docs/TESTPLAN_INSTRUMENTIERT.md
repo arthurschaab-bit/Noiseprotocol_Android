@@ -1,10 +1,11 @@
 # Testplan: Instrumentierte UI-Tests (echter Emulator)
 
-Vollständige Liste jedes interaktiven Elements in der App (Button, Switch, Checkbox, Slider,
-Chip, klickbare Card) mit Positiv- und Negativtest, verlinkt auf die genaue Codestelle. Grundlage
-für die `androidTest`-Suite, die im gelabelten/kommentar-getriggerten Emulator-CI-Job laufen soll
-(`android-emulator-runner`, siehe Vorgespräch) - dieses Dokument ist die Planung, noch keine
-Implementierung.
+**Status:** Vollständig implementiert (`app/src/androidTest/`) & automatisiert in CI (`.github/workflows/emulator-tests.yml`).
+
+Vollständige Liste der interaktiven Elemente in der App (Button, Switch, Checkbox, Slider,
+Chip, klickbare Card) mit Positiv- und Negativtest, verlinkt auf die genaue Codestelle. Die
+`androidTest`-Suite umfasst 34 instrumentierte Smoke- und Interaktionstests, die bei jedem
+Pull Request und Push auf `main` auf einem Android 14 (API 34) ATD-Emulator ausgeführt werden.
 
 ## Was hier NEU ist gegenüber den bestehenden Robolectric-Compose-Tests
 
