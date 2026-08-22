@@ -209,11 +209,15 @@ fun LiveCockpitCard(
                 }
             }
 
+            val threshold = container.settingsManager.dbThreshold.toDouble()
+
             PegelverlaufChart(
                 spalten = chartSpalten,
                 ausfallbaender = ausfallbaender,
                 sessionStart = s.startedAt,
                 sessionEnde = sessionEndeFuerChart,
+                thresholdDb = threshold,
+                laeqDb = kennwerte?.leqDb,
                 isLive = isLive,
                 height = 140.dp
             )
