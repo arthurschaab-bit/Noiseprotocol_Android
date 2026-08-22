@@ -139,6 +139,17 @@ ausgeschaltetem Bluetooth wären genau der Fehler, den die Adapter-Beobachtung v
 
 ---
 
+## Teil E — Befunde aus dem Praxiseinsatz & Härtung (Google Pixel & Xiaomi Pad 6)
+
+| Bereich / Test | Beobachtung im Feld | Maßnahme & Härtung | Status |
+|---|---|---|---|
+| **BLE-Kopplung PCE-323** | Erfolgreich verbunden, Messwertübertragung läuft stabil. | Sortierung der BLE-Liste stabilisiert (`sortiereGefundeneGeraete`), Entkopplung Audioaufnahme von Dauermessung (`PR #53`). | ✅ Gelöst |
+| **Frequenzgang dB(A) / dB(C)** | Umschaltung und Pegel stimmen mit Display überein. | Bestätigt. | ✅ Gelöst |
+| **Google Drive Login & Export** | Login erfolgreich; Daten liegen in `F:\Meine Ablage\Lärmprotokoll\` (`laermprotokoll_*.csv`, Support-Bundles). Bei Wiederverbindung kam erneuter Account-Chooser. | Kontopersistenz via `googleAccountEmail` + stiller Token-Flow + `DriveStatusCard` mit Sofort-Sync in UI (`PR #54`). | ✅ Gelöst |
+| **Tablet-Alarmierung (Xiaomi Pad 6)** | Auf MiPad 6 kein Alarm, keine Notification, keine Vibration. | **Ursachen:** 1. Tablets haben keinen Vibrationsmotor (`hasVibrator == false`), 2. Lautlos-Modus unterdrückte Standardtöne, 3. HyperOS Berechtigungs- und Akku-Restriktionen.<br>**Lösung:** Akustischer Alarmton forciert mit `USAGE_ALARM` via `LocalNotificationAlertChannel`, NotificationChannel v3 mit Priorität `MAX`, `OemDeviceHelperCard` mit 1-Klick-Intents (`PR #55`). | ✅ Gelöst |
+
+---
+
 ## Was zurückgemeldet werden sollte
 
 1. Die ausgefüllte Tabelle, auch mit den Zeilen, die nicht wie erwartet liefen
