@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
+import com.example.lrmprotokoll.drive.DriveDatei
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
@@ -47,6 +48,10 @@ fun DriveStatusCard(
     onConnectGoogle: () -> Unit,
     onDisconnectGoogle: () -> Unit,
     onUpdateFolderName: (String) -> Unit,
+    onLoadFolders: (suspend () -> Result<List<DriveDatei>>)? = null,
+    onSelectFolder: ((DriveDatei) -> Unit)? = null,
+    onCreateFolder: (suspend (String) -> Result<DriveDatei>)? = null,
+    onRenameFolder: (suspend (String, String) -> Result<Unit>)? = null,
     modifier: Modifier = Modifier,
 ) {
     val isConnected = !googleAccountEmail.isNullOrBlank() && !folderId.isNullOrBlank()
@@ -55,45 +60,60 @@ fun DriveStatusCard(
     var inputFolderName by remember(folderName) { mutableStateOf(folderName) }
 
     if (showFolderDialog) {
-        AlertDialog(
-            onDismissRequest = { showFolderDialog = false },
-            title = { Text("Google Drive Zielordner", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        "Gib den exakten Namen des Zielordners in deinem Google Drive an. Wenn der Ordner noch nicht existiert, wird er automatisch angelegt.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = inputFolderName,
-                        onValueChange = { inputFolderName = it },
-                        label = { Text("Ordnername") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+        if (onLoadFolders != null && onSelectFolder != null && onCreateFolder != null && onRenameFolder != null) {
+            DriveFolderPickerDialog(
+                currentFolderId = folderId,
+                currentFolderName = folderName,
+                onSelectFolder = { selected ->
+                    onSelectFolder(selected)
+                    showFolderDialog = false
+                },
+                onCreateFolder = onCreateFolder,
+                onRenameFolder = onRenameFolder,
+                onLoadFolders = onLoadFolders,
+                onDismiss = { showFolderDialog = false }
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { showFolderDialog = false },
+                title = { Text("Google Drive Zielordner", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text(
+                            "Gib den exakten Namen des Zielordners in deinem Google Drive an. Wenn der Ordner noch nicht existiert, wird er automatisch angelegt.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = inputFolderName,
+                            onValueChange = { inputFolderName = it },
+                            label = { Text("Ordnername") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val trimmed = inputFolderName.trim()
+                            if (trimmed.isNotBlank()) {
+                                onUpdateFolderName(trimmed)
+                                showFolderDialog = false
+                            }
+                        },
+                        enabled = inputFolderName.isNotBlank()
+                    ) {
+                        Text("Speichern & Synchronisieren")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFolderDialog = false }) {
+                        Text("Abbrechen")
+                    }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val trimmed = inputFolderName.trim()
-                        if (trimmed.isNotBlank()) {
-                            onUpdateFolderName(trimmed)
-                            showFolderDialog = false
-                        }
-                    },
-                    enabled = inputFolderName.isNotBlank()
-                ) {
-                    Text("Speichern & Synchronisieren")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFolderDialog = false }) {
-                    Text("Abbrechen")
-                }
-            }
-        )
+            )
+        }
     }
 
     NoiseCard(

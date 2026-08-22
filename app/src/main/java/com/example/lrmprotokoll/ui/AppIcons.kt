@@ -215,4 +215,56 @@ object AppIcons {
             close()
         }.build()
     }
+
+    val Folder: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Folder",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+            moveTo(10.0f, 4.0f)
+            horizontalLineTo(4.0f)
+            curveToRelative(-1.1f, 0.0f, -1.99f, 0.9f, -1.99f, 2.0f)
+            lineTo(2.0f, 18.0f)
+            curveToRelative(0.0f, 1.1f, 0.9f, 2.0f, 2.0f, 2.0f)
+            horizontalLineToRelative(16.0f)
+            curveToRelative(1.1f, 0.0f, 2.0f, -0.9f, 2.0f, -2.0f)
+            verticalLineTo(8.0f)
+            curveToRelative(0.0f, -1.1f, -0.9f, -2.0f, -2.0f, -2.0f)
+            horizontalLineToRelative(-8.0f)
+            lineToRelative(-2.0f, -2.0f)
+            close()
+        }.build()
+    }
+
+    val FolderOpen: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "FolderOpen",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+            moveTo(20.0f, 6.0f)
+            horizontalLineToRelative(-8.0f)
+            lineToRelative(-2.0f, -2.0f)
+            horizontalLineTo(4.0f)
+            curveToRelative(-1.1f, 0.0f, -1.99f, 0.9f, -1.99f, 2.0f)
+            lineTo(2.0f, 18.0f)
+            curveToRelative(0.0f, 1.1f, 0.9f, 2.0f, 2.0f, 2.0f)
+            horizontalLineToRelative(16.0f)
+            curveToRelative(1.1f, 0.0f, 2.0f, -0.9f, 2.0f, -2.0f)
+            verticalLineTo(8.0f)
+            curveToRelative(0.0f, -1.1f, -0.9f, -2.0f, -2.0f, -2.0f)
+            close()
+            moveTo(20.0f, 18.0f)
+            horizontalLineTo(4.0f)
+            verticalLineTo(8.0f)
+            horizontalLineToRelative(16.0f)
+            verticalLineToRelative(10.0f)
+            close()
+        }.build()
+    }
 }

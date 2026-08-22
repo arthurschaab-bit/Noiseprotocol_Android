@@ -25,6 +25,21 @@ interface DriveApiClient {
     suspend fun ordnerAnlegen(name: String): Result<String>
 
     /**
+     * Sucht einen Ordner mit [name]. Liefert `null`, wenn kein nicht-gelöschter Ordner mit diesem Namen existiert.
+     */
+    suspend fun ordnerSuchen(name: String): Result<DriveDatei?>
+
+    /**
+     * Listet alle für die App erreichbaren Ordner auf Google Drive auf.
+     */
+    suspend fun ordnerAuflisten(): Result<List<DriveDatei>>
+
+    /**
+     * Benennt den Ordner mit [ordnerId] in [neuerName] um.
+     */
+    suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String): Result<Unit>
+
+    /**
      * Sucht eine Datei mit [name] in [ordnerId]. Liefert `null`, wenn keine existiert - das ist
      * die Absicherung gegen Waisen aus Plan 8.4.4: vor jedem `create` muss geprueft werden, ob
      * ein vorheriger, teilweise fehlgeschlagener Versuch bereits eine Datei angelegt hat.
