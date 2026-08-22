@@ -126,7 +126,7 @@ fun ProtokollDetailScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Messprotokoll",
+                        text = "Session",
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -193,33 +193,17 @@ fun ProtokollDetailScreen(
         ) {
             // 1. KOMPAKTE 1-SEKUNDEN ZUSAMMENFASSUNG (Dauer, Leq, Max, Events)
             item {
-                NoiseCard(containerColor = MaterialTheme.colorScheme.surface) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = s.deviceName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Start: ${formatierer.format(Date(s.startedAt))}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                NoiseHeaderCard(
+                    title = "Kennwerte",
+                    subtitle = "Start: ${formatierer.format(Date(s.startedAt))} · ${s.deviceName}",
+                    statusBadge = {
                         if (isLive) {
                             StatusPill(text = "LIVE AKTIV", type = StatusPillType.CONNECTED)
                         } else {
                             StatusPill(text = "Abgeschlossen", type = StatusPillType.NEUTRAL)
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
+                ) {
                     // 4-Kachel Metriken
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -286,7 +270,7 @@ fun ProtokollDetailScreen(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("PDF Bericht")
+                        Text("PDF exportieren")
                     }
 
                     OutlinedButton(
@@ -300,7 +284,7 @@ fun ProtokollDetailScreen(
                     ) {
                         Icon(AppIcons.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("CSV Rohdaten")
+                        Text("CSV exportieren")
                     }
                 }
             }
