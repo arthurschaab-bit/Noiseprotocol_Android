@@ -40,10 +40,10 @@
     <string name="status_off">Aus</string>
 
     <!-- Empty States & Warnings -->
-    <string name="empty_records_title">Noch keine Aufnahmen</string>
-    <string name="empty_records_desc">Starten Sie die Überwachung, um Lärmereignisse automatisch aufzuzeichnen.</string>
-    <string name="empty_filtered_records_title">Keine Treffer für den Filter</string>
-    <string name="empty_filtered_records_desc">Passen Sie die Filterkriterien an oder setzen Sie den Filter zurück.</string>
+    <string name="empty_records_title">Keine Schwellenwert-Ereignisse</string>
+    <string name="empty_records_desc">Es wurden noch keine Lärmereignisse über dem Schwellenwert aufgezeichnet. Die kontinuierliche Dauermessung läuft unabhängig im Hintergrund und ist im Tab „Protokoll“ einsehbar.</string>
+    <string name="empty_filtered_records_title">Keine Treffer für den aktiven Filter</string>
+    <string name="empty_filtered_records_desc">Für die gewählten Filtereinstellungen liegen keine Audioaufnahmen vor. Passen Sie die Filterkriterien an oder setzen Sie den Filter zurück.</string>
     <string name="action_reset_filter">Filter zurücksetzen</string>
     <string name="empty_protocol_title">Keine Messreihen vorhanden</string>
     <string name="empty_protocol_desc">Messreihen entstehen automatisch, sobald ein PCE-323 verbunden ist.</string>

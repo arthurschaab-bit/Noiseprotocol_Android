@@ -112,18 +112,11 @@ aus dem SDK, kein neuer Dependency), geteilt über denselben FileProvider-Weg wi
 Tagesbericht. Einstellungen waren bereits konsolidiert (durchgängig betitelte Abschnitte) —
 keine Änderung nötig.
 
-**Aus M7c:** Nach Rückmeldung aus dem ersten Gerätetest überarbeitet — vier Befunde aus
-[`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) behoben. Der Home-Screen zeigt jetzt
-ein Live-Status-Dashboard (`AudioRecordingService.laeuft` als `StateFlow` statt einmaligem
-`ActivityManager`-Snapshot): läuft die Überwachung gerade, über Mikrofon oder Messgerät, seit
-wann, mit welchem letzten Pegel. Diagnose-Log und Drive-Sync-Historie im Diagnose-Screen
-aktualisieren sich live (`Flow` statt einmaligem Laden). Die Navigation ist auf eine durchgängig
-beschriftete `NavigationBar` mit fünf Zielen konsolidiert, `MeterScreen` verliert sein
-Scroll-Risiko (echte `LazyColumn` statt `Column` mit fester Höhe). Neu in der Protokollansicht:
-ein **Pegelverlauf-Chart** je Session (`messreihe/ChartDaten.kt`, `PegelChart` in
-`ProtokollDetailScreen`) — Min/Max-Band mit energetischer Mittelwertlinie (LAeq) über Zeitfenster,
-Verbindungsausfälle als rote Fläche darüber; deckt sowohl Rohwerte als auch bereits vom
-Retention-Job verdichtete Minutenaggregate ab.
+**Aus M7c / UI-Harmonisierung & Entkopplung:** Nach Rückmeldung aus den physischen Gerätetests am PCE-323 umfassend harmonisiert:
+- **Startseiten-Integration:** PCE-323 Messgerätesteuerung und Kopplungsdialog (`MeterControlCard`, `MeterPairingDialog`) direkt auf der Startseite integriert. Die Bottom-Navigation ist auf 4 Hauptziele gestrafft (`Start`, `Protokoll`, `Diagnose`, `Einstellungen`).
+- **Entkopplung der Audio-Aufnahme:** Das Beenden der Audio-Aufnahme (`ACTION_STOP_AUDIO_RECORDING`) stoppt gezielt nur die Mikrofon-Erfassung, während die Bluetooth-Dauermessung und der Foreground Service unterbrechungsfrei weiterlaufen.
+- **Stabile BLE-Geräteliste:** Stabile Sortierreihenfolge (`sortiereGefundeneGeraete`) verhindert das Springen der Gerätezeilen bei RSSI-Pegelschwankungen während des Scans.
+- **Transparente Status- & Protokoll-Führung:** Startseite bietet eine Session-Übersichtskarte für aktive und abgeschlossene Dauermessungen mit Direktlink ins Protokoll sowie präzise Leerzustandstexte, die Schwellenwert-Events von kontinuierlichen Hintergrund-Messreihen klar trennen.
 
 ### Nicht vorhanden
 

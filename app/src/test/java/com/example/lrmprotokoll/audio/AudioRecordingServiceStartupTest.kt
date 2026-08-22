@@ -40,4 +40,26 @@ class AudioRecordingServiceStartupTest {
         assertNotNull(service)
         serviceController.destroy()
     }
+
+    @Test
+    fun stopAudioRecordingActionSetztAudioAufnahmeAktivAufFalse() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        val startIntent = Intent(app, AudioRecordingService::class.java).apply {
+            putExtra(EXTRA_START_AUDIO_MONITORING, true)
+        }
+        val serviceController = Robolectric.buildService(AudioRecordingService::class.java, startIntent)
+        serviceController.create()
+        serviceController.startCommand(0, 1)
+
+        // Stop Audio Recording
+        val stopAudioIntent = Intent(app, AudioRecordingService::class.java).apply {
+            action = ACTION_STOP_AUDIO_RECORDING
+        }
+        serviceController.get().onStartCommand(stopAudioIntent, 0, 2)
+
+        org.junit.Assert.assertFalse(AudioRecordingService.audioAufnahmeAktiv.value)
+
+        serviceController.destroy()
+    }
 }

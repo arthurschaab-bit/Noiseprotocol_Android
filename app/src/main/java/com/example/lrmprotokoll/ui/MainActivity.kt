@@ -50,6 +50,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
+import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
+import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
@@ -139,7 +142,6 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     AppNavigationBar(
                         currentRoute = currentRoute,
                         onNavigateToStart = { navigiereZuTab("main") },
-                        onNavigateToMeter = { navigiereZuTab("meter") },
                         onNavigateToProtokoll = { navigiereZuTab("protokoll") },
                         onNavigateToDiagnose = { navigiereZuTab("diagnose") },
                         onNavigateToSettings = { navigiereZuTab("settings") },
@@ -231,16 +233,16 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
 }
 
 /**
- * Bottom Navigation Bar mit semantischen Icons.
+ * Bottom Navigation Bar mit semantischen Icons für 4 Hauptnavigationsziele.
  */
 @Composable
 fun AppNavigationBar(
     currentRoute: String?,
     onNavigateToStart: () -> Unit,
-    onNavigateToMeter: () -> Unit,
     onNavigateToProtokoll: () -> Unit,
     onNavigateToDiagnose: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToMeter: (() -> Unit)? = null,
 ) {
     NavigationBar {
         NavigationBarItem(
@@ -248,13 +250,6 @@ fun AppNavigationBar(
             onClick = onNavigateToStart,
             icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.nav_start)) },
             label = { Text(stringResource(R.string.nav_start)) },
-            modifier = Modifier.heightIn(min = 48.dp)
-        )
-        NavigationBarItem(
-            selected = istBottomNavZielAktiv(currentRoute, "meter"),
-            onClick = onNavigateToMeter,
-            icon = { Icon(AppIcons.Sensors, contentDescription = stringResource(R.string.nav_meter)) },
-            label = { Text(stringResource(R.string.nav_meter)) },
             modifier = Modifier.heightIn(min = 48.dp)
         )
         NavigationBarItem(
@@ -309,6 +304,9 @@ fun NoiseProtocolApp(
     var reportTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }
     var referenceToDelete by remember { mutableStateOf<ReferenceSound?>(null) }
     var showReferenceDialog by remember { mutableStateOf<NoiseRecord?>(null) }
+    var showPairingDialog by remember { mutableStateOf(false) }
+    val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+    val latestFrame by container.meterTransport.frames.collectAsState(initial = null)
     var refName by remember { mutableStateOf("") }
     var showOverflowMenu by remember { mutableStateOf(false) }
 
@@ -421,7 +419,7 @@ fun NoiseProtocolApp(
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
-                        onClick = onNavigateToMeter,
+                        onClick = { showPairingDialog = true },
                         modifier = Modifier.padding(end = 4.dp)
                     )
 
@@ -533,11 +531,83 @@ fun NoiseProtocolApp(
 
         // 3. ServiceControl / Dashboard-Karte mit Live-Chart
         item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 ServiceControl(
                     context = context,
                     hasPermissions = hasAudioPermission && hasNotificationPermission
                 )
+            }
+        }
+
+        // 4. PCE-323 Messgerät Steuerung & Kopplung (direkt auf der Startseite)
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                MeterControlCard(
+                    connectionState = verbindungszustand,
+                    pairedAddress = settingsManager.meterDeviceAddress,
+                    pairedName = settingsManager.meterDeviceName,
+                    latestFrame = latestFrame,
+                    onConnect = {
+                        val intent = Intent(context, AudioRecordingService::class.java)
+                        context.startForegroundService(intent)
+                    },
+                    onDisconnect = {
+                        container.connectionSupervisor.stop()
+                    },
+                    onOpenPairing = {
+                        showPairingDialog = true
+                    }
+                )
+            }
+        }
+
+        // 5. Dauermessungs-Zusammenfassung (Session-Status & Protokoll-Link)
+        if (letzteSession != null) {
+            val s = letzteSession
+            val isActive = s?.endedAt == null
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = AppIcons.BarChart,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isActive) "Dauermessung aktiv" else "Letzte Dauermessung",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                TextButton(onClick = onNavigateToProtokoll) {
+                                    Text("Im Protokoll ansehen")
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isActive) {
+                                    "Die Pegelwerte werden kontinuierlich erfasst und im Protokoll gespeichert."
+                                } else {
+                                    "Dauermessung abgeschlossen. Alle 5s-Mittelwerte sind im Protokoll archiviert."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -930,6 +1000,23 @@ fun NoiseProtocolApp(
             }
         )
     }
+
+    // Dialog: PCE-323 Kopplung
+    if (showPairingDialog) {
+        MeterPairingDialog(
+            pairedAddress = settingsManager.meterDeviceAddress,
+            pairedName = settingsManager.meterDeviceName,
+            onDeviceSelected = { device ->
+                settingsManager.meterDeviceAddress = device.address
+                settingsManager.meterDeviceName = device.name
+                showPairingDialog = false
+                val intent = Intent(context, AudioRecordingService::class.java)
+                context.startForegroundService(intent)
+                onShowSnackbar("PCE-323 (${device.name ?: device.address}) gekoppelt", null, null)
+            },
+            onDismiss = { showPairingDialog = false }
+        )
+    }
 }
 
 /**
@@ -1118,6 +1205,7 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(modifier = Modifier.fillMaxWidth()) {
+                val audioAktiv by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
                 Button(
                     onClick = {
                         if (!hasPermissions) {
@@ -1132,7 +1220,7 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp),
-                    enabled = !anzeige.dienstAktiv,
+                    enabled = !audioAktiv,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.statusColors.connected)
                 ) {
                     Text(stringResource(R.string.action_start_recording))
@@ -1143,17 +1231,37 @@ fun ServiceControl(context: Context, hasPermissions: Boolean) {
                 Button(
                     onClick = {
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
-                            action = "STOP_SERVICE"
+                            action = ACTION_STOP_AUDIO_RECORDING
                         }
                         context.startService(intent)
                     },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp),
-                    enabled = anzeige.dienstAktiv,
+                    enabled = audioAktiv,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text(stringResource(R.string.action_stop_recording))
+                }
+            }
+
+            val audioAktivState by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
+            if (anzeige.dienstAktiv && !audioAktivState) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(context, AudioRecordingService::class.java).apply {
+                                action = ACTION_STOP_SERVICE
+                            }
+                            context.startService(intent)
+                        }
+                    ) {
+                        Text("Dienst & Messung komplett beenden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
