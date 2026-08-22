@@ -1,52 +1,66 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
-import com.example.lrmprotokoll.ui.components.NoiseCard
-import com.example.lrmprotokoll.ui.components.StatusPill
-import com.example.lrmprotokoll.ui.components.StatusPillType
+import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import java.text.SimpleDateFormat
 import java.time.Duration
-import java.util.Locale
+import java.util.*
+
+const val PROTOKOLL_SEARCH_BAR_TAG = "protokoll_search_bar"
 
 /**
- * Die Protokollansicht (Plan Abschnitt 9 & UX-Briefing): Übersicht aller Überwachungsperioden
- * im strukturierten DM-Karten-Design.
+ * Moderner Protokoll-History Screen nach Screen 4 des neuen Designs.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProtokollScreen(
     onBack: () -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
-    onOpenSession: (Long) -> Unit
+    onOpenSession: (Long) -> Unit,
+    onStartNewMeasurement: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val sessions by container.database.sessionDao().alle().collectAsState(initial = emptyList())
-    val verbindungszustand by container.connectionSupervisor.state.collectAsState()
+    val db = container.database
+
+    var searchQuery by remember { mutableStateOf("") }
+    var filterOnlyWithEvents by remember { mutableStateOf(false) }
+
+    val filteredSessions = remember(sessions, searchQuery, filterOnlyWithEvents) {
+        sessions.filter { s ->
+            val matchQuery = searchQuery.isBlank() ||
+                    s.deviceName.contains(searchQuery, ignoreCase = true) ||
+                    SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(s.startedAt).contains(searchQuery, ignoreCase = true)
+            matchQuery
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -54,6 +68,7 @@ fun ProtokollScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.nav_protocol),
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -69,26 +84,72 @@ fun ProtokollScreen(
                     }
                 },
                 actions = {
-                    BluetoothStatusBadge(
-                        state = verbindungszustand,
-                        deviceName = container.settingsManager.meterDeviceName,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
+                    IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }) {
+                        Icon(
+                            imageVector = AppIcons.FilterList,
+                            contentDescription = "Filter",
+                            tint = if (filterOnlyWithEvents) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             )
+        },
+        floatingActionButton = {
+            if (onStartNewMeasurement != null) {
+                ExtendedFloatingActionButton(
+                    onClick = onStartNewMeasurement,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("New Measurement", fontWeight = FontWeight.Bold) },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            if (sessions.isEmpty()) {
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search protocols...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Löschen")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(PROTOKOLL_SEARCH_BAR_TAG)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Recent Measurements",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (filteredSessions.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
+                        .fillMaxWidth()
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -100,7 +161,7 @@ fun ProtokollScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = stringResource(R.string.empty_protocol_desc),
+                            text = if (searchQuery.isNotBlank()) "Keine Protokolle für die Suche gefunden" else stringResource(R.string.empty_protocol_desc),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -108,12 +169,40 @@ fun ProtokollScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    items(sessions, key = { it.id }) { session ->
-                        SessionCardItem(session, onClick = { onOpenSession(session.id) })
+                    items(filteredSessions, key = { it.id }) { session ->
+                        ModernSessionCard(
+                            session = session,
+                            db = db,
+                            onClick = { onOpenSession(session.id) }
+                        )
+                    }
+
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Restore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "End of history",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -122,68 +211,181 @@ fun ProtokollScreen(
 }
 
 @Composable
-private fun SessionCardItem(session: SessionEntity, onClick: () -> Unit) {
-    val formatierer = remember { SimpleDateFormat("dd.MM.yyyy · HH:mm", Locale.getDefault()) }
+private fun ModernSessionCard(
+    session: SessionEntity,
+    db: com.example.lrmprotokoll.data.AppDatabase,
+    onClick: () -> Unit
+) {
     val isLive = session.endedAt == null
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.US) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US) }
 
-    NoiseCard(
+    val dateStr = remember(session.startedAt) { dateFormat.format(session.startedAt) }
+    val timeRangeStr = remember(session.startedAt, session.endedAt) {
+        val startStr = timeFormat.format(session.startedAt)
+        val endStr = if (session.endedAt != null) timeFormat.format(session.endedAt) else "Now"
+        "$startStr – $endStr"
+    }
+
+    var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
+    var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
+    var eventCount by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(session.id) {
+        val agg = db.minuteAggregateDao().fuerSession(session.id)
+        aggregate = agg
+        if (agg.isNotEmpty()) {
+            kennwerte = AkustischeKennwerte.ausAggregaten(agg)
+        } else {
+            val measurements = db.measurementDao().fuerSession(session.id)
+            if (measurements.isNotEmpty()) {
+                kennwerte = AkustischeKennwerte.berechne(measurements)
+            }
+        }
+        val records = db.noiseDao().zwischenZeitpunkt(session.startedAt, session.endedAt ?: System.currentTimeMillis())
+        eventCount = records.size
+    }
+
+    val durationStr = remember(session.startedAt, session.endedAt) {
+        val end = session.endedAt ?: System.currentTimeMillis()
+        val d = Duration.ofMillis((end - session.startedAt).coerceAtLeast(0))
+        val h = d.toHours()
+        val m = d.toMinutesPart()
+        if (h > 0) "${h}h ${m}m" else "${m} min"
+    }
+
+    val laeqStr = kennwerte?.leqDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "--.-"
+    val lmaxStr = kennwerte?.maxDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "--.-"
+
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
             .clickable { onClick() }
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Top Row: Date, Time Range, Status Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
                     Text(
-                        text = formatierer.format(session.startedAt),
+                        text = dateStr,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
                     Text(
-                        text = session.deviceName,
+                        text = timeRangeStr,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text("·", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+
+                // Status Badge
+                val badgeText = if (isLive) "Active" else "Complete"
+                val badgeBg = if (isLive) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
+                val badgeTextColor = if (isLive) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(badgeBg)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
                     Text(
-                        text = if (session.endedAt != null) {
-                            val dauer = Duration.ofMillis(session.endedAt - session.startedAt)
-                            formatiereDauer(dauer)
-                        } else {
-                            "Läuft aktuell"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isLive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = badgeTextColor
                     )
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isLive) {
-                    StatusPill(text = "LIVE", type = StatusPillType.CONNECTED)
-                } else {
-                    StatusPill(text = "Archiv", type = StatusPillType.NEUTRAL)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 4 Stats Columns Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MetricColumn(label = "Duration", value = durationStr)
+                MetricColumn(label = "LAeq", value = laeqStr)
+                MetricColumn(label = "LMax", value = lmaxStr)
+                MetricColumn(label = "Events", value = eventCount.toString())
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Bottom Row: Device badge and Details > link
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = AppIcons.Sensors,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = session.deviceName,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outline
-                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { onClick() }
+                ) {
+                    Text(
+                        text = "Details",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = AppIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun MetricColumn(
+    label: String,
+    value: String
+) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

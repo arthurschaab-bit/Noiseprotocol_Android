@@ -30,10 +30,10 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
 | **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 367 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
-| **Release-Pipeline & GitHub Releases** (Dynamische Versionierung, signierte APKs) | ✅ aktiv (v1.0.0 veröffentlicht) |
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
+| **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List) | ✅ umgesetzt |
 
-**Gesamtfortschritt: 10 von 10 Bluetooth-Meilensteinen + Release-Pipeline + UX Redesign vollständig umgesetzt, getestet und gemerged.**
+**Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + Modernes UI/UX-Redesign vollständig umgesetzt, getestet und verifiziert.**
 
 ---
 

@@ -39,7 +39,7 @@ class ServiceControlInstrumentedTest {
         composeRule.waitForIdle()
 
         // Starten-Button und Bereit-Status im Ruhezustand vorhanden
-        composeRule.onNodeWithText("Messung starten").assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithText("Bereit").assertIsDisplayed()
+        composeRule.onNodeWithText("Start measurement").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("Ready to measure").assertIsDisplayed()
     }
 }

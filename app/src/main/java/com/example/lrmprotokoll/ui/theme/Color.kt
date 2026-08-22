@@ -2,26 +2,26 @@ package com.example.lrmprotokoll.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary & Secondary Brand Palette (Refined Technical Blue & Slate)
-val PrimaryLight = Color(0xFF0969DA)
+// Primary & Secondary Brand Palette (Modern Tech Electric Blue & Slate)
+val PrimaryLight = Color(0xFF0052FF)
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFDDF4FF)
-val OnPrimaryContainerLight = Color(0xFF053B82)
+val PrimaryContainerLight = Color(0xFFE0ECFF)
+val OnPrimaryContainerLight = Color(0xFF0038B8)
 
-val PrimaryDark = Color(0xFF58A6FF)
-val OnPrimaryDark = Color(0xFF03224C)
-val PrimaryContainerDark = Color(0xFF0D3268)
-val OnPrimaryContainerDark = Color(0xFFC8E1FF)
+val PrimaryDark = Color(0xFF3B82F6)
+val OnPrimaryDark = Color(0xFFFFFFFF)
+val PrimaryContainerDark = Color(0xFF1E3A8A)
+val OnPrimaryContainerDark = Color(0xFFDBEAFE)
 
-val SecondaryLight = Color(0xFF57606A)
+val SecondaryLight = Color(0xFF475569)
 val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFE7ECF0)
-val OnSecondaryContainerLight = Color(0xFF24292F)
+val SecondaryContainerLight = Color(0xFFF1F5F9)
+val OnSecondaryContainerLight = Color(0xFF1E293B)
 
-val SecondaryDark = Color(0xFF8B949E)
-val OnSecondaryDark = Color(0xFF161B22)
-val SecondaryContainerDark = Color(0xFF21262D)
-val OnSecondaryContainerDark = Color(0xFFE6EDF3)
+val SecondaryDark = Color(0xFF94A3B8)
+val OnSecondaryDark = Color(0xFF0F172A)
+val SecondaryContainerDark = Color(0xFF1E293B)
+val OnSecondaryContainerDark = Color(0xFFF8FAFC)
 
 // Surface & Background (OLED Dark & DM-Style Crisp Light)
 val BackgroundLight = Color(0xFFF6F8FA)
