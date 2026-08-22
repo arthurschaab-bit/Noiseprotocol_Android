@@ -14,24 +14,26 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | Bereich | Stand |
 |---------|-------|
 | Aufnahme über Mikrofon, Pre-Roll, WAV | ✅ läuft |
-| KI-Klassifikation (YAMNet) | ✅ läuft |
+| KI-Klassifikation (YAMNet, 16-KB Page Size) | ✅ läuft |
 | Wellenform-Player, Tagesbericht, CSV/ZIP-Export | ✅ läuft |
 | **M-1** Bestand instandsetzen | ✅ abgeschlossen |
 | **M0** Protokoll-Discovery am PCE-323 | ✅ abgeschlossen |
 | **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
-| **M2** BLE-Transport (Scan, Verbindung, Notify) | ✅ abgeschlossen, Gerätetest offen |
-| **M3** Robustheit (Reconnect, Ausfallerkennung) | ✅ abgeschlossen, Gerätetest offen |
+| **M2** BLE-Transport (Scan, Verbindung, Notify, On-Demand Permissions) | ✅ abgeschlossen, Gerätetest offen |
+| **M3** Robustheit (Reconnect, Ausfallerkennung, FGS-Typen dynamisch) | ✅ abgeschlossen, Gerätetest offen |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
 | **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code + echte OAuth-Client-ID eingerichtet, Gerätetest offen |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
 | **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen, Gerätetest offen |
 | **M7c** UI-Überarbeitung (Live-Dashboard, Navigationsstruktur, Pegelverlauf-Chart) | ✅ abgeschlossen, Gerätetest offen |
+| **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
+| **CI-Qualitäts-Gates** (Android Lint, 354 JVM/Robolectric Tests, 34 Emulator-Tests) | ✅ vollständig aktiv |
 | **Gerätetest** M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät | ⬜ **als Nächstes** |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 10 von 10 Meilensteinen.** (M8 Härtung ist im Plan
-zusätzlich vorgesehen, M7c war eine zusätzliche, nicht im ursprünglichen Plan gezählte
-UI-Überarbeitung nach dem ersten Gerätetest, siehe „Nächste Schritte".)
+**Gesamtfortschritt Bluetooth-Vorhaben: 10 von 10 Meilensteinen umgesetzt.** (Offen für den
+Einsatz am realen Gerät ist der physische Hardwaretest; Erweiterungen M8 Härtung, M9 UX und M10
+Funktionen sind als nächste Stufen konzipiert.)
 
 ---
 
@@ -276,7 +278,9 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/PROMPT_M8.md`](docs/PROMPT_M8.md) | Auftrag für M8, hardwarefreier Teil (offen) — Release-Build härten (R8/Minify), Herstellerspezifika |
 | [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | **UX-Review und Auftrag für M9 (offen)** — Befunde am Code mit Datei:Zeile (Live-Diagramm rechnet die Session alle 5 s neu, kein Dunkelmodus, keine String-Ressourcen, Barrierefreiheit, Navigation, leere/ladende/fehlerhafte Zustände, Berechtigungsablauf) plus Umsetzungsauftrag |
 | [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | **Funktionsvorschläge und Auftrag für M10 (offen)** — 15 Vorschläge in drei Stufen nach Migrationsbedarf, Umsetzungsauftrag für Stufe 1 (ohne Room-Migration), offene Owner-Entscheidungen |
-| [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code |
+| [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code (umgesetzt & aktiv) |
+| [`docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md`](docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md) | **Diagnose-, Fehleranalyse- und Observability-Konzept** — Architektur für Sentry, Breadcrumbs, Redaction & Support-Bundle (umgesetzt) |
+| [`docs/EXTERNE_DIENSTE_EINRICHTUNG.md`](docs/EXTERNE_DIENSTE_EINRICHTUNG.md) | Externe Dienste einrichten (Sentry, Google Drive, ntfy, Healthchecks.io) |
 | [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Plan für eine Release-Pipeline (offen) — signierte APKs über GitHub Releases, Voraussetzung: Owner richtet Keystore + Secrets ein |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
