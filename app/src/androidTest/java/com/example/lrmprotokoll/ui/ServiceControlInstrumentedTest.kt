@@ -3,7 +3,6 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
@@ -15,10 +14,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Instrumentierte UI-Tests für das [ServiceControl] Dashboard gemäß Testplan.
+ * Instrumentierte UI-Tests für das Live-Cockpit ([LiveCockpitCard]) gemäß aktuellem UX-Design.
  *
- * Prüft die Anzeige des Inaktiv/Aktiv-Status sowie die Buttons "Aufnahme starten"
- * und "Aufnahme beenden" mit korrekter Aktivierungs- und Deaktivierungslogik.
+ * Prüft die Anzeige des Inaktiv/Bereit-Status sowie des zentralen Buttons "Messung starten".
  */
 @RunWith(AndroidJUnit4::class)
 class ServiceControlInstrumentedTest {
@@ -34,17 +32,14 @@ class ServiceControlInstrumentedTest {
     }
 
     @Test
-    fun serviceControlZeigtInaktivenZustandUndStartButtonAktiv() {
+    fun liveCockpitCardZeigtInaktivenZustandUndStartButtonAktiv() {
         composeRule.setContent {
-            ServiceControl(context = app, hasPermissions = true)
+            LiveCockpitCard()
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Überwachung:").assertIsDisplayed()
-        composeRule.onNodeWithText("Inaktiv").assertIsDisplayed()
-
-        // Starten-Button ist aktiviert, Beenden-Button ist deaktiviert
-        composeRule.onNodeWithText("Aufnahme starten").assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithText("Aufnahme beenden").assertIsDisplayed().assertIsNotEnabled()
+        // Starten-Button und Bereit-Status im Ruhezustand vorhanden
+        composeRule.onNodeWithText("Messung starten").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("Bereit").assertIsDisplayed()
     }
 }

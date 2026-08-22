@@ -58,6 +58,9 @@ import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
+import com.example.lrmprotokoll.ui.components.NoiseCard
+import com.example.lrmprotokoll.ui.components.StatusPill
+import com.example.lrmprotokoll.ui.components.StatusPillType
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.diagnose.HealthStatus
@@ -1019,287 +1022,7 @@ fun NoiseProtocolApp(
 }
 
 /**
- * ServiceControl: Live-Dashboard mit On-Demand Permission-Dialog.
- */
-@Composable
-fun ServiceControl(context: Context, hasPermissions: Boolean) {
-    val container = remember { (context.applicationContext as LaermprotokollApp).container }
-
-    val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
-    val verbindungszustand by container.connectionSupervisor.state.collectAsState()
-    val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
-    val geraetGepinnt = container.settingsManager.meterDeviceAddress != null
-
-    val db = container.database
-    val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
-    var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
-    var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
-    var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
-    var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
-
-    var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var showPermissionDialog by remember { mutableStateOf(false) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        val audioOk = permissions[Manifest.permission.RECORD_AUDIO] == true
-        if (audioOk) {
-            val intent = Intent(context, AudioRecordingService::class.java).apply {
-                putExtra(EXTRA_START_AUDIO_MONITORING, true)
-            }
-            context.startForegroundService(intent)
-        } else {
-            Toast.makeText(context, "Mikrofon-Berechtigung abgelehnt", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    LaunchedEffect(letzteSession?.id) {
-        val s = letzteSession
-        if (s != null) {
-            launch {
-                db.measurementDao().fuerSessionFlow(s.id).collectLatest { geladeneMesswerte ->
-                    messwerte = geladeneMesswerte
-                    if (geladeneMesswerte.isNotEmpty()) {
-                        kennwerte = AkustischeKennwerte.berechne(geladeneMesswerte)
-                    } else {
-                        val geladeneAggregate = db.minuteAggregateDao().fuerSession(s.id)
-                        aggregate = geladeneAggregate
-                        kennwerte = AkustischeKennwerte.ausAggregaten(geladeneAggregate)
-                    }
-                }
-            }
-            launch {
-                db.connectionEventDao().fuerSessionFlow(s.id).collectLatest { events ->
-                    ausfallbaender = leiteAusfallbaenderAb(events, s.endedAt)
-                }
-            }
-        } else {
-            messwerte = emptyList()
-            aggregate = emptyList()
-            kennwerte = null
-            ausfallbaender = emptyList()
-        }
-    }
-
-    LaunchedEffect(letzteSession?.endedAt) {
-        while (letzteSession != null && letzteSession?.endedAt == null) {
-            jetzt = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-
-    val s = letzteSession
-    val sessionStartedAt = if (s?.endedAt == null) s?.startedAt else null
-
-    val anzeige = leiteDashboardAnzeigeAb(
-        dienstAktiv = dienstAktiv,
-        geraetGepinnt = geraetGepinnt,
-        verbindungszustand = verbindungszustand,
-        sessionStartedAtMillis = sessionStartedAt,
-        jetztMillis = jetzt,
-        letzterPegel = letzterFrame?.level,
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Überwachung:", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.width(8.dp))
-
-                if (anzeige.dienstAktiv) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.statusColors.error)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.status_active),
-                            color = MaterialTheme.colorScheme.statusColors.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.status_inactive),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (anzeige.dienstAktiv) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(anzeige.betriebsartText, style = MaterialTheme.typography.bodyMedium)
-                anzeige.laufzeitText?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                anzeige.pegelText?.let {
-                    Text(it, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                }
-            }
-
-            // Live Pegelverlauf Chart direkt im Hauptmenüpunkt ("Start")
-            if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
-                val isLive = s.endedAt == null
-                val sessionEndeFuerChart = s.endedAt ?: jetzt
-                val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
-                    if (messwerte.isNotEmpty()) {
-                        downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
-                    } else {
-                        downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (isLive) "Live-Pegelverlauf" else "Pegelverlauf",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (isLive) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.statusColors.livePulse)
-                            )
-                        }
-                    }
-                    kennwerte?.let { kw ->
-                        Text(
-                            text = "LAeq: ${String.format(Locale.getDefault(), "%.1f", kw.leqDb)} dB · Max: ${String.format(Locale.getDefault(), "%.1f", kw.maxDb)} dB",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                PegelverlaufChart(
-                    spalten = chartSpalten,
-                    ausfallbaender = ausfallbaender,
-                    sessionStart = s.startedAt,
-                    sessionEnde = sessionEndeFuerChart,
-                    isLive = isLive,
-                    height = 140.dp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                val audioAktiv by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
-                Button(
-                    onClick = {
-                        if (!hasPermissions) {
-                            showPermissionDialog = true
-                        } else {
-                            val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                putExtra(EXTRA_START_AUDIO_MONITORING, true)
-                            }
-                            context.startForegroundService(intent)
-                        }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    enabled = !audioAktiv,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.statusColors.connected)
-                ) {
-                    Text(stringResource(R.string.action_start_recording))
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Button(
-                    onClick = {
-                        val intent = Intent(context, AudioRecordingService::class.java).apply {
-                            action = ACTION_STOP_AUDIO_RECORDING
-                        }
-                        context.startService(intent)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    enabled = audioAktiv,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(R.string.action_stop_recording))
-                }
-            }
-
-            val audioAktivState by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
-            if (anzeige.dienstAktiv && !audioAktivState) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                action = ACTION_STOP_SERVICE
-                            }
-                            context.startService(intent)
-                        }
-                    ) {
-                        Text("Dienst & Messung komplett beenden", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-    }
-
-    if (showPermissionDialog) {
-        AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
-            title = { Text(stringResource(R.string.permission_audio_title)) },
-            text = { Text(stringResource(R.string.permission_audio_desc)) },
-            confirmButton = {
-                Button(onClick = {
-                    showPermissionDialog = false
-                    val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    permissionLauncher.launch(perms.toTypedArray())
-                }) {
-                    Text(stringResource(R.string.permission_grant_button))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showPermissionDialog = false
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", context.packageName, null)
-                    }
-                    context.startActivity(intent)
-                }) {
-                    Text(stringResource(R.string.permission_settings_button))
-                }
-            }
-        )
-    }
-}
-
-/**
- * NoiseRecordItem: Hebt kalibrierte Werte und Triggerquelle prominent hervor (M9 Aufgabe 9).
+ * NoiseRecordItem: Hebt kalibrierte Werte und Triggerquelle prominent hervor (M9 Aufgabe 9 & UX-Redesign).
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -1314,7 +1037,7 @@ fun NoiseRecordItem(
     onLongClick: () -> Unit,
     onAiRecognize: () -> Unit
 ) {
-    Card(
+    NoiseCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
@@ -1322,124 +1045,117 @@ fun NoiseRecordItem(
                 onClick = onPlay,
                 onLongClick = onLongClick
             ),
-        colors = if (isSelected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        else CardDefaults.cardColors()
+        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(time, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                        if (record.isQuietHour) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            AssistChip(
-                                onClick = {},
-                                label = { Text("Ruhezeit", style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.height(24.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts
-                    if (record.calibratedDbA != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} dBA",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "(PCE-323 · Mikrofon: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    if (record.detectedLabel != null) {
-                        Text(
-                            text = "KI: ${record.detectedLabel}",
-                            color = MaterialTheme.colorScheme.secondary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (record.label != null) {
-                        Text(
-                            text = "Label: ${record.label}",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(time, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    if (record.isQuietHour) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        StatusPill(text = "Ruhezeit", type = StatusPillType.WARNING)
                     }
                 }
 
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Favorit",
-                        tint = if (record.favorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts
+                if (record.calibratedDbA != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} dBA",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "(PCE-323 · Mikrofon: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                IconButton(
-                    onClick = onAiRecognize,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "KI-Erkennung", tint = MaterialTheme.colorScheme.secondary)
+                if (record.detectedLabel != null) {
+                    Text(
+                        text = "KI: ${record.detectedLabel}",
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
-                }
-
-                IconButton(
-                    onClick = onPlay,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Abspielen", tint = MaterialTheme.colorScheme.primary)
+                if (record.label != null) {
+                    Text(
+                        text = "Label: ${record.label}",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(48.dp)
             ) {
-                listOf("Bagger", "Bohren", "Hämmern", "Verkehr").forEach { label ->
-                    AssistChip(
-                        onClick = { onLabel(label) },
-                        label = { Text(label) },
-                        modifier = Modifier.height(28.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = "Favorit",
+                    tint = if (record.favorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
+                )
+            }
+
+            IconButton(
+                onClick = onAiRecognize,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "KI-Erkennung", tint = MaterialTheme.colorScheme.secondary)
+            }
+
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
+            }
+
+            IconButton(
+                onClick = onPlay,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Abspielen", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf("Bagger", "Bohren", "Hämmern", "Verkehr").forEach { label ->
                 AssistChip(
-                    onClick = onLearn,
-                    label = { Text("+ Muster lernen") },
-                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                    onClick = { onLabel(label) },
+                    label = { Text(label) },
                     modifier = Modifier.height(28.dp)
                 )
             }
+            AssistChip(
+                onClick = onLearn,
+                label = { Text("+ Muster lernen") },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                modifier = Modifier.height(28.dp)
+            )
         }
     }
 }
