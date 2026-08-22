@@ -42,9 +42,19 @@ class DriveSyncCoordinator(
     }
 
     suspend fun syncEinenZyklus(): SyncErgebnis {
-        if (!settings.driveSyncEnabled) return SyncErgebnis.SyncAusgeschaltet
-        if (settings.driveOrdnerBlockiert) return SyncErgebnis.OrdnerBlockiert
-        val ordnerId = settings.driveFolderId ?: return SyncErgebnis.KeinOrdnerEingerichtet
+        if (!settings.driveSyncEnabled) {
+            settings.driveSyncLastMessage = "Synchronisation pausiert"
+            return SyncErgebnis.SyncAusgeschaltet
+        }
+        if (settings.driveOrdnerBlockiert) {
+            settings.driveSyncLastMessage = "Ordner nicht gefunden – bitte neu verbinden"
+            return SyncErgebnis.OrdnerBlockiert
+        }
+        val ordnerId = settings.driveFolderId
+        if (ordnerId == null) {
+            settings.driveSyncLastMessage = "Kein Zielordner eingerichtet"
+            return SyncErgebnis.KeinOrdnerEingerichtet
+        }
 
         val jetzt = now.now()
         // jetzt.atZone(zone).toLocalDate() statt LocalDate.now(zone): "heute" muss aus derselben
@@ -66,6 +76,7 @@ class DriveSyncCoordinator(
 
         val registry = dailyFileDao.byDate(datumSchluessel)
         if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
+            settings.driveSyncLastMessage = "Aktuell (${zeilen.size} Zeilen synchronisiert)"
             return SyncErgebnis.KeineAenderung
         }
 
@@ -84,6 +95,7 @@ class DriveSyncCoordinator(
                 )
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
+                settings.driveSyncLastMessage = "${zeilen.size} Zeilen erfolgreich hochgeladen"
                 SyncErgebnis.Erfolgreich(zeilen.size)
             },
             onFailure = { fehler -> behandleFehlschlag(datumSchluessel, registry, jetzt, fehler) },
@@ -153,6 +165,8 @@ class DriveSyncCoordinator(
                 state = DriveSyncState.FAILED,
             )
         )
-        return SyncErgebnis.Fehlgeschlagen(fehler.message ?: "Unbekannter Fehler", httpCode)
+        val grund = fehler.message ?: "Unbekannter Fehler"
+        settings.driveSyncLastMessage = "Fehler: $grund"
+        return SyncErgebnis.Fehlgeschlagen(grund, httpCode)
     }
 }

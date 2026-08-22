@@ -34,15 +34,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.widget.Toast
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.drive.auth.AutorisierungBenoetigtException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +94,8 @@ fun SettingsScreen(
     var testErgebnis by remember { mutableStateOf<String?>(null) }
 
     // Drive Sync
+    var googleAccountEmail by remember { mutableStateOf(settings.googleAccountEmail) }
+    var googleAccountName by remember { mutableStateOf(settings.googleAccountName) }
     var driveSyncAktiv by remember { mutableStateOf(settings.driveSyncEnabled) }
     var driveOrdnerName by remember { mutableStateOf(settings.driveFolderName) }
     var driveOrdnerId by remember { mutableStateOf(settings.driveFolderId) }
@@ -97,8 +103,12 @@ fun SettingsScreen(
     var driveAggregationSekunden by remember { mutableFloatStateOf(settings.driveAggregationSekunden.toFloat()) }
     var driveWlanOnly by remember { mutableStateOf(settings.driveWlanOnly) }
     var driveUploadWav by remember { mutableStateOf(settings.driveUploadWav) }
-    var driveEinrichtungsErgebnis by remember { mutableStateOf<String?>(null) }
+    var driveEinrichtungsErgebnis by remember { mutableStateOf<String?>(settings.driveSyncLastMessage) }
     var ausstehendeZustimmung by remember { mutableStateOf<IntentSender?>(null) }
+    var isSyncing by remember { mutableStateOf(false) }
+
+    val syncHistorie by container.database.driveDailyFileDao().alle().collectAsState(initial = emptyList())
+    val latestDailyFile = syncHistorie.firstOrNull()
 
     // Diagnose & Akku
     var diagnoseLoggingAktiv by remember { mutableStateOf(settings.diagnoseLoggingAktiv) }
@@ -112,16 +122,55 @@ fun SettingsScreen(
     var expDrive by remember { mutableStateOf(false) }
     var expSystem by remember { mutableStateOf(false) }
 
-    suspend fun verarbeiteDriveEinrichtungsVersuch() {
-        when (val versuch = versucheDriveEinrichtung(container, settings, driveOrdnerName)) {
+    suspend fun verarbeiteDriveEinrichtungsVersuch(ordner: String = driveOrdnerName) {
+        when (val versuch = versucheDriveEinrichtung(container, settings, ordner)) {
             is DriveEinrichtungsVersuch.Erfolg -> {
+                googleAccountEmail = settings.googleAccountEmail
+                googleAccountName = settings.googleAccountName
                 driveOrdnerId = versuch.folderId
                 driveOrdnerBlockiert = false
+                driveSyncAktiv = true
                 driveEinrichtungsErgebnis = versuch.nachricht
+                DriveSyncPlanung.plane(context)
             }
             is DriveEinrichtungsVersuch.Fehler -> driveEinrichtungsErgebnis = versuch.nachricht
             is DriveEinrichtungsVersuch.ZustimmungNoetig -> ausstehendeZustimmung = versuch.intentSender
         }
+    }
+
+    fun manuelleSynchronisation() {
+        scope.launch {
+            isSyncing = true
+            try {
+                val ergebnis = withContext(Dispatchers.IO) {
+                    container.driveSyncCoordinator.syncEinenZyklus()
+                }
+                val msg = when (ergebnis) {
+                    is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> "Synchronisation erfolgreich (${ergebnis.zeilen} Zeilen hochgeladen)"
+                    is DriveSyncCoordinator.SyncErgebnis.KeineAenderung -> "Bereits aktuell (keine neuen Messwerte seit letztem Upload)"
+                    is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen -> "Fehlgeschlagen: ${ergebnis.grund}"
+                    is DriveSyncCoordinator.SyncErgebnis.OrdnerNichtGefunden -> "Ordner nicht gefunden – bitte neu einrichten"
+                    is DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> "Ordner blockiert"
+                    is DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet -> "Kein Ordner eingerichtet"
+                    is DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet -> "Sync ist in den Einstellungen pausiert"
+                }
+                driveEinrichtungsErgebnis = msg
+                onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            } finally {
+                isSyncing = false
+            }
+        }
+    }
+
+    fun abmeldenDrive() {
+        container.driveAccessTokenProvider.abmelden()
+        googleAccountEmail = null
+        googleAccountName = null
+        driveOrdnerId = null
+        driveSyncAktiv = false
+        driveOrdnerBlockiert = false
+        driveEinrichtungsErgebnis = "Google-Konto getrennt"
+        DriveSyncPlanung.stoppe(context)
     }
 
     val driveZustimmungLauncher = rememberLauncherForActivityResult(
@@ -475,46 +524,42 @@ fun SettingsScreen(
             // Sektion 6: Google Drive Synchronisation
             SettingsSectionCard(
                 title = "Google Drive Synchronisation",
-                summary = if (driveSyncAktiv) "Aktiv (Ordner: $driveOrdnerName)" else "Deaktiviert",
+                summary = if (driveSyncAktiv && !googleAccountEmail.isNullOrBlank()) "Aktiv ($googleAccountEmail)" else if (!googleAccountEmail.isNullOrBlank()) "Verbunden (Pausiert)" else "Nicht verbunden",
                 expanded = expDrive,
                 onToggle = { expDrive = !expDrive }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = driveSyncAktiv,
-                        onCheckedChange = {
-                            driveSyncAktiv = it
-                            settings.driveSyncEnabled = it
-                            if (it) DriveSyncPlanung.plane(context) else DriveSyncPlanung.stoppe(context)
-                        },
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Drive-Sync aktiv")
-                }
-
-                if (driveSyncAktiv) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = driveOrdnerName,
-                        onValueChange = { driveOrdnerName = it; settings.driveFolderName = it },
-                        label = { Text("Ordnername") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { scope.launch { verarbeiteDriveEinrichtungsVersuch() } },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Mit Google Drive verbinden")
+                DriveStatusCard(
+                    googleAccountEmail = googleAccountEmail,
+                    googleAccountName = googleAccountName,
+                    syncEnabled = driveSyncAktiv,
+                    folderName = driveOrdnerName,
+                    folderId = driveOrdnerId,
+                    isFolderBlocked = driveOrdnerBlockiert,
+                    consecutiveFailures = settings.driveSyncFehlschlaegeInFolge,
+                    lastSuccessAt = settings.driveSyncLastSuccessAt,
+                    lastMessage = driveEinrichtungsErgebnis,
+                    latestDailyFile = latestDailyFile,
+                    isSyncing = isSyncing,
+                    onToggleSync = {
+                        driveSyncAktiv = it
+                        settings.driveSyncEnabled = it
+                        if (it) DriveSyncPlanung.plane(context) else DriveSyncPlanung.stoppe(context)
+                    },
+                    onSyncNow = { manuelleSynchronisation() },
+                    onConnectGoogle = { scope.launch { verarbeiteDriveEinrichtungsVersuch() } },
+                    onDisconnectGoogle = { abmeldenDrive() },
+                    onUpdateFolderName = { newFolder ->
+                        driveOrdnerName = newFolder
+                        settings.driveFolderName = newFolder
+                        scope.launch { verarbeiteDriveEinrichtungsVersuch(newFolder) }
                     }
+                )
 
-                    driveEinrichtungsErgebnis?.let {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall)
-                    }
+                if (driveSyncAktiv || !googleAccountEmail.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Upload-Optionen", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    Spacer(modifier = Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(
                             checked = driveWlanOnly,
@@ -536,6 +581,21 @@ fun SettingsScreen(
                         )
                         Text("Audioaufnahmen (WAV) hochladen")
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Aggregationsfenster: ${driveAggregationSekunden.toInt()} s",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = driveAggregationSekunden,
+                        onValueChange = {
+                            driveAggregationSekunden = it
+                            settings.driveAggregationSekunden = it.toInt()
+                        },
+                        valueRange = 1f..60f,
+                        steps = 58,
+                    )
                 }
             }
 

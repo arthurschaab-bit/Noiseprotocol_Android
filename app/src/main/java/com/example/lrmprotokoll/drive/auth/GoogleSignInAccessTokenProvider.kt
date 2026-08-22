@@ -1,9 +1,11 @@
 package com.example.lrmprotokoll.drive.auth
 
+import android.accounts.Account
 import android.content.Context
 import android.content.IntentSender
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
@@ -19,11 +21,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * [GoogleSignInAccessTokenProvider] ein Zugriffstoken bekommen kann (Identity Services
  * "Authorization API": `AuthorizationResult.hasResolution() == true`) - typischerweise beim
  * allerersten Autorisieren des drive.file-Scopes oder wenn eine vorherige Zustimmung widerrufen
- * wurde. Bislang fehlte diese Fallunterscheidung komplett: [autorisiereDriveZugriff] warf in
- * genau diesem Fall pauschal `IllegalStateException("Autorisierung ohne Zugriffstoken - erneute
- * Zustimmung nötig")`, ohne der UI eine Moeglichkeit zu geben, den noetigen Zustimmungsbildschirm
- * ueberhaupt zu zeigen - "Mit Google verbinden" konnte diesen Fall dadurch nie beheben, egal wie
- * oft man es antippte (Owner-Rueckmeldung nach Geraetetest).
+ * wurde.
  *
  * [intentSender] muss ueber `ActivityResultContracts.StartIntentSenderForResult` in einer
  * Activity/Compose-UI gestartet werden (siehe `SettingsScreen`); nach erfolgreicher Zustimmung
@@ -33,32 +31,56 @@ class AutorisierungBenoetigtException(val intentSender: IntentSender) :
     Exception("Zustimmung des Nutzers erforderlich, um Drive-Zugriff zu autorisieren")
 
 /**
- * Holt vor jedem Upload ein frisches Drive-Zugriffstoken - bewusst kein eigenes Caching, siehe
- * [AccessTokenProvider] (Plan 8.4.3: "wird nicht selbst persistiert, sondern vor jedem Upload
- * ueber authorize() erneuert - das laeuft still, solange die Zustimmung besteht").
+ * Holt vor jedem Upload ein frisches Drive-Zugriffstoken - nutzt gespeicherte Kontodaten
+ * aus [settings], um Hintergrund-Synchronisationen und Wiederverbindungen ohne wiederholte
+ * interaktive Konto-Auswahldialoge auszuführen.
  *
  * ⚠ NICHT lauffaehig ohne echte [GoogleClientConfig.SERVER_CLIENT_ID] und NICHT in einem
  * JVM-Unit-Test pruefbar: `CredentialManager` und `Identity.getAuthorizationClient` brauchen
- * echte Play Services auf einem echten Geraet. Diese Klasse gehoert vollstaendig in die
- * Geraete-Endabnahme (siehe PR). Die Alarm-/Sync-Logik kennt nur die [AccessTokenProvider]-
- * Schnittstelle und ist davon unberuehrt.
+ * echte Play Services auf einem echten Geraet.
  */
-class GoogleSignInAccessTokenProvider(private val context: Context) : AccessTokenProvider {
+class GoogleSignInAccessTokenProvider(
+    private val context: Context,
+    private val settings: SettingsManager? = null,
+) : AccessTokenProvider {
 
     override suspend fun holeToken(): Result<String> = runCatching {
         check(GoogleClientConfig.konfiguriert) {
             "Keine echte OAuth-Client-ID eingerichtet - siehe GoogleClientConfig"
         }
 
-        val angemeldetesKonto = ermittleAngemeldetesKonto()
-        autorisiereDriveZugriff(angemeldetesKonto)
+        val kontoEmail = settings?.googleAccountEmail?.takeIf { it.isNotBlank() }
+            ?: ermittleAngemeldetesKonto()
+        autorisiereDriveZugriff(kontoEmail)
     }
 
     /**
-     * Liest das zuletzt ueber [meldeAn] angemeldete Konto. Erwartet, dass die Anmeldung selbst
-     * bereits einmalig ueber die Einstellungen ("Mit Google verbinden") stattgefunden hat -
-     * [holeToken] meldet nicht selbst neu an, weil das einen sichtbaren UI-Flow braucht, den ein
-     * Hintergrund-Sync-Zyklus nicht ausloesen darf.
+     * Interaktiver Login-Schritt aus der Benutzeroberfläche:
+     * Fordert über CredentialManager das Google-Konto an, speichert E-Mail und Anzeigename
+     * in [settings] und holt die Autorisierung für drive.file ein.
+     */
+    suspend fun meldeAnInteraktiv(): Result<String> = runCatching {
+        check(GoogleClientConfig.konfiguriert) {
+            "Keine echte OAuth-Client-ID eingerichtet - siehe GoogleClientConfig"
+        }
+        val kontoEmail = ermittleAngemeldetesKonto()
+        autorisiereDriveZugriff(kontoEmail)
+    }
+
+    /**
+     * Trennt das Google-Konto und setzt alle Drive-Zustände zurück.
+     */
+    fun abmelden() {
+        settings?.googleAccountEmail = null
+        settings?.googleAccountName = null
+        settings?.driveFolderId = null
+        settings?.driveSyncEnabled = false
+        settings?.driveSyncLastMessage = null
+        settings?.driveOrdnerBlockiert = false
+    }
+
+    /**
+     * Liest oder erfragt das Google-Konto über CredentialManager.
      */
     private suspend fun ermittleAngemeldetesKonto(): String {
         val anfrage = GetCredentialRequest.Builder()
@@ -71,13 +93,20 @@ class GoogleSignInAccessTokenProvider(private val context: Context) : AccessToke
 
         val antwort = CredentialManager.create(context).getCredential(context, anfrage)
         val zugangsdaten = GoogleIdTokenCredential.createFrom(antwort.credential.data)
-        return zugangsdaten.id
+        val email = zugangsdaten.id
+        settings?.googleAccountEmail = email
+        settings?.googleAccountName = zugangsdaten.displayName
+        return email
     }
 
     private suspend fun autorisiereDriveZugriff(kontoEmail: String): String {
-        val anfrage = AuthorizationRequest.Builder()
+        val anfrageBuilder = AuthorizationRequest.Builder()
             .setRequestedScopes(listOf(Scope(GoogleClientConfig.DRIVE_FILE_SCOPE)))
-            .build()
+
+        if (kontoEmail.isNotBlank()) {
+            anfrageBuilder.setAccount(Account(kontoEmail, "com.google"))
+        }
+        val anfrage = anfrageBuilder.build()
 
         val client = Identity.getAuthorizationClient(context)
         return suspendCancellableCoroutine { fortsetzung ->
@@ -87,8 +116,6 @@ class GoogleSignInAccessTokenProvider(private val context: Context) : AccessToke
                     val pendingIntent = ergebnis.pendingIntent
                     when {
                         token != null -> fortsetzung.resume(token)
-                        // hasResolution(): Google verlangt einen Zustimmungsbildschirm, bevor ein
-                        // Token ausgestellt wird - siehe KDoc von [AutorisierungBenoetigtException].
                         ergebnis.hasResolution() && pendingIntent != null ->
                             fortsetzung.resumeWithException(
                                 AutorisierungBenoetigtException(pendingIntent.intentSender)
