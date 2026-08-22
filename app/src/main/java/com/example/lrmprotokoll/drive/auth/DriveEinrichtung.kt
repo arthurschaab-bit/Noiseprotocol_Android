@@ -17,11 +17,17 @@ class DriveEinrichtung(
     private val context: Context,
     private val settings: SettingsManager,
     private val driveApi: DriveApiClient,
+    private val tokenProvider: GoogleSignInAccessTokenProvider? = null,
 ) {
     suspend fun richteEin(ordnerName: String): Result<Unit> = runCatching {
+        if (settings.googleAccountEmail.isNullOrBlank() && tokenProvider != null) {
+            tokenProvider.meldeAnInteraktiv().getOrThrow()
+        }
         val folderId = driveApi.ordnerAnlegen(ordnerName).getOrThrow()
         settings.driveFolderId = folderId
         settings.driveFolderName = ordnerName
         settings.driveOrdnerBlockiert = false
+        settings.driveSyncEnabled = true
+        settings.driveSyncLastMessage = "Verbunden und bereit zur Synchronisation"
     }
 }

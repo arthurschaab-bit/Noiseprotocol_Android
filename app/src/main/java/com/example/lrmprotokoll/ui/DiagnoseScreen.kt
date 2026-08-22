@@ -44,6 +44,8 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.HealthStatus
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
+import com.example.lrmprotokoll.drive.DriveSyncCoordinator
+import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.messreihe.zaehleReconnects
 import com.example.lrmprotokoll.meter.label
 import com.example.lrmprotokoll.ui.theme.statusColors
@@ -83,6 +85,8 @@ fun DiagnoseScreen(
     var letzteDiagnoseId by remember { mutableStateOf(container.settingsManager.letzteDiagnoseId) }
     var reconnectZaehler by remember { mutableStateOf(0) }
     var exportiertGerade by remember { mutableStateOf(false) }
+    var isSyncing by remember { mutableStateOf(false) }
+    var driveMessage by remember { mutableStateOf(container.settingsManager.driveSyncLastMessage) }
 
     val hasAudioPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
     val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -383,16 +387,71 @@ fun DiagnoseScreen(
                 }
             }
 
-            // Sektion: Sync-Historie
+            // Sektion: Sync-Historie & Google Drive Status
             item {
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Sync-Historie (${syncHistorie.size})", style = MaterialTheme.typography.titleSmall)
+                Text("Google Drive Synchronisation", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                DriveStatusCard(
+                    googleAccountEmail = container.settingsManager.googleAccountEmail,
+                    googleAccountName = container.settingsManager.googleAccountName,
+                    syncEnabled = container.settingsManager.driveSyncEnabled,
+                    folderName = container.settingsManager.driveFolderName,
+                    folderId = container.settingsManager.driveFolderId,
+                    isFolderBlocked = container.settingsManager.driveOrdnerBlockiert,
+                    consecutiveFailures = container.settingsManager.driveSyncFehlschlaegeInFolge,
+                    lastSuccessAt = container.settingsManager.driveSyncLastSuccessAt,
+                    lastMessage = driveMessage ?: container.settingsManager.driveSyncLastMessage,
+                    latestDailyFile = syncHistorie.firstOrNull(),
+                    isSyncing = isSyncing,
+                    onToggleSync = { enabled ->
+                        container.settingsManager.driveSyncEnabled = enabled
+                        if (enabled) DriveSyncPlanung.plane(context) else DriveSyncPlanung.stoppe(context)
+                    },
+                    onSyncNow = {
+                        scope.launch {
+                            isSyncing = true
+                            try {
+                                val ergebnis = withContext(Dispatchers.IO) {
+                                    container.driveSyncCoordinator.syncEinenZyklus()
+                                }
+                                val msg = when (ergebnis) {
+                                    is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> "Synchronisation erfolgreich (${ergebnis.zeilen} Zeilen hochgeladen)"
+                                    is DriveSyncCoordinator.SyncErgebnis.KeineAenderung -> "Bereits aktuell (keine neuen Messwerte)"
+                                    is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen -> "Fehlgeschlagen: ${ergebnis.grund}"
+                                    is DriveSyncCoordinator.SyncErgebnis.OrdnerNichtGefunden -> "Ordner nicht gefunden"
+                                    is DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> "Ordner blockiert"
+                                    is DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet -> "Kein Ordner eingerichtet"
+                                    is DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet -> "Sync pausiert"
+                                }
+                                driveMessage = msg
+                                onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isSyncing = false
+                            }
+                        }
+                    },
+                    onConnectGoogle = {
+                        val msg = "Bitte in den Einstellungen mit Google verbinden"
+                        onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    },
+                    onDisconnectGoogle = {
+                        container.driveAccessTokenProvider.abmelden()
+                        DriveSyncPlanung.stoppe(context)
+                        driveMessage = "Google-Konto getrennt"
+                    },
+                    onUpdateFolderName = { newFolder ->
+                        container.settingsManager.driveFolderName = newFolder
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Tägliche CSV-Dateien (${syncHistorie.size})", style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 if (syncHistorie.isEmpty()) {
                     Text(
-                        "Noch kein Drive-Sync-Lauf.",
+                        "Noch keine synchronisierten Tagesdateien vorhanden.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

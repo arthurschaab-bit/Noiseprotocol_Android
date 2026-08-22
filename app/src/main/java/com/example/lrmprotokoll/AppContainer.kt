@@ -177,8 +177,8 @@ class AppContainer(context: Context) {
         LevelSampleCollector(dao = database.levelSampleDao(), scope = connectionSupervisorScope)
     }
 
-    private val driveAccessTokenProvider: AccessTokenProvider by lazy {
-        GoogleSignInAccessTokenProvider(context.applicationContext)
+    val driveAccessTokenProvider: GoogleSignInAccessTokenProvider by lazy {
+        GoogleSignInAccessTokenProvider(context.applicationContext, settingsManager)
     }
 
     val driveApiClient: DriveApiClient by lazy {
@@ -186,7 +186,7 @@ class AppContainer(context: Context) {
     }
 
     val driveEinrichtung: DriveEinrichtung by lazy {
-        DriveEinrichtung(context.applicationContext, settingsManager, driveApiClient)
+        DriveEinrichtung(context.applicationContext, settingsManager, driveApiClient, driveAccessTokenProvider)
     }
 
     val driveSyncCoordinator: DriveSyncCoordinator by lazy {

@@ -174,6 +174,24 @@ class SettingsManager(
         get() = prefs.getBoolean("drive_sync_enabled", false)
         set(value) = prefs.edit().putBoolean("drive_sync_enabled", value).apply()
 
+    /**
+     * Das für den Drive-Sync autorisierte Google-Konto (E-Mail).
+     * Wird nach dem ersten Login gemerkt, damit Hintergrund-Sync und erneute Verbindungsaufbauten
+     * ohne erneutes interaktives Konto-Auswahlfenster still autorisiert werden.
+     */
+    var googleAccountEmail: String?
+        get() = prefs.getString("google_account_email", null)
+        set(value) = prefs.edit().putString("google_account_email", value).apply()
+
+    var googleAccountName: String?
+        get() = prefs.getString("google_account_name", null)
+        set(value) = prefs.edit().putString("google_account_name", value).apply()
+
+    /** Letzte Status- oder Fehlermeldung der Drive-Synchronisation für die UI. */
+    var driveSyncLastMessage: String?
+        get() = prefs.getString("drive_sync_last_message", null)
+        set(value) = prefs.edit().putString("drive_sync_last_message", value).apply()
+
     /** `folderId` des von der App angelegten Drive-Ordners (Plan 8.4.3, drive.file-Scope). */
     var driveFolderId: String?
         get() = prefs.getString("drive_folder_id", null)
