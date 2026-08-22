@@ -1,60 +1,27 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
+import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
@@ -62,6 +29,10 @@ import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.report.MessreiheExport
+import com.example.lrmprotokoll.ui.components.NoiseCard
+import com.example.lrmprotokoll.ui.components.NoiseHeaderCard
+import com.example.lrmprotokoll.ui.components.StatusPill
+import com.example.lrmprotokoll.ui.components.StatusPillType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -69,14 +40,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.Duration
+import java.util.Date
 import java.util.Locale
 
 /**
- * Kennwerte und Ausfallbänder EINER Session (Plan Abschnitt 9).
- *
- * Unterstützt sowohl abgeschlossene als auch aktuell laufende Sessions:
- * Bei laufenden Sessions aktualisiert sich der Pegelverlauf live und verlängert sich
- * dynamisch über die Zeitachse.
+ * Revisionssichere Protokoll-Detailansicht mit 1-Sekunden-Zusammenfassung, interaktivem
+ * Pegelverlauf, Vorfallsliste und technischem Audit-Bericht (UX-Briefing Punkte 5, 14, 16, 18, 19).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,23 +64,23 @@ fun ProtokollDetailScreen(
     var session by remember { mutableStateOf<SessionEntity?>(null) }
     var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
     var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
+    var sessionRecords by remember { mutableStateOf<List<NoiseRecord>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
     var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
     var geladen by remember { mutableStateOf(false) }
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var showAuditDetails by remember { mutableStateOf(false) }
 
-    // Live-Beobachtung der Session und deren Messdaten
+    // Live-Beobachtung der Session und zugehörigen Daten
     LaunchedEffect(sessionId) {
         val db = container.database
 
-        // Session-Stammdaten beobachten
         launch {
             db.sessionDao().byIdFlow(sessionId).collectLatest { geladeneSession ->
                 session = geladeneSession
             }
         }
 
-        // Messwerte beobachten
         launch {
             db.measurementDao().fuerSessionFlow(sessionId).collectLatest { geladeneMesswerte ->
                 messwerte = geladeneMesswerte
@@ -126,24 +95,25 @@ fun ProtokollDetailScreen(
             }
         }
 
-        // Verbindungsereignisse beobachten
         launch {
             db.connectionEventDao().fuerSessionFlow(sessionId).collectLatest { events ->
                 ausfallbaender = leiteAusfallbaenderAb(events, session?.endedAt)
             }
         }
 
-        // Falls noch keine Messwerte da sind, initiale Aggregate laden
         val initialSession = db.sessionDao().byId(sessionId)
         if (initialSession != null) {
             session = initialSession
             val events = db.connectionEventDao().fuerSession(sessionId)
             ausfallbaender = leiteAusfallbaenderAb(events, initialSession.endedAt)
+            val ende = initialSession.endedAt ?: System.currentTimeMillis()
+            db.noiseDao().zwischenZeitpunktFlow(initialSession.startedAt, ende).collectLatest { recs ->
+                sessionRecords = recs
+            }
         }
         geladen = true
     }
 
-    // Ticker für laufende Sessions, damit die Zeitachse im Live-Betrieb stetig wächst
     LaunchedEffect(session?.endedAt) {
         while (session != null && session?.endedAt == null) {
             jetzt = System.currentTimeMillis()
@@ -154,7 +124,12 @@ fun ProtokollDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Session") },
+                title = {
+                    Text(
+                        text = "Session",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
@@ -183,13 +158,13 @@ fun ProtokollDetailScreen(
         }
         val s = session
         if (s == null) {
-            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
+            Box(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text("Session nicht gefunden.", style = MaterialTheme.typography.bodyMedium)
             }
             return@Scaffold
         }
 
-        val formatierer = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+        val formatierer = remember { SimpleDateFormat("dd.MM.yyyy · HH:mm:ss", Locale.getDefault()) }
         val isLive = s.endedAt == null
         val sessionEndeFuerChart = s.endedAt ?: jetzt
 
@@ -201,247 +176,288 @@ fun ProtokollDetailScreen(
             }
         }
 
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
+        val dauerText = if (s.endedAt != null) {
+            formatiereDauer(Duration.ofMillis(s.endedAt - s.startedAt))
+        } else {
+            formatiereDauer(Duration.ofMillis((jetzt - s.startedAt).coerceAtLeast(0)))
+        }
+
+        val threshold = container.settingsManager.dbThreshold.toDouble()
+
+        LazyColumn(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 1. KOMPAKTE 1-SEKUNDEN ZUSAMMENFASSUNG (Dauer, Leq, Max, Events)
             item {
-                // Header mit Gerätename und Status-Badge
-                SessionStatusHeader(session = s, formatierer = formatierer, jetztMillis = jetzt)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Kompakter/einklappbarer Kennwerte-Block
-                Text("Kennwerte", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(4.dp))
-                KompakterKennwerteBlock(kennwerte)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Pegelverlauf Chart
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+                NoiseHeaderCard(
+                    title = "Kennwerte",
+                    subtitle = "Start: ${formatierer.format(Date(s.startedAt))} · ${s.deviceName}",
+                    statusBadge = {
+                        if (isLive) {
+                            StatusPill(text = "LIVE AKTIV", type = StatusPillType.CONNECTED)
+                        } else {
+                            StatusPill(text = "Abgeschlossen", type = StatusPillType.NEUTRAL)
+                        }
+                    }
                 ) {
-                    Text("Pegelverlauf", style = MaterialTheme.typography.titleSmall)
-                    if (isLive) {
-                        Text(
-                            "Live",
-                            color = Color(0xFF2E7D32),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
+                    // 4-Kachel Metriken
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        SummaryMetricItem("⏱️ Dauer", dauerText, modifier = Modifier.weight(1f))
+                        SummaryMetricItem(
+                            "📈 LAeq",
+                            kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryMetricItem(
+                            "⚡ LMax",
+                            kennwerte?.maxDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryMetricItem(
+                            "📍 Vorfälle",
+                            "${sessionRecords.size}",
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                PegelverlaufChart(
-                    spalten = chartSpalten,
-                    ausfallbaender = ausfallbaender,
-                    sessionStart = s.startedAt,
-                    sessionEnde = sessionEndeFuerChart,
-                    isLive = isLive,
-                )
-                Spacer(modifier = Modifier.height(14.dp))
+            }
 
-                Row {
-                    Button(onClick = {
-                        scope.launch {
-                            val datei = withContext(Dispatchers.IO) { export.exportiereCsv(s, messwerte, aggregate) }
-                            export.teilen(datei)
-                        }
-                    }) { Text("CSV exportieren") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        val k = kennwerte ?: return@Button
-                        scope.launch {
-                            val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender) }
-                            export.teilen(datei)
-                        }
-                    }) { Text("PDF exportieren") }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    "Ausfälle (${ausfallbaender.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                if (ausfallbaender.isEmpty()) {
-                    Text(
-                        "Keine Verbindungsausfälle während dieser Session.",
-                        style = MaterialTheme.typography.bodyMedium,
+            // 2. INTERAKTIVER PEGELVERLAUF
+            item {
+                NoiseHeaderCard(
+                    title = "Pegelverlauf",
+                    subtitle = "Pinch-to-zoom & Pan für Detailanalyse",
+                    statusBadge = {
+                        if (isLive) StatusPill(text = "Live-Kurve", type = StatusPillType.CONNECTED)
+                    }
+                ) {
+                    PegelverlaufChart(
+                        spalten = chartSpalten,
+                        ausfallbaender = ausfallbaender,
+                        sessionStart = s.startedAt,
+                        sessionEnde = sessionEndeFuerChart,
+                        events = sessionRecords,
+                        thresholdDb = threshold,
+                        laeqDb = kennwerte?.leqDb,
+                        isLive = isLive,
+                        height = 180.dp
                     )
                 }
             }
-            items(ausfallbaender) { band -> AusfallZeile(band, formatierer) }
-        }
-    }
-}
 
-@Composable
-private fun SessionStatusHeader(session: SessionEntity, formatierer: SimpleDateFormat, jetztMillis: Long) {
-    val isLive = session.endedAt == null
+            // 3. EXPORT & BERICHTSAKTIONEN
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val k = kennwerte ?: return@Button
+                            scope.launch {
+                                val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender) }
+                                export.teilen(datei)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("PDF exportieren")
+                    }
 
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isLive) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "${session.deviceName} (${session.deviceAddress})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                val datei = withContext(Dispatchers.IO) { export.exportiereCsv(s, messwerte, aggregate) }
+                                export.teilen(datei)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(AppIcons.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("CSV exportieren")
+                    }
+                }
+            }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isLive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outlineVariant
+            // 4. ERFASSTE EREIGNISSE & VORFÄLLE
+            if (sessionRecords.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Dokumentierte Ereignisse (${sessionRecords.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(sessionRecords, key = { it.id }) { record ->
+                    NoiseCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = record.label ?: record.detectedLabel ?: "Lärmereignis",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    StatusPill(
+                                        text = "%.1f dB".format(Locale.US, record.calibratedDbA ?: record.dbValue),
+                                        type = StatusPillType.WARNING
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (!record.notes.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Notiz: ${record.notes}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. REVISIONSSICHERE AUDIT-DETAILS (Aufklappbar für Techniker/Behörden)
+            item {
+                NoiseCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAuditDetails = !showAuditDetails }
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isLive) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Revisions- & Mess-Audit",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        Text(
-                            text = if (isLive) "LIVE" else "BEENDET",
-                            color = if (isLive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
+                        Icon(
+                            imageVector = if (showAuditDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null
                         )
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                buildString {
-                    append("Start: ${formatierer.format(session.startedAt)}")
-                    if (session.endedAt != null) {
-                        append(" · Dauer: ")
-                        val dauer = Duration.ofMillis(session.endedAt - session.startedAt)
-                        append(formatiereDauer(dauer))
-                    } else {
-                        append(" · Läuft seit ")
-                        val dauer = Duration.ofMillis((jetztMillis - session.startedAt).coerceAtLeast(0))
-                        append(formatiereDauer(dauer))
+                    AnimatedVisibility(visible = showAuditDetails) {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AuditDetailRow("Geräte-ID / MAC", s.deviceAddress ?: "Internes Mikrofon")
+                            AuditDetailRow("Messparameter", "dB(A) · FAST (125 ms)")
+                            AuditDetailRow("Messpunkte erfasst", "${kennwerte?.sampleCount ?: messwerte.size}")
+                            AuditDetailRow("Verbindungsausfälle", "${ausfallbaender.size} Vorfälle")
+                            kennwerte?.l10Db?.let { AuditDetailRow("L10 (Spitzenpegel)", "%.1f dB".format(Locale.US, it)) }
+                            kennwerte?.l50Db?.let { AuditDetailRow("L50 (Median)", "%.1f dB".format(Locale.US, it)) }
+                            kennwerte?.l90Db?.let { AuditDetailRow("L90 (Grundgeräusch)", "%.1f dB".format(Locale.US, it)) }
+                            AuditDetailRow("App-Version", "Noise Protocol v${BuildConfig.VERSION_NAME}")
+                        }
                     }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isLive) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                }
+            }
+
+            // 6. AUSFALLBÄNDER LISTE
+            if (ausfallbaender.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Verbindungsunterbrechungen (${ausfallbaender.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                items(ausfallbaender) { band ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "${formatierer.format(band.von)} – ${if (band.bis != null) formatierer.format(band.bis) else "andauernd"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (band.bis != null) {
+                                    Text(
+                                        text = "Ausfalldauer: ${formatiereDauer(Duration.ofMillis(band.bis - band.von))}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                            StatusPill(text = "Keine Daten", type = StatusPillType.ERROR)
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun KompakterKennwerteBlock(kennwerte: AkustischeKennwerte.Kennwerte?) {
-    if (kennwerte == null || kennwerte.sampleCount == 0) {
-        Text("Keine Messwerte in dieser Session.", style = MaterialTheme.typography.bodyMedium)
-        return
+private fun SummaryMetricItem(title: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
+}
 
-    var detailsGeoeffnet by remember { mutableStateOf(false) }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
+@Composable
+private fun AuditDetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Kompakte Hauptübersicht
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "LAeq: ${String.format(Locale.getDefault(), "%.1f", kennwerte.leqDb)} dB",
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        "Max: ${String.format(Locale.getDefault(), "%.1f", kennwerte.maxDb)} dB",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        "Min: ${String.format(Locale.getDefault(), "%.1f", kennwerte.minDb)} dB",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-
-                IconButton(
-                    onClick = { detailsGeoeffnet = !detailsGeoeffnet },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        if (detailsGeoeffnet) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (detailsGeoeffnet) "Details ausblenden" else "Details einblenden"
-                    )
-                }
-            }
-
-            AnimatedVisibility(visible = detailsGeoeffnet) {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                    if (kennwerte.l10Db != null) KennwertZeile("L10 (Spitzenbelastung)", kennwerte.l10Db)
-                    if (kennwerte.l50Db != null) KennwertZeile("L50 (Medianpegel)", kennwerte.l50Db)
-                    if (kennwerte.l90Db != null) KennwertZeile("L90 (Hintergrundpegel)", kennwerte.l90Db)
-                    Text(
-                        "${kennwerte.sampleCount} Messwerte",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-        }
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
-
-@Composable
-private fun KennwertZeile(label: String, wertDb: Double?) {
-    if (wertDb == null) return
-    Text("$label: ${String.format(Locale.getDefault(), "%.1f", wertDb)} dB", style = MaterialTheme.typography.bodyMedium)
-}
-
-@Composable
-private fun AusfallZeile(band: Ausfallband, formatierer: SimpleDateFormat) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row {
-                Text(formatierer.format(band.von), style = MaterialTheme.typography.bodyMedium)
-                Text(" – ", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    if (band.bis != null) formatierer.format(band.bis) else "andauernd",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            if (band.bis != null) {
-                Text(
-                    formatiereDauer(Duration.ofMillis(band.bis - band.von)),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-    }
-}
-

@@ -63,6 +63,7 @@ class DriveSyncCoordinatorTest {
         override fun getAll(): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override suspend fun zwischenZeitpunkt(von: Long, bis: Long): List<NoiseRecord> = emptyList()
+        override fun zwischenZeitpunktFlow(von: Long, bis: Long): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override suspend fun insert(record: NoiseRecord) {}
         override suspend fun update(record: NoiseRecord) {}
         override suspend fun softDelete(id: Long, deletedAt: Long) {}
