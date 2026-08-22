@@ -5,21 +5,26 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.alert.Alert
 import com.example.lrmprotokoll.alert.AlertChannel
+import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertMessages
 import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.data.SettingsManager
 
-// v2: Owner-Rueckmeldung nach Geraetetest - im Klingelton-Modus "Lautlos" fiel der Alarm nicht
-// auf, weil kein Vibrationsmuster gesetzt war. NotificationChannel-Einstellungen (Vibration,
-// Sound, Importance) sind nach dem ersten createNotificationChannel() unveraenderlich - eine
-// neue Channel-ID ist der einzige Weg, bestehende Installationen auf das neue Muster zu heben.
-// Der alte Kanal wird beim naechsten [send] mitentfernt (siehe unten), damit er nicht als
-// Karteileiche in den Systemeinstellungen haengen bleibt.
-private const val ALARM_NOTIFICATION_CHANNEL_ID_LEGACY = "noise_alarm_channel"
-const val ALARM_NOTIFICATION_CHANNEL_ID = "noise_alarm_channel_v2"
+private const val ALARM_NOTIFICATION_CHANNEL_ID_V1 = "noise_alarm_channel"
+private const val ALARM_NOTIFICATION_CHANNEL_ID_V2 = "noise_alarm_channel_v2"
+const val ALARM_NOTIFICATION_CHANNEL_ID = "noise_alarm_channel_v3"
 private const val ALARM_NOTIFICATION_ID = 4711
 
 /**
@@ -46,36 +51,70 @@ internal fun alarmVibrationsmuster(mindestdauerMillis: Long = 60_000L): LongArra
 /**
  * Meldung auf dem Ueberwachungsgeraet selbst (Plan 7.6, `LocalNotificationAlertChannel`).
  *
- * Sie ersetzt keinen Push und soll es nicht: Wer nicht am Geraet ist, sieht sie nicht. Sie deckt
- * aber einen Ausfall ab, an dem ntfy scheitert - naemlich fehlendes Internet - und kostet dafuer
- * weder Netz noch Fremddienst. Genau darum gehen die Kanaele parallel raus und nicht als Kette.
- *
- * Eigener Notification-Kanal mit IMPORTANCE_HIGH, getrennt vom stillen Kanal des Foreground
- * Service: Der laeuft bewusst mit IMPORTANCE_LOW, damit die Dauer-Notification nicht nervt - ein
- * Alarm auf demselben Kanal waere damit ebenso lautlos und niemandem aufgefallen.
+ * Gehärtet für Android Tablets (z.B. Xiaomi Pad 6 / HyperOS) und Telefone:
+ * - Spielt bei Alarmen einen akustischen Alarmton mit USAGE_ALARM (auch bei stummem Gerät / Tablets ohne Motor).
+ * - Prüft Hardware-Vibrationsmotor (`hasVibrator`) und triggert direkte Hardware-Vibration.
+ * - Setzt den NotificationChannel mit explizitem Alarm-Sound und IMPORTANCE_HIGH.
  */
-class LocalNotificationAlertChannel(private val context: Context) : AlertChannel {
+class LocalNotificationAlertChannel(
+    private val context: Context,
+    private val settings: SettingsManager? = null,
+) : AlertChannel {
 
     override val id: ChannelId = ChannelId.LOCAL_NOTIFICATION
 
     override val isAvailable: Boolean
-        get() = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+    companion object {
+        @Volatile
+        private var aktiverAlarmTon: Ringtone? = null
+
+        fun stoppeAlarmTon() {
+            try {
+                aktiverAlarmTon?.stop()
+                aktiverAlarmTon = null
+            } catch (_: Exception) {}
+        }
+    }
 
     override suspend fun send(alert: Alert): Result<Unit> = runCatching {
         val manager = context.getSystemService(NotificationManager::class.java)
             ?: error("NotificationManager nicht verfügbar")
 
-        manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_LEGACY)
+        // Alte Kanäle aufräumen
+        try {
+            manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V1)
+            manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V2)
+        } catch (_: Exception) {}
+
+        val alarmSoundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            ?: Uri.EMPTY
+
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
         manager.createNotificationChannel(
             NotificationChannel(
                 ALARM_NOTIFICATION_CHANNEL_ID,
                 "Verbindungsalarm",
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "Meldet, wenn die Verbindung zum Messgerät abreißt."
+                description = "Meldet mit Alarmton und Vibration, wenn die Verbindung zum Messgerät abreißt."
+                if (alarmSoundUri != Uri.EMPTY) {
+                    setSound(alarmSoundUri, audioAttributes)
+                }
                 enableVibration(true)
                 vibrationPattern = alarmVibrationsmuster()
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
         )
 
@@ -85,13 +124,58 @@ class LocalNotificationAlertChannel(private val context: Context) : AlertChannel
             .setStyle(NotificationCompat.BigTextStyle().bigText(alert.message))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .build()
 
-        // Feste ID: Die Entwarnung ersetzt die stehende Alarmmeldung, statt sich daneben zu
-        // stapeln - sonst stuenden am Morgen Alarm und Entwarnung nebeneinander und man muesste
-        // die Zeitstempel vergleichen, um zu wissen, was gerade gilt.
+        // Feste ID: Die Entwarnung ersetzt die stehende Alarmmeldung
         manager.notify(ALARM_NOTIFICATION_ID, meldung)
+
+        // Akustischer Ton & Hardware-Vibration für Tablets & OEM Geräte
+        when (alert.kind) {
+            AlertKind.RAISED, AlertKind.ESCALATED, AlertKind.TEST -> {
+                spieleAlarmTon(alarmSoundUri, audioAttributes)
+                triggereHardwareVibration(audioAttributes)
+            }
+            AlertKind.RESOLVED -> {
+                stoppeAlarmTon()
+            }
+        }
+    }
+
+    private fun spieleAlarmTon(soundUri: Uri, audioAttributes: AudioAttributes) {
+        if (settings?.alarmTonAktiv == false) return
+        try {
+            stoppeAlarmTon()
+            val ringtone = RingtoneManager.getRingtone(context, soundUri) ?: return
+            ringtone.audioAttributes = audioAttributes
+            ringtone.play()
+            aktiverAlarmTon = ringtone
+        } catch (_: Exception) {}
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
+    private fun triggereHardwareVibration(audioAttributes: AudioAttributes) {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+            if (vibrator != null && vibrator.hasVibrator()) {
+                val muster = alarmVibrationsmuster(mindestdauerMillis = 3_000L)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(
+                        VibrationEffect.createWaveform(muster, -1),
+                        audioAttributes
+                    )
+                } else {
+                    vibrator.vibrate(muster, -1)
+                }
+            }
+        } catch (_: Exception) {}
     }
 }

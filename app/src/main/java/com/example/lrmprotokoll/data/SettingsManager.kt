@@ -168,6 +168,14 @@ class SettingsManager(
         get() = prefs.getBoolean("entwarnung_local", true)
         set(value) = prefs.edit().putBoolean("entwarnung_local", value).apply()
 
+    /**
+     * Akustischer Alarmton bei Verbindungsabbruch auf dem Gerät (Default: an).
+     * Besonders wichtig für Tablets ohne Vibrationsmotor (z.B. Xiaomi Pad 6) oder im Lautlos-Modus.
+     */
+    var alarmTonAktiv: Boolean
+        get() = prefs.getBoolean("alarm_ton_aktiv", true)
+        set(value) = prefs.edit().putBoolean("alarm_ton_aktiv", value).apply()
+
     // ---------------------------------------------------------------- M7b: Google-Drive-Sync
 
     var driveSyncEnabled: Boolean
