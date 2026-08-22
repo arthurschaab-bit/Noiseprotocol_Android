@@ -258,13 +258,11 @@ fun MeterScreen(
             )
         }
     ) { padding ->
-        // Ein einziges LazyColumn statt einer Column mit verschachteltem LazyColumn fuer die
-        // Geraeteliste (M7c Aufgabe 4, Bestandsaufnahme-Befund 4.2): dasselbe Muster wie
-        // ProtokollDetailScreen/DiagnoseScreen - item{} fuer den festen Kopfbereich, items() fuer
-        // die Geraeteliste. Ohne diese Absicherung koennen Verbindungszustand, Warnungen und die
-        // Live-Pegel-Karte zusammen mehr Platz beanspruchen als der Bildschirm hoch ist, ohne
-        // dass man zur Geraeteliste oder zum "Verbinden"-Button scrollen kann.
-        val sortierteGefundeneGeraete = foundDevices.values.sortedByDescending { it.rssi }
+        // Stabile Sortierung der Geräteliste: Gepinntes Gerät zuerst, dann alphabetisch nach
+        // Name und MAC-Adresse. RSSI-Schwankungen verändern dadurch nicht mehr die Zeilenposition.
+        val sortierteGefundeneGeraete = remember(foundDevices.toMap(), pairedAddress) {
+            sortiereGefundeneGeraete(foundDevices.values, pairedAddress)
+        }
         LazyColumn(
             modifier = Modifier
                 .padding(padding)
@@ -548,4 +546,18 @@ private fun connectionStateDisplay(state: ConnectionState): Triple<ImageVector, 
         ConnectionState.FAILED -> Icons.Default.Warning to Color(0xFFD32F2F)
     }
     return Triple(icon, state.label(), color)
+}
+
+/**
+ * Stabile Sortierung für gefundene Bluetooth-Geräte: Gepinntes Gerät steht ganz oben,
+ * gefolgt von benannten Geräten alphabetisch, danach unbenannte Geräte.
+ * RSSI-Schwankungen beeinflussen die Positionierung nicht, sodass die Liste im UI ruhig bleibt.
+ */
+internal fun sortiereGefundeneGeraete(devices: Collection<BleDevice>, pairedAddress: String?): List<BleDevice> {
+    return devices.sortedWith(
+        compareByDescending<BleDevice> { it.address == pairedAddress }
+            .thenBy { it.name.isNullOrBlank() }
+            .thenBy { it.name ?: "" }
+            .thenBy { it.address }
+    )
 }

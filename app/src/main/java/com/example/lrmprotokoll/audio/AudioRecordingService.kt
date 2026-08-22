@@ -47,6 +47,9 @@ private const val NOTIFICATION_CHANNEL_ID = "noise_monitoring_channel"
  * eines Messgeraets soll nicht ungefragt die Mikrofon-Schwellwertueberwachung mitstarten.
  */
 const val EXTRA_START_AUDIO_MONITORING = "start_audio_monitoring"
+const val ACTION_START_AUDIO_MONITORING = "com.example.lrmprotokoll.START_AUDIO_MONITORING"
+const val ACTION_STOP_AUDIO_RECORDING = "com.example.lrmprotokoll.STOP_AUDIO_RECORDING"
+const val ACTION_STOP_SERVICE = "STOP_SERVICE"
 
 class AudioRecordingService : LifecycleService() {
 
@@ -59,10 +62,15 @@ class AudioRecordingService : LifecycleService() {
         private val _laeuft = MutableStateFlow(false)
         val laeuft: StateFlow<Boolean> = _laeuft.asStateFlow()
 
+        // Zeigt an, ob die Mikrofon-Audioaufnahme / Schwellwert-Überwachung aktiv aufzeichnet.
+        private val _audioAufnahmeAktiv = MutableStateFlow(false)
+        val audioAufnahmeAktiv: StateFlow<Boolean> = _audioAufnahmeAktiv.asStateFlow()
+
         /** Nur fuer Compose-UI-Tests, die den Servicestart nicht real ausloesen koennen (kein
          * Mikrofon unter Robolectric) - internal statt private, damit das Testmodul zugreifen
          * kann, ohne den Setter Teil der eigentlichen Produktions-API zu machen. */
         internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
+        internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) { _audioAufnahmeAktiv.value = wert }
     }
 
     private val serviceJob = SupervisorJob()
@@ -207,7 +215,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        if (intent?.action == "STOP_SERVICE") {
+        if (intent?.action == ACTION_STOP_SERVICE || intent?.action == "STOP_SERVICE") {
             // Expliziter Nutzerstop: die Flags fuer die Neustart-Wiederaufnahme (Plan Abschnitt
             // 5.4) muessen hier zurueckgesetzt werden, sonst wuerde ein spaeterer Geraeteneustart
             // etwas reaktivieren, das der Nutzer bewusst beendet hat.
@@ -218,9 +226,21 @@ class AudioRecordingService : LifecycleService() {
             HeartbeatPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(applicationContext)
+            isRunning = false
+            _audioAufnahmeAktiv.value = false
             _laeuft.value = false
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_STOP_AUDIO_RECORDING || intent?.action == "STOP_AUDIO_RECORDING") {
+            // Stoppt nur die Audioaufnahme/Schwellenwert-Überwachung, Foreground-Service und BLE-Verbindung bleiben aktiv
+            isRunning = false
+            _audioAufnahmeAktiv.value = false
+            settingsManager.audioMonitoringWasActive = false
+            diagnosticsReporter.breadcrumb("AudioService", "Audio-Aufnahme gestoppt (Hintergrund-Dienst bleibt aktiv)")
+            updateNotification(connectionSupervisor.state.value)
+            return START_STICKY
         }
 
         if (!isForegroundActive) {
@@ -229,8 +249,14 @@ class AudioRecordingService : LifecycleService() {
             settingsManager.monitoringWasActive = true
             _laeuft.value = true
         }
-        if (!isRunning && intent?.getBooleanExtra(EXTRA_START_AUDIO_MONITORING, false) == true) {
+
+        val shouldStartAudio = intent?.getBooleanExtra(EXTRA_START_AUDIO_MONITORING, false) == true ||
+            intent?.action == ACTION_START_AUDIO_MONITORING ||
+            intent?.action == "START_AUDIO_MONITORING"
+
+        if (!isRunning && shouldStartAudio) {
             isRunning = true
+            _audioAufnahmeAktiv.value = true
             startMonitoring()
             settingsManager.audioMonitoringWasActive = true
         }
@@ -613,6 +639,7 @@ class AudioRecordingService : LifecycleService() {
 
     override fun onDestroy() {
         isRunning = false
+        _audioAufnahmeAktiv.value = false
         _laeuft.value = false
         diagnosticsReporter.breadcrumb("AudioService", "AudioRecordingService wird beendet")
         connectionSupervisor.stop()

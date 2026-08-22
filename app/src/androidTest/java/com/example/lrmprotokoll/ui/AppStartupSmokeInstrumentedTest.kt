@@ -21,8 +21,8 @@ import org.junit.runner.RunWith
  *
  * Stellt sicher, dass:
  * 1. Der Application-Kontext und alle Provider (Sentry, Room, Diagnostics) ohne Absturz initialisieren.
- * 2. Die MainActivity mit NavHost, Theme und Drawer-Layout sauber gerendert wird.
- * 3. Alle Hauptscreens (Start, Messgerät, Protokoll, Diagnose, Einstellungen) fehlerfrei geladen werden können.
+ * 2. Die MainActivity mit NavHost, Theme und 4-Tab Navigation sauber gerendert wird.
+ * 3. Alle Hauptscreens (Start inkl. PCE-323 Steuerung, Protokoll, Diagnose, Einstellungen) fehlerfrei geladen werden können.
  */
 @RunWith(AndroidJUnit4::class)
 class AppStartupSmokeInstrumentedTest {
@@ -41,13 +41,16 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen
+        // 1. Startscreen (Home) ist geladen inkl. integrierter PCE-323 Steuerung
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
+        composeRule.onNodeWithText("PCE-323 Messgerät").assertIsDisplayed()
 
-        // 2. Navigation zum Messgerät
-        composeRule.onAllNodesWithText("Messgerät").onFirst().performClick()
+        // 2. Öffnen des Kopplungsdialogs von der Startseite
+        composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
+        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.waitForIdle()
 
         // 3. Navigation zu Protokoll
         composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()

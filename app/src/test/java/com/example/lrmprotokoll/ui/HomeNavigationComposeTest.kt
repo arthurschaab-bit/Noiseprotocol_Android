@@ -53,13 +53,13 @@ class HomeNavigationComposeTest {
     }
 
     @Test
-    fun alleFuenfNavigationszieleSindBeschriftetAufDemStartbildschirm() {
+    fun alleVierNavigationszieleSindBeschriftetAufDemStartbildschirm() {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        listOf("Start", "Messgerät", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
+        listOf("Start", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
@@ -75,10 +75,10 @@ class HomeNavigationComposeTest {
         composeRule.waitForIdle()
 
         // Der eigentliche Regressionsfall: auf JEDER Seite, nicht nur auf "Start", muessen
-        // weiterhin alle fuenf Ziele erreichbar sein. onFirst() statt onNodeWithText(), weil
+        // weiterhin alle vier Ziele erreichbar sein. onFirst() statt onNodeWithText(), weil
         // "Diagnose" jetzt zusaetzlich als TopAppBar-Titel des Zielscreens selbst vorkommt -
         // zwei Treffer sind hier korrekt, nicht das zu pruefende Verhalten.
-        listOf("Start", "Messgerät", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
+        listOf("Start", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
