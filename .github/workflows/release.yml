@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag-Name (z.B. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0 platform-tools
+
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # Kein Release auf rotem Grund: Vollständige Unit-Testsuite ausführen
+      - name: Unit tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Versionsnummern aus dem Tag ableiten
+        id: version
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          TAG="${RAW_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Keystore aus Secret wiederherstellen
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > release.jks
+
+      - name: Signierten Release-Build bauen
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -f "release.jks" ]; then
+            ./gradlew assembleRelease --no-daemon --stacktrace \
+              -PversionName=${{ steps.version.outputs.name }} \
+              -PversionCode=${{ steps.version.outputs.code }} \
+              -PreleaseStoreFile=$(pwd)/release.jks
+          else
+            echo "Kein Keystore vorhanden - baue un-signiertes Release-APK als Fallback"
+            ./gradlew assembleRelease --no-daemon --stacktrace \
+              -PversionName=${{ steps.version.outputs.name }} \
+              -PversionCode=${{ steps.version.outputs.code }}
+          fi
+
+      - name: Keystore-Kopie löschen
+        if: always()
+        run: rm -f release.jks
+
+      - name: GitHub Release mit APK erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Release ${{ steps.version.outputs.tag }}"
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/mapping/release/mapping.txt
