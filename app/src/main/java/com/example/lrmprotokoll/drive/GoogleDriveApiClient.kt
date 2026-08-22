@@ -51,6 +51,68 @@ class GoogleDriveApiClient(
         JSONObject(antwort).getString("id")
     }
 
+    override suspend fun ordnerSuchen(name: String): Result<DriveDatei?> = mitToken { token ->
+        val query = "name = '${escapeFuerDriveQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        val url = "$basisUrl/drive/v3/files".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("fields", "files(id,name)")
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        val antwort = fuehreAus(request)
+        val dateien: JSONArray = JSONObject(antwort).getJSONArray("files")
+        if (dateien.length() == 0) {
+            null
+        } else {
+            val erste = dateien.getJSONObject(0)
+            DriveDatei(id = erste.getString("id"), name = erste.getString("name"))
+        }
+    }
+
+    override suspend fun ordnerAuflisten(): Result<List<DriveDatei>> = mitToken { token ->
+        val query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        val url = "$basisUrl/drive/v3/files".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("fields", "files(id,name)")
+            .addQueryParameter("pageSize", "100")
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        val antwort = fuehreAus(request)
+        val dateien: JSONArray = JSONObject(antwort).getJSONArray("files")
+        val liste = mutableListOf<DriveDatei>()
+        for (i in 0 until dateien.length()) {
+            val obj = dateien.getJSONObject(i)
+            liste.add(DriveDatei(id = obj.getString("id"), name = obj.getString("name")))
+        }
+        liste
+    }
+
+    override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String): Result<Unit> = mitToken { token ->
+        val body = JSONObject().apply {
+            put("name", neuerName)
+        }.toString().toRequestBody(JSON)
+
+        val request = Request.Builder()
+            .url("$basisUrl/drive/v3/files/$ordnerId")
+            .patch(body)
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        fuehreAus(request)
+        Unit
+    }
+
     override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> = mitToken { token ->
         // Query-Parameter ueber HttpUrl.Builder statt Hand-Encoding - Drive-Query-Syntax
         // erlaubt Anfuehrungszeichen im Namen, die escaped werden muessen.

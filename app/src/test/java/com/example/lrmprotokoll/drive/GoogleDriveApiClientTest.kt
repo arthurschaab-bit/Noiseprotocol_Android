@@ -65,6 +65,52 @@ class GoogleDriveApiClientTest {
     }
 
     @Test
+    fun ordnerSuchenLiefertGefundenenOrdner() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"files":[{"id":"ordner-found","name":"Lärmprotokoll"}]}""")
+        )
+
+        val ergebnis = client.ordnerSuchen("Lärmprotokoll")
+
+        val ordner = ergebnis.getOrThrow()
+        assertEquals("ordner-found", ordner?.id)
+        assertEquals("Lärmprotokoll", ordner?.name)
+        val anfrage = server.takeRequest()
+        assertEquals("GET", anfrage.method)
+        assertTrue(anfrage.path!!.contains("mimeType"))
+    }
+
+    @Test
+    fun ordnerAuflistenLiefertAlleGefundenenOrdner() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"files":[{"id":"ordner-1","name":"Ordner A"},{"id":"ordner-2","name":"Ordner B"}]}""")
+        )
+
+        val ergebnis = client.ordnerAuflisten()
+
+        val liste = ergebnis.getOrThrow()
+        assertEquals(2, liste.size)
+        assertEquals("ordner-1", liste[0].id)
+        assertEquals("Ordner A", liste[0].name)
+        assertEquals("ordner-2", liste[1].id)
+        assertEquals("Ordner B", liste[1].name)
+    }
+
+    @Test
+    fun ordnerUmbenennenSendetPatchMitNeuemNamen() = runTest {
+        server.enqueue(MockResponse().setBody("""{"id":"ordner-123","name":"Neuer Name"}""").setResponseCode(200))
+
+        val ergebnis = client.ordnerUmbenennen("ordner-123", "Neuer Name")
+
+        assertTrue(ergebnis.isSuccess)
+        val anfrage = server.takeRequest()
+        assertEquals("PATCH", anfrage.method)
+        assertEquals("/drive/v3/files/ordner-123", anfrage.path)
+        val koerper = anfrage.body.readUtf8()
+        assertTrue(koerper.contains("\"name\":\"Neuer Name\""))
+    }
+
+    @Test
     fun dateiSuchenLiefertGefundeneDatei() = runTest {
         server.enqueue(
             MockResponse().setBody("""{"files":[{"id":"datei-1","name":"laermprotokoll_2026-08-19.csv"}]}""")

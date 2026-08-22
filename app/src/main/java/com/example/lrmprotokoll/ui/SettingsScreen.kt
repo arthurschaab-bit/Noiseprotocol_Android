@@ -41,6 +41,7 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import com.example.lrmprotokoll.drive.DriveDatei
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.drive.auth.AutorisierungBenoetigtException
@@ -602,6 +603,41 @@ fun SettingsScreen(
                         driveOrdnerName = newFolder
                         settings.driveFolderName = newFolder
                         scope.launch { verarbeiteDriveEinrichtungsVersuch(newFolder) }
+                    },
+                    onLoadFolders = {
+                        withContext(Dispatchers.IO) {
+                            container.driveEinrichtung.ladeVerfuegbareOrdner()
+                        }
+                    },
+                    onSelectFolder = { selectedFolder ->
+                        driveOrdnerName = selectedFolder.name
+                        driveOrdnerId = selectedFolder.id
+                        scope.launch {
+                            container.driveEinrichtung.waehleBestehendenOrdner(selectedFolder)
+                            driveSyncAktiv = true
+                            DriveSyncPlanung.plane(context)
+                        }
+                    },
+                    onCreateFolder = { newName ->
+                        withContext(Dispatchers.IO) {
+                            container.driveEinrichtung.erstelleNeuenOrdner(newName).also { res ->
+                                res.getOrNull()?.let { f ->
+                                    driveOrdnerName = f.name
+                                    driveOrdnerId = f.id
+                                    driveSyncAktiv = true
+                                    DriveSyncPlanung.plane(context)
+                                }
+                            }
+                        }
+                    },
+                    onRenameFolder = { fId, newName ->
+                        withContext(Dispatchers.IO) {
+                            container.driveEinrichtung.benenneOrdnerUm(fId, newName).also { res ->
+                                if (res.isSuccess && driveOrdnerId == fId) {
+                                    driveOrdnerName = newName
+                                }
+                            }
+                        }
                     }
                 )
 

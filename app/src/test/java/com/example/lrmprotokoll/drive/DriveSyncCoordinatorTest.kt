@@ -93,7 +93,14 @@ class DriveSyncCoordinatorTest {
         var aktualisierenAufrufe = 0
         var letzterAktualisierterInhalt: ByteArray? = null
 
+        var ordnerSuchenErgebnis: Result<DriveDatei?> = Result.success(null)
+        var ordnerAuflistenErgebnis: Result<List<DriveDatei>> = Result.success(emptyList())
+        var ordnerUmbenennenErgebnis: Result<Unit> = Result.success(Unit)
+
         override suspend fun ordnerAnlegen(name: String) = ordnerAnlegenErgebnis
+        override suspend fun ordnerSuchen(name: String) = ordnerSuchenErgebnis
+        override suspend fun ordnerAuflisten() = ordnerAuflistenErgebnis
+        override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String) = ordnerUmbenennenErgebnis
         override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> {
             suchenAufrufe++
             return dateiSuchenErgebnis
