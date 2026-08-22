@@ -51,7 +51,7 @@ class SettingsScreenInstrumentedTest {
         // 2. Aufnahme & Mikrofon Sektion aufklappen
         composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Aufnahme-Schwellenwert (Mikrofon)", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Aufnahme-Schwellenwert", substring = true).assertIsDisplayed()
 
         // 3. Bis zum Bildschirmende scrollen
         composeRule.onNodeWithTag(BILDSCHIRM_ENDE_TAG).performScrollTo().assertIsDisplayed()
@@ -80,7 +80,7 @@ class SettingsScreenInstrumentedTest {
         composeRule.onNodeWithText("Automatische KI-Erkennung", substring = true).performScrollTo().assertIsDisplayed()
 
         // 3. System & Diagnose Sektion aufklappen
-        composeRule.onNodeWithText("System, Logging & Energie", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText("Diagnose & Systemgesundheit", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
 
         // 4. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
