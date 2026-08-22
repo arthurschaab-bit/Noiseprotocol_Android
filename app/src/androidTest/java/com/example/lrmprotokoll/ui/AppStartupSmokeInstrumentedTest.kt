@@ -48,7 +48,7 @@ class AppStartupSmokeInstrumentedTest {
         // 2. Öffnen des Kopplungsdialogs von der Startseite
         composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
         composeRule.onNodeWithText("Schließen").performClick()
         composeRule.waitForIdle()
 
