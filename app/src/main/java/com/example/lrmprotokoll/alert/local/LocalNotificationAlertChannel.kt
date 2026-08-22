@@ -155,6 +155,7 @@ class LocalNotificationAlertChannel(
         } catch (_: Exception) {}
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
     private fun triggereHardwareVibration(audioAttributes: AudioAttributes) {
         try {
