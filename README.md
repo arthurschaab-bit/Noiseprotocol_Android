@@ -242,6 +242,21 @@ Backup die einzige Rückfalloption.
 adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > backup.db
 ```
 
+### Release erstellen (Signierte APKs über GitHub Releases)
+
+Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
+
+1. **Tag erstellen und pushen:**
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+2. **Automatischer Workflow (`.github/workflows/release.yml`):**
+   - Leitet `versionName` (`1.0.0`) und `versionCode` (`10000`) deterministisch aus dem Tag ab.
+   - Führt die vollständige Test-Suite aus.
+   - Baut und signiert das Release-APK mit dem hinterlegten Release-Keystore (`RELEASE_KEYSTORE_BASE64` in GitHub Secrets).
+   - Erstellt automatisch einen GitHub Release mit dem fertigen `app-release.apk` und Release Notes.
+
 ---
 
 ## Dokumentation
@@ -269,7 +284,7 @@ adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > back
 | [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code (umgesetzt & aktiv) |
 | [`docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md`](docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md) | **Diagnose-, Fehleranalyse- und Observability-Konzept** — Architektur für Sentry, Breadcrumbs, Redaction & Support-Bundle (umgesetzt) |
 | [`docs/EXTERNE_DIENSTE_EINRICHTUNG.md`](docs/EXTERNE_DIENSTE_EINRICHTUNG.md) | Externe Dienste einrichten (Sentry, Google Drive, ntfy, Healthchecks.io) |
-| [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Plan für eine Release-Pipeline (offen) — signierte APKs über GitHub Releases, Voraussetzung: Owner richtet Keystore + Secrets ein |
+| [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Release-Pipeline (umgesetzt) — signierte APKs über GitHub Releases via Tag `vX.Y.Z` |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |

@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.room)
 }
 
+val releaseStoreFile = (findProperty("releaseStoreFile") as String?)?.let { file(it) }
+
 android {
     namespace = "com.example.lrmprotokoll"
     compileSdk = 36
@@ -14,8 +16,8 @@ android {
         applicationId = "com.example.lrmprotokoll"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("versionName") as String?) ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -42,9 +44,20 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         release {
+            if (releaseStoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
