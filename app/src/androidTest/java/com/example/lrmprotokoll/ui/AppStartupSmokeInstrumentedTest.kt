@@ -41,12 +41,12 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen inkl. integrierter PCE-323 Steuerung
+        // 1. Startscreen (Home) ist geladen inkl. Smartphone-Mikrofon und PCE-323 Steuerung
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("PCE-323 Messgerät").assertIsDisplayed()
+        composeRule.onAllNodesWithText("1. Smartphone-Mikrofon").onFirst().assertIsDisplayed()
 
-        // 2. Öffnen des Kopplungsdialogs von der Startseite
-        composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performClick()
+        // 2. Öffnen des Kopplungsdialogs von der Startseite (per Scroll)
+        composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
         composeRule.onNodeWithText("Schließen").performClick()
@@ -57,17 +57,13 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Messreihen", substring = true).onFirst().assertIsDisplayed()
 
-        // 4. Navigation zu Diagnose
-        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Diagnose", substring = true).onFirst().assertIsDisplayed()
-
-        // 5. Navigation zu Einstellungen
+        // 4. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
         composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Einstellungen", substring = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Diagnose & Systemgesundheit", substring = true).onFirst().assertIsDisplayed()
 
-        // 6. Navigation zurück zum Startscreen
+        // 5. Navigation zurück zum Startscreen
         composeRule.onAllNodesWithText("Start").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
