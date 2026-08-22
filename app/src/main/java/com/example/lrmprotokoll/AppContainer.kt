@@ -91,7 +91,7 @@ class AppContainer(context: Context) {
     private val alertChannels: List<AlertChannel> by lazy {
         listOf(
             NtfyAlertChannel(settingsManager, httpClient),
-            LocalNotificationAlertChannel(context.applicationContext),
+            LocalNotificationAlertChannel(context.applicationContext, settingsManager),
         )
     }
 

@@ -91,6 +91,7 @@ fun SettingsScreen(
     var heartbeatUrl by remember { mutableStateOf(settings.heartbeatUrl) }
     var entwarnungNtfy by remember { mutableStateOf(settings.entwarnungUeberNtfy) }
     var entwarnungMeldung by remember { mutableStateOf(settings.entwarnungUeberMeldung) }
+    var alarmTonAktiv by remember { mutableStateOf(settings.alarmTonAktiv) }
     var testErgebnis by remember { mutableStateOf<String?>(null) }
 
     // Drive Sync
@@ -496,6 +497,24 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text("Lokale Geräte-Alarmierung", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = alarmTonAktiv,
+                            onCheckedChange = {
+                                alarmTonAktiv = it
+                                settings.alarmTonAktiv = it
+                            },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Akustischer Alarmton (für Tablets & Lautlos)")
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OemDeviceHelperCard()
+
+                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
                             scope.launch {
@@ -506,8 +525,8 @@ fun SettingsScreen(
                                     since = java.time.Instant.now(),
                                     message = "Test-Alarm: Verbindung zum Messgerät unterbrochen."
                                 )
-                                val res = com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel(context).send(alert)
-                                testErgebnis = if (res.isSuccess) "Test-Alarm auf Gerät ausgelöst" else "Fehlgeschlagen: ${res.exceptionOrNull()?.message}"
+                                val res = com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel(context, settings).send(alert)
+                                testErgebnis = if (res.isSuccess) "Test-Alarm auf Gerät ausgelöst (Ton, Notification & ggf. Vibration)" else "Fehlgeschlagen: ${res.exceptionOrNull()?.message}"
                             }
                         },
                         modifier = Modifier.fillMaxWidth()

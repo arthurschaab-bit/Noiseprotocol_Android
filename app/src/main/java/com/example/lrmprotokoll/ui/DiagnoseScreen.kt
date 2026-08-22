@@ -348,6 +348,8 @@ fun DiagnoseScreen(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                OemDeviceHelperCard()
             }
 
             // Sektion: Alarm-Historie (F15)

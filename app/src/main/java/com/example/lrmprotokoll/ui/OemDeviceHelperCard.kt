@@ -1,0 +1,242 @@
+package com.example.lrmprotokoll.ui
+
+import android.Manifest
+import android.app.AlarmManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+
+const val OEM_HELPER_CARD_TAG = "oem_helper_card"
+
+/**
+ * Erkennt OEM-Besonderheiten (z.B. Xiaomi Pad 6 / HyperOS / MIUI, Tablets ohne Vibrationsmotor)
+ * und bietet direkte One-Tap-Lösungen für Berechtigungen, Akku-Ausnahmen und Autostart.
+ */
+@Composable
+fun OemDeviceHelperCard(
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val manufacturer = Build.MANUFACTURER
+    val model = Build.MODEL
+    val isXiaomi = remember {
+        manufacturer.contains("Xiaomi", ignoreCase = true) ||
+            manufacturer.contains("Redmi", ignoreCase = true) ||
+            manufacturer.contains("POCO", ignoreCase = true)
+    }
+
+    val hasVibrator = remember {
+        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+        v?.hasVibrator() == true
+    }
+
+    val hasNotificationPermission = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        } else true
+    }
+
+    val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
+    val canExactAlarm = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() == true
+        } else true
+    }
+
+    val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
+    val isBatteryOptimized = remember {
+        powerManager?.isIgnoringBatteryOptimizations(context.packageName) != true
+    }
+
+    val hasIssues = !hasNotificationPermission || !canExactAlarm || isBatteryOptimized || (!hasVibrator && isXiaomi)
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(OEM_HELPER_CARD_TAG),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hasIssues) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (hasIssues) Icons.Default.Warning else Icons.Default.Check,
+                        contentDescription = null,
+                        tint = if (hasIssues) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Geräte- & Alarm-Diagnose",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (hasIssues) MaterialTheme.colorScheme.errorContainer else Color(0xFFE8F5E9)
+                ) {
+                    Text(
+                        text = if (hasIssues) "Prüfung nötig" else "Optimal konfiguriert",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (hasIssues) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Modell: $manufacturer $model (Android ${Build.VERSION.RELEASE})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Hardware Vibration Information
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                Text(
+                    text = "• Hardware-Vibration: " + (if (hasVibrator) "Vorhanden" else "Nicht vorhanden (Akustischer Alarmton wird forciert)"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!hasVibrator) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Notification Permission
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                Text(
+                    text = "• Benachrichtigungen: " + (if (hasNotificationPermission) "Erlaubt" else "Blockiert"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!hasNotificationPermission) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Exact Alarms
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                Text(
+                    text = "• Exakte Alarme: " + (if (canExactAlarm) "Erlaubt" else "Eingeschränkt"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!canExactAlarm) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Battery Optimization
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                Text(
+                    text = "• Akku-Optimierung: " + (if (!isBatteryOptimized) "Ausgenommen (Keine Einschränkungen)" else "Eingeschränkt (kann Alarme verzögern)"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isBatteryOptimized) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (hasIssues) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Empfohlene Aktionen für zuverlässige Alarme:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (!hasNotificationPermission) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Text("Benachrichtigungen erlauben")
+                    }
+                }
+
+                if (isBatteryOptimized) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Text("Akku-Optimierung aufheben")
+                    }
+                }
+
+                if (!canExactAlarm && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Text("Exakte Alarme freischalten")
+                    }
+                }
+
+                if (isXiaomi) {
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val intent = Intent().apply {
+                                    setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Text("Xiaomi / HyperOS Autostart prüfen")
+                    }
+                }
+            }
+        }
+    }
+}
