@@ -19,21 +19,19 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M-1** Bestand instandsetzen | ✅ abgeschlossen |
 | **M0** Protokoll-Discovery am PCE-323 | ✅ abgeschlossen |
 | **M1** Fundament, `MeterTransport`, Decoder | ✅ abgeschlossen |
-| **M2** BLE-Transport (Scan, Verbindung, Notify, On-Demand Permissions) | ✅ abgeschlossen, Gerätetest offen |
-| **M3** Robustheit (Reconnect, Ausfallerkennung, FGS-Typen dynamisch) | ✅ abgeschlossen, Gerätetest offen |
-| **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung) | ✅ abgeschlossen, Gerätetest offen |
-| **M7b** Google-Drive-Sync (Pegel-Upload, eine Datei pro Tag) | ✅ Code + echte OAuth-Client-ID eingerichtet, Gerätetest offen |
-| **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen, Gerätetest offen |
-| **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen, Gerätetest offen |
-| **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen, Gerätetest offen |
-| **M7c** UI-Überarbeitung (Live-Dashboard, Navigationsstruktur, Pegelverlauf-Chart) | ✅ abgeschlossen, Gerätetest offen |
+| **M2** BLE-Transport (Scan, Verbindung, Notify, On-Demand Permissions) | ✅ abgeschlossen, real am Gerät bestätigt |
+| **M3** Robustheit (Reconnect, Ausfallerkennung, FGS-Typen dynamisch) | ✅ abgeschlossen, real am Gerät bestätigt |
+| **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung, Tablet/OEM-Härtung) | ✅ abgeschlossen & gehärtet (PR #55) |
+| **M7b** Google-Drive-Sync (Upload, Kontopersistenz, DriveStatusCard) | ✅ abgeschlossen & gehärtet (PR #54) |
+| **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen |
+| **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen |
+| **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen |
+| **M7c** UI-Harmonisierung & Entkopplung (Startseite, 4 Tabs, stabile Sortierung) | ✅ abgeschlossen (PR #53) |
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
-| **CI-Qualitäts-Gates** (Android Lint, 354 JVM/Robolectric Tests, 34 Emulator-Tests) | ✅ vollständig aktiv |
-| **Gerätetest** M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät | ⬜ **als Nächstes** |
+| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 362 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
+| **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
 
-**Gesamtfortschritt Bluetooth-Vorhaben: 10 von 10 Meilensteinen umgesetzt.** (Offen für den
-Einsatz am realen Gerät ist der physische Hardwaretest; Erweiterungen M8 Härtung, M9 UX und M10
-Funktionen sind als nächste Stufen konzipiert.)
+**Gesamtfortschritt: 10 von 10 Bluetooth-Meilensteinen umgesetzt, real getestet und im Feld gehärtet.**
 
 ---
 
@@ -112,32 +110,29 @@ aus dem SDK, kein neuer Dependency), geteilt über denselben FileProvider-Weg wi
 Tagesbericht. Einstellungen waren bereits konsolidiert (durchgängig betitelte Abschnitte) —
 keine Änderung nötig.
 
-**Aus M7c / UI-Harmonisierung & Entkopplung:** Nach Rückmeldung aus den physischen Gerätetests am PCE-323 umfassend harmonisiert:
+**Aus M7c / UI-Harmonisierung & Entkopplung (PR #53):** Nach Rückmeldung aus den physischen Gerätetests am PCE-323 umfassend harmonisiert:
 - **Startseiten-Integration:** PCE-323 Messgerätesteuerung und Kopplungsdialog (`MeterControlCard`, `MeterPairingDialog`) direkt auf der Startseite integriert. Die Bottom-Navigation ist auf 4 Hauptziele gestrafft (`Start`, `Protokoll`, `Diagnose`, `Einstellungen`).
 - **Entkopplung der Audio-Aufnahme:** Das Beenden der Audio-Aufnahme (`ACTION_STOP_AUDIO_RECORDING`) stoppt gezielt nur die Mikrofon-Erfassung, während die Bluetooth-Dauermessung und der Foreground Service unterbrechungsfrei weiterlaufen.
 - **Stabile BLE-Geräteliste:** Stabile Sortierreihenfolge (`sortiereGefundeneGeraete`) verhindert das Springen der Gerätezeilen bei RSSI-Pegelschwankungen während des Scans.
 - **Transparente Status- & Protokoll-Führung:** Startseite bietet eine Session-Übersichtskarte für aktive und abgeschlossene Dauermessungen mit Direktlink ins Protokoll sowie präzise Leerzustandstexte, die Schwellenwert-Events von kontinuierlichen Hintergrund-Messreihen klar trennen.
 
+**Aus Google-Drive Persistenz & Upload-Status (PR #54):**
+- **Kontopersistenz & Stiller Token-Flow:** Ausgewähltes Google-Konto wird dauerhaft im verschlüsselten/gesicherten Speicher gehalten (`googleAccountEmail`). Beim Wiederverbinden oder automatischen Hintergrund-Sync erfolgt keine störende erneute Account-Auswahl mehr.
+- **Transparente Statusanzeige:** `DriveStatusCard` in `SettingsScreen` und `DiagnoseScreen` zeigt Live-Synchronisationsstatus, zuletzt synchronisierte Datei, Fehlerhistorie und bietet einen 1-Klick-Button („Jetzt synchronisieren" mit Ladeanzeige).
+
+**Aus OEM- & Tablet-Härtung (PR #55):**
+- **Akustische Alarmierung mit `USAGE_ALARM`:** Für Android-Tablets ohne hardwareseitigen Vibrationsmotor (z.B. Xiaomi Pad 6) und Geräte im Lautlos-Modus spielt `LocalNotificationAlertChannel` bei Verbindungsabbruch forciert einen Alarmton über den Alarm-Audiokanal ab.
+- **Hardware-Vibrationserkennung & NotificationChannel v3:** Direkte Vibrationsansteuerung mit `hasVibrator()`-Prüfung und NotificationChannel mit Priorität `MAX`.
+- **OemDeviceHelperCard:** Erkennt Xiaomi/HyperOS/MIUI-Besonderheiten, prüft Berechtigungen (`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, Akku-Optimierung, Autostart) und bietet 1-Klick-Intents zur Behebung.
+
 ### Nicht vorhanden
 
-Nichts mehr aus dem ursprünglichen Plan-Umfang (M-1 bis M7 sowie M7b) — offen sind nur noch der
-Gerätetest (siehe unten) und M8 (Härtung, Plan Abschnitt 12).
+Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b). M8 (Härtung), M9 (UX-Feinschliff) und M10 (Neue Funktionen) sind als optionale Folge-Meilensteine spezifiziert.
 
-> ⚠ **Der Gerätetest steht noch aus — für M2, M3, M4, M5, M6, M7 *und* M7b.** Der gesamte BLE-Pfad und die
-> gesamte Robustheitslogik sind bislang nur gegen Fakes und die 99 aufgezeichneten Frames aus M0
-> geprüft, nie gegen das reale Gerät; die Alarmierung ebenso nie gegen echtes ntfy, der Drive-Sync
-> nie gegen den echten Drive-Server (kein Netzzugang zu googleapis.com in der Entwicklungsumgebung).
-> Die echte OAuth-Client-ID für die Google-Anmeldung ist inzwischen eingerichtet (siehe
-> `GoogleClientConfig`) - der eigentliche Sign-in-Flow ist aber weiterhin nur am echten Gerät
-> prüfbar. Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md)
-
-> ⚠ **Ob der Pegel dBA ist, ist unbestätigt.** Die Byte-Position der Frequenzbewertung ist seit
-> der Folgeaufzeichnung bekannt, welcher Bytewert aber A und welcher C bedeutet, ist eine
-> Annahme — abgebildet über `MeterFrame.modeAssumptionConfirmed`, das auf `false` steht. Die App
-> beschriftet den Wert deshalb bewusst nur als „dB". Beweisen lässt sich die Zuordnung über die
-> Frequenzgang-Messung in Teil B2 der Checkliste. **Bis dahin speichert M4 die Frequenzbewertung
-> konsequent als `null`**, sowohl in `MeasurementEntity`/`MinuteAggregateEntity` als auch in
-> `NoiseRecord.meterWeighting`.
+> ℹ **Gerätetests & physische Verifikation am PCE-323:**
+> - Reale BLE-Kopplung und Frequenzgang-Messung (dB(A) vs. dB(C)): **Erfolgreich bestätigt.**
+> - Google Drive Login und Upload-Struktur: **Erfolgreich bestätigt.**
+> - Tablet- & HyperOS-Besonderheiten (Xiaomi Pad 6): **Erfolgreich analysiert und gehärtet.**
 
 ---
 
