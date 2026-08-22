@@ -49,14 +49,14 @@ class ServiceControlComposeTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Inaktiv").assertIsDisplayed()
+        composeRule.onNodeWithText("Messung starten").assertIsDisplayed()
 
         AudioRecordingService.testSetzeLaeuft(true)
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("AKTIV").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Lärmereignis markieren").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("AKTIV").assertIsDisplayed()
+        composeRule.onNodeWithText("Lärmereignis markieren").assertIsDisplayed()
 
         AudioRecordingService.testSetzeLaeuft(false)
     }

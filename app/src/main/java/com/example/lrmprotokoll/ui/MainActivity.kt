@@ -529,12 +529,11 @@ fun NoiseProtocolApp(
             }
         }
 
-        // 3. ServiceControl / Dashboard-Karte mit Live-Chart
+        // 3. Live-Cockpit (1-Sekunden Header, Live-Kurve, Messung starten/stoppen, Quick-Tagger)
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                ServiceControl(
-                    context = context,
-                    hasPermissions = hasAudioPermission && hasNotificationPermission
+                LiveCockpitCard(
+                    onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
                 )
             }
         }
