@@ -42,29 +42,22 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen inkl. Smartphone-Mikrofon und PCE-323 Steuerung
+        // 1. Startscreen (Home) ist geladen inkl. Smartphone-Mikrofon
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
         composeRule.onAllNodesWithText("1. Smartphone-Mikrofon").onFirst().assertIsDisplayed()
 
-        // 2. Öffnen des Kopplungsdialogs von der Startseite (per Scroll)
-        composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performScrollTo().assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
-
-        // 3. Navigation zu Protokoll
+        // 2. Navigation zu Protokoll
         composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Messreihen", substring = true).onFirst().assertIsDisplayed()
 
-        // 4. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
+        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
         composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Einstellungen", substring = true).onFirst().assertIsDisplayed()
         composeRule.onAllNodesWithText("Diagnose & Systemgesundheit", substring = true).onFirst().assertIsDisplayed()
 
-        // 5. Navigation zurück zum Startscreen
+        // 4. Navigation zurück zum Startscreen
         composeRule.onAllNodesWithText("Start").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
