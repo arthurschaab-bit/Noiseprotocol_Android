@@ -58,6 +58,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".alert.local.AlarmDismissReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.lrmprotokoll.ACTION_STOP_ALARM" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true">

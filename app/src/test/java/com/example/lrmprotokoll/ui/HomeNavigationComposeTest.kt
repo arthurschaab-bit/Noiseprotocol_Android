@@ -36,49 +36,41 @@ class HomeNavigationComposeTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun diagnoseIstUeberEinenBeschrifteteNavigationseintragErreichbar() {
+    fun diagnoseIstUeberEinstellungenErreichbar() {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Diagnose").onFirst().assertIsDisplayed()
-        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
+        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
 
-        // "Diagnose-Log (" statt nur "Diagnose-Log": der Leerzustandstext auf demselben Screen
-        // ("...oder das Diagnose-Log ist...") enthaelt "Diagnose-Log" ebenfalls als Substring -
-        // erst die Klammer macht die Kopfzeile eindeutig treffbar.
-        composeRule.onNodeWithText("Diagnose-Log (", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Diagnose & Systemgesundheit").assertIsDisplayed()
     }
 
     @Test
-    fun alleVierNavigationszieleSindBeschriftetAufDemStartbildschirm() {
+    fun alleDreiNavigationszieleSindBeschriftetAufDemStartbildschirm() {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        listOf("Start", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
+        listOf("Start", "Protokoll", "Einstellungen").forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
 
     @Test
-    fun navigationsleisteBleibtAufDemDiagnoseScreenSichtbar() {
+    fun navigationsleisteBleibtAufDemEinstellungenScreenSichtbar() {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
+        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
 
-        // Der eigentliche Regressionsfall: auf JEDER Seite, nicht nur auf "Start", muessen
-        // weiterhin alle vier Ziele erreichbar sein. onFirst() statt onNodeWithText(), weil
-        // "Diagnose" jetzt zusaetzlich als TopAppBar-Titel des Zielscreens selbst vorkommt -
-        // zwei Treffer sind hier korrekt, nicht das zu pruefende Verhalten.
-        listOf("Start", "Protokoll", "Diagnose", "Einstellungen").forEach { label ->
+        listOf("Start", "Protokoll", "Einstellungen").forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }

@@ -91,6 +91,16 @@ class SettingsManager(
         get() = prefs.getInt("sample_rate", 16000)
         set(value) = prefs.edit().putInt("sample_rate", value).apply()
 
+    /**
+     * Auslösequelle für die Audio-Schwellenwertaufzeichnung:
+     * - "AUTO": Messgerät wenn verbunden, sonst Smartphone-Mikrofon
+     * - "PCE_323": Nur das externe Messgerät PCE-323 löst aus
+     * - "MIKROFON": Nur das interne Smartphone-Mikrofon löst aus
+     */
+    var audioTriggerQuelle: String
+        get() = prefs.getString("audio_trigger_quelle", "AUTO") ?: "AUTO"
+        set(value) = prefs.edit().putString("audio_trigger_quelle", value).apply()
+
     // Geraete-Pinning fuer das PCE-323 (Plan Abschnitt 6): nach der Erstkopplung wird
     // ausschliesslich noch zu dieser Adresse verbunden.
     var meterDeviceAddress: String?

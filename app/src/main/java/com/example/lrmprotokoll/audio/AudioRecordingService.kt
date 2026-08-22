@@ -459,7 +459,8 @@ class AudioRecordingService : LifecycleService() {
                     val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
                         letzterMeterFrame = letzterMeterFrame,
                         mikrofonDb = currentDb,
-                        mikrofonSchwelle = activeSchwelle,
+                        activeSchwelle = activeSchwelle,
+                        triggerQuelle = settingsManager.audioTriggerQuelle,
                     )
                     if (auswertung.ausgeloest) {
                         Log.d(
@@ -530,6 +531,8 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
+    private var wavEventCounter = 1
+
     private suspend fun saveRecording(
         audioRecord: AudioRecord,
         amplitude: Double,
@@ -539,7 +542,8 @@ class AudioRecordingService : LifecycleService() {
         isQuiet: Boolean,
     ) {
         val timestamp = System.currentTimeMillis()
-        val fileName = "noise_$timestamp.wav"
+        val dateStr = java.text.SimpleDateFormat("yyyyMMdd_HH_mm_ss", java.util.Locale.US).format(java.util.Date(timestamp))
+        val fileName = "${dateStr}_${wavEventCounter++}.wav"
         val file = File(getExternalFilesDir(null), fileName)
         
         val durationMs = settingsManager.recordDurationSeconds * 1000L
@@ -600,6 +604,10 @@ class AudioRecordingService : LifecycleService() {
             meterConnected = auswertung.meterConnected,
             isQuietHour = isQuiet,
         ))
+
+        if (settingsManager.driveSyncEnabled && settingsManager.driveUploadWav) {
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
+        }
     }
 
     private fun writeWavHeader(out: FileOutputStream, channelConfig: Int, sampleRate: Int, audioFormat: Int, dataLength: Long) {

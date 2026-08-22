@@ -40,4 +40,9 @@ class LocalNotificationAlertChannelTest {
         val lang = alarmVibrationsmuster(mindestdauerMillis = 60_000L)
         assertTrue(kurz.size < lang.size)
     }
+
+    @Test
+    fun actionStopAlarmKonstanteIstDefiniert() {
+        assertEquals("com.example.lrmprotokoll.ACTION_STOP_ALARM", ACTION_STOP_ALARM)
+    }
 }

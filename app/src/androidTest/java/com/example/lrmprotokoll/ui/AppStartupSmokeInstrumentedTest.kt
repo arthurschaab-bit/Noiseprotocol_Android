@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -41,33 +42,22 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen inkl. integrierter PCE-323 Steuerung
+        // 1. Startscreen (Home) ist geladen inkl. Smartphone-Mikrofon
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("PCE-323 Messgerät").assertIsDisplayed()
+        composeRule.onAllNodesWithText("1. Smartphone-Mikrofon").onFirst().assertIsDisplayed()
 
-        // 2. Öffnen des Kopplungsdialogs von der Startseite
-        composeRule.onNodeWithTag(METER_CARD_PAIR_TAG).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
-
-        // 3. Navigation zu Protokoll
+        // 2. Navigation zu Protokoll
         composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Messreihen", substring = true).onFirst().assertIsDisplayed()
 
-        // 4. Navigation zu Diagnose
-        composeRule.onAllNodesWithText("Diagnose").onFirst().performClick()
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Diagnose", substring = true).onFirst().assertIsDisplayed()
-
-        // 5. Navigation zu Einstellungen
+        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
         composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Einstellungen", substring = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Diagnose & Systemgesundheit", substring = true).onFirst().assertExists()
 
-        // 6. Navigation zurück zum Startscreen
+        // 4. Navigation zurück zum Startscreen
         composeRule.onAllNodesWithText("Start").onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()

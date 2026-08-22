@@ -105,15 +105,16 @@ fun LiveCockpitCard(
         }
     }
 
-    LaunchedEffect(letzteSession?.endedAt) {
-        while (letzteSession != null && letzteSession?.endedAt == null) {
+    LaunchedEffect(dienstAktiv, letzteSession?.endedAt) {
+        while (dienstAktiv || (letzteSession != null && letzteSession?.endedAt == null)) {
             jetzt = System.currentTimeMillis()
-            delay(1000)
+            delay(10_000)
         }
     }
 
     val liveLevel = letzterFrame?.level
     val isCalibrated = verbindungszustand == ConnectionState.STREAMING && liveLevel != null
+    val weightingText = letzterFrame?.weighting?.let { "dB(${it.name})" } ?: if (isCalibrated) "dB(A)" else "dB"
 
     NoiseCard(
         modifier = modifier.fillMaxWidth(),
@@ -135,7 +136,7 @@ fun LiveCockpitCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isCalibrated) "dB(A)" else "dB",
+                        text = weightingText,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,8 +160,9 @@ fun LiveCockpitCard(
 
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (isCalibrated) {
+                    val pillLabel = letzterFrame?.weighting?.let { "PCE-323 (${it.name})" } ?: "PCE-323 Kalibriert"
                     StatusPill(
-                        text = "PCE-323 Kalibriert",
+                        text = pillLabel,
                         icon = Icons.Default.Check,
                         type = StatusPillType.CALIBRATED
                     )
@@ -196,7 +198,7 @@ fun LiveCockpitCard(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 2. LIVE-PEGELVERLAUF KURVE (Verlauf steht im Fokus)
+        // 2. LIVE-PEGELVERLAUF KURVE (Verlauf steht im Fokus, vergrößert nach Start)
         val s = letzteSession
         if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
             val isLive = s.endedAt == null
@@ -219,7 +221,7 @@ fun LiveCockpitCard(
                 thresholdDb = threshold,
                 laeqDb = kennwerte?.leqDb,
                 isLive = isLive,
-                height = 140.dp
+                height = if (dienstAktiv) 220.dp else 160.dp
             )
         } else {
             Surface(

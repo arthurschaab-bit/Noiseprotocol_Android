@@ -66,16 +66,29 @@ class PegelAggregatorTest {
     @Test
     fun fensterOhneSampleWirdAlsLueckeAusgegebenNichtAusgelassen() {
         val zeilen = PegelAggregator.aggregiere(
-            samples = listOf(sample(0, 60.0)), // nur im ersten von drei Fenstern
+            samples = listOf(sample(0, 60.0), sample(25, 65.0)), // Im 1. und 3. Fenster -> 2. Fenster ist Lücke
             ereignisse = emptyList(),
             von = t0, bis = t0.plusSeconds(30), fensterDauer = Duration.ofSeconds(10),
         )
 
-        assertEquals("Drei Fenster muessen entstehen, auch wenn zwei davon leer sind", 3, zeilen.size)
+        assertEquals("Drei Fenster muessen entstehen, mit Lücke im 2. Fenster", 3, zeilen.size)
         assertEquals(QUELLE_KEINE_VERBINDUNG, zeilen[1].quelle)
         assertNull(zeilen[1].laeqDb)
         assertEquals(0, zeilen[1].samples)
-        assertEquals(QUELLE_KEINE_VERBINDUNG, zeilen[2].quelle)
+    }
+
+    @Test
+    fun leereZeitenVorUndNachMessungWerdenNichtAlsLeereZeilenErzeugt() {
+        // Messung lief nur von Minute 10 bis 12 am Tag
+        val startM10 = t0.plusSeconds(600)
+        val zeilen = PegelAggregator.aggregiere(
+            samples = listOf(LevelSampleEntity(at = startM10.toEpochMilli(), levelDb = 55.0, source = LevelSource.PCE_323)),
+            ereignisse = emptyList(),
+            von = t0, bis = t0.plusSeconds(3600), fensterDauer = Duration.ofSeconds(60),
+        )
+        // Nur 1 Fenster für die tatsächliche Messung, keine 60 leeren Fenster
+        assertEquals(1, zeilen.size)
+        assertEquals(55.0, zeilen[0].laeqDb!!, 0.001)
     }
 
     @Test

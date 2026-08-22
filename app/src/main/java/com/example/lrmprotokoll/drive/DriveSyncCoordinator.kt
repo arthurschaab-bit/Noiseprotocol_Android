@@ -74,7 +74,36 @@ class DriveSyncCoordinator(
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
         val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
 
+        // WAV-Dateien hochladen, wenn Option aktiviert ist
+        if (settings.driveUploadWav) {
+            val wavRecords = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
+            for (record in wavRecords) {
+                val file = java.io.File(record.filePath)
+                if (file.exists() && file.isFile) {
+                    val dateiName = file.name
+                    val existiert = driveApi.dateiSuchen(dateiName, ordnerId).getOrNull()
+                    if (existiert == null) {
+                        val bytes = runCatching { file.readBytes() }.getOrNull()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            driveApi.dateiAnlegen(
+                                name = dateiName,
+                                ordnerId = ordnerId,
+                                inhalt = bytes,
+                                mimeType = "audio/wav",
+                                gzip = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         val registry = dailyFileDao.byDate(datumSchluessel)
+        if (zeilen.isEmpty()) {
+            settings.driveSyncLastMessage = "Keine neuen Messwerte zu synchronisieren"
+            return SyncErgebnis.KeineAenderung
+        }
+
         if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
             settings.driveSyncLastMessage = "Aktuell (${zeilen.size} Zeilen synchronisiert)"
             return SyncErgebnis.KeineAenderung

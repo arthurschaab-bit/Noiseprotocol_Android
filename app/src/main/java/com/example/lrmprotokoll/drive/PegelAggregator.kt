@@ -51,8 +51,25 @@ object PegelAggregator {
         require(fensterDauer > Duration.ZERO) { "fensterDauer muss positiv sein" }
         require(!bis.isBefore(von)) { "bis darf nicht vor von liegen" }
 
+        if (samples.isEmpty() && ereignisse.isEmpty()) {
+            return emptyList()
+        }
+
         val vonMillis = von.toEpochMilli()
         val fensterMillis = fensterDauer.toMillis()
+
+        val minTs = minOf(
+            samples.minOfOrNull { it.at } ?: Long.MAX_VALUE,
+            ereignisse.minOfOrNull { it.at.toEpochMilli() } ?: Long.MAX_VALUE
+        )
+        val maxTs = maxOf(
+            samples.maxOfOrNull { it.at } ?: Long.MIN_VALUE,
+            ereignisse.maxOfOrNull { it.at.toEpochMilli() } ?: Long.MIN_VALUE
+        )
+
+        // Auf Fenster ausrichten und auf [von, bis] begrenzen
+        val effektiverStartMillis = maxOf(vonMillis, (minTs / fensterMillis) * fensterMillis)
+        val effektivesEndeMillis = minOf(bis.toEpochMilli(), ((maxTs / fensterMillis) + 1) * fensterMillis)
 
         val samplesNachFenster = samples.groupBy { (it.at - vonMillis).floorDiv(fensterMillis) }
         val ereignisseNachFenster = ereignisse.groupBy {
@@ -60,9 +77,11 @@ object PegelAggregator {
         }
 
         val zeilen = mutableListOf<AggregatZeile>()
-        var fensterStart = von
-        var index = 0L
-        while (fensterStart.isBefore(bis)) {
+        var fensterStart = Instant.ofEpochMilli(effektiverStartMillis)
+        val fensterEnde = Instant.ofEpochMilli(effektivesEndeMillis)
+        var index = (effektiverStartMillis - vonMillis) / fensterMillis
+
+        while (fensterStart.isBefore(fensterEnde)) {
             val inDiesemFenster = samplesNachFenster[index].orEmpty()
             val ereignisseHier = ereignisseNachFenster[index].orEmpty()
             zeilen += bildeZeile(inDiesemFenster, ereignisseHier, fensterStart)

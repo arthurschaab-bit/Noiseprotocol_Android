@@ -375,7 +375,9 @@ fun ProtokollDetailScreen(
                             HorizontalDivider()
                             Spacer(modifier = Modifier.height(8.dp))
                             AuditDetailRow("Geräte-ID / MAC", s.deviceAddress ?: "Internes Mikrofon")
-                            AuditDetailRow("Messparameter", "dB(A) · FAST (125 ms)")
+                            val paramBewertung = s.weighting?.let { "dB($it)" } ?: "dB(A)"
+                            val paramZeit = s.timeWeighting?.let { "$it (125 ms)" } ?: "FAST (125 ms)"
+                            AuditDetailRow("Messparameter", "$paramBewertung · $paramZeit")
                             AuditDetailRow("Messpunkte erfasst", "${kennwerte?.sampleCount ?: messwerte.size}")
                             AuditDetailRow("Verbindungsausfälle", "${ausfallbaender.size} Vorfälle")
                             kennwerte?.l10Db?.let { AuditDetailRow("L10 (Spitzenpegel)", "%.1f dB".format(Locale.US, it)) }
