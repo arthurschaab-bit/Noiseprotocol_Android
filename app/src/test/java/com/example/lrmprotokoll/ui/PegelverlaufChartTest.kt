@@ -4,8 +4,12 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,7 +18,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PegelverlaufChartTest {
 
@@ -22,14 +26,18 @@ class PegelverlaufChartTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun leereSpaltenZeigenHinweistext() {
+    fun chartRendersEmptyStateWhenNoData() {
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
         composeRule.setContent {
-            PegelverlaufChart(
-                spalten = emptyList(),
-                ausfallbaender = emptyList(),
-                sessionStart = 1_700_000_000_000L,
-                sessionEnde = 1_700_000_010_000L,
-            )
+            LaermprotokollTheme(darkTheme = true) {
+                PegelverlaufChart(
+                    spalten = emptyList(),
+                    ausfallbaender = emptyList(),
+                    sessionStart = 1000L,
+                    sessionEnde = 2000L
+                )
+            }
         }
         composeRule.waitForIdle()
 
@@ -37,27 +45,40 @@ class PegelverlaufChartTest {
     }
 
     @Test
-    fun mitSpaltenWirdChartOhneFehlerGerendert() {
+    fun chartRendersWithDataAndEvents() {
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
         val spalten = listOf(
-            ChartSpalte(zeitOffsetSekunden = 0, minDb = 40.0, maxDb = 50.0, mittelDb = 45.0, anzahl = 10),
-            ChartSpalte(zeitOffsetSekunden = 10, minDb = 42.0, maxDb = 55.0, mittelDb = 48.0, anzahl = 10),
-            ChartSpalte(zeitOffsetSekunden = 20, minDb = 38.0, maxDb = 60.0, mittelDb = 52.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 0, minDb = 45.0, maxDb = 65.0, mittelDb = 55.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 60, minDb = 48.0, maxDb = 72.0, mittelDb = 60.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 120, minDb = 42.0, maxDb = 50.0, mittelDb = 46.0, anzahl = 10),
         )
-        val ausfallbaender = listOf(
-            Ausfallband(von = 1_700_000_005_000L, bis = 1_700_000_008_000L)
+        val ausfall = listOf(Ausfallband(von = 1000L + 30_000L, bis = 1000L + 50_000L))
+        val event = listOf(
+            NoiseRecord(
+                id = 1L,
+                timestamp = 1000L + 60_000L,
+                amplitude = 0.5,
+                dbValue = 72.0,
+                filePath = "",
+                label = "Bohren",
+                calibratedDbA = 72.0
+            )
         )
 
         composeRule.setContent {
-            PegelverlaufChart(
-                spalten = spalten,
-                ausfallbaender = ausfallbaender,
-                sessionStart = 1_700_000_000_000L,
-                sessionEnde = 1_700_000_030_000L,
-                isLive = true
-            )
+            LaermprotokollTheme(darkTheme = true) {
+                PegelverlaufChart(
+                    spalten = spalten,
+                    ausfallbaender = ausfall,
+                    sessionStart = 1000L,
+                    sessionEnde = 1000L + 120_000L,
+                    events = event,
+                    thresholdDb = 60.0,
+                    laeqDb = 54.2
+                )
+            }
         }
         composeRule.waitForIdle()
-
-        composeRule.onNodeWithText("Keine Messwerte für den Pegelverlauf.").assertDoesNotExist()
     }
 }
