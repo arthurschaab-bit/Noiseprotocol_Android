@@ -33,8 +33,8 @@ class LiveCockpitCardTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Messung starten").assertIsDisplayed()
-        composeRule.onNodeWithText("Bereit").assertIsDisplayed()
+        composeRule.onNodeWithText("Start measurement").assertIsDisplayed()
+        composeRule.onNodeWithText("Ready to measure").assertIsDisplayed()
     }
 
     @Test

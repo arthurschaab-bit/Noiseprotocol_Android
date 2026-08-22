@@ -204,6 +204,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onBack = { navController.popBackStack() },
                         onOpenDrawer = { scope.launch { drawerState.open() } },
                         onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
+                        onStartNewMeasurement = { navigiereZuTab("main") }
                     )
                 }
                 composable(
@@ -534,10 +535,13 @@ fun NoiseProtocolApp(
             }
         }
 
-        // 4. 2. Sektion: PCE-323 Messgeräte Aufnahme & Live-Pegelverlauf
+        // 4. Haupt-Cockpit (Unified Idle- & Live-Steuerung nach neuem Design)
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 LiveCockpitCard(
+                    onNavigateToSettings = onNavigateToSettings,
+                    onNavigateToDiagnose = onNavigateToDiagnose,
+                    onNavigateToMeter = onNavigateToMeter,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
                 )
             }
