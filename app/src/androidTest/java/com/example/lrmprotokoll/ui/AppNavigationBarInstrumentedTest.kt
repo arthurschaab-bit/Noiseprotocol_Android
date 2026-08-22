@@ -40,14 +40,13 @@ class AppNavigationBarInstrumentedTest {
     }
 
     @Test
-    fun alleVierNavigationsleistenZieleSindSichtbarUndAntippbar() {
+    fun alleDreiNavigationsleistenZieleSindSichtbarUndAntippbar() {
         var currentRoute by androidx.compose.runtime.mutableStateOf("main")
         composeRule.setContent {
             AppNavigationBar(
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToDiagnose = { currentRoute = "diagnose" },
                 onNavigateToSettings = { currentRoute = "settings" },
             )
         }
@@ -61,17 +60,12 @@ class AppNavigationBarInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Protokoll").assertIsSelected()
 
-        // 3. Zu "Diagnose" navigieren
-        composeRule.onNodeWithText("Diagnose").assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Diagnose").assertIsSelected()
-
-        // 4. Zu "Einstellungen" navigieren
+        // 3. Zu "Einstellungen" navigieren
         composeRule.onNodeWithText("Einstellungen").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Einstellungen").assertIsSelected()
 
-        // 5. Zurück zu "Start"
+        // 4. Zurück zu "Start"
         composeRule.onNodeWithText("Start").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Start").assertIsSelected()
@@ -85,7 +79,6 @@ class AppNavigationBarInstrumentedTest {
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToDiagnose = { currentRoute = "diagnose" },
                 onNavigateToSettings = { currentRoute = "settings" },
             )
         }
@@ -103,8 +96,8 @@ class AppNavigationBarInstrumentedTest {
 
     @Test
     fun navigationsleisteBleibtAufJederSeiteSichtbar() {
-        val routes = listOf("main", "protokoll", "diagnose", "settings")
-        val labels = listOf("Start", "Protokoll", "Diagnose", "Einstellungen")
+        val routes = listOf("main", "protokoll", "settings")
+        val labels = listOf("Start", "Protokoll", "Einstellungen")
 
         var currentRoute by mutableStateOf("main")
         composeRule.setContent {
@@ -112,7 +105,6 @@ class AppNavigationBarInstrumentedTest {
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToDiagnose = { currentRoute = "diagnose" },
                 onNavigateToSettings = { currentRoute = "settings" },
             )
         }
@@ -122,7 +114,7 @@ class AppNavigationBarInstrumentedTest {
             currentRoute = activeRoute
             composeRule.waitForIdle()
 
-            // Auf jedem der 4 Screens müssen alle 4 Nav-Labels sichtbar bleiben
+            // Auf jedem der Screens müssen alle Nav-Labels sichtbar bleiben
             labels.forEach { label ->
                 composeRule.onNodeWithText(label).assertIsDisplayed()
             }
