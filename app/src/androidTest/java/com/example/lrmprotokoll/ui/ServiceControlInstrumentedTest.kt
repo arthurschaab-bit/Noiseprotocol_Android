@@ -16,8 +16,7 @@ import org.junit.runner.RunWith
 /**
  * Instrumentierte UI-Tests für das Live-Cockpit ([LiveCockpitCard]) gemäß aktuellem UX-Design.
  *
- * Prüft die Anzeige des Inaktiv/Aktiv-Status sowie die zentralen Buttons "Messung starten"
- * und "Live-Kurve".
+ * Prüft die Anzeige des Inaktiv/Bereit-Status sowie des zentralen Buttons "Messung starten".
  */
 @RunWith(AndroidJUnit4::class)
 class ServiceControlInstrumentedTest {
@@ -39,8 +38,8 @@ class ServiceControlInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // Starten-Button ist im Ruhezustand vorhanden und aktiv
+        // Starten-Button und Bereit-Status im Ruhezustand vorhanden
         composeRule.onNodeWithText("Messung starten").assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithText("Live-Kurve").assertIsDisplayed()
+        composeRule.onNodeWithText("Bereit").assertIsDisplayed()
     }
 }
