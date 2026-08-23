@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -109,17 +110,13 @@ fun MeterScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var hasBluetoothPermissions by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        )
+        mutableStateOf(BluetoothPermissions.hasPermissions(context))
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasBluetoothPermissions = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                hasBluetoothPermissions = BluetoothPermissions.hasPermissions(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -181,9 +178,7 @@ fun MeterScreen(
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        val scanOk = permissions[Manifest.permission.BLUETOOTH_SCAN] == true
-        val connectOk = permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
-        hasBluetoothPermissions = scanOk && connectOk
+        hasBluetoothPermissions = BluetoothPermissions.hasPermissions(context)
         if (hasBluetoothPermissions) {
             starteScan()
         }
@@ -193,12 +188,7 @@ fun MeterScreen(
         if (hasBluetoothPermissions) {
             starteScan()
         } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-            )
+            permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
         }
     }
 
@@ -365,12 +355,7 @@ fun MeterScreen(
                             if (hasBluetoothPermissions) {
                                 ensureConnected()
                             } else {
-                                permissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.BLUETOOTH_SCAN,
-                                        Manifest.permission.BLUETOOTH_CONNECT
-                                    )
-                                )
+                                permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                             }
                         }
                     ) {
@@ -404,12 +389,7 @@ fun MeterScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.BLUETOOTH_SCAN,
-                                            Manifest.permission.BLUETOOTH_CONNECT
-                                        )
-                                    )
+                                    permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error

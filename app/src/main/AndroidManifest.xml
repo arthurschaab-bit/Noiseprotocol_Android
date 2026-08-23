@@ -14,9 +14,12 @@
          Ausnahme drosseln Hersteller-ROMs den Foreground Service aggressiv. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- Ab minSdk 31 die einzigen noetigen Bluetooth-Berechtigungen (Plan Abschnitt 10):
-         kein ACCESS_FINE_LOCATION, da die Scan-Ergebnisse nicht zur Standortbestimmung
-         genutzt werden (neverForLocation). -->
+    <!-- Legacy-Bluetooth-Berechtigungen für Android 10/11 (API 29/30, z.B. Huawei P30) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <!-- Ab Android 12 (API 31+) moderne Bluetooth-Berechtigungen -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

@@ -92,7 +92,7 @@ fun DiagnoseScreen(
     val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
         ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
     } else true
-    val hasBluetoothPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val hasBluetoothPermission = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasScanPermission(context)
 
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
     val isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false

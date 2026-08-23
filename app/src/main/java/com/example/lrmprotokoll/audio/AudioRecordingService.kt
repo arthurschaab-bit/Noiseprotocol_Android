@@ -157,11 +157,9 @@ class AudioRecordingService : LifecycleService() {
      */
     private fun ensureMeterMonitoringStarted() {
         val address = settingsManager.meterDeviceAddress ?: return
-        val hasBluetoothConnect = ActivityCompat.checkSelfPermission(
-            this, Manifest.permission.BLUETOOTH_CONNECT
-        ) == PackageManager.PERMISSION_GRANTED
+        val hasBluetoothConnect = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasConnectPermission(this)
         if (!hasBluetoothConnect) {
-            Log.w("AudioRecordingService", "BLUETOOTH_CONNECT Berechtigung fehlt - Meter-Monitoring wird übersprungen")
+            Log.w("AudioRecordingService", "Bluetooth Berechtigung fehlt - Meter-Monitoring wird übersprungen")
             return
         }
         val device = BoundDevice(address, settingsManager.meterDeviceName ?: address)
@@ -279,9 +277,7 @@ class AudioRecordingService : LifecycleService() {
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
-        val hasBluetoothConnect = ActivityCompat.checkSelfPermission(
-            this, Manifest.permission.BLUETOOTH_CONNECT
-        ) == PackageManager.PERMISSION_GRANTED
+        val hasBluetoothConnect = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasConnectPermission(this)
 
         val hasRecordAudio = ActivityCompat.checkSelfPermission(
             this, Manifest.permission.RECORD_AUDIO
