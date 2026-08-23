@@ -42,15 +42,19 @@ class MeterScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val meterTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_meter)
+        val scanBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.meter_scan_button)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
         // 1. Titel "Messgerät" in TopAppBar sichtbar
-        composeRule.onNodeWithText("Messgerät").assertIsDisplayed()
+        composeRule.onNodeWithText(meterTitle).assertIsDisplayed()
 
         // 2. Scan-Button vorhanden und klickbar
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("Scannen (10s)").assertIsDisplayed()
+        composeRule.onNodeWithText(scanBtn).assertIsDisplayed()
 
         // 3. Zurück-Button klickbar
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 

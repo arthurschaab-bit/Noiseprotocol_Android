@@ -52,23 +52,27 @@ class AppNavigationBarInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
+        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+
         // 1. Start ist initial aktiv
-        composeRule.onNodeWithText("Start").assertIsDisplayed().assertIsSelected()
+        composeRule.onNodeWithText(startLabel).assertIsDisplayed().assertIsSelected()
 
         // 2. Zu "Protokoll" navigieren
-        composeRule.onNodeWithText("Protokoll").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(protocolLabel).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Protokoll").assertIsSelected()
+        composeRule.onNodeWithText(protocolLabel).assertIsSelected()
 
         // 3. Zu "Einstellungen" navigieren
-        composeRule.onNodeWithText("Einstellungen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(settingsLabel).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Einstellungen").assertIsSelected()
+        composeRule.onNodeWithText(settingsLabel).assertIsSelected()
 
         // 4. Zurück zu "Start"
-        composeRule.onNodeWithText("Start").performClick()
+        composeRule.onNodeWithText(startLabel).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Start").assertIsSelected()
+        composeRule.onNodeWithText(startLabel).assertIsSelected()
     }
 
     @Test
@@ -84,20 +88,26 @@ class AppNavigationBarInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
+        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+
         // Mehrfach hintereinander schnell "Protokoll" und "Start" antippen
         repeat(3) {
-            composeRule.onNodeWithText("Protokoll").performClick()
-            composeRule.onNodeWithText("Start").performClick()
+            composeRule.onNodeWithText(protocolLabel).performClick()
+            composeRule.onNodeWithText(startLabel).performClick()
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Start").assertIsDisplayed().assertIsSelected()
+        composeRule.onNodeWithText(startLabel).assertIsDisplayed().assertIsSelected()
     }
 
     @Test
     fun navigationsleisteBleibtAufJederSeiteSichtbar() {
         val routes = listOf("main", "protokoll", "settings")
-        val labels = listOf("Start", "Protokoll", "Einstellungen")
+        val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
+        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        val labels = listOf(startLabel, protocolLabel, settingsLabel)
 
         var currentRoute by mutableStateOf("main")
         composeRule.setContent {

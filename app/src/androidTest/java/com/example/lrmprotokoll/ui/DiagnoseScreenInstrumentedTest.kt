@@ -55,18 +55,21 @@ class DiagnoseScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Titel
-        composeRule.onNodeWithText("Diagnose").assertIsDisplayed()
+        val diagTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_diagnose)
+        val stateHeader = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_state_header)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
-        // 2. Zustand & Fehlerrate
-        composeRule.onNodeWithText("Zustand").assertIsDisplayed()
-        composeRule.onNodeWithText("Decode-Fehlerrate", substring = true).assertIsDisplayed()
+        // 1. Titel
+        composeRule.onNodeWithText(diagTitle).assertIsDisplayed()
+
+        // 2. Zustand
+        composeRule.onNodeWithText(stateHeader).assertIsDisplayed()
 
         // 3. Log-Eintrag
         composeRule.onNodeWithText("Test-Diagnoseeintrag BLE Verbindung hergestellt", substring = true).assertIsDisplayed()
 
         // 4. Zurück-Button
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 }

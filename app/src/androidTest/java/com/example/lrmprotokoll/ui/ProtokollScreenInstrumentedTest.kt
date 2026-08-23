@@ -45,17 +45,21 @@ class ProtokollScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val protocolTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val emptyStateText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_empty_desc)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
         // 1. Titel "Protokoll" in TopAppBar sichtbar
-        composeRule.onNodeWithText("Protokoll").assertIsDisplayed()
+        composeRule.onNodeWithText(protocolTitle).assertIsDisplayed()
 
         // 2. Leerzustandstext sichtbar
         composeRule.onNodeWithText(
-            "Messreihen entstehen automatisch",
+            emptyStateText,
             substring = true
         ).assertIsDisplayed()
 
         // 3. Zurück-Button klickbar
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 }
