@@ -89,9 +89,9 @@ class SettingsScreenInstrumentedTest {
         composeRule.onNodeWithText(sample44k, substring = true).performScrollTo().assertIsDisplayed().performClick()
 
         // 2. KI Sektion aufklappen & Schalter prüfen
-        composeRule.onNodeWithText(secAi, substring = true).performScrollTo().performClick()
+        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(secAi, substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().assertIsDisplayed()
 
         // 3. System & Diagnose Sektion aufklappen
         composeRule.onNodeWithText(secDiag, substring = true).performScrollTo().performClick()
