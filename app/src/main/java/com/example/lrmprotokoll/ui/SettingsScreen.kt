@@ -65,6 +65,7 @@ fun SettingsScreen(
 
     // Aufnahme-Parameter
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
+    var audioTriggerQuelle by remember { mutableStateOf(settings.audioTriggerQuelle) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
     var duration by remember { mutableFloatStateOf(settings.recordDurationSeconds.toFloat()) }
     var sampleRate by remember { mutableIntStateOf(settings.audioSampleRate) }
@@ -247,7 +248,7 @@ fun SettingsScreen(
             // Sektion 1: Aufnahme & Mikrofon
             SettingsSectionCard(
                 title = "Aufnahme & Mikrofon",
-                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle · ${preRoll.toInt()}s Vorlauf · ${duration.toInt()}s Dauer",
+                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}) · ${preRoll.toInt()}s Vorlauf · ${duration.toInt()}s Dauer",
                 expanded = expAufnahme,
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
@@ -260,24 +261,45 @@ fun SettingsScreen(
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Trigger-Quelle für Audioaufnahmen:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Trigger-Quelle für Audioaufnahmen:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
-                        selected = settings.audioTriggerQuelle == "AUTO",
-                        onClick = { settings.audioTriggerQuelle = "AUTO" },
-                        label = { Text("Auto") }
+                        selected = audioTriggerQuelle == "AUTO",
+                        onClick = {
+                            audioTriggerQuelle = "AUTO"
+                            settings.audioTriggerQuelle = "AUTO"
+                        },
+                        label = { Text("Automatisch (Standard)") }
                     )
                     FilterChip(
-                        selected = settings.audioTriggerQuelle == "PCE_323",
-                        onClick = { settings.audioTriggerQuelle = "PCE_323" },
+                        selected = audioTriggerQuelle == "PCE_323",
+                        onClick = {
+                            audioTriggerQuelle = "PCE_323"
+                            settings.audioTriggerQuelle = "PCE_323"
+                        },
                         label = { Text("Nur PCE-323") }
                     )
                     FilterChip(
-                        selected = settings.audioTriggerQuelle == "MIKROFON",
-                        onClick = { settings.audioTriggerQuelle = "MIKROFON" },
+                        selected = audioTriggerQuelle == "MIKROFON",
+                        onClick = {
+                            audioTriggerQuelle = "MIKROFON"
+                            settings.audioTriggerQuelle = "MIKROFON"
+                        },
                         label = { Text("Nur Mikrofon") }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = when (audioTriggerQuelle) {
+                        "PCE_323" -> "Audioaufnahme wird nur ausgelöst, wenn das externe Messgerät PCE-323 verbunden ist und den Schwellenwert überschreitet."
+                        "MIKROFON" -> "Audioaufnahme wird immer anhand des internen Smartphone-Mikrofons ausgelöst (Messgerät-Werte werden ignoriert)."
+                        else -> "Standard: Sobald ein Messgerät (z. B. PCE-323) verbunden ist, wird dessen kalibrierter Messwert zur Schwellenprüfung verwendet. Wenn kein Messgerät verbunden ist, wird automatisch das Smartphone-Mikrofon genutzt."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Pre-Roll (Sekunden): ${preRoll.toInt()}s")

@@ -313,7 +313,7 @@ fun LiveCockpitCard(
                 SettingQuickRow(
                     icon = AppIcons.Speedometer,
                     title = "Threshold Level",
-                    subtitle = "${settings.dbThreshold.toInt()}.0 dB(A)",
+                    subtitle = "${settings.dbThreshold.toInt()}.0 dB(A) · ${when (settings.audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}",
                     onClick = { onNavigateToSettings?.invoke() },
                     trailing = {
                         Icon(
