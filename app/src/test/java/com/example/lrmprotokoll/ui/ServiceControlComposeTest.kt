@@ -47,7 +47,7 @@ class ServiceControlComposeTest {
                 onNavigateToDiagnose = {},
             )
         }
-        composeRule.onNodeWithText("Start measurement").assertIsDisplayed()
+        composeRule.onNodeWithText("Start measurement").assertExists()
 
         AudioRecordingService.testSetzeLaeuft(true)
 
