@@ -61,6 +61,7 @@ class DriveSyncCoordinatorTest {
 
     private class FakeNoiseDao : NoiseDao {
         override fun getAll(): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        override suspend fun getAlleAktiven(): List<NoiseRecord> = emptyList()
         override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override suspend fun zwischenZeitpunkt(von: Long, bis: Long): List<NoiseRecord> = emptyList()
         override fun zwischenZeitpunktFlow(von: Long, bis: Long): Flow<List<NoiseRecord>> = flowOf(emptyList())
@@ -352,7 +353,7 @@ class DriveSyncCoordinatorTest {
         assertEquals("Beide Samples muessen in einem einzigen 60s-Fenster verdichtet sein", 1, datenzeilen.size)
         assertTrue(
             "Die Fensterzeile muss beide Samples widerspiegeln (Anzahl=2)",
-            datenzeilen.single().split(";")[4] == "2",
+            datenzeilen.single().split(";")[8] == "2",
         )
     }
 

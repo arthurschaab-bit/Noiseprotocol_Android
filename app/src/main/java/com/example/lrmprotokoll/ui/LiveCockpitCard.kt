@@ -309,11 +309,14 @@ fun LiveCockpitCard(
                     }
                 )
 
+                val istRuhezeit = istAktuellRuhezeit(settings)
+                val aktiveSchwelle = if (istRuhezeit) settings.quietHoursThreshold else settings.dbThreshold
+
                 // Card 2: Threshold Level
                 SettingQuickRow(
                     icon = AppIcons.Speedometer,
                     title = "Threshold Level",
-                    subtitle = "${settings.dbThreshold.toInt()}.0 dB(A) · ${when (settings.audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}",
+                    subtitle = "${String.format(Locale.US, "%.1f", aktiveSchwelle)} dB(A) (${if (istRuhezeit) "Ruhezeit" else "Tag"}) · ${when (settings.audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}",
                     onClick = { onNavigateToSettings?.invoke() },
                     trailing = {
                         Icon(
@@ -530,10 +533,12 @@ fun LiveCockpitCard(
                 }
             }
 
-            // Stat Cards (LAeq & LMax)
+            // Stat Cards (LAeq, LMax & Schwelle)
+            val istRuhe = istAktuellRuhezeit(settings)
+            val schwelle = if (istRuhe) settings.quietHoursThreshold else settings.dbThreshold
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 StatCard(
                     title = "LAeq (Avg)",
@@ -544,6 +549,12 @@ fun LiveCockpitCard(
                 StatCard(
                     title = "LMax (Peak)",
                     value = kennwerte?.maxDb?.let { String.format(Locale.US, "%.1f", it) } ?: "--.-",
+                    unit = "dB",
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    title = if (istRuhe) "Schwelle (Nacht)" else "Schwelle (Tag)",
+                    value = String.format(Locale.US, "%.0f", schwelle),
                     unit = "dB",
                     modifier = Modifier.weight(1f)
                 )
@@ -774,4 +785,14 @@ private fun StatCard(
             }
         }
     }
+}
+
+fun istAktuellRuhezeit(settings: com.example.lrmprotokoll.data.SettingsManager): Boolean {
+    if (!settings.quietHoursEnabled) return false
+    val cal = java.util.Calendar.getInstance()
+    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val start = settings.quietHoursStartHour
+    val end = settings.quietHoursEndHour
+    return if (start <= end) (hour >= start && hour < end)
+    else (hour >= start || hour < end)
 }

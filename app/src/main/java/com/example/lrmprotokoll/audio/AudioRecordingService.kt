@@ -606,7 +606,7 @@ class AudioRecordingService : LifecycleService() {
         ))
 
         if (settingsManager.driveSyncEnabled && settingsManager.driveUploadWav) {
-            com.example.lrmprotokoll.drive.DriveSyncPlanung.plane(applicationContext)
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(applicationContext)
         }
     }
 

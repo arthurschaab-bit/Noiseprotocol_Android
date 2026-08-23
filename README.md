@@ -22,18 +22,18 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M2** BLE-Transport (Scan, Verbindung, Notify, On-Demand Permissions) | ✅ abgeschlossen, real am Gerät bestätigt |
 | **M3** Robustheit (Reconnect, Ausfallerkennung, FGS-Typen dynamisch) | ✅ abgeschlossen, real am Gerät bestätigt |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung, Tablet/OEM-Härtung) | ✅ abgeschlossen & gehärtet (PR #55) |
-| **M7b** Google-Drive-Sync (Upload, Kontopersistenz, DriveStatusCard) | ✅ abgeschlossen & gehärtet (PR #54) |
+| **M7b** Google-Drive-Sync (Upload, Kontopersistenz, DriveStatusCard, Sofortiger WAV-Sync & Rohwert-CSV) | ✅ abgeschlossen & erweitert |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen |
-| **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log) | ✅ abgeschlossen |
-| **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export) | ✅ abgeschlossen |
+| **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log standardmäßig aktiv) | ✅ abgeschlossen & gehärtet |
+| **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export, Wohnraum-Presets, Pro/Lite-Modus) | ✅ abgeschlossen & erweitert |
 | **M7c** UI-Harmonisierung & Entkopplung (Startseite, 4 Tabs, stabile Sortierung) | ✅ abgeschlossen (PR #53) |
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
-| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 367 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
+| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 394 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
-| **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List) | ✅ umgesetzt |
+| **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 
-**Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + Modernes UI/UX-Redesign vollständig umgesetzt, getestet und verifiziert.**
+**Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign vollständig umgesetzt, getestet und verifiziert.**
 
 ---
 

@@ -275,12 +275,18 @@ class SettingsManager(
     // ---------------------------------------------------------------- M6: Sicherheit
 
     /**
-     * Diagnose-/Rohdaten-Log (Plan Abschnitt 6): "standardmaessig aus". Kein Geheimnis - anders
-     * als [ntfyTopic] & Co. bleibt dieser Schalter in den unverschluesselten Einstellungen.
+     * Diagnose-/Rohdaten-Log (Plan Abschnitt 6): standardmäßig aktiv (User-Option).
      */
     var diagnoseLoggingAktiv: Boolean
-        get() = prefs.getBoolean("diagnose_logging_enabled", false)
+        get() = prefs.getBoolean("diagnose_logging_enabled", true)
         set(value) = prefs.edit().putBoolean("diagnose_logging_enabled", value).apply()
+
+    /**
+     * Steuert den Pro-Modus in den Einstellungen (Lite- vs. Pro-Ansicht).
+     */
+    var isProMode: Boolean
+        get() = prefs.getBoolean("settings_is_pro_mode", false)
+        set(value) = prefs.edit().putBoolean("settings_is_pro_mode", value).apply()
 
     // ---------------------------------------------------------------- Diagnose & Observability (Konzept)
 

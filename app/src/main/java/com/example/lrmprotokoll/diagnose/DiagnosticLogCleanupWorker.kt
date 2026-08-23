@@ -36,15 +36,23 @@ object DiagnosticLogCleanupPlanung {
      * unnoetig laufender Job waere Verschwendung.
      */
     fun plane(context: Context) {
-        val anfrage = PeriodicWorkRequestBuilder<DiagnosticLogCleanupWorker>(1, TimeUnit.DAYS).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            anfrage,
-        )
+        try {
+            val anfrage = PeriodicWorkRequestBuilder<DiagnosticLogCleanupWorker>(1, TimeUnit.DAYS).build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                anfrage,
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("DiagnosticLogCleanupPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 
     fun stoppe(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        } catch (e: Throwable) {
+            android.util.Log.w("DiagnosticLogCleanupPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 }

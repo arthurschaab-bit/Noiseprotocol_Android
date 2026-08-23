@@ -48,8 +48,8 @@ class SettingsScreenInstrumentedTest {
         // 1. Titel in TopAppBar
         composeRule.onNodeWithText("Einstellungen").assertIsDisplayed()
 
-        // 2. Aufnahme & Mikrofon Sektion aufklappen
-        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
+        // 2. Aufnahme & Schwellenwert Sektion aufklappen
+        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Aufnahme-Schwellenwert", substring = true).assertIsDisplayed()
 
@@ -68,8 +68,12 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Aufnahme & Mikrofon Sektion aufklappen & Abtastrate-Chips prüfen
-        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
+        // In den Pro-Modus schalten, um erweiterte Optionen (Abtastrate etc.) freizuschalten
+        composeRule.onNodeWithText("Pro-Modus", substring = true).performClick()
+        composeRule.waitForIdle()
+
+        // 1. Aufnahme & Schwellenwert Sektion aufklappen & Abtastrate-Chips prüfen
+        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("16000 Hz (KI-Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithText("44100 Hz (Qualität)", substring = true).performScrollTo().assertIsDisplayed().performClick()
