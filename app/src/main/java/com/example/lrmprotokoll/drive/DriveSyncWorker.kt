@@ -114,13 +114,7 @@ object DriveSyncPlanung {
     fun starteSofort(context: Context) {
         try {
             val einschraenkungen = Constraints.Builder()
-                .setRequiredNetworkType(
-                    if ((context.applicationContext as LaermprotokollApp).container.settingsManager.driveWlanOnly) {
-                        NetworkType.UNMETERED
-                    } else {
-                        NetworkType.CONNECTED
-                    }
-                )
+                .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
             val anfrage = OneTimeWorkRequestBuilder<DriveSyncWorker>()

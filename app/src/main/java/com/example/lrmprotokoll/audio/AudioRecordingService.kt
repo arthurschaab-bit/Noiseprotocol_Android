@@ -131,6 +131,7 @@ class AudioRecordingService : LifecycleService() {
                 if (settingsManager.driveSyncEnabled) {
                     levelSampleCollector.pegel(LevelSource.PCE_323, frame.level, frame.receivedAt)
                 }
+                pruefeSchwellenwertUndTrigger(meterFrame = frame, mikrofonDb = null)
             }
         }
         updateRollingBuffer()
@@ -419,7 +420,6 @@ class AudioRecordingService : LifecycleService() {
             audioRecord.startRecording()
             val buffer = ShortArray(bufferSize / 2)
             val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
-
             while (isRunning) {
                 val readSize = audioRecord.read(buffer, 0, buffer.size)
                 if (readSize > 0) {
@@ -432,10 +432,19 @@ class AudioRecordingService : LifecycleService() {
                         tempByteBuffer.putShort(sample)
                     }
 
+                    val pcmBytes = tempByteBuffer.array()
+                    val pcmLen = readSize * 2
+
                     updateRollingBuffer()
-                    writeToRollingBuffer(tempByteBuffer.array(), readSize * 2)
+                    writeToRollingBuffer(pcmBytes, pcmLen)
+
+                    activeWavRecorder?.let { rec ->
+                        rec.writeChunk(pcmBytes, pcmLen)
+                        if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
+                    }
 
                     val currentDb = calculateDb(buffer, readSize)
+                    letzterMikrofonDb = currentDb
 
                     // M7b-Nachtrag: dieser Aufruf fehlte bislang komplett - der Mikrofon-Pfad hat
                     // nie in den Drive-Sync-Puffer geschrieben, obwohl der PCE-323-Pfad das schon
@@ -445,47 +454,70 @@ class AudioRecordingService : LifecycleService() {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
 
-                    val cal = java.util.Calendar.getInstance()
-                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                    val start = settingsManager.quietHoursStartHour
-                    val end = settingsManager.quietHoursEndHour
-                    val isQuiet = if (settingsManager.quietHoursEnabled) {
-                        if (start <= end) (hour >= start && hour < end)
-                        else (hour >= start || hour < end)
-                    } else false
-
-                    val activeSchwelle = if (isQuiet) settingsManager.quietHoursThreshold else settingsManager.dbThreshold
-
-                    val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
-                        letzterMeterFrame = letzterMeterFrame,
+                    pruefeSchwellenwertUndTrigger(
+                        meterFrame = letzterMeterFrame,
                         mikrofonDb = currentDb,
-                        activeSchwelle = activeSchwelle,
-                        triggerQuelle = settingsManager.audioTriggerQuelle,
+                        maxAmplitude = maxAmplitude.toDouble()
                     )
-                    if (auswertung.ausgeloest) {
-                        Log.d(
-                            "AudioRecordingService",
-                            "Schwelle überschritten: ${String.format("%.1f", auswertung.pegel)} dB " +
-                                "(Quelle: ${if (auswertung.meterConnected) "Messgerät" else "Mikrofon"}, Ruhezeit=$isQuiet)",
-                        )
-                        saveRecording(audioRecord, maxAmplitude.toDouble(), currentDb, sampleRate, auswertung, isQuiet)
-                    }
                 }
-                delay(50)
             }
             audioRecord.stop()
             audioRecord.release()
         }
     }
 
+    private fun pruefeSchwellenwertUndTrigger(
+        meterFrame: com.example.lrmprotokoll.meter.MeterFrame?,
+        mikrofonDb: Double?,
+        maxAmplitude: Double = 0.0,
+    ) {
+        if (!isRunning) return
+        if (isRecordingActive.get()) return
+        // Mindestens 1s Cooldown nach Beendigung der letzten WAV-Aufnahme
+        if (System.currentTimeMillis() - letzteAufnahmeEndeTimestamp < 1000L) return
+
+        val cal = java.util.Calendar.getInstance()
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val start = settingsManager.quietHoursStartHour
+        val end = settingsManager.quietHoursEndHour
+        val isQuiet = if (settingsManager.quietHoursEnabled) {
+            if (start <= end) (hour >= start && hour < end)
+            else (hour >= start || hour < end)
+        } else false
+
+        val activeSchwelle = if (isQuiet) settingsManager.quietHoursThreshold else settingsManager.dbThreshold
+
+        val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
+            letzterMeterFrame = meterFrame ?: letzterMeterFrame,
+            mikrofonDb = mikrofonDb ?: letzterMikrofonDb,
+            activeSchwelle = activeSchwelle,
+            triggerQuelle = settingsManager.audioTriggerQuelle,
+        )
+
+        if (auswertung.ausgeloest) {
+            if (isRecordingActive.compareAndSet(false, true)) {
+                serviceScope.launch(Dispatchers.IO) {
+                    starteWavAufnahme(maxAmplitude, mikrofonDb ?: auswertung.pegel, auswertung, isQuiet)
+                }
+            }
+        }
+    }
+
     private fun calculateDb(buffer: ShortArray, readSize: Int): Double {
         if (readSize <= 0) return 0.0
         var sum = 0.0
+        var maxAmp = 0
         for (i in 0 until readSize) {
-            sum += buffer[i].toDouble() * buffer[i].toDouble()
+            val sample = buffer[i].toDouble()
+            sum += sample * sample
+            val abs = Math.abs(buffer[i].toInt())
+            if (abs > maxAmp) maxAmp = abs
         }
         val rms = Math.sqrt(sum / readSize)
-        val db = 20 * Math.log10(rms / 32767.0) + 100.0
+        val rmsDb = if (rms > 0) 20 * Math.log10(rms / 32767.0) + 100.0 else 0.0
+        // Peak-dB erfasst auch sehr kurze Geräuschimpulse (Knall, Hämmern, Rufen) sofort
+        val peakDb = if (maxAmp > 0) 20 * Math.log10(maxAmp / 32767.0) + 100.0 else 0.0
+        val db = Math.max(rmsDb, peakDb - 6.0)
         return if (db < 0) 0.0 else db
     }
 
@@ -532,12 +564,33 @@ class AudioRecordingService : LifecycleService() {
     }
 
     private var wavEventCounter = 1
+    private val isRecordingActive = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var letzteAufnahmeEndeTimestamp: Long = 0L
+    @Volatile private var letzterMikrofonDb: Double = 0.0
 
-    private suspend fun saveRecording(
-        audioRecord: AudioRecord,
-        amplitude: Double,
+    private class ActiveWavRecorder(
+        val file: File,
+        val outputStream: FileOutputStream,
+        val durationMs: Long,
+        val sampleRate: Int,
+        val auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
+        val isQuiet: Boolean,
+        val timestamp: Long,
+        var maxAmplitude: Double = 0.0,
+        var totalDataLen: Long = 0L,
+        val startTime: Long = System.currentTimeMillis(),
+    ) {
+        fun writeChunk(data: ByteArray, size: Int) {
+            outputStream.write(data, 0, size)
+            totalDataLen += size
+        }
+    }
+
+    @Volatile private var activeWavRecorder: ActiveWavRecorder? = null
+
+    private suspend fun starteWavAufnahme(
+        initialAmplitude: Double,
         dbValue: Double,
-        sampleRate: Int,
         auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
         isQuiet: Boolean,
     ) {
@@ -545,69 +598,91 @@ class AudioRecordingService : LifecycleService() {
         val dateStr = java.text.SimpleDateFormat("yyyyMMdd_HH_mm_ss", java.util.Locale.US).format(java.util.Date(timestamp))
         val fileName = "${dateStr}_${wavEventCounter++}.wav"
         val file = File(getExternalFilesDir(null), fileName)
-        
+        val sampleRate = settingsManager.audioSampleRate
         val durationMs = settingsManager.recordDurationSeconds * 1000L
-        try {
-            val outputStream = FileOutputStream(file)
-            
-            writeWavHeader(outputStream, channelConfig, sampleRate, audioFormat, 0)
 
-            val preRollData = getPreRollData()
-            outputStream.write(preRollData)
-            var totalDataLen = preRollData.size.toLong()
+        Log.d(
+            "AudioRecordingService",
+            "WAV-Aufnahme gestartet ($fileName): ${String.format(java.util.Locale.US, "%.1f", auswertung.pegel)} dB " +
+                "(Quelle: ${if (auswertung.meterConnected) "Messgerät" else "Mikrofon"}, Ruhezeit=$isQuiet)",
+        )
 
-            val buffer = ShortArray(bufferSize / 2)
-            val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
-            val startTime = System.currentTimeMillis()
-            
-            while (System.currentTimeMillis() - startTime < durationMs && isRunning) {
-                val read = audioRecord.read(buffer, 0, buffer.size)
-                if (read > 0) {
-                    tempByteBuffer.clear()
-                    for (i in 0 until read) {
-                        tempByteBuffer.putShort(buffer[i])
-                    }
-                    outputStream.write(tempByteBuffer.array(), 0, read * 2)
-                    totalDataLen += (read * 2)
-                    writeToRollingBuffer(tempByteBuffer.array(), read * 2)
-                }
-            }
-            
-            outputStream.close()
-            updateWavHeader(file, totalDataLen)
+        var totalDataLen = 0L
+        val fos = try {
+            val stream = FileOutputStream(file)
+            writeWavHeader(stream, channelConfig, sampleRate, audioFormat, 0)
+            val preRoll = getPreRollData()
+            stream.write(preRoll)
+            totalDataLen = preRoll.size.toLong()
+            stream
         } catch (e: Throwable) {
-            Log.e("AudioRecordingService", "Fehler beim Speichern der WAV-Datei", e)
+            Log.e("AudioRecordingService", "Fehler beim Anlegen der WAV-Datei", e)
             diagnosticsReporter.report(
                 code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FILE_WRITE_FAILED,
                 component = "AudioRecordingService",
-                operation = "saveRecording",
+                operation = "starteWavAufnahme",
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
                 cause = e,
-                details = mapOf("fileName" to fileName)
+                details = mapOf("fileName" to fileName),
             )
+            isRecordingActive.set(false)
             return
         }
 
-        // Klassifikator-Aufruf darf die Aufnahme nie verhindern (Prompt B-11, Problem 2):
-        // classifySafely() faengt jede Ausnahme ab und liefert dann nur ein fehlendes Label.
+        val recorder = ActiveWavRecorder(
+            file = file,
+            outputStream = fos,
+            durationMs = durationMs,
+            sampleRate = sampleRate,
+            auswertung = auswertung,
+            isQuiet = isQuiet,
+            timestamp = timestamp,
+            maxAmplitude = initialAmplitude,
+            totalDataLen = totalDataLen,
+        )
+        activeWavRecorder = recorder
+
+        val startWait = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startWait < durationMs && isRunning) {
+            delay(50)
+        }
+
+        activeWavRecorder = null
+        try {
+            fos.close()
+            updateWavHeader(file, recorder.totalDataLen)
+        } catch (e: Throwable) {
+            Log.e("AudioRecordingService", "Fehler beim Finalisieren der WAV-Datei", e)
+        }
+
         val detected = classifySafely(classifier, settingsManager.aiEnabled, file)
 
-        val dao = (application as LaermprotokollApp).container.database.noiseDao()
-        dao.insert(NoiseRecord(
-            timestamp = timestamp, 
-            amplitude = amplitude, 
-            dbValue = dbValue,
-            filePath = file.absolutePath,
-            detectedLabel = detected,
-            calibratedDbA = auswertung.calibratedDbA,
-            meterWeighting = auswertung.meterWeighting,
-            meterConnected = auswertung.meterConnected,
-            isQuietHour = isQuiet,
-        ))
+        try {
+            val dao = (application as LaermprotokollApp).container.database.noiseDao()
+            dao.insert(
+                NoiseRecord(
+                    timestamp = timestamp,
+                    amplitude = recorder.maxAmplitude,
+                    dbValue = dbValue,
+                    filePath = file.absolutePath,
+                    detectedLabel = detected,
+                    calibratedDbA = auswertung.calibratedDbA,
+                    meterWeighting = auswertung.meterWeighting,
+                    meterConnected = auswertung.meterConnected,
+                    isQuietHour = isQuiet,
+                ),
+            )
+            Log.i("AudioRecordingService", "NoiseRecord erfolgreich gespeichert: $fileName (KI: $detected)")
+        } catch (e: Throwable) {
+            Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
+        }
 
         if (settingsManager.driveSyncEnabled && settingsManager.driveUploadWav) {
             com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(applicationContext)
         }
+
+        letzteAufnahmeEndeTimestamp = System.currentTimeMillis()
+        isRecordingActive.set(false)
     }
 
     private fun writeWavHeader(out: FileOutputStream, channelConfig: Int, sampleRate: Int, audioFormat: Int, dataLength: Long) {

@@ -1074,36 +1074,47 @@ fun NoiseRecordItem(
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts
-                if (record.calibratedDbA != null) {
-                    val unit = if (record.meterWeighting != null) "dB(${record.meterWeighting})" else "dBA"
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts mit klarem Herkunfts-Badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    if (record.calibratedDbA != null) {
+                        val unit = if (record.meterWeighting != null) "dB(${record.meterWeighting})" else "dB(A)"
+                        StatusPill(text = "PCE-323", type = StatusPillType.CALIBRATED)
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} $unit",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (record.dbValue > 0) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "(Mikrofon: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        StatusPill(text = "Mikrofon", type = StatusPillType.NEUTRAL)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "(PCE-323 · Mikrofon: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                } else {
-                    Text(
-                        text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
                 }
 
                 if (record.detectedLabel != null) {
                     Text(
                         text = "KI: ${record.detectedLabel}",
                         color = MaterialTheme.colorScheme.secondary,
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
                 if (record.label != null) {

@@ -82,6 +82,7 @@ class DriveSyncCoordinator(
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
         val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
 
+        var wavUploadedCount = 0
         // WAV-Dateien hochladen, wenn Option aktiviert ist (prüft alle aktiven Aufnahmen mit lokaler Datei)
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
@@ -104,6 +105,7 @@ class DriveSyncCoordinator(
                             if (uploadResult.isFailure) {
                                 Log.w(TAG, "WAV-Upload fehlgeschlagen für $dateiName: ${uploadResult.exceptionOrNull()?.message}")
                             } else {
+                                wavUploadedCount++
                                 Log.i(TAG, "WAV-Upload erfolgreich für $dateiName (ID: ${uploadResult.getOrNull()})")
                             }
                         }
@@ -114,11 +116,23 @@ class DriveSyncCoordinator(
 
         val registry = dailyFileDao.byDate(datumSchluessel)
         if (zeilen.isEmpty()) {
+            if (wavUploadedCount > 0) {
+                settings.driveSyncFehlschlaegeInFolge = 0
+                settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
+                settings.driveSyncLastMessage = "$wavUploadedCount WAV-Aufnahme(n) erfolgreich synchronisiert"
+                return SyncErgebnis.Erfolgreich(wavUploadedCount)
+            }
             settings.driveSyncLastMessage = "Keine neuen Messwerte zu synchronisieren"
             return SyncErgebnis.KeineAenderung
         }
 
         if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
+            if (wavUploadedCount > 0) {
+                settings.driveSyncFehlschlaegeInFolge = 0
+                settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
+                settings.driveSyncLastMessage = "${zeilen.size} Zeilen & $wavUploadedCount WAV(s) synchronisiert"
+                return SyncErgebnis.Erfolgreich(zeilen.size)
+            }
             settings.driveSyncLastMessage = "Aktuell (${zeilen.size} Zeilen synchronisiert)"
             return SyncErgebnis.KeineAenderung
         }
@@ -138,7 +152,12 @@ class DriveSyncCoordinator(
                 )
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
-                settings.driveSyncLastMessage = "${zeilen.size} Zeilen erfolgreich hochgeladen"
+                val message = if (wavUploadedCount > 0) {
+                    "${zeilen.size} Zeilen & $wavUploadedCount WAV(s) erfolgreich hochgeladen"
+                } else {
+                    "${zeilen.size} Zeilen erfolgreich hochgeladen"
+                }
+                settings.driveSyncLastMessage = message
                 SyncErgebnis.Erfolgreich(zeilen.size)
             },
             onFailure = { fehler -> behandleFehlschlag(datumSchluessel, registry, jetzt, fehler) },
