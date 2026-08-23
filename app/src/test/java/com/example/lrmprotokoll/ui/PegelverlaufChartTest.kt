@@ -41,7 +41,8 @@ class PegelverlaufChartTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Keine Messwerte für den Pegelverlauf.").assertIsDisplayed()
+        val noDataText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data)
+        composeRule.onNodeWithText(noDataText).assertIsDisplayed()
     }
 
     @Test

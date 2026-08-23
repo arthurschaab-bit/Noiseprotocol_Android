@@ -71,7 +71,7 @@ fun PegelverlaufChart(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Keine Messwerte für den Pegelverlauf.",
+                text = androidx.compose.ui.res.stringResource(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -376,7 +376,7 @@ fun PegelverlaufChart(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Zoom zurücksetzen",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.example.lrmprotokoll.R.string.action_reset_zoom),
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

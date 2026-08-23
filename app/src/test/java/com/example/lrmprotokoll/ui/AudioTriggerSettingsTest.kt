@@ -113,26 +113,31 @@ class AudioTriggerSettingsTest {
         composeRule.waitForIdle()
 
         // Sektion öffnen
-        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
+        val secTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        composeRule.onNodeWithText(secTitle, substring = true).performClick()
         composeRule.waitForIdle()
 
+        val autoStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_trigger_source_auto)
+        val meterStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_trigger_source_meter)
+        val micStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_trigger_source_mic)
+
         // Chips prüfen
-        composeRule.onNodeWithText("Automatisch (Standard)").assertIsDisplayed()
-        composeRule.onNodeWithText("Nur PCE-323").assertIsDisplayed()
-        composeRule.onNodeWithText("Nur Mikrofon").assertIsDisplayed()
+        composeRule.onNodeWithText(autoStr).assertIsDisplayed()
+        composeRule.onNodeWithText(meterStr).assertIsDisplayed()
+        composeRule.onNodeWithText(micStr).assertIsDisplayed()
 
         // Auf "Nur PCE-323" umschalten
-        composeRule.onNodeWithText("Nur PCE-323").performClick()
+        composeRule.onNodeWithText(meterStr).performClick()
         composeRule.waitForIdle()
         assertEquals("PCE_323", settings.audioTriggerQuelle)
 
         // Auf "Nur Mikrofon" umschalten
-        composeRule.onNodeWithText("Nur Mikrofon").performClick()
+        composeRule.onNodeWithText(micStr).performClick()
         composeRule.waitForIdle()
         assertEquals("MIKROFON", settings.audioTriggerQuelle)
 
         // Zurück auf "Automatisch (Standard)"
-        composeRule.onNodeWithText("Automatisch (Standard)").performClick()
+        composeRule.onNodeWithText(autoStr).performClick()
         composeRule.waitForIdle()
         assertEquals("AUTO", settings.audioTriggerQuelle)
     }

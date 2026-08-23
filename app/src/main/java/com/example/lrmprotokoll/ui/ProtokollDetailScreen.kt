@@ -15,10 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
@@ -126,13 +128,13 @@ fun ProtokollDetailScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Session",
+                        text = stringResource(R.string.protocol_tab_sessions),
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
@@ -159,7 +161,7 @@ fun ProtokollDetailScreen(
         val s = session
         if (s == null) {
             Box(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                Text("Session nicht gefunden.", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.protocol_session_not_found), style = MaterialTheme.typography.bodyMedium)
             }
             return@Scaffold
         }
@@ -194,13 +196,13 @@ fun ProtokollDetailScreen(
             // 1. KOMPAKTE 1-SEKUNDEN ZUSAMMENFASSUNG (Dauer, Leq, Max, Events)
             item {
                 NoiseHeaderCard(
-                    title = "Kennwerte",
-                    subtitle = "Start: ${formatierer.format(Date(s.startedAt))} · ${s.deviceName}",
+                    title = stringResource(R.string.protocol_detail_metrics),
+                    subtitle = "Start: ${formatierer.format(Date(s.startedAt))} · ${s.deviceName ?: stringResource(R.string.protocol_not_specified)}",
                     statusBadge = {
                         if (isLive) {
-                            StatusPill(text = "LIVE AKTIV", type = StatusPillType.CONNECTED)
+                            StatusPill(text = stringResource(R.string.protocol_live_active), type = StatusPillType.CONNECTED)
                         } else {
-                            StatusPill(text = "Abgeschlossen", type = StatusPillType.NEUTRAL)
+                            StatusPill(text = stringResource(R.string.protocol_completed), type = StatusPillType.NEUTRAL)
                         }
                     }
                 ) {
@@ -209,7 +211,7 @@ fun ProtokollDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        SummaryMetricItem("⏱️ Dauer", dauerText, modifier = Modifier.weight(1f))
+                        SummaryMetricItem(stringResource(R.string.stat_duration), dauerText, modifier = Modifier.weight(1f))
                         SummaryMetricItem(
                             "📈 LAeq",
                             kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
@@ -221,7 +223,7 @@ fun ProtokollDetailScreen(
                             modifier = Modifier.weight(1f)
                         )
                         SummaryMetricItem(
-                            "📍 Vorfälle",
+                            stringResource(R.string.stat_incidents),
                             "${sessionRecords.size}",
                             modifier = Modifier.weight(1f)
                         )
@@ -232,10 +234,10 @@ fun ProtokollDetailScreen(
             // 2. INTERAKTIVER PEGELVERLAUF
             item {
                 NoiseHeaderCard(
-                    title = "Pegelverlauf",
-                    subtitle = "Pinch-to-zoom & Pan für Detailanalyse",
+                    title = stringResource(R.string.cockpit_history_title),
+                    subtitle = stringResource(R.string.protocol_detail_zoom_hint),
                     statusBadge = {
-                        if (isLive) StatusPill(text = "Live-Kurve", type = StatusPillType.CONNECTED)
+                        if (isLive) StatusPill(text = stringResource(R.string.protocol_live_curve), type = StatusPillType.CONNECTED)
                     }
                 ) {
                     PegelverlaufChart(
@@ -270,7 +272,7 @@ fun ProtokollDetailScreen(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("PDF exportieren")
+                        Text(stringResource(R.string.action_export_pdf))
                     }
 
                     OutlinedButton(
@@ -284,7 +286,7 @@ fun ProtokollDetailScreen(
                     ) {
                         Icon(AppIcons.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("CSV exportieren")
+                        Text(stringResource(R.string.action_export_csv))
                     }
                 }
             }
@@ -293,7 +295,7 @@ fun ProtokollDetailScreen(
             if (sessionRecords.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Dokumentierte Ereignisse (${sessionRecords.size})",
+                        text = stringResource(R.string.protocol_documented_events, sessionRecords.size),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -328,7 +330,7 @@ fun ProtokollDetailScreen(
                                 if (!record.notes.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Notiz: ${record.notes}",
+                                        text = stringResource(R.string.protocol_notes_label, record.notes),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -359,7 +361,7 @@ fun ProtokollDetailScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Revisions- & Mess-Audit",
+                                text = stringResource(R.string.protocol_audit_header),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -393,12 +395,13 @@ fun ProtokollDetailScreen(
             if (ausfallbaender.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Verbindungsunterbrechungen (${ausfallbaender.size})",
+                        text = stringResource(R.string.protocol_outages_header, ausfallbaender.size),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                 }
                 items(ausfallbaender) { band ->
+                    val ongoingText = stringResource(R.string.protocol_outage_ongoing)
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
@@ -412,19 +415,19 @@ fun ProtokollDetailScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = "${formatierer.format(band.von)} – ${if (band.bis != null) formatierer.format(band.bis) else "andauernd"}",
+                                    text = "${formatierer.format(band.von)} – ${if (band.bis != null) formatierer.format(band.bis) else ongoingText}",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Bold
                                 )
                                 if (band.bis != null) {
                                     Text(
-                                        text = "Ausfalldauer: ${formatiereDauer(Duration.ofMillis(band.bis - band.von))}",
+                                        text = stringResource(R.string.protocol_outage_duration, formatiereDauer(Duration.ofMillis(band.bis - band.von))),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
                             }
-                            StatusPill(text = "Keine Daten", type = StatusPillType.ERROR)
+                            StatusPill(text = stringResource(R.string.protocol_no_data), type = StatusPillType.ERROR)
                         }
                     }
                 }

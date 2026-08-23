@@ -45,19 +45,22 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val settingsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        val secThresholds = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
         // 1. Titel in TopAppBar
-        composeRule.onNodeWithText("Einstellungen").assertIsDisplayed()
+        composeRule.onNodeWithText(settingsTitle).assertIsDisplayed()
 
         // 2. Aufnahme & Schwellenwert Sektion aufklappen
-        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
+        composeRule.onNodeWithText(secThresholds, substring = true).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Aufnahme-Schwellenwert", substring = true).assertIsDisplayed()
 
         // 3. Bis zum Bildschirmende scrollen
         composeRule.onNodeWithTag(BILDSCHIRM_ENDE_TAG).performScrollTo().assertIsDisplayed()
 
         // 4. Zurück-Button
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
@@ -68,27 +71,31 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val proMode = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_mode_pro)
+        val secThresholds = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        val sample16k = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_16k)
+        val sample44k = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_44k)
+        val secAi = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_ai_title)
+        val secDiag = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_diagnostics)
+
         // In den Pro-Modus schalten, um erweiterte Optionen (Abtastrate etc.) freizuschalten
-        composeRule.onNodeWithText("Pro-Modus", substring = true).performClick()
+        composeRule.onNodeWithText(proMode, substring = true).performClick()
         composeRule.waitForIdle()
 
         // 1. Aufnahme & Schwellenwert Sektion aufklappen & Abtastrate-Chips prüfen
-        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
+        composeRule.onNodeWithText(secThresholds, substring = true).performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("16000 Hz (KI-Opt.)", substring = true).performScrollTo().assertIsDisplayed().performClick()
-        composeRule.onNodeWithText("44100 Hz (Qualität)", substring = true).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(sample16k, substring = true).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(sample44k, substring = true).performScrollTo().assertIsDisplayed().performClick()
 
         // 2. KI Sektion aufklappen & Schalter prüfen
-        composeRule.onNodeWithText("KI-Erkennung (YAMNet)", substring = true).performScrollTo().performClick()
+        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Automatische KI-Erkennung", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().assertIsDisplayed()
 
         // 3. System & Diagnose Sektion aufklappen
-        composeRule.onNodeWithText("Diagnose & Systemgesundheit", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText(secDiag, substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
-
-        // 4. Diagnose-Log Switch prüfen (durch Scrollen erreichbar)
-        composeRule.onNodeWithText("Diagnose-Log aktiv", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test

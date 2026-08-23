@@ -74,20 +74,27 @@ class ProtokollDetailScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val sessionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_tab_sessions)
+        val metricsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_metrics)
+        val historyTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
+        val csvBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_csv)
+        val pdfBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_pdf)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
         // 1. Titel & Kopfzeile
-        composeRule.onNodeWithText("Session").assertIsDisplayed()
+        composeRule.onNodeWithText(sessionTitle, substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("PCE-323 Testgerät", substring = true).assertIsDisplayed()
 
         // 2. Kennwerte- und Pegelverlauf-Überschriften
-        composeRule.onNodeWithText("Kennwerte").assertIsDisplayed()
-        composeRule.onNodeWithText("Pegelverlauf").assertIsDisplayed()
+        composeRule.onNodeWithText(metricsTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(historyTitle).assertIsDisplayed()
 
         // 3. Export-Buttons vorhanden
-        composeRule.onNodeWithText("CSV exportieren").assertIsDisplayed()
-        composeRule.onNodeWithText("PDF exportieren").assertIsDisplayed()
+        composeRule.onNodeWithText(csvBtn).assertIsDisplayed()
+        composeRule.onNodeWithText(pdfBtn).assertIsDisplayed()
 
         // 4. Zurück-Navigation
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
@@ -100,8 +107,11 @@ class ProtokollDetailScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Session nicht gefunden.").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        val notFoundText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_session_not_found)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
+        composeRule.onNodeWithText(notFoundText).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 }

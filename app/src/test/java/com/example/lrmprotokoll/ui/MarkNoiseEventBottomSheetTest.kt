@@ -43,27 +43,34 @@ class MarkNoiseEventBottomSheetTest {
         composeRule.waitForIdle()
 
         // 1. Titel & Header
-        composeRule.onNodeWithText("Mark noise event").assertIsDisplayed()
+        val titleStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_mark_noise_event)
+        composeRule.onNodeWithText(titleStr).assertIsDisplayed()
+
+        val hammerStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_hammering)
+        val drillStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_drilling)
+        val footStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_footsteps)
+        val voiceStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_voices)
+        val notePlaceholder = composeRule.activity.getString(com.example.lrmprotokoll.R.string.mark_event_note_placeholder)
 
         // 2. Kategorien prüfen
-        composeRule.onNodeWithText("Hammering").assertIsDisplayed()
-        composeRule.onNodeWithText("Drilling").assertIsDisplayed()
-        composeRule.onNodeWithText("Footsteps").assertIsDisplayed()
-        composeRule.onNodeWithText("Voices").assertIsDisplayed()
+        composeRule.onNodeWithText(hammerStr).assertIsDisplayed()
+        composeRule.onNodeWithText(drillStr).assertIsDisplayed()
+        composeRule.onNodeWithText(footStr).assertIsDisplayed()
+        composeRule.onNodeWithText(voiceStr).assertIsDisplayed()
 
         // 3. Kategorie "Drilling" auswählen
-        composeRule.onNodeWithText("Drilling").performClick()
+        composeRule.onNodeWithText(drillStr).performClick()
         composeRule.waitForIdle()
 
         // 4. Notiz eingeben
-        composeRule.onNodeWithText("Describe the noise source...").performTextInput("Bauarbeiten Nachbar")
+        composeRule.onNodeWithText(notePlaceholder).performTextInput("Bauarbeiten Nachbar")
         composeRule.waitForIdle()
 
         // 5. Speichern
         composeRule.onNodeWithTag(SAVE_NOISE_EVENT_BUTTON_TAG).performClick()
         composeRule.waitForIdle()
 
-        assertEquals("Drilling", savedCategory)
+        assertEquals(drillStr, savedCategory)
         assertEquals("Bauarbeiten Nachbar", savedNote)
         assertEquals(true, dismissed)
     }

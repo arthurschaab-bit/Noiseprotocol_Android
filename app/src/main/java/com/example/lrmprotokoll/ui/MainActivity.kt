@@ -80,6 +80,12 @@ import java.util.*
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val container = (application as LaermprotokollApp).container
+        val language = container.settingsManager.appLanguage
+        if (language.isNotBlank()) {
+            val appLocale = androidx.core.os.LocaleListCompat.forLanguageTags(language)
+            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(appLocale)
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
@@ -468,7 +474,7 @@ fun NoiseProtocolApp(
                             onDismissRequest = { showOverflowMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text(if (showFilterPanel) "Filter ausblenden" else "Filter & Suche") },
+                                text = { Text(if (showFilterPanel) stringResource(R.string.filter_hide) else stringResource(R.string.filter_title)) },
                                 leadingIcon = { Icon(AppIcons.FilterList, contentDescription = null) },
                                 onClick = {
                                     showFilterPanel = !showFilterPanel
@@ -476,7 +482,7 @@ fun NoiseProtocolApp(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("KI-Batch-Erkennung") },
+                                text = { Text(stringResource(R.string.action_ai_batch)) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
                                     showOverflowMenu = false
@@ -489,19 +495,19 @@ fun NoiseProtocolApp(
                                                 count++
                                             }
                                         }
-                                        onShowSnackbar("$count Aufnahme(n) durch KI klassifiziert", null, null)
+                                        onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
                                     }
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Tagesbericht exportieren") },
+                                text = { Text(stringResource(R.string.protocol_daily_report_title)) },
                                 leadingIcon = { Icon(AppIcons.BarChart, contentDescription = null) },
                                 onClick = {
                                     showOverflowMenu = false
                                     if (records.isNotEmpty()) {
                                         reportTargetRecords = records
                                     } else {
-                                        onShowSnackbar("Keine Aufnahmen vorhanden", null, null)
+                                        onShowSnackbar(context.getString(R.string.empty_records_title), null, null)
                                     }
                                 }
                             )
@@ -543,19 +549,19 @@ fun NoiseProtocolApp(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Einschränkung bei Überwachung",
+                                text = stringResource(R.string.monitoring_restriction_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
-                                text = "Mindestens eine erforderliche Berechtigung fehlt.",
+                                text = stringResource(R.string.monitoring_restriction_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                         TextButton(onClick = onNavigateToDiagnose) {
-                            Text("Prüfen", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.action_check), color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -599,21 +605,21 @@ fun NoiseProtocolApp(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isActive) "Dauermessung aktiv" else "Letzte Dauermessung",
+                                        text = if (isActive) stringResource(R.string.session_continuous_active) else stringResource(R.string.session_continuous_last),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                                 TextButton(onClick = onNavigateToProtokoll) {
-                                    Text("Im Protokoll ansehen")
+                                    Text(stringResource(R.string.session_view_in_protocol))
                                 }
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (isActive) {
-                                    "Die Pegelwerte werden kontinuierlich erfasst und im Protokoll gespeichert."
+                                    stringResource(R.string.session_continuous_active_desc)
                                 } else {
-                                    "Dauermessung abgeschlossen. Alle 5s-Mittelwerte sind im Protokoll archiviert."
+                                    stringResource(R.string.session_continuous_last_desc)
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -643,13 +649,13 @@ fun NoiseProtocolApp(
                                 contentDescription = null
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Suche & Filter", style = MaterialTheme.typography.titleSmall)
+                            Text(stringResource(R.string.filter_title), style = MaterialTheme.typography.titleSmall)
                             Spacer(modifier = Modifier.weight(1f))
                             if (filterState.istAktiv) {
                                 FilterChip(
                                     selected = true,
                                     onClick = { updateFilter(RecordFilterState()) },
-                                    label = { Text("Aktiv (Zurücksetzen)") },
+                                    label = { Text(stringResource(R.string.filter_active_reset)) },
                                     trailingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                 )
                             }
@@ -660,7 +666,7 @@ fun NoiseProtocolApp(
                                 OutlinedTextField(
                                     value = filterState.query,
                                     onValueChange = { updateFilter(filterState.copy(query = it)) },
-                                    label = { Text("Suchen (Label, Notiz, KI)") },
+                                    label = { Text(stringResource(R.string.filter_search_label)) },
                                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                                     trailingIcon = {
                                         if (filterState.query.isNotEmpty()) {
@@ -675,7 +681,7 @@ fun NoiseProtocolApp(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Pegelbereich: ${filterState.minDb.toInt()} - ${filterState.maxDb.toInt()} dB",
+                                    text = stringResource(R.string.filter_level_range, filterState.minDb.toInt(), filterState.maxDb.toInt()),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 RangeSlider(
@@ -695,23 +701,23 @@ fun NoiseProtocolApp(
                                     FilterChip(
                                         selected = filterState.onlyFavorites,
                                         onClick = { updateFilter(filterState.copy(onlyFavorites = !filterState.onlyFavorites)) },
-                                        label = { Text("Favoriten") },
+                                        label = { Text(stringResource(R.string.filter_favorites)) },
                                         leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                     )
                                     FilterChip(
                                         selected = filterState.onlyQuietHours,
                                         onClick = { updateFilter(filterState.copy(onlyQuietHours = !filterState.onlyQuietHours)) },
-                                        label = { Text("Ruhezeiten") }
+                                        label = { Text(stringResource(R.string.filter_quiet_hours)) }
                                     )
                                     FilterChip(
                                         selected = filterState.onlyMeter,
                                         onClick = { updateFilter(filterState.copy(onlyMeter = !filterState.onlyMeter)) },
-                                        label = { Text("Nur PCE-323") }
+                                        label = { Text(stringResource(R.string.filter_only_meter)) }
                                     )
                                     FilterChip(
                                         selected = filterState.onlyCalibrated,
                                         onClick = { updateFilter(filterState.copy(onlyCalibrated = !filterState.onlyCalibrated)) },
-                                        label = { Text("Nur Kalibriert") }
+                                        label = { Text(stringResource(R.string.filter_only_calibrated)) }
                                     )
                                 }
                             }
@@ -726,7 +732,7 @@ fun NoiseProtocolApp(
             item {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
-                        text = "Gelernte Geräusch-Muster (${references.size})",
+                        text = stringResource(R.string.learned_patterns_count, references.size),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -745,7 +751,7 @@ fun NoiseProtocolApp(
                                         onClick = { referenceToDelete = ref },
                                         modifier = Modifier.size(20.dp)
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Löschen", modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete), modifier = Modifier.size(16.dp))
                                     }
                                 }
                             )
@@ -859,7 +865,7 @@ fun NoiseProtocolApp(
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                text = "${dailyRecords.size} Aufnahmen",
+                                text = stringResource(R.string.protocol_records_count, dailyRecords.size),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(end = 8.dp)
@@ -868,7 +874,7 @@ fun NoiseProtocolApp(
                                 onClick = { reportTargetRecords = dailyRecords },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(AppIcons.BarChart, contentDescription = "Bericht für Tag erstellen")
+                                Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
                             }
                         }
                     }
@@ -890,7 +896,7 @@ fun NoiseProtocolApp(
                                 onDelete = {
                                     scope.launch {
                                         dao.softDelete(record.id)
-                                        onShowSnackbar("Aufnahme in Papierkorb verschoben", "RÜCKGÄNGIG") {
+                                        onShowSnackbar(context.getString(R.string.record_moved_to_trash), context.getString(R.string.action_undo)) {
                                             scope.launch { dao.restore(record.id) }
                                         }
                                     }
@@ -903,7 +909,7 @@ fun NoiseProtocolApp(
                                 onAiRecognize = {
                                     scope.launch {
                                         val detected = classifier.classify(File(record.filePath))
-                                        dao.update(record.copy(detectedLabel = detected ?: "Nicht erkannt"))
+                                        dao.update(record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)))
                                     }
                                 }
                             )
@@ -918,15 +924,15 @@ fun NoiseProtocolApp(
     if (showReferenceDialog != null) {
         AlertDialog(
             onDismissRequest = { showReferenceDialog = null },
-            title = { Text("Geräusch lernen") },
+            title = { Text(stringResource(R.string.learn_pattern_title)) },
             text = {
                 Column {
-                    Text("Geben Sie diesem Geräusch-Muster einen Namen für den automatischen KI-Abgleich:")
+                    Text(stringResource(R.string.learn_pattern_desc))
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = refName,
                         onValueChange = { refName = it },
-                        label = { Text("Name (z.B. Kompressor)") },
+                        label = { Text(stringResource(R.string.learn_pattern_label)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -940,7 +946,7 @@ fun NoiseProtocolApp(
                             val detailed = classifier.classifyDetailed(File(record.filePath))
                             if (detailed != null && refName.isNotBlank()) {
                                 dao.insertReference(ReferenceSound(name = refName.trim(), pattern = detailed.joinToString(",")))
-                                onShowSnackbar("Muster '$refName' erfolgreich gelernt", null, null)
+                                onShowSnackbar(context.getString(R.string.learn_pattern_success, refName), null, null)
                             }
                             showReferenceDialog = null
                             refName = ""
@@ -963,15 +969,15 @@ fun NoiseProtocolApp(
     referenceToDelete?.let { ref ->
         AlertDialog(
             onDismissRequest = { referenceToDelete = null },
-            title = { Text("Muster löschen?") },
-            text = { Text("Möchten Sie das gelernte Muster '${ref.name}' wirklich entfernen?") },
+            title = { Text(stringResource(R.string.delete_pattern_title)) },
+            text = { Text(stringResource(R.string.delete_pattern_desc, ref.name)) },
             confirmButton = {
                 Button(
                     onClick = {
                         scope.launch {
                             dao.deleteReference(ref.id)
                             referenceToDelete = null
-                            onShowSnackbar("Muster '${ref.name}' gelöscht", null, null)
+                            onShowSnackbar(context.getString(R.string.delete_pattern_success, ref.name), null, null)
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -991,15 +997,15 @@ fun NoiseProtocolApp(
     reportTargetRecords?.let { target ->
         AlertDialog(
             onDismissRequest = { reportTargetRecords = null },
-            title = { Text("Tagesbericht exportieren") },
-            text = { Text("Möchten Sie den Textbericht oder ein ZIP-Paket inkl. Audioaufnahmen (${target.size} Dateien) teilen?") },
+            title = { Text(stringResource(R.string.protocol_daily_report_title)) },
+            text = { Text(stringResource(R.string.report_dialog_desc, target.size)) },
             confirmButton = {
                 Button(onClick = {
                     val report = reportManager.generateDailyReport(target)
                     reportManager.createZipAndShare(target, report)
                     reportTargetRecords = null
                 }) {
-                    Text("ZIP inkl. Audio teilen")
+                    Text(stringResource(R.string.report_dialog_zip_button))
                 }
             },
             dismissButton = {
@@ -1008,7 +1014,7 @@ fun NoiseProtocolApp(
                     reportManager.shareFile(report)
                     reportTargetRecords = null
                 }) {
-                    Text("Nur Textbericht teilen")
+                    Text(stringResource(R.string.report_dialog_text_button))
                 }
             }
         )
@@ -1025,7 +1031,7 @@ fun NoiseProtocolApp(
                 showPairingDialog = false
                 val intent = Intent(context, AudioRecordingService::class.java)
                 context.startForegroundService(intent)
-                onShowSnackbar("PCE-323 (${device.name ?: device.address}) gekoppelt", null, null)
+                onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false }
         )
@@ -1068,7 +1074,7 @@ fun NoiseRecordItem(
                     Text(time, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                     if (record.isQuietHour) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        StatusPill(text = "Ruhezeit", type = StatusPillType.WARNING)
+                        StatusPill(text = stringResource(R.string.badge_quiet_hour), type = StatusPillType.WARNING)
                     }
                 }
 
@@ -1081,7 +1087,7 @@ fun NoiseRecordItem(
                 ) {
                     if (record.calibratedDbA != null) {
                         val unit = if (record.meterWeighting != null) "dB(${record.meterWeighting})" else "dB(A)"
-                        StatusPill(text = "PCE-323", type = StatusPillType.CALIBRATED)
+                        StatusPill(text = stringResource(R.string.badge_pce323), type = StatusPillType.CALIBRATED)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} $unit",
@@ -1092,16 +1098,16 @@ fun NoiseRecordItem(
                         if (record.dbValue > 0) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "(Mikrofon: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB)",
+                                text = stringResource(R.string.source_mic_format, record.dbValue),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     } else {
-                        StatusPill(text = "Mikrofon", type = StatusPillType.NEUTRAL)
+                        StatusPill(text = stringResource(R.string.badge_microphone), type = StatusPillType.NEUTRAL)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)",
+                            text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (${stringResource(R.string.badge_microphone)})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1111,7 +1117,7 @@ fun NoiseRecordItem(
 
                 if (record.detectedLabel != null) {
                     Text(
-                        text = "KI: ${record.detectedLabel}",
+                        text = stringResource(R.string.label_ai_prefix, record.detectedLabel ?: ""),
                         color = MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
@@ -1119,7 +1125,7 @@ fun NoiseRecordItem(
                 }
                 if (record.label != null) {
                     Text(
-                        text = "Label: ${record.label}",
+                        text = stringResource(R.string.label_user_prefix, record.label ?: ""),
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
@@ -1133,7 +1139,7 @@ fun NoiseRecordItem(
             ) {
                 Icon(
                     imageVector = Icons.Default.Star,
-                    contentDescription = "Favorit",
+                    contentDescription = stringResource(R.string.filter_favorites),
                     tint = if (record.favorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
                 )
             }
@@ -1142,7 +1148,7 @@ fun NoiseRecordItem(
                 onClick = onAiRecognize,
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "KI-Erkennung", tint = MaterialTheme.colorScheme.secondary)
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch), tint = MaterialTheme.colorScheme.secondary)
             }
 
             IconButton(
@@ -1156,7 +1162,7 @@ fun NoiseRecordItem(
                 onClick = onPlay,
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Abspielen", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.audio_play), tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -1166,7 +1172,11 @@ fun NoiseRecordItem(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf("Bagger", "Bohren", "Hämmern", "Verkehr").forEach { label ->
+            listOf(
+                stringResource(R.string.category_drilling),
+                stringResource(R.string.category_hammering),
+                stringResource(R.string.category_traffic)
+            ).forEach { label ->
                 AssistChip(
                     onClick = { onLabel(label) },
                     label = { Text(label) },
@@ -1175,7 +1185,7 @@ fun NoiseRecordItem(
             }
             AssistChip(
                 onClick = onLearn,
-                label = { Text("+ Muster lernen") },
+                label = { Text(stringResource(R.string.action_learn_pattern)) },
                 leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) },
                 modifier = Modifier.height(28.dp)
             )

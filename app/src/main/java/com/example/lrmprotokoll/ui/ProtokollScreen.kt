@@ -101,7 +101,7 @@ fun ProtokollScreen(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("New Measurement", fontWeight = FontWeight.Bold) },
+                    text = { Text(stringResource(R.string.protocol_new_measurement), fontWeight = FontWeight.Bold) },
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -118,12 +118,12 @@ fun ProtokollScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search protocols...") },
+                placeholder = { Text(stringResource(R.string.protocol_search_placeholder)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Löschen")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete))
                         }
                     }
                 },
@@ -137,7 +137,7 @@ fun ProtokollScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Recent Measurements",
+                text = stringResource(R.string.protocol_recent_measurements),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,7 +161,7 @@ fun ProtokollScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (searchQuery.isNotBlank()) "Keine Protokolle für die Suche gefunden" else stringResource(R.string.empty_protocol_desc),
+                            text = if (searchQuery.isNotBlank()) stringResource(R.string.protocol_search_no_results) else stringResource(R.string.empty_protocol_desc),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -198,7 +198,7 @@ fun ProtokollScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "End of history",
+                                text = stringResource(R.string.protocol_end_of_history),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -217,13 +217,14 @@ private fun ModernSessionCard(
     onClick: () -> Unit
 ) {
     val isLive = session.endedAt == null
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.US) }
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.US) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     val dateStr = remember(session.startedAt) { dateFormat.format(session.startedAt) }
-    val timeRangeStr = remember(session.startedAt, session.endedAt) {
+    val nowText = stringResource(R.string.protocol_time_now)
+    val timeRangeStr = remember(session.startedAt, session.endedAt, nowText) {
         val startStr = timeFormat.format(session.startedAt)
-        val endStr = if (session.endedAt != null) timeFormat.format(session.endedAt) else "Now"
+        val endStr = if (session.endedAt != null) timeFormat.format(session.endedAt) else nowText
         "$startStr – $endStr"
     }
 
@@ -254,8 +255,8 @@ private fun ModernSessionCard(
         if (h > 0) "${h}h ${m}m" else "${m} min"
     }
 
-    val laeqStr = kennwerte?.leqDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "--.-"
-    val lmaxStr = kennwerte?.maxDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "--.-"
+    val laeqStr = kennwerte?.leqDb?.let { String.format(Locale.getDefault(), "%.1f dB", it) } ?: "--.-"
+    val lmaxStr = kennwerte?.maxDb?.let { String.format(Locale.getDefault(), "%.1f dB", it) } ?: "--.-"
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -287,7 +288,7 @@ private fun ModernSessionCard(
                 }
 
                 // Status Badge
-                val badgeText = if (isLive) "Active" else "Complete"
+                val badgeText = if (isLive) stringResource(R.string.protocol_badge_active) else stringResource(R.string.protocol_badge_complete)
                 val badgeBg = if (isLive) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
                 val badgeTextColor = if (isLive) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -313,10 +314,10 @@ private fun ModernSessionCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MetricColumn(label = "Duration", value = durationStr)
+                MetricColumn(label = stringResource(R.string.protocol_metric_duration), value = durationStr)
                 MetricColumn(label = "LAeq", value = laeqStr)
                 MetricColumn(label = "LMax", value = lmaxStr)
-                MetricColumn(label = "Events", value = eventCount.toString())
+                MetricColumn(label = stringResource(R.string.protocol_metric_events), value = eventCount.toString())
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -350,7 +351,7 @@ private fun ModernSessionCard(
                     modifier = Modifier.clickable { onClick() }
                 ) {
                     Text(
-                        text = "Details",
+                        text = stringResource(R.string.protocol_details_button),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary

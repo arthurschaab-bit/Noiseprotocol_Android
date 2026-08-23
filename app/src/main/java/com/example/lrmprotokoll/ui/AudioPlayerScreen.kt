@@ -65,7 +65,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Aufnahme abspielen") },
+                title = { Text(stringResource(R.string.player_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
@@ -113,7 +113,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Abspielen",
+                    contentDescription = if (isPlaying) stringResource(R.string.audio_pause) else stringResource(R.string.audio_play),
                     modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )

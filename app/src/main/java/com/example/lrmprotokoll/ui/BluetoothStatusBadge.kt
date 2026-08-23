@@ -26,8 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.label
 
@@ -98,12 +100,12 @@ fun BluetoothStatusBadge(
                     .background(statusColor)
                     .then(if (isAnimating) Modifier.alpha(pulseAlpha) else Modifier)
             )
-            Spacer(modifier = Modifier.width(6.dp))
-
+            val connectedStr = stringResource(R.string.status_connected)
+            val offStr = stringResource(R.string.status_off)
             val displayText = when {
                 state == ConnectionState.STREAMING && !deviceName.isNullOrBlank() -> deviceName
-                state == ConnectionState.STREAMING -> "BT: Verbunden"
-                state == ConnectionState.IDLE -> "BT: Aus"
+                state == ConnectionState.STREAMING -> "BT: $connectedStr"
+                state == ConnectionState.IDLE -> "BT: $offStr"
                 else -> "BT: ${state.label()}"
             }
 

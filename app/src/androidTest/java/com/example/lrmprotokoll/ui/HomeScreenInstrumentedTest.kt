@@ -123,46 +123,56 @@ class HomeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val micBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.badge_microphone)
+        val aiPrefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_ai_prefix, "Drilling")
+        val userPrefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_user_prefix, "Nachbar bohrt")
+
         // Überprüfe Detailtexte
-        composeRule.onNodeWithText("68.5 dB (Mikrofon)", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("KI: Drilling").assertIsDisplayed()
-        composeRule.onNodeWithText("Label: Nachbar bohrt").assertIsDisplayed()
+        composeRule.onNodeWithText("68.5 dB ($micBadge)", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(aiPrefix).assertIsDisplayed()
+        composeRule.onNodeWithText(userPrefix).assertIsDisplayed()
+
+        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
+        val aiDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_ai_batch)
+        val favDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.filter_favorites)
+        val delDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_delete)
+        val learnStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_learn_pattern)
+        val bohrenStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_drilling)
+        val haemmernStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_hammering)
+        val verkehrStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_traffic)
 
         // Teste Play-Button
-        composeRule.onNodeWithContentDescription("Abspielen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(playDesc).assertIsDisplayed().performClick()
         assertTrue(played)
 
         // Teste KI-Erkennung-Button
-        composeRule.onNodeWithContentDescription("KI-Erkennung").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(aiDesc).assertIsDisplayed().performClick()
         assertTrue(aiRecognized)
 
         // Teste Favorit-Button
-        composeRule.onNodeWithContentDescription("Favorit").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(favDesc).assertIsDisplayed().performClick()
         assertTrue(favoriteToggled)
 
         // Teste Lernen-Chip
-        composeRule.onNodeWithText("Muster lernen", substring = true).assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(learnStr, substring = true).assertIsDisplayed().performClick()
         assertTrue(learned)
 
         // Teste Löschen-Button
-        composeRule.onNodeWithContentDescription("Löschen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(delDesc).assertIsDisplayed().performClick()
         assertTrue(deleted)
 
         // Teste Label-Chips
-        composeRule.onNodeWithText("Bagger").assertIsDisplayed().performClick()
-        assertEquals("Bagger", assignedLabel)
+        composeRule.onNodeWithText(bohrenStr).assertIsDisplayed().performClick()
+        assertEquals(bohrenStr, assignedLabel)
 
-        composeRule.onNodeWithText("Bohren").assertIsDisplayed().performClick()
-        assertEquals("Bohren", assignedLabel)
+        composeRule.onNodeWithText(haemmernStr).assertIsDisplayed().performClick()
+        assertEquals(haemmernStr, assignedLabel)
 
-        composeRule.onNodeWithText("Hämmern").assertIsDisplayed().performClick()
-        assertEquals("Hämmern", assignedLabel)
-
-        composeRule.onNodeWithText("Verkehr").assertIsDisplayed().performClick()
-        assertEquals("Verkehr", assignedLabel)
+        composeRule.onNodeWithText(verkehrStr).assertIsDisplayed().performClick()
+        assertEquals(verkehrStr, assignedLabel)
 
         // Teste Long Click
-        composeRule.onNodeWithText("KI: Drilling").performTouchInput { longClick() }
+        composeRule.onNodeWithText(aiPrefix).performTouchInput { longClick() }
         assertTrue(longClicked)
     }
 
@@ -191,6 +201,7 @@ class HomeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("55.0 dB (Mikrofon)", substring = true).assertIsDisplayed()
+        val micBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.badge_microphone)
+        composeRule.onNodeWithText("55.0 dB ($micBadge)", substring = true).assertIsDisplayed()
     }
 }

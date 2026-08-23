@@ -32,8 +32,9 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
+| **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
 
-**Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign vollständig umgesetzt, getestet und verifiziert.**
+**Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign + Mehrsprachigkeit (i18n) vollständig umgesetzt, getestet und verifiziert.**
 
 ---
 

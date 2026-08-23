@@ -36,28 +36,28 @@ fun OnboardingScreen(
 
     val pages = listOf(
         OnboardingPage(
-            title = "Willkommen beim Lärmprotokoll",
-            description = "Dokumentieren Sie Lärmbelästigungen und akustische Ereignisse verlässlich mit automatischer Aufzeichnung und Pegelmessung.",
+            title = stringResource(R.string.onboarding_1_title),
+            description = stringResource(R.string.onboarding_1_desc),
             icon = Icons.Default.Info,
-            note = "Aufnahmen werden lokal auf Ihrem Gerät gespeichert und können bei Bedarf exportiert werden."
+            note = stringResource(R.string.onboarding_1_note)
         ),
         OnboardingPage(
-            title = "Zwei Betriebsarten",
-            description = "1. Smartphone-Mikrofon: Schneller Einstieg, unkalibrierter dB-Vergleichswert.\n\n2. PCE-323 über Bluetooth BLE: Normgerechte, kalibrierte dBA-Messung für belastbare Gutachten.",
+            title = stringResource(R.string.onboarding_2_title),
+            description = stringResource(R.string.onboarding_2_desc),
             icon = AppIcons.Sensors,
-            note = "Wichtig: Smartphone-Mikrofone sind unkalibriert. Für amtliche Nachweise empfehlen wir das PCE-323."
+            note = stringResource(R.string.onboarding_2_note)
         ),
         OnboardingPage(
-            title = "Berechtigungen",
-            description = "Die App fordert Berechtigungen gezielt an, wenn sie gebraucht werden:\n• Mikrofon: für Audioaufnahmen\n• Bluetooth: für die PCE-323 Kopplung\n• Benachrichtigungen: für den Hintergrunddienst",
+            title = stringResource(R.string.onboarding_3_title),
+            description = stringResource(R.string.onboarding_3_desc),
             icon = Icons.Default.Notifications,
-            note = "Keine unnötigen Berechtigungen im Voraus."
+            note = stringResource(R.string.onboarding_3_note)
         ),
         OnboardingPage(
-            title = "Akku-Optimierung",
-            description = "Damit Messungen über viele Stunden im Hintergrund unterbrechungsfrei laufen, sollte die App von der Android Akku-Optimierung ausgenommen werden.",
+            title = stringResource(R.string.onboarding_4_title),
+            description = stringResource(R.string.onboarding_4_desc),
             icon = Icons.Default.PlayArrow,
-            note = "Sie können die Einstellung jederzeit in den App-Einstellungen anpassen."
+            note = stringResource(R.string.onboarding_4_note)
         )
     )
 

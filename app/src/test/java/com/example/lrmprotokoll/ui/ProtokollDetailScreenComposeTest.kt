@@ -57,13 +57,16 @@ class ProtokollDetailScreenComposeTest {
             )
         }
 
+        val chartTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
+        val noChartData = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data)
+
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(chartTitle).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Pegelverlauf").assertIsDisplayed()
-        composeRule.onNodeWithText("Keine Messwerte für den Pegelverlauf.").assertIsDisplayed()
+        composeRule.onNodeWithText(chartTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(noChartData).assertIsDisplayed()
     }
 
     @Test
@@ -85,12 +88,15 @@ class ProtokollDetailScreenComposeTest {
             id
         }
 
+        val chartTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
+        val noChartData = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data)
+
         composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("Pegelverlauf").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(chartTitle).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Pegelverlauf").assertIsDisplayed()
-        composeRule.onNodeWithText("Keine Messwerte für den Pegelverlauf.").assertDoesNotExist()
+        composeRule.onNodeWithText(chartTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(noChartData).assertDoesNotExist()
     }
 }

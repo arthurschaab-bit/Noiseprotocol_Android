@@ -47,7 +47,11 @@ class DiagnoseScreenComposeTest {
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Diagnose-Log (1)").assertExists()
+        val logTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_header, 1)
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText(logTitle).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(logTitle).assertExists()
     }
 
     @Test
@@ -55,9 +59,13 @@ class DiagnoseScreenComposeTest {
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Remote-Diagnose & Datenschutz").assertIsDisplayed()
-        composeRule.onNodeWithText("Fehlerberichte senden").assertIsDisplayed()
-        composeRule.onNodeWithText("Support-Bundle exportieren (ZIP)").assertIsDisplayed()
+        val secPrivacy = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_remote_privacy_header)
+        val sendReports = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_send_reports)
+        val exportBundle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_export_bundle)
+
+        composeRule.onNodeWithText(secPrivacy).assertIsDisplayed()
+        composeRule.onNodeWithText(sendReports).assertIsDisplayed()
+        composeRule.onNodeWithText(exportBundle).assertIsDisplayed()
     }
 
     @Test
@@ -68,7 +76,8 @@ class DiagnoseScreenComposeTest {
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
 
+        val copyStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_copy)
         composeRule.onNodeWithText("DIA-20260820-TEST9999").assertIsDisplayed()
-        composeRule.onNodeWithText("Kopieren").assertIsDisplayed()
+        composeRule.onNodeWithText(copyStr).assertIsDisplayed()
     }
 }

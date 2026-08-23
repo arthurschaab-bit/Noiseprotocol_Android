@@ -4,13 +4,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,24 +40,29 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen inkl. Cockpit
-        composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onAllNodesWithText("Noise Protocol", substring = true).onFirst().assertIsDisplayed()
+        val appName = composeRule.activity.getString(R.string.app_name)
+        val protocolLabel = composeRule.activity.getString(R.string.nav_protocol)
+        val settingsLabel = composeRule.activity.getString(R.string.nav_settings)
+        val startLabel = composeRule.activity.getString(R.string.nav_start)
+        val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)
+
+        // 1. Startscreen (Home) ist geladen
+        composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
 
         // 2. Navigation zu Protokoll
-        composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
+        composeRule.onAllNodesWithText(protocolLabel).onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Messreihen", substring = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText(protocolLabel, substring = true).onFirst().assertIsDisplayed()
 
         // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
-        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
+        composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Einstellungen", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onAllNodesWithText("Diagnose & Systemgesundheit", substring = true).onFirst().assertExists()
+        composeRule.onAllNodesWithText(settingsLabel, substring = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText(diagSection, substring = true).onFirst().assertExists()
 
         // 4. Navigation zurück zum Startscreen
-        composeRule.onAllNodesWithText("Start").onFirst().performClick()
+        composeRule.onAllNodesWithText(startLabel).onFirst().performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
     }
 }

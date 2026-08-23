@@ -24,11 +24,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
@@ -157,13 +159,13 @@ fun LiveCockpitCard(
             // Left: Title & Subtitle
             Column {
                 Text(
-                    text = "Noise Protocol",
+                    text = stringResource(R.string.cockpit_title),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (dienstAktiv) "Live Monitoring" else "System Ready",
+                    text = stringResource(if (dienstAktiv) R.string.cockpit_subtitle_live else R.string.cockpit_subtitle_ready),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -175,7 +177,7 @@ fun LiveCockpitCard(
                 modifier = Modifier.padding(horizontal = 4.dp)
             ) {
                 Text(
-                    text = "Auslösequelle für Audio/WAV: ",
+                    text = stringResource(R.string.cockpit_trigger_source_label) + " ",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -191,9 +193,9 @@ fun LiveCockpitCard(
                         ) {
                             Text(
                                 text = when (settings.audioTriggerQuelle) {
-                                    "PCE_323" -> "Nur PCE-323"
-                                    "MIKROFON" -> "Nur Mikrofon"
-                                    else -> "Automatisch"
+                                    "PCE_323" -> stringResource(R.string.cockpit_trigger_meter_only)
+                                    "MIKROFON" -> stringResource(R.string.cockpit_trigger_mic_only)
+                                    else -> stringResource(R.string.cockpit_trigger_auto)
                                 },
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
@@ -211,21 +213,21 @@ fun LiveCockpitCard(
                         onDismissRequest = { showTriggerMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Automatisch (Standard)") },
+                            text = { Text(stringResource(R.string.settings_trigger_source_auto)) },
                             onClick = {
                                 settings.audioTriggerQuelle = "AUTO"
                                 showTriggerMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Nur PCE-323") },
+                            text = { Text(stringResource(R.string.settings_trigger_source_meter)) },
                             onClick = {
                                 settings.audioTriggerQuelle = "PCE_323"
                                 showTriggerMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Nur Mikrofon") },
+                            text = { Text(stringResource(R.string.settings_trigger_source_mic)) },
                             onClick = {
                                 settings.audioTriggerQuelle = "MIKROFON"
                                 showTriggerMenu = false
@@ -237,7 +239,7 @@ fun LiveCockpitCard(
 
             // Right: Aufnahme-Schwelle
             Text(
-                text = "Aufnahme-Schwelle: ${String.format(Locale.US, "%.1f", schwelle)} dB",
+                text = stringResource(R.string.cockpit_threshold_display, schwelle),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.clickable { onNavigateToSettings?.invoke() }
@@ -254,7 +256,7 @@ fun LiveCockpitCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (dienstAktiv) "MEASUREMENT RUNNING" else "Ready to measure",
+                text = stringResource(if (dienstAktiv) R.string.cockpit_measuring_running else R.string.cockpit_ready_to_measure),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
@@ -282,11 +284,11 @@ fun LiveCockpitCard(
 
             val levelVal = liveLevel ?: (if (dienstAktiv) 36.3 else 0.0)
             val levelDescription = when {
-                !dienstAktiv -> "Bereit für Lärmmessung und Audio-Dokumentation"
-                levelVal <= 0.0 -> "Waiting for level updates..."
-                levelVal < 45.0 -> "Background noise level is low"
-                levelVal < 65.0 -> "Moderate ambient noise level"
-                else -> "High noise level exceeding standard threshold"
+                !dienstAktiv -> stringResource(R.string.cockpit_level_desc_ready)
+                levelVal <= 0.0 -> stringResource(R.string.cockpit_level_desc_waiting)
+                levelVal < 45.0 -> stringResource(R.string.cockpit_level_desc_low)
+                levelVal < 65.0 -> stringResource(R.string.cockpit_level_desc_moderate)
+                else -> stringResource(R.string.cockpit_level_desc_high)
             }
 
             Text(
@@ -313,7 +315,7 @@ fun LiveCockpitCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Sound Level History",
+                        text = stringResource(R.string.cockpit_history_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -334,7 +336,7 @@ fun LiveCockpitCard(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "LAeq (Avg)",
+                                    text = stringResource(R.string.cockpit_laeq_label),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -346,7 +348,7 @@ fun LiveCockpitCard(
                                     )
                                     Spacer(Modifier.width(2.dp))
                                     Text(
-                                        text = "dB",
+                                        text = stringResource(R.string.unit_db),
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -365,7 +367,7 @@ fun LiveCockpitCard(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "LMax (Peak)",
+                                    text = stringResource(R.string.cockpit_lmax_label),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -377,7 +379,7 @@ fun LiveCockpitCard(
                                     )
                                     Spacer(Modifier.width(2.dp))
                                     Text(
-                                        text = "dB",
+                                        text = stringResource(R.string.unit_db),
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -427,7 +429,7 @@ fun LiveCockpitCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (dienstAktiv) "Erfasse Live-Messdaten..." else "Starte eine Messung, um den Pegelverlauf zu sehen.",
+                            text = if (dienstAktiv) stringResource(R.string.cockpit_collecting_live_data) else stringResource(R.string.cockpit_start_to_see_history),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -453,7 +455,7 @@ fun LiveCockpitCard(
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "+ Mark noise event",
+                        text = stringResource(R.string.cockpit_mark_noise_event),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -474,7 +476,7 @@ fun LiveCockpitCard(
                         .testTag(END_MEASUREMENT_BUTTON_TAG)
                 ) {
                     Text(
-                        text = "End measurement",
+                        text = stringResource(R.string.cockpit_end_measurement),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -507,7 +509,7 @@ fun LiveCockpitCard(
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Start measurement",
+                    text = stringResource(R.string.cockpit_start_measurement),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

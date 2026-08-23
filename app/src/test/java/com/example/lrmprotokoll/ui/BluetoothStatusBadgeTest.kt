@@ -61,6 +61,7 @@ class BluetoothStatusBadgeTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("BT: Aus").assertIsDisplayed()
+        val offStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.status_off)
+        composeRule.onNodeWithText("BT: $offStr").assertIsDisplayed()
     }
 }

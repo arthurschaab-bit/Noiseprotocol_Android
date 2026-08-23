@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import org.junit.Assert.assertFalse
@@ -42,10 +43,12 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Diagnose & Systemgesundheit").assertIsDisplayed()
+        val diagTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_diagnostics)
+        composeRule.onNodeWithText(diagTitle).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -55,7 +58,11 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        listOf("Start", "Protokoll", "Einstellungen").forEach { label ->
+        val homeLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
+        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+
+        listOf(homeLabel, protocolLabel, settingsLabel).forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
@@ -67,10 +74,14 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Einstellungen").onFirst().performClick()
+        val homeLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
+        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+
+        composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
 
-        listOf("Start", "Protokoll", "Einstellungen").forEach { label ->
+        listOf(homeLabel, protocolLabel, settingsLabel).forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }

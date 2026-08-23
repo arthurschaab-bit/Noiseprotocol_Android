@@ -90,7 +90,7 @@ fun TrashScreen(
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "${trashRecords.size} Aufnahme(n) im Papierkorb",
+                        text = stringResource(R.string.trash_count_format, trashRecords.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -113,7 +113,7 @@ fun TrashScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA ?: record.dbValue)} dB" +
+                                    text = "${stringResource(R.string.level_prefix)}: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA ?: record.dbValue)} ${stringResource(R.string.unit_db)}" +
                                         (if (record.label != null) " · ${record.label}" else ""),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -125,7 +125,7 @@ fun TrashScreen(
                                     onClick = {
                                         scope.launch {
                                             container.database.noiseDao().restore(record.id)
-                                            onShowSnackbar("Aufnahme wiederhergestellt")
+                                            onShowSnackbar(context.getString(R.string.trash_restored))
                                         }
                                     }
                                 ) {
@@ -155,8 +155,8 @@ fun TrashScreen(
         recordToDeletePermanently?.let { rec ->
             AlertDialog(
                 onDismissRequest = { recordToDeletePermanently = null },
-                title = { Text("Endgültig löschen?") },
-                text = { Text("Die Aufnahme und die zugehörige Audiodatei werden unwiderruflich gelöscht.") },
+                title = { Text(stringResource(R.string.trash_delete_confirm_title)) },
+                text = { Text(stringResource(R.string.trash_delete_confirm_desc)) },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -164,7 +164,7 @@ fun TrashScreen(
                                 container.database.noiseDao().deleteById(rec.id)
                                 java.io.File(rec.filePath).delete()
                                 recordToDeletePermanently = null
-                                onShowSnackbar("Aufnahme endgültig gelöscht")
+                                onShowSnackbar(context.getString(R.string.trash_deleted_permanently))
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)

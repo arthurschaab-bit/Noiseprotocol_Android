@@ -36,10 +36,11 @@ class ServiceControlInstrumentedTest {
         composeRule.setContent {
             LiveCockpitCard()
         }
-        composeRule.waitForIdle()
+        val startBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_start_measurement)
+        val readyText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_ready_to_measure)
 
         // Starten-Button und Bereit-Status im Ruhezustand vorhanden
-        composeRule.onNodeWithText("Start measurement").assertExists().assertIsEnabled()
-        composeRule.onNodeWithText("Ready to measure").assertIsDisplayed()
+        composeRule.onNodeWithText(startBtn).assertExists().assertIsEnabled()
+        composeRule.onNodeWithText(readyText).assertIsDisplayed()
     }
 }
