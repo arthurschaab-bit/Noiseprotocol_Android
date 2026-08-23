@@ -46,7 +46,7 @@ class ProtokollScreenInstrumentedTest {
         composeRule.waitForIdle()
 
         val protocolTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
-        val emptyStateText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_empty_desc)
+        val emptyStateText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.empty_protocol_desc)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
         // 1. Titel "Protokoll" in TopAppBar sichtbar

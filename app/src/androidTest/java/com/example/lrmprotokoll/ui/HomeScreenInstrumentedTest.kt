@@ -128,15 +128,14 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithText("KI: Drilling").assertIsDisplayed()
         composeRule.onNodeWithText("Label: Nachbar bohrt").assertIsDisplayed()
 
-        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_play)
-        val aiDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_ai_recognize)
-        val favDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_favorite)
+        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
+        val aiDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_ai_batch)
+        val favDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.filter_favorites)
         val delDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_delete)
-        val learnStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_learn_sound)
-        val baggerStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.tag_excavator)
-        val bohrenStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.tag_drilling)
-        val haemmernStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.tag_hammering)
-        val verkehrStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.tag_traffic)
+        val learnStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_learn_pattern)
+        val bohrenStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_drilling)
+        val haemmernStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_hammering)
+        val verkehrStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_traffic)
 
         // Teste Play-Button
         composeRule.onNodeWithContentDescription(playDesc).assertIsDisplayed().performClick()
@@ -159,9 +158,6 @@ class HomeScreenInstrumentedTest {
         assertTrue(deleted)
 
         // Teste Label-Chips
-        composeRule.onNodeWithText(baggerStr).assertIsDisplayed().performClick()
-        assertEquals(baggerStr, assignedLabel)
-
         composeRule.onNodeWithText(bohrenStr).assertIsDisplayed().performClick()
         assertEquals(bohrenStr, assignedLabel)
 

@@ -74,8 +74,8 @@ class ProtokollDetailScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val sessionLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_session_title)
-        val metricsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_metrics_title)
+        val sessionLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_session_details)
+        val metricsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_metrics)
         val historyTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
         val csvBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_csv)
         val pdfBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_pdf)
@@ -107,7 +107,7 @@ class ProtokollDetailScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val notFoundText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_session_not_found)
+        val notFoundText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_session_not_found)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
         composeRule.onNodeWithText(notFoundText).assertIsDisplayed()

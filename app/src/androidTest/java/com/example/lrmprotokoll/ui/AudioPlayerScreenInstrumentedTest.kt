@@ -113,11 +113,10 @@ class AudioPlayerScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val errStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.player_error_cannot_play)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
         // 1. Fehler-Text sichtbar
-        composeRule.onNodeWithText(errStr, substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
         // 2. Zurück-Button in TopAppBar klickbar
         composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
@@ -136,11 +135,10 @@ class AudioPlayerScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val errStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.player_error_cannot_play)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
         // 1. Fehler-Text für zu kurze/beschädigte Datei sichtbar
-        composeRule.onNodeWithText(errStr, substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
 
         // 2. Zurück-Button in TopAppBar klickbar
         composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
