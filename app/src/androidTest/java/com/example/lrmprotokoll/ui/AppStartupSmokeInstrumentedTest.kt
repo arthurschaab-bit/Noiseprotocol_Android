@@ -42,9 +42,9 @@ class AppStartupSmokeInstrumentedTest {
     fun appStartetOhneAbsturzUndNavigiertDurchAlleHauptscreens() {
         composeRule.waitForIdle()
 
-        // 1. Startscreen (Home) ist geladen inkl. Smartphone-Mikrofon
+        // 1. Startscreen (Home) ist geladen inkl. Cockpit
         composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onAllNodesWithText("1. Smartphone-Mikrofon").onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Noise Protocol", substring = true).onFirst().assertIsDisplayed()
 
         // 2. Navigation zu Protokoll
         composeRule.onAllNodesWithText("Protokoll").onFirst().performClick()
