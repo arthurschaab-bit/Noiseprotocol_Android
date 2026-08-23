@@ -100,8 +100,11 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
         }
     }
 
+    data class ScoredCategory(val name: String, val score: Float)
+
     override fun classify(file: File): String? {
-        val currentLabels = classifyDetailed(file) ?: return null
+        val scoredLabels = classifyDetailedScored(file) ?: return null
+        val currentLabels = scoredLabels.map { it.name }
 
         // 1. Abgleich mit der Datenbank bekannter Geräusche
         try {
@@ -110,23 +113,29 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
             references.forEach { ref ->
                 val refPattern = ref.pattern.split(",").toSet()
                 val intersection = currentLabels.intersect(refPattern)
-                if (intersection.size.toFloat() / refPattern.size > 0.5f) {
-                    return "Gelernt: ${ref.name}"
+                val ratio = intersection.size.toFloat() / refPattern.size
+                if (ratio > 0.5f) {
+                    val percent = (ratio * 100).toInt().coerceIn(1, 100)
+                    return "Gelernt: ${ref.name} ($percent%)"
                 }
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error checking references: ${e.message}", e)
         }
 
-        // 2. Standard-Top-Label finden
-        val top = currentLabels.firstOrNull {
-            it != "Background noise" && it != "Silence" && it != "Noise"
-        }
+        // 2. Standard-Top-Label finden mit Konfidenz-Prozentwert
+        val top = scoredLabels.firstOrNull {
+            it.name != "Background noise" && it.name != "Silence" && it.name != "Noise"
+        } ?: return null
 
-        return labelMapping[top] ?: top
+        val mappedName = labelMapping[top.name] ?: top.name
+        val percent = (top.score * 100).toInt().coerceIn(1, 100)
+        return "$mappedName ($percent%)"
     }
 
-    fun classifyDetailed(file: File): List<String>? {
+    fun classifyDetailed(file: File): List<String>? = classifyDetailedScored(file)?.map { it.name }
+
+    fun classifyDetailedScored(file: File): List<ScoredCategory>? {
         val currentClassifier = classifier ?: return null
 
         try {
@@ -166,8 +175,8 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
                 .flatMap { it.categories() }
                 .filter { it.score() > settingsManager.aiConfidenceThreshold }
                 .sortedByDescending { it.score() }
-                .map { it.categoryName() }
-                .distinct()
+                .map { ScoredCategory(it.categoryName(), it.score()) }
+                .distinctBy { it.name }
         } catch (e: Throwable) {
             Log.e(TAG, "Error during detailed classification: ${e.message}", e)
             container.diagnosticsReporter.report(

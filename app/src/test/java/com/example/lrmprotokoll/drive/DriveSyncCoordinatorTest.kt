@@ -59,7 +59,7 @@ class DriveSyncCoordinatorTest {
         override fun alle() = flowOf(zeilen.values.sortedByDescending { it.date })
     }
 
-    private class FakeNoiseDao : NoiseDao {
+    private open class FakeNoiseDao : NoiseDao {
         override fun getAll(): Flow<List<NoiseRecord>> = flowOf(emptyList())
         override suspend fun getAlleAktiven(): List<NoiseRecord> = emptyList()
         override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(emptyList())
@@ -375,5 +375,34 @@ class DriveSyncCoordinatorTest {
         ).syncEinenZyklus()
 
         assertTrue(gzipGesehen)
+    }
+
+    @Test
+    fun wavUploadWirdErfolgreichSynchronisiertAuchWennKeinePegelzeilenVorliegen() = runTest {
+        val tempWav = java.io.File.createTempFile("test_audio", ".wav").apply {
+            writeBytes(ByteArray(100) { 1 })
+            deleteOnExit()
+        }
+        val customNoiseDao = object : FakeNoiseDao() {
+            override suspend fun getAlleAktiven(): List<NoiseRecord> = listOf(
+                NoiseRecord(
+                    id = 1L,
+                    timestamp = uhr.now().toEpochMilli(),
+                    amplitude = 50.0,
+                    dbValue = 65.0,
+                    filePath = tempWav.absolutePath,
+                )
+            )
+        }
+        settings.driveUploadWav = true
+
+        val koordinator = DriveSyncCoordinator(
+            driveApi, levelSampleDao, dailyFileDao, customNoiseDao, settings, uhr, zone,
+        )
+        val ergebnis = koordinator.syncEinenZyklus()
+
+        assertTrue("Ergebnis muss Erfolgreich sein", ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+        assertEquals("1 WAV-Datei synchronisiert", 1, (ergebnis as DriveSyncCoordinator.SyncErgebnis.Erfolgreich).zeilen)
+        assertTrue(settings.driveSyncLastSuccessAt > 0)
     }
 }
