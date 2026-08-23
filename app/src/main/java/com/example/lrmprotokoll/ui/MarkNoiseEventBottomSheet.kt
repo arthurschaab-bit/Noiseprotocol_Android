@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,10 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.lrmprotokoll.R
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,20 +33,20 @@ const val SAVE_NOISE_EVENT_BUTTON_TAG = "save_noise_event_button"
 
 data class NoiseCategory(
     val id: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector
 )
 
 val DEFAULT_NOISE_CATEGORIES = listOf(
-    NoiseCategory("hammering", "Hammering", AppIcons.Hammer),
-    NoiseCategory("drilling", "Drilling", AppIcons.Drill),
-    NoiseCategory("footsteps", "Footsteps", AppIcons.Footsteps),
-    NoiseCategory("voices", "Voices", AppIcons.Voices),
-    NoiseCategory("music", "Music", AppIcons.Music),
-    NoiseCategory("traffic", "Traffic", AppIcons.Traffic),
-    NoiseCategory("dogs", "Dogs", AppIcons.Dogs),
-    NoiseCategory("alarms", "Alarms", AppIcons.Alarms),
-    NoiseCategory("other", "Other", AppIcons.Other),
+    NoiseCategory("hammering", R.string.category_hammering, AppIcons.Hammer),
+    NoiseCategory("drilling", R.string.category_drilling, AppIcons.Drill),
+    NoiseCategory("footsteps", R.string.category_footsteps, AppIcons.Footsteps),
+    NoiseCategory("voices", R.string.category_voices, AppIcons.Voices),
+    NoiseCategory("music", R.string.category_music, AppIcons.Music),
+    NoiseCategory("traffic", R.string.category_traffic, AppIcons.Traffic),
+    NoiseCategory("dogs", R.string.category_dogs, AppIcons.Dogs),
+    NoiseCategory("alarms", R.string.category_alarms, AppIcons.Alarms),
+    NoiseCategory("other", R.string.category_other, AppIcons.Other),
 )
 
 /**
@@ -57,6 +61,7 @@ fun MarkNoiseEventBottomSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var selectedCategoryId by remember { mutableStateOf("hammering") }
     var noteText by remember { mutableStateOf("") }
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
@@ -87,7 +92,7 @@ fun MarkNoiseEventBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "Mark noise event",
+                        text = stringResource(R.string.cockpit_mark_noise_event),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -106,7 +111,7 @@ fun MarkNoiseEventBottomSheet(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Schließen",
+                        contentDescription = stringResource(R.string.action_close),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -127,6 +132,7 @@ fun MarkNoiseEventBottomSheet(
                     val isSelected = cat.id == selectedCategoryId
                     val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                     val contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    val label = stringResource(cat.labelRes)
 
                     Column(
                         modifier = Modifier
@@ -146,13 +152,13 @@ fun MarkNoiseEventBottomSheet(
                     ) {
                         Icon(
                             imageVector = cat.icon,
-                            contentDescription = cat.label,
+                            contentDescription = label,
                             tint = contentColor,
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = cat.label,
+                            text = label,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = contentColor,
@@ -166,7 +172,7 @@ fun MarkNoiseEventBottomSheet(
 
             // Notiz-Eingabe
             Text(
-                text = "Add note (optional)",
+                text = stringResource(R.string.mark_event_add_note),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -175,7 +181,7 @@ fun MarkNoiseEventBottomSheet(
             OutlinedTextField(
                 value = noteText,
                 onValueChange = { noteText = it },
-                placeholder = { Text("Describe the noise source...") },
+                placeholder = { Text(stringResource(R.string.mark_event_note_placeholder)) },
                 minLines = 2,
                 maxLines = 3,
                 shape = RoundedCornerShape(12.dp),
@@ -187,7 +193,8 @@ fun MarkNoiseEventBottomSheet(
             // Speichern CTA Button
             Button(
                 onClick = {
-                    val catLabel = DEFAULT_NOISE_CATEGORIES.find { it.id == selectedCategoryId }?.label ?: selectedCategoryId
+                    val catObj = DEFAULT_NOISE_CATEGORIES.find { it.id == selectedCategoryId }
+                    val catLabel = catObj?.let { context.getString(it.labelRes) } ?: selectedCategoryId
                     onSaveEvent(catLabel, noteText.trim())
                     onDismiss()
                 },
@@ -199,7 +206,7 @@ fun MarkNoiseEventBottomSheet(
                     .testTag(SAVE_NOISE_EVENT_BUTTON_TAG)
             ) {
                 Text(
-                    text = "Save Event",
+                    text = stringResource(R.string.mark_event_save_button),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimary

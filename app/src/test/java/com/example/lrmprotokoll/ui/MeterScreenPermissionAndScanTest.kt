@@ -51,6 +51,7 @@ class MeterScreenPermissionAndScanTest {
         scanButton.performClick()
 
         // Berechtigungs-Hinweis oder Button muss vorhanden sein
-        composeRule.onNodeWithText("Neues Gerät koppeln", substring = true).performScrollTo().assertIsDisplayed()
+        val pairStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.meter_pair_new_title)
+        composeRule.onNodeWithText(pairStr, substring = true).performScrollTo().assertIsDisplayed()
     }
 }

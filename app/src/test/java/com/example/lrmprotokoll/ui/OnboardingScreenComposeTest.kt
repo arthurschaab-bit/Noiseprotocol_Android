@@ -32,24 +32,27 @@ class OnboardingScreenComposeTest {
         }
         composeRule.waitForIdle()
 
+        val nextStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_next)
+        val startStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_finish)
+
         // 1. Willkommen
-        composeRule.onAllNodesWithText("Willkommen beim Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("Weiter").performClick()
+        composeRule.onAllNodesWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_1_title), substring = true).onFirst().assertIsDisplayed()
+        composeRule.onNodeWithText(nextStr).performClick()
         composeRule.waitForIdle()
 
         // 2. Betriebsarten
-        composeRule.onAllNodesWithText("Zwei Betriebsarten", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("Weiter").performClick()
+        composeRule.onAllNodesWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_2_title), substring = true).onFirst().assertIsDisplayed()
+        composeRule.onNodeWithText(nextStr).performClick()
         composeRule.waitForIdle()
 
         // 3. Berechtigungen
-        composeRule.onAllNodesWithText("Berechtigungen", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("Weiter").performClick()
+        composeRule.onAllNodesWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_3_title), substring = true).onFirst().assertIsDisplayed()
+        composeRule.onNodeWithText(nextStr).performClick()
         composeRule.waitForIdle()
 
         // 4. Akku
-        composeRule.onAllNodesWithText("Akku-Optimierung", substring = true).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithText("Starten").performClick()
+        composeRule.onAllNodesWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_4_title), substring = true).onFirst().assertIsDisplayed()
+        composeRule.onNodeWithText(startStr).performClick()
         composeRule.waitForIdle()
 
         assertTrue(finished)
@@ -64,7 +67,8 @@ class OnboardingScreenComposeTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Überspringen").performClick()
+        val skipStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_skip)
+        composeRule.onNodeWithText(skipStr).performClick()
         composeRule.waitForIdle()
 
         assertTrue(finished)

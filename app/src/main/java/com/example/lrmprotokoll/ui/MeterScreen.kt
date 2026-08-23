@@ -294,7 +294,7 @@ fun MeterScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Unverschlüsselte Verbindung – dieses Gerät unterstützt kein Bonding",
+                            stringResource(R.string.meter_unencrypted_warning),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -320,7 +320,7 @@ fun MeterScreen(
                     )
                     if (confirmedWeighting == null) {
                         Text(
-                            "Frequenzbewertung unbekannt – kein bestätigtes dBA",
+                            stringResource(R.string.meter_unknown_weighting),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -331,9 +331,9 @@ fun MeterScreen(
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 if (frame.modeAssumptionConfirmed) {
-                                    "Bestätigt am Gerät"
+                                    stringResource(R.string.meter_confirmed_on_device)
                                 } else {
-                                    "Annahme, unbestätigt – bitte gegen die Geräteanzeige prüfen"
+                                    stringResource(R.string.meter_unconfirmed_warning)
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (frame.modeAssumptionConfirmed) {
@@ -343,9 +343,9 @@ fun MeterScreen(
                                 }
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Bewertung: ${weightingLabel(frame.weighting)}", style = MaterialTheme.typography.bodyMedium)
-                            Text("Zeitbewertung: ${timeWeightingLabel(frame.timeWeighting)}", style = MaterialTheme.typography.bodyMedium)
-                            Text("Messbereich: ${rangeLabel(frame.range)}", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.meter_weighting_value, weightingLabel(frame.weighting)), style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.meter_time_weighting_value, timeWeightingLabel(frame.timeWeighting)), style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.meter_range_value, rangeLabel(frame.range)), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -356,7 +356,7 @@ fun MeterScreen(
 
                 if (pairedAddress != null) {
                     Text(
-                        "Gekoppelt: ${pairedName ?: "Unbekannt"} ($pairedAddress)",
+                        stringResource(R.string.meter_paired_info, pairedName ?: "Unbekannt", pairedAddress ?: ""),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -374,12 +374,12 @@ fun MeterScreen(
                             }
                         }
                     ) {
-                        Text("Verbinden")
+                        Text(stringResource(R.string.meter_action_connect))
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                Text("Neues Gerät koppeln", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.meter_pair_new_title), style = MaterialTheme.typography.titleSmall)
                 if (!hasBluetoothPermissions) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Card(
@@ -426,7 +426,7 @@ fun MeterScreen(
                     enabled = !isScanning,
                     modifier = Modifier.testTag(SCAN_BUTTON_TAG),
                 ) {
-                    Text(if (isScanning) "Suche läuft…" else "Scannen (10s)")
+                    Text(if (isScanning) stringResource(R.string.meter_scanning) else stringResource(R.string.meter_scan_button))
                 }
 
                 scanFehler?.let {
@@ -466,10 +466,10 @@ fun MeterScreen(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.height(16.dp).width(16.dp),
-                                )
+                                    )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    "Gleicher Name wie das gekoppelte Gerät, andere Adresse",
+                                    stringResource(R.string.meter_spoof_warning),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error,
                                 )

@@ -46,6 +46,6 @@ class AudioPlayerScreenComposeTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Wiedergabe fehlgeschlagen", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Abspielen").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)).assertIsNotEnabled()
     }
 }

@@ -29,6 +29,7 @@ class MainActivityLaunchTest {
         container.settingsManager.onboardingCompleted = true
 
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Lärmprotokoll", substring = true).onFirst().assertIsDisplayed()
+        val appName = composeRule.activity.getString(com.example.lrmprotokoll.R.string.app_name)
+        composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
     }
 }

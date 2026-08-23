@@ -293,7 +293,7 @@ fun SettingsScreen(
                     ) {
                         Icon(AppIcons.Sparkle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Lite-Modus", fontWeight = if (!isProMode) FontWeight.Bold else FontWeight.Normal)
+                        Text(stringResource(R.string.settings_mode_lite), fontWeight = if (!isProMode) FontWeight.Bold else FontWeight.Normal)
                     }
 
                     Button(
@@ -311,19 +311,78 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pro-Modus", fontWeight = if (isProMode) FontWeight.Bold else FontWeight.Normal)
+                        Text(stringResource(R.string.settings_mode_pro), fontWeight = if (isProMode) FontWeight.Bold else FontWeight.Normal)
                     }
+                }
+            }
+
+            // Sektion 0: Sprache / Language
+            var expSprache by remember { mutableStateOf(false) }
+            var appLanguage by remember { mutableStateOf(settings.appLanguage) }
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_language_title),
+                summary = when (appLanguage) {
+                    "de" -> stringResource(R.string.settings_language_de)
+                    "en" -> stringResource(R.string.settings_language_en)
+                    else -> stringResource(R.string.settings_language_system)
+                },
+                expanded = expSprache,
+                onToggle = { expSprache = !expSprache }
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_language_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = appLanguage.isEmpty(),
+                        onClick = {
+                            appLanguage = ""
+                            settings.appLanguage = ""
+                            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                                androidx.core.os.LocaleListCompat.getEmptyLocaleList()
+                            )
+                        },
+                        label = { Text(stringResource(R.string.settings_language_system)) }
+                    )
+                    FilterChip(
+                        selected = appLanguage == "de",
+                        onClick = {
+                            appLanguage = "de"
+                            settings.appLanguage = "de"
+                            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                                androidx.core.os.LocaleListCompat.forLanguageTags("de")
+                            )
+                        },
+                        label = { Text(stringResource(R.string.settings_language_de)) }
+                    )
+                    FilterChip(
+                        selected = appLanguage == "en",
+                        onClick = {
+                            appLanguage = "en"
+                            settings.appLanguage = "en"
+                            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                                androidx.core.os.LocaleListCompat.forLanguageTags("en")
+                            )
+                        },
+                        label = { Text(stringResource(R.string.settings_language_en)) }
+                    )
                 }
             }
 
             // Sektion 1: Aufnahme & Mikrofon
             SettingsSectionCard(
-                title = "Aufnahme & Schwellenwert",
-                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }})${if (isProMode) " · ${preRoll.toInt()}s Vorlauf · ${duration.toInt()}s Dauer" else ""}",
+                title = stringResource(R.string.settings_section_thresholds),
+                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }})${if (isProMode) " · ${preRoll.toInt()}s · ${duration.toInt()}s" else ""}",
                 expanded = expAufnahme,
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
-                Text("Aufnahme-Schwellenwert (Tag): ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB(A)", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.settings_threshold_day, dbThreshold), fontWeight = FontWeight.SemiBold)
                 Slider(
                     value = dbThreshold,
                     onValueChange = { dbThreshold = it },
@@ -338,11 +397,11 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Grenzwerte nach Wohnraum (TA Lärm)", color = TechBluePrimary)
+                    Text(stringResource(R.string.settings_ta_laerm_presets), color = TechBluePrimary)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Trigger-Quelle für Audioaufnahmen:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.settings_trigger_source_title), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
@@ -351,7 +410,7 @@ fun SettingsScreen(
                             audioTriggerQuelle = "AUTO"
                             settings.audioTriggerQuelle = "AUTO"
                         },
-                        label = { Text("Automatisch (Standard)") }
+                        label = { Text(stringResource(R.string.settings_trigger_source_auto)) }
                     )
                     FilterChip(
                         selected = audioTriggerQuelle == "PCE_323",
@@ -359,7 +418,7 @@ fun SettingsScreen(
                             audioTriggerQuelle = "PCE_323"
                             settings.audioTriggerQuelle = "PCE_323"
                         },
-                        label = { Text("Nur PCE-323") }
+                        label = { Text(stringResource(R.string.settings_trigger_source_meter)) }
                     )
                     FilterChip(
                         selected = audioTriggerQuelle == "MIKROFON",
@@ -367,24 +426,20 @@ fun SettingsScreen(
                             audioTriggerQuelle = "MIKROFON"
                             settings.audioTriggerQuelle = "MIKROFON"
                         },
-                        label = { Text("Nur Mikrofon") }
+                        label = { Text(stringResource(R.string.settings_trigger_source_mic)) }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = when (audioTriggerQuelle) {
-                        "PCE_323" -> "Audioaufnahme wird nur ausgelöst, wenn das externe Messgerät PCE-323 verbunden ist und den Schwellenwert überschreitet."
-                        "MIKROFON" -> "Audioaufnahme wird immer anhand des internen Smartphone-Mikrofons ausgelöst (Messgerät-Werte werden ignoriert)."
-                        else -> "Standard: Sobald ein Messgerät (z. B. PCE-323) verbunden ist, wird dessen kalibrierter Messwert zur Schwellenprüfung verwendet. Wenn kein Messgerät verbunden ist, wird automatisch das Smartphone-Mikrofon genutzt."
-                    },
+                    text = stringResource(R.string.settings_trigger_source_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 if (isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Pre-Roll (Sekunden): ${preRoll.toInt()}s")
+                    Text(stringResource(R.string.settings_pre_roll, preRoll.toInt()))
                     Slider(
                         value = preRoll,
                         onValueChange = { preRoll = it },
@@ -394,7 +449,7 @@ fun SettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Aufnahmedauer (Sekunden): ${duration.toInt()}s")
+                    Text(stringResource(R.string.settings_duration, duration.toInt()))
                     Slider(
                         value = duration,
                         onValueChange = { duration = it },
@@ -404,17 +459,17 @@ fun SettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Abtastrate (Sample Rate): $sampleRate Hz")
+                    Text(stringResource(R.string.settings_sample_rate, sampleRate))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = sampleRate == 16000,
                             onClick = { sampleRate = 16000; settings.audioSampleRate = 16000 },
-                            label = { Text("16000 Hz (KI-Opt.)") }
+                            label = { Text(stringResource(R.string.settings_sample_rate_16k)) }
                         )
                         FilterChip(
                             selected = sampleRate == 44100,
                             onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
-                            label = { Text("44100 Hz (Qualität)") }
+                            label = { Text(stringResource(R.string.settings_sample_rate_44k)) }
                         )
                     }
                 }
@@ -422,15 +477,15 @@ fun SettingsScreen(
 
             // Sektion 2: KI-Erkennung
             SettingsSectionCard(
-                title = "KI-Erkennung (YAMNet)",
+                title = stringResource(R.string.settings_ai_title),
                 summary = if (aiEnabled) "Aktiv${if (isProMode) " (${(aiConfidence * 100).toInt()}% Schwelle)" else ""}" else "Deaktiviert",
                 expanded = expKi,
                 onToggle = { expKi = !expKi }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Automatische KI-Erkennung", style = MaterialTheme.typography.bodyLarge)
-                        Text("Klassifiziert Geräusche automatisch nach der Aufnahme", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.settings_ai_title), style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_ai_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = aiEnabled,
@@ -443,7 +498,7 @@ fun SettingsScreen(
 
                 if (aiEnabled && isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("KI-Vertrauensschwelle: ${(aiConfidence * 100).toInt()}%")
+                    Text(stringResource(R.string.settings_ai_confidence, (aiConfidence * 100).toInt()))
                     Slider(
                         value = aiConfidence,
                         onValueChange = { aiConfidence = it },
@@ -455,15 +510,15 @@ fun SettingsScreen(
 
             // Sektion 3: F8 Ruhezeiten & Grenzwerte
             SettingsSectionCard(
-                title = "Ruhezeiten & Nachtschutz",
+                title = stringResource(R.string.settings_quiet_hours_title),
                 summary = if (quietHoursEnabled) "Aktiv (${quietHoursStartHour.toInt()}:00 - ${quietHoursEndHour.toInt()}:00 Uhr · ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB)" else "Deaktiviert",
                 expanded = expRuhezeiten,
                 onToggle = { expRuhezeiten = !expRuhezeiten }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Ruhezeiten berücksichtigen", style = MaterialTheme.typography.bodyLarge)
-                        Text("Verwendet in den Ruhezeiten einen separaten Schwellenwert", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.settings_quiet_hours_title), style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_quiet_hours_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = quietHoursEnabled,
@@ -476,7 +531,7 @@ fun SettingsScreen(
 
                 if (quietHoursEnabled) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Ruhezeit-Schwellenwert (Nacht): ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB(A)")
+                    Text(stringResource(R.string.settings_quiet_hours_threshold, quietHoursThreshold))
                     Slider(
                         value = quietHoursThreshold,
                         onValueChange = { quietHoursThreshold = it },
@@ -491,11 +546,11 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Grenzwerte nach Wohnraum (TA Lärm)", color = TechBluePrimary)
+                        Text(stringResource(R.string.settings_ta_laerm_presets), color = TechBluePrimary)
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Start: ${quietHoursStartHour.toInt()}:00 Uhr")
+                    Text(stringResource(R.string.settings_quiet_hours_start, quietHoursStartHour.toInt()))
                     Slider(
                         value = quietHoursStartHour,
                         onValueChange = { quietHoursStartHour = it },
@@ -505,7 +560,7 @@ fun SettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Ende: ${quietHoursEndHour.toInt()}:00 Uhr")
+                    Text(stringResource(R.string.settings_quiet_hours_end, quietHoursEndHour.toInt()))
                     Slider(
                         value = quietHoursEndHour,
                         onValueChange = { quietHoursEndHour = it },
@@ -519,15 +574,15 @@ fun SettingsScreen(
             // Sektion 4: F5 Speicherplatz & Auto-Bereinigung (nur Pro-Modus)
             if (isProMode) {
                 SettingsSectionCard(
-                    title = "Speicherplatz & Auto-Bereinigung",
+                    title = stringResource(R.string.settings_cleanup_title),
                     summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
                     expanded = expRetention,
                     onToggle = { expRetention = !expRetention }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Automatische Bereinigung", style = MaterialTheme.typography.bodyLarge)
-                            Text("Verschiebt alte Aufnahmen automatisch in den Papierkorb (Favoriten sind geschützt)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.settings_cleanup_title), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.settings_cleanup_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(
                             checked = autoRetentionEnabled,
@@ -540,7 +595,7 @@ fun SettingsScreen(
 
                     if (autoRetentionEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Aufbewahrungsdauer: ${autoRetentionDays.toInt()} Tage")
+                        Text(stringResource(R.string.settings_cleanup_days, autoRetentionDays.toInt()))
                         Slider(
                             value = autoRetentionDays,
                             onValueChange = { autoRetentionDays = it },
@@ -553,7 +608,7 @@ fun SettingsScreen(
 
             // Sektion 5: Alarmierung bei Verbindungsabbruch
             SettingsSectionCard(
-                title = "Alarmierung bei Verbindungsabbruch",
+                title = stringResource(R.string.settings_alerting_title),
                 summary = if (alarmierungAktiv) "Aktiv${if (isProMode) " (Karenzzeit ${karenzzeit.toInt()}s)" else ""}" else "Deaktiviert",
                 expanded = expAlarm,
                 onToggle = { expAlarm = !expAlarm }
@@ -564,13 +619,13 @@ fun SettingsScreen(
                         onCheckedChange = { alarmierungAktiv = it; settings.alarmierungAktiv = it },
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Alarmierung aktiv")
+                    Text(stringResource(R.string.settings_alerting_active))
                 }
 
                 if (alarmierungAktiv) {
                     if (isProMode) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Karenzzeit: ${karenzzeit.toInt()} s")
+                        Text(stringResource(R.string.settings_alerting_grace_period, karenzzeit.toInt()))
                         Slider(
                             value = karenzzeit,
                             onValueChange = { karenzzeit = it },
@@ -596,7 +651,7 @@ fun SettingsScreen(
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Push auf ein zweites Gerät (ntfy)", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.settings_alerting_ntfy), style = MaterialTheme.typography.titleSmall)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Switch(
                                 checked = ntfyAktiv,
@@ -609,7 +664,7 @@ fun SettingsScreen(
                                 },
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("ntfy-Push aktiv")
+                            Text(stringResource(R.string.settings_alerting_ntfy))
                         }
 
                         if (ntfyAktiv) {
@@ -617,20 +672,20 @@ fun SettingsScreen(
                             OutlinedTextField(
                                 value = ntfyServer,
                                 onValueChange = { ntfyServer = it; settings.ntfyServer = it },
-                                label = { Text("Server") },
+                                label = { Text(stringResource(R.string.settings_alerting_ntfy_server)) },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = ntfyTopic,
                                 onValueChange = { ntfyTopic = it; settings.ntfyTopic = it },
-                                label = { Text("Topic") },
+                                label = { Text(stringResource(R.string.settings_alerting_ntfy_topic)) },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Lokale Geräte-Alarmierung", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.settings_alerting_local), style = MaterialTheme.typography.titleSmall)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Switch(
@@ -641,7 +696,7 @@ fun SettingsScreen(
                                 },
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Akustischer Alarmton (für Tablets & Lautlos)")
+                            Text(stringResource(R.string.settings_alerting_sound))
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -813,7 +868,7 @@ fun SettingsScreen(
 
             // Sektion 7: Diagnose & Systemgesundheit
             SettingsSectionCard(
-                title = "Diagnose & Systemgesundheit",
+                title = stringResource(R.string.settings_section_diagnostics),
                 summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
                 expanded = expSystem,
                 onToggle = { expSystem = !expSystem }

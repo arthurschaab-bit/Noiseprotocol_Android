@@ -11,8 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 
 /**
  * Status-Badge für die TopAppBar, das anzeigt, ob die Mikrofonaufnahme bzw. -überwachung
@@ -40,7 +42,7 @@ fun MicrophoneStatusBadge(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         ) {
             Text(
-                text = if (audioMonitoringActive) "Mikrofon AN" else "Mikrofon AUS",
+                text = stringResource(if (audioMonitoringActive) R.string.status_mic_on else R.string.status_mic_off),
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
                 fontWeight = FontWeight.SemiBold,

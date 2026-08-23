@@ -288,6 +288,13 @@ class SettingsManager(
         get() = prefs.getBoolean("settings_is_pro_mode", false)
         set(value) = prefs.edit().putBoolean("settings_is_pro_mode", value).apply()
 
+    /**
+     * Steuert die App-Sprache: "" (Systemstandard), "de" (Deutsch), "en" (Englisch).
+     */
+    var appLanguage: String
+        get() = prefs.getString("app_language", "") ?: ""
+        set(value) = prefs.edit().putString("app_language", value).apply()
+
     // ---------------------------------------------------------------- Diagnose & Observability (Konzept)
 
     /**

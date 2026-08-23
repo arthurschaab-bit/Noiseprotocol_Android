@@ -158,17 +158,16 @@ fun DiagnoseScreen(
     ) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
             item {
-                Text("Zustand", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_state_header), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(verbindungszustand.label(), style = MaterialTheme.typography.bodyLarge)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Reconnects (aktuelle/letzte Session): $reconnectZaehler",
+                    stringResource(R.string.diagnose_reconnects, reconnectZaehler),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "Decode-Fehlerrate: ${String.format(Locale.getDefault(), "%.1f", fehlerrateProzent)} % " +
-                        "(${frameQuality.errorFrames}/${frameQuality.totalFrames} seit letztem Verbindungsaufbau)",
+                    stringResource(R.string.diagnose_decode_error_rate, fehlerrateProzent, frameQuality.errorFrames, frameQuality.totalFrames),
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
@@ -176,7 +175,7 @@ fun DiagnoseScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("Remote-Diagnose & Datenschutz", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_remote_privacy_header), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -189,9 +188,9 @@ fun DiagnoseScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                                Text("Fehlerberichte senden", style = MaterialTheme.typography.bodyLarge)
+                                Text(stringResource(R.string.diagnose_send_reports), style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "Übermittelt technische Fehlercodes und Absturzberichte (Sentry). Keine Audiodaten, MAC-Adressen und Namen sind pseudonymisiert.",
+                                    stringResource(R.string.diagnose_send_reports_desc),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -214,7 +213,7 @@ fun DiagnoseScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("Letzte Diagnose-ID:", style = MaterialTheme.typography.labelSmall)
+                                    Text(stringResource(R.string.diagnose_last_id_label), style = MaterialTheme.typography.labelSmall)
                                     Text(letzteDiagnoseId ?: "", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 OutlinedButton(
@@ -224,7 +223,7 @@ fun DiagnoseScreen(
                                         Toast.makeText(context, "Diagnose-ID in Zwischenablage kopiert", Toast.LENGTH_SHORT).show()
                                     }
                                 ) {
-                                    Text("Kopieren")
+                                    Text(stringResource(R.string.action_copy))
                                 }
                             }
                         }
@@ -252,7 +251,7 @@ fun DiagnoseScreen(
                     enabled = !exportiertGerade,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (exportiertGerade) "Erstelle Support-Bundle…" else "Support-Bundle exportieren (ZIP)")
+                    Text(if (exportiertGerade) stringResource(R.string.diagnose_creating_bundle) else stringResource(R.string.diagnose_export_bundle))
                 }
 
                 if (BuildConfig.DEBUG) {
@@ -280,12 +279,11 @@ fun DiagnoseScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Diagnose-Log (${diagnoseLog.size})", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_log_header, diagnoseLog.size), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 if (diagnoseLog.isEmpty()) {
                     Text(
-                        "Kein Eintrag - entweder ist alles in Ordnung, oder das Diagnose-Log ist " +
-                            "in den Einstellungen ausgeschaltet (Default).",
+                        stringResource(R.string.diagnose_log_empty),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -298,7 +296,7 @@ fun DiagnoseScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("System-Selbstprüfung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.diagnose_self_check_header), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Card(
@@ -357,11 +355,11 @@ fun DiagnoseScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Alarm-Historie (${alarmHistorie.size})", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_alert_history_header, alarmHistorie.size), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 if (alarmHistorie.isEmpty()) {
                     Text(
-                        "Bisher wurden keine Alarme ausgelöst.",
+                        stringResource(R.string.diagnose_alert_history_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -394,7 +392,7 @@ fun DiagnoseScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Google Drive Synchronisation", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_drive_sync_header), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(8.dp))
                 DriveStatusCard(
                     googleAccountEmail = container.settingsManager.googleAccountEmail,
@@ -449,11 +447,11 @@ fun DiagnoseScreen(
                     }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Tägliche CSV-Dateien (${syncHistorie.size})", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.diagnose_daily_files_header, syncHistorie.size), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 if (syncHistorie.isEmpty()) {
                     Text(
-                        "Noch keine synchronisierten Tagesdateien vorhanden.",
+                        stringResource(R.string.diagnose_daily_files_empty),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
