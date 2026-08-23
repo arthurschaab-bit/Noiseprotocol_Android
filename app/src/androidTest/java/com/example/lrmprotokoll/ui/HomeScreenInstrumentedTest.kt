@@ -123,10 +123,14 @@ class HomeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        val micBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.badge_microphone)
+        val aiPrefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_ai_prefix, "Drilling")
+        val userPrefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_user_prefix, "Nachbar bohrt")
+
         // Überprüfe Detailtexte
-        composeRule.onNodeWithText("68.5 dB (Mikrofon)", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("KI: Drilling").assertIsDisplayed()
-        composeRule.onNodeWithText("Label: Nachbar bohrt").assertIsDisplayed()
+        composeRule.onNodeWithText("68.5 dB ($micBadge)", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(aiPrefix).assertIsDisplayed()
+        composeRule.onNodeWithText(userPrefix).assertIsDisplayed()
 
         val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
         val aiDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_ai_batch)
@@ -168,7 +172,7 @@ class HomeScreenInstrumentedTest {
         assertEquals(verkehrStr, assignedLabel)
 
         // Teste Long Click
-        composeRule.onNodeWithText("KI: Drilling").performTouchInput { longClick() }
+        composeRule.onNodeWithText(aiPrefix).performTouchInput { longClick() }
         assertTrue(longClicked)
     }
 
@@ -197,6 +201,7 @@ class HomeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("55.0 dB (Mikrofon)", substring = true).assertIsDisplayed()
+        val micBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.badge_microphone)
+        composeRule.onNodeWithText("55.0 dB ($micBadge)", substring = true).assertIsDisplayed()
     }
 }

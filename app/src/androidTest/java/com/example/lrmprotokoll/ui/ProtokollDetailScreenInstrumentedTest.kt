@@ -74,7 +74,7 @@ class ProtokollDetailScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val sessionLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_session_details)
+        val sessionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_tab_sessions)
         val metricsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_metrics)
         val historyTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
         val csvBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_csv)
@@ -82,7 +82,7 @@ class ProtokollDetailScreenInstrumentedTest {
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
         // 1. Titel & Kopfzeile
-        composeRule.onNodeWithText(sessionLabel, substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(sessionTitle, substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("PCE-323 Testgerät", substring = true).assertIsDisplayed()
 
         // 2. Kennwerte- und Pegelverlauf-Überschriften
