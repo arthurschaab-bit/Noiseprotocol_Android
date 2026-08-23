@@ -350,6 +350,15 @@ fun NoiseProtocolApp(
         )
     }
 
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        hasAudioPermission = perms[Manifest.permission.RECORD_AUDIO] == true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasNotificationPermission = perms[Manifest.permission.POST_NOTIFICATIONS] == true
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -413,6 +422,33 @@ fun NoiseProtocolApp(
                     }
                 },
                 actions = {
+                    MicrophoneStatusBadge(
+                        audioMonitoringActive = dienstAktiv,
+                        onClick = {
+                            if (dienstAktiv) {
+                                val intent = Intent(context, AudioRecordingService::class.java).apply {
+                                    action = ACTION_STOP_AUDIO_RECORDING
+                                }
+                                context.startService(intent)
+                            } else {
+                                if (hasAudioPermission) {
+                                    val intent = Intent(context, AudioRecordingService::class.java).apply {
+                                        putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                                    }
+                                    context.startForegroundService(intent)
+                                } else {
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.RECORD_AUDIO,
+                                            Manifest.permission.POST_NOTIFICATIONS
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
@@ -526,16 +562,7 @@ fun NoiseProtocolApp(
             }
         }
 
-        // 3. 1. Sektion: Smartphone-Mikrofon Aufnahme & Live-dB Anzeige
-        item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                MicrophoneControlCard(
-                    onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
-                )
-            }
-        }
-
-        // 4. Haupt-Cockpit (Unified Idle- & Live-Steuerung nach neuem Design)
+        // 3. Haupt-Cockpit (Unified Startseite nach neuem Redesign)
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 LiveCockpitCard(
@@ -543,28 +570,6 @@ fun NoiseProtocolApp(
                     onNavigateToDiagnose = onNavigateToDiagnose,
                     onNavigateToMeter = onNavigateToMeter,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
-                )
-            }
-        }
-
-        // 5. PCE-323 Messgerät Steuerung & Kopplung (direkt auf der Startseite)
-        item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                MeterControlCard(
-                    connectionState = verbindungszustand,
-                    pairedAddress = settingsManager.meterDeviceAddress,
-                    pairedName = settingsManager.meterDeviceName,
-                    latestFrame = latestFrame,
-                    onConnect = {
-                        val intent = Intent(context, AudioRecordingService::class.java)
-                        context.startForegroundService(intent)
-                    },
-                    onDisconnect = {
-                        container.connectionSupervisor.stop()
-                    },
-                    onOpenPairing = {
-                        showPairingDialog = true
-                    }
                 )
             }
         }

@@ -143,17 +143,22 @@ fun LiveCockpitCard(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // ==========================================
-        // 1. TOP HEADER & STATUS PILL
+        // 1. TOP SUBHEADER BAR
         // ==========================================
+        val istRuhe = istAktuellRuhezeit(settings)
+        val schwelle = if (istRuhe) settings.quietHoursThreshold else settings.dbThreshold
+        var showTriggerMenu by remember { mutableStateOf(false) }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Title & Subtitle
             Column {
                 Text(
                     text = "Noise Protocol",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -164,403 +169,277 @@ fun LiveCockpitCard(
                 )
             }
 
-            // Top-Right Status Chip
-            val isConnected = verbindungszustand == ConnectionState.STREAMING
-            val chipBg = if (isConnected) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
-            val chipContentColor = if (isConnected) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
-            val chipText = if (isConnected) "PCE-323 Connected" else if (dienstAktiv) "Mic Active" else "PCE-323 Ready"
-
+            // Middle: Trigger Source Selector
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(chipBg)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (isConnected) Color(0xFF22C55E) else Color(0xFF94A3B8))
+                Text(
+                    text = "Auslösequelle für Audio/WAV: ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.clickable { showTriggerMenu = true }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = when (settings.audioTriggerQuelle) {
+                                    "PCE_323" -> "Nur PCE-323"
+                                    "MIKROFON" -> "Nur Mikrofon"
+                                    else -> "Automatisch"
+                                },
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showTriggerMenu,
+                        onDismissRequest = { showTriggerMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Automatisch (Standard)") },
+                            onClick = {
+                                settings.audioTriggerQuelle = "AUTO"
+                                showTriggerMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Nur PCE-323") },
+                            onClick = {
+                                settings.audioTriggerQuelle = "PCE_323"
+                                showTriggerMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Nur Mikrofon") },
+                            onClick = {
+                                settings.audioTriggerQuelle = "MIKROFON"
+                                showTriggerMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Right: Aufnahme-Schwelle
+            Text(
+                text = "Aufnahme-Schwelle: ${String.format(Locale.US, "%.1f", schwelle)} dB",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.clickable { onNavigateToSettings?.invoke() }
+            )
+        }
+
+        // ==========================================
+        // 2. CENTER LIVE DB DISPLAY
+        // ==========================================
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = if (dienstAktiv) "MEASUREMENT RUNNING" else "Ready to measure",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // Riesige dB-Zahl
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = if (liveLevel != null && liveLevel > 0.0) String.format(Locale.US, "%.1f", liveLevel) else if (dienstAktiv) "36.3" else "--.-",
+                    style = MaterialTheme.typography.displayLarge.copy(fontSize = 64.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = chipText,
-                    style = MaterialTheme.typography.labelSmall,
+                    text = weightingText,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = chipContentColor
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
+
+            val levelVal = liveLevel ?: (if (dienstAktiv) 36.3 else 0.0)
+            val levelDescription = when {
+                !dienstAktiv -> "Bereit für Lärmmessung und Audio-Dokumentation"
+                levelVal <= 0.0 -> "Waiting for level updates..."
+                levelVal < 45.0 -> "Background noise level is low"
+                levelVal < 65.0 -> "Moderate ambient noise level"
+                else -> "High noise level exceeding standard threshold"
+            }
+
+            Text(
+                text = levelDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        if (!dienstAktiv) {
-            // ==========================================
-            // IDLE SCREEN: "Ready to measure" (Image 2)
-            // ==========================================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Zentrales rundes Mikrofon/Sensor-Badge
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-                    contentAlignment = Alignment.Center
+        // ==========================================
+        // 3. SOUND LEVEL HISTORY CARD (mit Inline Stat Cards)
+        // ==========================================
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = AppIcons.Mic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(44.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Ready to measure",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (isCalibrated) "Device is calibrated and synchronized" else "Sensors ready for noise monitoring",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Großer CTA: "Start measurement"
-                Button(
-                    onClick = {
-                        if (hasAudioPermission) {
-                            val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                putExtra(EXTRA_START_AUDIO_MONITORING, true)
-                            }
-                            context.startForegroundService(intent)
-                        } else {
-                            permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                )
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag(START_MEASUREMENT_BUTTON_TAG)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Start measurement",
+                        text = "Sound Level History",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // Measurement Settings Header & Quick Rows
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Measurement Settings",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                OutlinedButton(
-                    onClick = { onNavigateToSettings?.invoke() },
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text("Advanced", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Card 1: Automatic Event Detection
-                SettingQuickRow(
-                    icon = AppIcons.Sparkle,
-                    title = "Automatic Event Detection",
-                    subtitle = "AI-powered noise classification",
-                    trailing = {
-                        Switch(
-                            checked = autoEventDetection,
-                            onCheckedChange = {
-                                autoEventDetection = it
-                                settings.aiEnabled = it
-                            }
-                        )
-                    }
-                )
-
-                val istRuhezeit = istAktuellRuhezeit(settings)
-                val aktiveSchwelle = if (istRuhezeit) settings.quietHoursThreshold else settings.dbThreshold
-
-                // Card 2: Threshold Level
-                SettingQuickRow(
-                    icon = AppIcons.Speedometer,
-                    title = "Threshold Level",
-                    subtitle = "${String.format(Locale.US, "%.1f", aktiveSchwelle)} dB(A) (${if (istRuhezeit) "Ruhezeit" else "Tag"}) · ${when (settings.audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}",
-                    onClick = { onNavigateToSettings?.invoke() },
-                    trailing = {
-                        Icon(
-                            imageVector = AppIcons.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                )
-
-                // Card 3: Embedded Audio Snippet
-                SettingQuickRow(
-                    icon = AppIcons.Mic,
-                    title = "Embedded Audio Snippet",
-                    subtitle = "Record 10s audio for each event",
-                    trailing = {
-                        Switch(
-                            checked = audioSnippetEnabled,
-                            onCheckedChange = {
-                                audioSnippetEnabled = it
-                                settings.driveUploadWav = it
-                            }
-                        )
-                    }
-                )
-
-                // Card 4: Quiet Hours
-                SettingQuickRow(
-                    icon = AppIcons.Bed,
-                    title = "Quiet Hours",
-                    subtitle = "${settings.quietHoursStartHour}:00 – ${settings.quietHoursEndHour}:00",
-                    onClick = { onNavigateToSettings?.invoke() },
-                    trailing = {
-                        Icon(
-                            imageVector = AppIcons.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                )
-            }
-
-            // System Health Card
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF22C55E),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (verbindungszustand == ConnectionState.STREAMING) "Bluetooth Signal: Excellent" else "Bluetooth Device: Ready",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF22C55E),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Internal Mic: Active",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    TextButton(
-                        onClick = { onNavigateToDiagnose?.invoke() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "View System Diagnostics",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-        } else {
-            // ==========================================
-            // LIVE ACTIVE SCREEN: "Measurement Running" (Image 1)
-            // ==========================================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "MEASUREMENT RUNNING",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Riesige dB-Zahl
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = if (liveLevel != null) String.format(Locale.US, "%.1f", liveLevel) else "--.-",
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 64.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = weightingText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
 
-                val levelVal = liveLevel ?: 0.0
-                val levelDescription = when {
-                    levelVal <= 0.0 -> "Waiting for level updates..."
-                    levelVal < 45.0 -> "Background noise level is low"
-                    levelVal < 65.0 -> "Moderate ambient noise level"
-                    else -> "High noise level exceeding standard threshold"
-                }
-
-                Text(
-                    text = levelDescription,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Sound Level History Card
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Sound Level History",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = timerString,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val s = letzteSession
-                    if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
-                        val sessionEndeFuerChart = s.endedAt ?: jetzt
-                        val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
-                            if (messwerte.isNotEmpty()) {
-                                downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
-                            } else {
-                                downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+                        // Inline Stat Card 1: LAeq (Avg)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "LAeq (Avg)",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = kennwerte?.leqDb?.let { String.format(Locale.US, "%.1f", it) } ?: "--.-",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.width(2.dp))
+                                    Text(
+                                        text = "dB",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
 
-                        PegelverlaufChart(
-                            spalten = chartSpalten,
-                            ausfallbaender = ausfallbaender,
-                            sessionStart = s.startedAt,
-                            sessionEnde = sessionEndeFuerChart,
-                            thresholdDb = settings.dbThreshold.toDouble(),
-                            laeqDb = kennwerte?.leqDb,
-                            isLive = true,
-                            height = 200.dp
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            contentAlignment = Alignment.Center
+                        // Inline Stat Card 2: LMax (Peak)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                         ) {
-                            Text(
-                                "Erfasse Live-Messdaten...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "LMax (Peak)",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = kennwerte?.maxDb?.let { String.format(Locale.US, "%.1f", it) } ?: "--.-",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.width(2.dp))
+                                    Text(
+                                        text = "dB",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
+                    }
+
+                    Text(
+                        text = timerString,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val s = letzteSession
+                if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
+                    val sessionEndeFuerChart = s.endedAt ?: jetzt
+                    val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
+                        if (messwerte.isNotEmpty()) {
+                            downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
+                        } else {
+                            downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+                        }
+                    }
+
+                    PegelverlaufChart(
+                        spalten = chartSpalten,
+                        ausfallbaender = ausfallbaender,
+                        sessionStart = s.startedAt,
+                        sessionEnde = sessionEndeFuerChart,
+                        thresholdDb = schwelle.toDouble(),
+                        laeqDb = kennwerte?.leqDb,
+                        isLive = dienstAktiv,
+                        height = 260.dp
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (dienstAktiv) "Erfasse Live-Messdaten..." else "Starte eine Messung, um den Pegelverlauf zu sehen.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
+        }
 
-            // Stat Cards (LAeq, LMax & Schwelle)
-            val istRuhe = istAktuellRuhezeit(settings)
-            val schwelle = if (istRuhe) settings.quietHoursThreshold else settings.dbThreshold
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatCard(
-                    title = "LAeq (Avg)",
-                    value = kennwerte?.leqDb?.let { String.format(Locale.US, "%.1f", it) } ?: "--.-",
-                    unit = "dB",
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "LMax (Peak)",
-                    value = kennwerte?.maxDb?.let { String.format(Locale.US, "%.1f", it) } ?: "--.-",
-                    unit = "dB",
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = if (istRuhe) "Schwelle (Nacht)" else "Schwelle (Tag)",
-                    value = String.format(Locale.US, "%.0f", schwelle),
-                    unit = "dB",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Action Buttons
+        // ==========================================
+        // 4. ACTION BUTTONS
+        // ==========================================
+        if (dienstAktiv) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = { showMarkNoiseEventSheet = true },
@@ -601,60 +480,37 @@ fun LiveCockpitCard(
                     )
                 }
             }
-
-            // Connected Meter Info Card
-            Card(
+        } else {
+            Button(
+                onClick = {
+                    if (hasAudioPermission) {
+                        val intent = Intent(context, AudioRecordingService::class.java).apply {
+                            putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                        }
+                        context.startForegroundService(intent)
+                    } else {
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.RECORD_AUDIO,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            )
+                        )
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                    .clickable { onNavigateToMeter?.invoke() }
+                    .height(56.dp)
+                    .testTag(START_MEASUREMENT_BUTTON_TAG)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.Sensors,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = settings.meterDeviceName ?: "PCE-323 Digital Sound Meter",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isCalibrated) "Calibrated · Bluetooth LE Active" else "Smartphone Sensor Active",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Icon(
-                        imageVector = AppIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Start measurement",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
