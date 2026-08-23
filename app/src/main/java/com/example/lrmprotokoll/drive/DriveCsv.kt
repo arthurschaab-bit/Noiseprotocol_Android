@@ -16,7 +16,7 @@ import java.util.Locale
  */
 object DriveCsv {
 
-    private const val KOPFZEILE = "Zeit;LAeq_dB;LAFmax_dB;LAFmin_dB;Samples;Quelle;Ereignis;Klassifikation"
+    private const val KOPFZEILE = "Zeit;Pegel_dB;LAeq_dB;LAFmax_dB;LAFmin_dB;Bewertung;Zeitbewertung;Messbereich;Samples;Quelle;Ereignis;Klassifikation;Notizen"
     private val ZEITFORMAT: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
     fun schreibe(zeilen: List<AggregatZeile>, zone: ZoneId = ZoneId.systemDefault()): String {
@@ -32,13 +32,18 @@ object DriveCsv {
     private fun formatiereZeile(zeile: AggregatZeile, zone: ZoneId): String {
         val spalten = listOf(
             ZEITFORMAT.format(zeile.fensterStart.atZone(zone)),
+            formatiereDezimalkomma(zeile.pegelDb),
             formatiereDezimalkomma(zeile.laeqDb),
             formatiereDezimalkomma(zeile.lafMaxDb),
             formatiereDezimalkomma(zeile.lafMinDb),
+            zeile.bewertung.orEmpty(),
+            zeile.zeitbewertung.orEmpty(),
+            zeile.messbereich.orEmpty(),
             zeile.samples.toString(),
             zeile.quelle,
             if (zeile.ereignis) "JA" else "",
             zeile.klassifikation.orEmpty(),
+            zeile.notes.orEmpty(),
         )
         return spalten.joinToString(";")
     }

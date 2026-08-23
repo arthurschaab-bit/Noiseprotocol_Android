@@ -16,6 +16,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import com.example.lrmprotokoll.drive.DriveDatei
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.drive.auth.AutorisierungBenoetigtException
+import com.example.lrmprotokoll.ui.theme.TechBluePrimary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +64,10 @@ fun SettingsScreen(
     val settings = container.settingsManager
     val scope = rememberCoroutineScope()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
+
+    // Ansichtsmodus (Lite vs. Pro) & Presets-Dialog
+    var isProMode by remember { mutableStateOf(settings.isProMode) }
+    var showWohnraumDialog by remember { mutableStateOf(false) }
 
     // Aufnahme-Parameter
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
@@ -213,6 +219,23 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    if (showWohnraumDialog) {
+        RuhezeitPresetsDialog(
+            aktuelleNachtSchwelle = quietHoursThreshold,
+            onDismissRequest = { showWohnraumDialog = false },
+            onPresetSelected = { nachtDb, tagDb ->
+                quietHoursThreshold = nachtDb
+                settings.quietHoursThreshold = nachtDb
+                if (tagDb != null) {
+                    dbThreshold = tagDb
+                    settings.dbThreshold = tagDb
+                }
+                val msg = "Grenzwerte angepasst (Nacht: ${nachtDb.toInt()} dB${if (tagDb != null) ", Tag: ${tagDb.toInt()} dB" else ""})"
+                onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -245,20 +268,78 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Modus-Umschalter: Lite vs. Pro
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            isProMode = false
+                            settings.isProMode = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (!isProMode) TechBluePrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f),
+                            contentColor = if (!isProMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(AppIcons.Sparkle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Lite-Modus", fontWeight = if (!isProMode) FontWeight.Bold else FontWeight.Normal)
+                    }
+
+                    Button(
+                        onClick = {
+                            isProMode = true
+                            settings.isProMode = true
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isProMode) TechBluePrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f),
+                            contentColor = if (isProMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pro-Modus", fontWeight = if (isProMode) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+
             // Sektion 1: Aufnahme & Mikrofon
             SettingsSectionCard(
-                title = "Aufnahme & Mikrofon",
-                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }}) · ${preRoll.toInt()}s Vorlauf · ${duration.toInt()}s Dauer",
+                title = "Aufnahme & Schwellenwert",
+                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }})${if (isProMode) " · ${preRoll.toInt()}s Vorlauf · ${duration.toInt()}s Dauer" else ""}",
                 expanded = expAufnahme,
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
-                Text("Aufnahme-Schwellenwert: ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB", fontWeight = FontWeight.SemiBold)
+                Text("Aufnahme-Schwellenwert (Tag): ${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB(A)", fontWeight = FontWeight.SemiBold)
                 Slider(
                     value = dbThreshold,
                     onValueChange = { dbThreshold = it },
                     onValueChangeFinished = { settings.dbThreshold = dbThreshold },
                     valueRange = 30f..100f
                 )
+
+                OutlinedButton(
+                    onClick = { showWohnraumDialog = true },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Grenzwerte nach Wohnraum (TA Lärm)", color = TechBluePrimary)
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Trigger-Quelle für Audioaufnahmen:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
@@ -301,46 +382,48 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Pre-Roll (Sekunden): ${preRoll.toInt()}s")
-                Slider(
-                    value = preRoll,
-                    onValueChange = { preRoll = it },
-                    onValueChangeFinished = { settings.preRollSeconds = preRoll.toInt() },
-                    valueRange = 0f..5f,
-                    steps = 4
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Aufnahmedauer (Sekunden): ${duration.toInt()}s")
-                Slider(
-                    value = duration,
-                    onValueChange = { duration = it },
-                    onValueChangeFinished = { settings.recordDurationSeconds = duration.toInt() },
-                    valueRange = 1f..10f,
-                    steps = 8
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Abtastrate (Sample Rate): $sampleRate Hz")
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = sampleRate == 16000,
-                        onClick = { sampleRate = 16000; settings.audioSampleRate = 16000 },
-                        label = { Text("16000 Hz (KI-Opt.)") }
+                if (isProMode) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Pre-Roll (Sekunden): ${preRoll.toInt()}s")
+                    Slider(
+                        value = preRoll,
+                        onValueChange = { preRoll = it },
+                        onValueChangeFinished = { settings.preRollSeconds = preRoll.toInt() },
+                        valueRange = 0f..5f,
+                        steps = 4
                     )
-                    FilterChip(
-                        selected = sampleRate == 44100,
-                        onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
-                        label = { Text("44100 Hz (Qualität)") }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Aufnahmedauer (Sekunden): ${duration.toInt()}s")
+                    Slider(
+                        value = duration,
+                        onValueChange = { duration = it },
+                        onValueChangeFinished = { settings.recordDurationSeconds = duration.toInt() },
+                        valueRange = 1f..10f,
+                        steps = 8
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Abtastrate (Sample Rate): $sampleRate Hz")
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = sampleRate == 16000,
+                            onClick = { sampleRate = 16000; settings.audioSampleRate = 16000 },
+                            label = { Text("16000 Hz (KI-Opt.)") }
+                        )
+                        FilterChip(
+                            selected = sampleRate == 44100,
+                            onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
+                            label = { Text("44100 Hz (Qualität)") }
+                        )
+                    }
                 }
             }
 
             // Sektion 2: KI-Erkennung
             SettingsSectionCard(
                 title = "KI-Erkennung (YAMNet)",
-                summary = if (aiEnabled) "Aktiv (${(aiConfidence * 100).toInt()}% Schwelle)" else "Deaktiviert",
+                summary = if (aiEnabled) "Aktiv${if (isProMode) " (${(aiConfidence * 100).toInt()}% Schwelle)" else ""}" else "Deaktiviert",
                 expanded = expKi,
                 onToggle = { expKi = !expKi }
             ) {
@@ -358,7 +441,7 @@ fun SettingsScreen(
                     )
                 }
 
-                if (aiEnabled) {
+                if (aiEnabled && isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("KI-Vertrauensschwelle: ${(aiConfidence * 100).toInt()}%")
                     Slider(
@@ -372,7 +455,7 @@ fun SettingsScreen(
 
             // Sektion 3: F8 Ruhezeiten & Grenzwerte
             SettingsSectionCard(
-                title = "Ruhezeiten & Grenzwerte",
+                title = "Ruhezeiten & Nachtschutz",
                 summary = if (quietHoursEnabled) "Aktiv (${quietHoursStartHour.toInt()}:00 - ${quietHoursEndHour.toInt()}:00 Uhr · ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB)" else "Deaktiviert",
                 expanded = expRuhezeiten,
                 onToggle = { expRuhezeiten = !expRuhezeiten }
@@ -393,13 +476,23 @@ fun SettingsScreen(
 
                 if (quietHoursEnabled) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Ruhezeit-Schwellenwert: ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB")
+                    Text("Ruhezeit-Schwellenwert (Nacht): ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB(A)")
                     Slider(
                         value = quietHoursThreshold,
                         onValueChange = { quietHoursThreshold = it },
                         onValueChangeFinished = { settings.quietHoursThreshold = quietHoursThreshold },
-                        valueRange = 30f..80f
+                        valueRange = 25f..80f
                     )
+
+                    OutlinedButton(
+                        onClick = { showWohnraumDialog = true },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Grenzwerte nach Wohnraum (TA Lärm)", color = TechBluePrimary)
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Start: ${quietHoursStartHour.toInt()}:00 Uhr")
@@ -423,43 +516,45 @@ fun SettingsScreen(
                 }
             }
 
-            // Sektion 4: F5 Speicherplatz & Auto-Bereinigung
-            SettingsSectionCard(
-                title = "Speicherplatz & Auto-Bereinigung",
-                summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
-                expanded = expRetention,
-                onToggle = { expRetention = !expRetention }
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Automatische Bereinigung", style = MaterialTheme.typography.bodyLarge)
-                        Text("Verschiebt alte Aufnahmen automatisch in den Papierkorb (Favoriten sind geschützt)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = autoRetentionEnabled,
-                        onCheckedChange = {
-                            autoRetentionEnabled = it
-                            settings.autoRetentionEnabled = it
+            // Sektion 4: F5 Speicherplatz & Auto-Bereinigung (nur Pro-Modus)
+            if (isProMode) {
+                SettingsSectionCard(
+                    title = "Speicherplatz & Auto-Bereinigung",
+                    summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
+                    expanded = expRetention,
+                    onToggle = { expRetention = !expRetention }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Automatische Bereinigung", style = MaterialTheme.typography.bodyLarge)
+                            Text("Verschiebt alte Aufnahmen automatisch in den Papierkorb (Favoriten sind geschützt)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    )
-                }
+                        Switch(
+                            checked = autoRetentionEnabled,
+                            onCheckedChange = {
+                                autoRetentionEnabled = it
+                                settings.autoRetentionEnabled = it
+                            }
+                        )
+                    }
 
-                if (autoRetentionEnabled) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Aufbewahrungsdauer: ${autoRetentionDays.toInt()} Tage")
-                    Slider(
-                        value = autoRetentionDays,
-                        onValueChange = { autoRetentionDays = it },
-                        onValueChangeFinished = { settings.autoRetentionDays = autoRetentionDays.toInt() },
-                        valueRange = 7f..180f
-                    )
+                    if (autoRetentionEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Aufbewahrungsdauer: ${autoRetentionDays.toInt()} Tage")
+                        Slider(
+                            value = autoRetentionDays,
+                            onValueChange = { autoRetentionDays = it },
+                            onValueChangeFinished = { settings.autoRetentionDays = autoRetentionDays.toInt() },
+                            valueRange = 7f..180f
+                        )
+                    }
                 }
             }
 
             // Sektion 5: Alarmierung bei Verbindungsabbruch
             SettingsSectionCard(
                 title = "Alarmierung bei Verbindungsabbruch",
-                summary = if (alarmierungAktiv) "Aktiv (Karenzzeit ${karenzzeit.toInt()}s)" else "Deaktiviert",
+                summary = if (alarmierungAktiv) "Aktiv${if (isProMode) " (Karenzzeit ${karenzzeit.toInt()}s)" else ""}" else "Deaktiviert",
                 expanded = expAlarm,
                 onToggle = { expAlarm = !expAlarm }
             ) {
@@ -473,84 +568,85 @@ fun SettingsScreen(
                 }
 
                 if (alarmierungAktiv) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Karenzzeit: ${karenzzeit.toInt()} s")
-                    Slider(
-                        value = karenzzeit,
-                        onValueChange = { karenzzeit = it },
-                        onValueChangeFinished = { settings.karenzzeitSekunden = karenzzeit.toInt() },
-                        valueRange = 10f..900f,
-                    )
-
-                    if (!exakteAlarmeErlaubt) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Ohne Berechtigung für exakte Alarme kann die Karenzzeit verzögert ablaufen.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                    if (isProMode) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Karenzzeit: ${karenzzeit.toInt()} s")
+                        Slider(
+                            value = karenzzeit,
+                            onValueChange = { karenzzeit = it },
+                            onValueChangeFinished = { settings.karenzzeitSekunden = karenzzeit.toInt() },
+                            valueRange = 10f..900f,
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Button(onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
-                            }
-                        }) {
-                            Text("Exakte Alarme erlauben")
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Push auf ein zweites Gerät (ntfy)", style = MaterialTheme.typography.titleSmall)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(
-                            checked = ntfyAktiv,
-                            onCheckedChange = {
-                                ntfyAktiv = it
-                                settings.ntfyAktiv = it
-                                if (it && ntfyTopic.isBlank()) {
-                                    // ntfyTopic = erzeugeNtfyTopic() // Assume logic exists
-                                    settings.ntfyTopic = ntfyTopic
+                        if (!exakteAlarmeErlaubt) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Ohne Berechtigung für exakte Alarme kann die Karenzzeit verzögert ablaufen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Button(onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
                                 }
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("ntfy-Push aktiv")
-                    }
+                            }) {
+                                Text("Exakte Alarme erlauben")
+                            }
+                        }
 
-                    if (ntfyAktiv) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = ntfyServer,
-                            onValueChange = { ntfyServer = it; settings.ntfyServer = it },
-                            label = { Text("Server") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = ntfyTopic,
-                            onValueChange = { ntfyTopic = it; settings.ntfyTopic = it },
-                            label = { Text("Topic") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Push auf ein zweites Gerät (ntfy)", style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = ntfyAktiv,
+                                onCheckedChange = {
+                                    ntfyAktiv = it
+                                    settings.ntfyAktiv = it
+                                    if (it && ntfyTopic.isBlank()) {
+                                        settings.ntfyTopic = ntfyTopic
+                                    }
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("ntfy-Push aktiv")
+                        }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Lokale Geräte-Alarmierung", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(
-                            checked = alarmTonAktiv,
-                            onCheckedChange = {
-                                alarmTonAktiv = it
-                                settings.alarmTonAktiv = it
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Akustischer Alarmton (für Tablets & Lautlos)")
-                    }
+                        if (ntfyAktiv) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = ntfyServer,
+                                onValueChange = { ntfyServer = it; settings.ntfyServer = it },
+                                label = { Text("Server") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = ntfyTopic,
+                                onValueChange = { ntfyTopic = it; settings.ntfyTopic = it },
+                                label = { Text("Topic") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OemDeviceHelperCard()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Lokale Geräte-Alarmierung", style = MaterialTheme.typography.titleSmall)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = alarmTonAktiv,
+                                onCheckedChange = {
+                                    alarmTonAktiv = it
+                                    settings.alarmTonAktiv = it
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Akustischer Alarmton (für Tablets & Lautlos)")
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OemDeviceHelperCard()
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
@@ -669,20 +765,6 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(
-                            checked = driveWlanOnly,
-                            onCheckedChange = {
-                                driveWlanOnly = it
-                                settings.driveWlanOnly = it
-                                DriveSyncPlanung.plane(context)
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Nur über WLAN synchronisieren")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             checked = driveUploadWav,
                             onCheckedChange = { driveUploadWav = it; settings.driveUploadWav = it },
@@ -690,26 +772,42 @@ fun SettingsScreen(
                         Text("Audioaufnahmen (WAV) hochladen")
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Aggregationsfenster: ${driveAggregationSekunden.toInt()} s",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "Zusammenfassungs-Intervall für Pegelmesswerte in der Google Drive CSV-Tabelle (z. B. 10 s oder 60 s Mittelwert).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = driveAggregationSekunden,
-                        onValueChange = {
-                            driveAggregationSekunden = it
-                            settings.driveAggregationSekunden = it.toInt()
-                        },
-                        valueRange = 1f..60f,
-                        steps = 58,
-                    )
+                    if (isProMode) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = driveWlanOnly,
+                                onCheckedChange = {
+                                    driveWlanOnly = it
+                                    settings.driveWlanOnly = it
+                                    DriveSyncPlanung.plane(context)
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Nur über WLAN synchronisieren")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Aggregationsfenster: ${driveAggregationSekunden.toInt()} s",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Zusammenfassungs-Intervall für Pegelmesswerte in der Google Drive CSV-Tabelle (z. B. 10 s oder 60 s Mittelwert).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = driveAggregationSekunden,
+                            onValueChange = {
+                                driveAggregationSekunden = it
+                                settings.driveAggregationSekunden = it.toInt()
+                            },
+                            valueRange = 1f..60f,
+                            steps = 58,
+                        )
+                    }
                 }
             }
 

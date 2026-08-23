@@ -69,29 +69,43 @@ class DriveSyncCoordinator(
 
         val samples = levelSampleDao.zwischen(von.toEpochMilli(), jetzt.toEpochMilli())
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
-            .map { ProtokollEreignis(at = Instant.ofEpochMilli(it.timestamp), klassifikation = it.detectedLabel) }
+            .map {
+                ProtokollEreignis(
+                    at = Instant.ofEpochMilli(it.timestamp),
+                    pegelDb = it.calibratedDbA ?: it.dbValue,
+                    klassifikation = it.detectedLabel ?: it.label,
+                    notes = it.notes,
+                    weighting = it.meterWeighting
+                )
+            }
 
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
         val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
 
-        // WAV-Dateien hochladen, wenn Option aktiviert ist
+        // WAV-Dateien hochladen, wenn Option aktiviert ist (prüft alle aktiven Aufnahmen mit lokaler Datei)
         if (settings.driveUploadWav) {
-            val wavRecords = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
+            val wavRecords = noiseDao.getAlleAktiven()
             for (record in wavRecords) {
                 val file = java.io.File(record.filePath)
                 if (file.exists() && file.isFile) {
                     val dateiName = file.name
-                    val existiert = driveApi.dateiSuchen(dateiName, ordnerId).getOrNull()
-                    if (existiert == null) {
+                    val suchenResult = driveApi.dateiSuchen(dateiName, ordnerId)
+                    val existiert = suchenResult.getOrNull()
+                    if (existiert == null && suchenResult.isSuccess) {
                         val bytes = runCatching { file.readBytes() }.getOrNull()
                         if (bytes != null && bytes.isNotEmpty()) {
-                            driveApi.dateiAnlegen(
+                            val uploadResult = driveApi.dateiAnlegen(
                                 name = dateiName,
                                 ordnerId = ordnerId,
                                 inhalt = bytes,
                                 mimeType = "audio/wav",
                                 gzip = false,
                             )
+                            if (uploadResult.isFailure) {
+                                Log.w(TAG, "WAV-Upload fehlgeschlagen für $dateiName: ${uploadResult.exceptionOrNull()?.message}")
+                            } else {
+                                Log.i(TAG, "WAV-Upload erfolgreich für $dateiName (ID: ${uploadResult.getOrNull()})")
+                            }
                         }
                     }
                 }

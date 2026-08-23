@@ -3,7 +3,8 @@ package com.example.lrmprotokoll.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Primary & Secondary Brand Palette (Modern Tech Electric Blue & Slate)
-val PrimaryLight = Color(0xFF0052FF)
+val TechBluePrimary = Color(0xFF0052FF)
+val PrimaryLight = TechBluePrimary
 val OnPrimaryLight = Color(0xFFFFFFFF)
 val PrimaryContainerLight = Color(0xFFE0ECFF)
 val OnPrimaryContainerLight = Color(0xFF0038B8)

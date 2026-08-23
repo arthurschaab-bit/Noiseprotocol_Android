@@ -11,6 +11,9 @@ import androidx.work.WorkerParameters
 import com.example.lrmprotokoll.LaermprotokollApp
 import java.util.concurrent.TimeUnit
 
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+
 private const val WORK_NAME = "drive_sync"
 
 /**
@@ -90,18 +93,55 @@ object DriveSyncPlanung {
             )
             .build()
 
-        val anfrage = PeriodicWorkRequestBuilder<DriveSyncWorker>(30, TimeUnit.MINUTES)
-            .setConstraints(einschraenkungen)
-            .build()
+        try {
+            val anfrage = PeriodicWorkRequestBuilder<DriveSyncWorker>(30, TimeUnit.MINUTES)
+                .setConstraints(einschraenkungen)
+                .build()
 
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            anfrage,
-        )
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                anfrage,
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("DriveSyncPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
+    }
+
+    /**
+     * Startet sofort einen einmaligen Synchronisationslauf (z.B. nach einer WAV-Aufnahme).
+     */
+    fun starteSofort(context: Context) {
+        try {
+            val einschraenkungen = Constraints.Builder()
+                .setRequiredNetworkType(
+                    if ((context.applicationContext as LaermprotokollApp).container.settingsManager.driveWlanOnly) {
+                        NetworkType.UNMETERED
+                    } else {
+                        NetworkType.CONNECTED
+                    }
+                )
+                .build()
+
+            val anfrage = OneTimeWorkRequestBuilder<DriveSyncWorker>()
+                .setConstraints(einschraenkungen)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "${WORK_NAME}_immediate",
+                ExistingWorkPolicy.REPLACE,
+                anfrage,
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("DriveSyncPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 
     fun stoppe(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        } catch (e: Throwable) {
+            android.util.Log.w("DriveSyncPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
     }
 }

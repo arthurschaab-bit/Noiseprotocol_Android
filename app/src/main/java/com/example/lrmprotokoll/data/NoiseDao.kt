@@ -11,6 +11,9 @@ interface NoiseDao {
     @Query("SELECT * FROM noise_records WHERE deletedAt IS NULL ORDER BY timestamp DESC")
     fun getAll(): Flow<List<NoiseRecord>>
 
+    @Query("SELECT * FROM noise_records WHERE deletedAt IS NULL ORDER BY timestamp DESC")
+    suspend fun getAlleAktiven(): List<NoiseRecord>
+
     @Query("SELECT * FROM noise_records WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun getTrash(): Flow<List<NoiseRecord>>
 

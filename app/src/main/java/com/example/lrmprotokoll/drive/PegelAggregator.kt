@@ -1,26 +1,38 @@
 package com.example.lrmprotokoll.drive
 
 import com.example.lrmprotokoll.data.LevelSampleEntity
+import com.example.lrmprotokoll.data.LevelSource
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.log10
 import kotlin.math.pow
 
-/** Eine verdichtete Zeile der Drive-CSV (Plan Abschnitt 8.4.2). */
+/** Eine verdichtete Zeile der Drive-CSV mit Rohwerten und verarbeiteten Kennwerten. */
 data class AggregatZeile(
     val fensterStart: Instant,
-    val laeqDb: Double?,
-    val lafMaxDb: Double?,
-    val lafMinDb: Double?,
-    val samples: Int,
-    val quelle: String,
-    val ereignis: Boolean,
-    val klassifikation: String?,
+    val pegelDb: Double? = null,
+    val laeqDb: Double? = null,
+    val lafMaxDb: Double? = null,
+    val lafMinDb: Double? = null,
+    val bewertung: String? = null,
+    val zeitbewertung: String? = null,
+    val messbereich: String? = null,
+    val samples: Int = 0,
+    val quelle: String = QUELLE_KEINE_VERBINDUNG,
+    val ereignis: Boolean = false,
+    val klassifikation: String? = null,
+    val notes: String? = null,
 )
 
 /** Minimale Sicht auf ein [com.example.lrmprotokoll.data.NoiseRecord] fuer den Abgleich -
  * entkoppelt den Aggregator bewusst von der vollen Entity. */
-data class ProtokollEreignis(val at: Instant, val klassifikation: String?)
+data class ProtokollEreignis(
+    val at: Instant,
+    val pegelDb: Double? = null,
+    val klassifikation: String? = null,
+    val notes: String? = null,
+    val weighting: String? = null,
+)
 
 const val QUELLE_GEMISCHT = "GEMISCHT"
 const val QUELLE_KEINE_VERBINDUNG = "KEINE_VERBINDUNG"
@@ -97,29 +109,44 @@ object PegelAggregator {
         fensterStart: Instant,
     ): AggregatZeile {
         if (samples.isEmpty()) {
+            val erstEreignis = ereignisse.firstOrNull()
             return AggregatZeile(
                 fensterStart = fensterStart,
-                laeqDb = null, lafMaxDb = null, lafMinDb = null,
+                pegelDb = erstEreignis?.pegelDb,
+                laeqDb = null,
+                lafMaxDb = null,
+                lafMinDb = null,
+                bewertung = erstEreignis?.weighting,
+                zeitbewertung = null,
+                messbereich = null,
                 samples = 0,
                 quelle = QUELLE_KEINE_VERBINDUNG,
                 ereignis = ereignisse.isNotEmpty(),
-                klassifikation = ereignisse.firstOrNull()?.klassifikation,
+                klassifikation = erstEreignis?.klassifikation,
+                notes = erstEreignis?.notes,
             )
         }
 
         val pegel = samples.map { it.levelDb }
         val energetischerMittelwert = 10.0 * log10(pegel.sumOf { 10.0.pow(it / 10.0) } / pegel.size)
         val quellen = samples.map { it.source }.toSet()
+        val erstEreignis = ereignisse.firstOrNull()
+        val quelleStr = if (quellen.size == 1) quellen.first() else QUELLE_GEMISCHT
 
         return AggregatZeile(
             fensterStart = fensterStart,
+            pegelDb = samples.lastOrNull()?.levelDb,
             laeqDb = energetischerMittelwert,
             lafMaxDb = pegel.max(),
             lafMinDb = pegel.min(),
+            bewertung = erstEreignis?.weighting ?: (if (quelleStr == LevelSource.PCE_323) "A" else null),
+            zeitbewertung = if (quelleStr == LevelSource.PCE_323) "FAST" else null,
+            messbereich = if (quelleStr == LevelSource.PCE_323) "AUTO" else null,
             samples = samples.size,
-            quelle = if (quellen.size == 1) quellen.first() else QUELLE_GEMISCHT,
+            quelle = quelleStr,
             ereignis = ereignisse.isNotEmpty(),
-            klassifikation = ereignisse.firstOrNull()?.klassifikation,
+            klassifikation = erstEreignis?.klassifikation,
+            notes = erstEreignis?.notes,
         )
     }
 }

@@ -11,62 +11,64 @@ class DriveCsvTest {
     private val zone = ZoneId.of("Europe/Berlin")
 
     @Test
-    fun kopfzeileNenntDbNichtDbaWeilDieBewertungUnbestaetigtIst() {
+    fun kopfzeileNenntPegelDbUndLaeqDbSowieWeitereAussagekraeftigeSpalten() {
         val csv = DriveCsv.schreibe(emptyList(), zone)
         assertTrue(
-            "Spaltenkopf darf keine A-Bewertung behaupten, die nicht bestaetigt ist",
-            csv.contains("LAeq_dB;LAFmax_dB;LAFmin_dB"),
+            "Kopfzeile muss Rohwerte (Pegel_dB) und verarbeitete Kennwerte (LAeq_dB) enthalten",
+            csv.contains("Zeit;Pegel_dB;LAeq_dB;LAFmax_dB;LAFmin_dB;Bewertung;Zeitbewertung;Messbereich;Samples;Quelle;Ereignis;Klassifikation;Notizen"),
         )
-        assertTrue(!csv.contains("_dBA"))
     }
 
     @Test
     fun beginntMitUtf8BomDamitExcelUmlauteKorrektZeigt() {
         val csv = DriveCsv.schreibe(emptyList(), zone)
-        assertEquals('﻿', csv.first())
+        assertEquals('\uFEFF', csv.first())
     }
 
     @Test
-    fun normaleZeileEntsprichtDemPlanBeispiel() {
+    fun normaleZeileEntsprichtDemErweitertenFormat() {
         val zeile = AggregatZeile(
             fensterStart = Instant.parse("2026-08-16T06:00:00Z"), // 08:00 MESZ
-            laeqDb = 52.3, lafMaxDb = 61.8, lafMinDb = 48.1,
-            samples = 20, quelle = "PCE_323", ereignis = false, klassifikation = null,
+            pegelDb = 52.3, laeqDb = 52.3, lafMaxDb = 61.8, lafMinDb = 48.1,
+            bewertung = "A", zeitbewertung = "FAST", messbereich = "AUTO",
+            samples = 20, quelle = "PCE_323", ereignis = false, klassifikation = null, notes = null,
         )
         val csv = DriveCsv.schreibe(listOf(zeile), zone)
 
-        assertTrue(csv.contains("2026-08-16T08:00:00+02:00;52,3;61,8;48,1;20;PCE_323;;"))
+        assertTrue(csv.contains("2026-08-16T08:00:00+02:00;52,3;52,3;61,8;48,1;A;FAST;AUTO;20;PCE_323;;;"))
     }
 
     @Test
-    fun ereigniszeileZeigtJaUndKlassifikation() {
+    fun ereigniszeileZeigtJaUndKlassifikationSowieNotiz() {
         val zeile = AggregatZeile(
             fensterStart = Instant.parse("2026-08-16T06:00:10Z"),
-            laeqDb = 71.4, lafMaxDb = 89.2, lafMinDb = 53.0,
-            samples = 20, quelle = "PCE_323", ereignis = true, klassifikation = "Hämmern",
+            pegelDb = 75.0, laeqDb = 71.4, lafMaxDb = 89.2, lafMinDb = 53.0,
+            bewertung = "A", zeitbewertung = "FAST", messbereich = "AUTO",
+            samples = 20, quelle = "PCE_323", ereignis = true, klassifikation = "Hämmern", notes = "Nachbar bohrt",
         )
         val csv = DriveCsv.schreibe(listOf(zeile), zone)
 
-        assertTrue(csv.contains("71,4;89,2;53,0;20;PCE_323;JA;Hämmern"))
+        assertTrue(csv.contains("75,0;71,4;89,2;53,0;A;FAST;AUTO;20;PCE_323;JA;Hämmern;Nachbar bohrt"))
     }
 
     @Test
     fun lueckenzeileZeigtLeereWerteAberEchteNullenNichtSondernLeerstring() {
         val zeile = AggregatZeile(
             fensterStart = Instant.parse("2026-08-16T06:00:20Z"),
-            laeqDb = null, lafMaxDb = null, lafMinDb = null,
-            samples = 0, quelle = QUELLE_KEINE_VERBINDUNG, ereignis = false, klassifikation = null,
+            pegelDb = null, laeqDb = null, lafMaxDb = null, lafMinDb = null,
+            bewertung = null, zeitbewertung = null, messbereich = null,
+            samples = 0, quelle = QUELLE_KEINE_VERBINDUNG, ereignis = false, klassifikation = null, notes = null,
         )
         val csv = DriveCsv.schreibe(listOf(zeile), zone)
 
-        assertTrue(csv.contains("2026-08-16T08:00:20+02:00;;;;0;KEINE_VERBINDUNG;;"))
+        assertTrue(csv.contains("2026-08-16T08:00:20+02:00;;;;;;;;0;KEINE_VERBINDUNG;;;"))
     }
 
     @Test
     fun dezimaltrennzeichenIstKommaNichtPunkt() {
         val zeile = AggregatZeile(
             fensterStart = Instant.parse("2026-08-16T06:00:00Z"),
-            laeqDb = 52.3, lafMaxDb = 61.8, lafMinDb = 48.1,
+            pegelDb = 52.3, laeqDb = 52.3, lafMaxDb = 61.8, lafMinDb = 48.1,
             samples = 1, quelle = "PCE_323", ereignis = false, klassifikation = null,
         )
         val csv = DriveCsv.schreibe(listOf(zeile), zone)

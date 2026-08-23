@@ -113,7 +113,7 @@ class AudioTriggerSettingsTest {
         composeRule.waitForIdle()
 
         // Sektion öffnen
-        composeRule.onNodeWithText("Aufnahme & Mikrofon", substring = true).performClick()
+        composeRule.onNodeWithText("Aufnahme & Schwellenwert", substring = true).performClick()
         composeRule.waitForIdle()
 
         // Chips prüfen
