@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.lrmprotokoll"
-        minSdk = 31
+        minSdk = 29
         targetSdk = 36
         versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = (findProperty("versionName") as String?) ?: "1.0"
