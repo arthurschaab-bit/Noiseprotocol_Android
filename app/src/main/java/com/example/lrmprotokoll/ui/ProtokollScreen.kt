@@ -251,7 +251,7 @@ private fun ModernSessionCard(
         val end = session.endedAt ?: System.currentTimeMillis()
         val d = Duration.ofMillis((end - session.startedAt).coerceAtLeast(0))
         val h = d.toHours()
-        val m = d.toMinutesPart()
+        val m = (d.toMinutes() % 60).toInt()
         if (h > 0) "${h}h ${m}m" else "${m} min"
     }
 
@@ -393,6 +393,6 @@ private fun MetricColumn(
 /** Gemeinsame Dauer-Formatierung für Protokoll-Liste und -Detail. */
 internal fun formatiereDauer(dauer: Duration): String {
     val stunden = dauer.toHours()
-    val minuten = dauer.toMinutesPart()
+    val minuten = (dauer.toMinutes() % 60).toInt()
     return if (stunden > 0) "${stunden} h ${minuten} min" else "${minuten} min"
 }
