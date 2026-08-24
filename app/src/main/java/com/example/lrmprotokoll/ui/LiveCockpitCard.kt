@@ -389,18 +389,30 @@ fun LiveCockpitCard(
                 val s = letzteSession
                 if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
                     val sessionEndeFuerChart = s.endedAt ?: jetzt
-                    val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
-                        if (messwerte.isNotEmpty()) {
-                            downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
+                    val vierStundenMs = 4 * 3600 * 1000L
+                    val chartStart = if (dienstAktiv && (sessionEndeFuerChart - s.startedAt) > vierStundenMs) {
+                        sessionEndeFuerChart - vierStundenMs
+                    } else {
+                        s.startedAt
+                    }
+
+                    val chartSpalten = remember(messwerte, aggregate, chartStart, sessionEndeFuerChart) {
+                        val filteredMesswerte = if (chartStart > s.startedAt) messwerte.filter { it.timestamp in chartStart..sessionEndeFuerChart } else messwerte
+                        val filteredAggregate = if (chartStart > s.startedAt) aggregate.filter { it.minuteStart in chartStart..sessionEndeFuerChart } else aggregate
+
+                        if (filteredMesswerte.isNotEmpty()) {
+                            downsampleMesswerteFuerChart(filteredMesswerte, chartStart, sessionEndeFuerChart)
+                        } else if (filteredAggregate.isNotEmpty()) {
+                            downsampleAggregateFuerChart(filteredAggregate, chartStart, sessionEndeFuerChart)
                         } else {
-                            downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+                            emptyList()
                         }
                     }
 
                     PegelverlaufChart(
                         spalten = chartSpalten,
                         ausfallbaender = ausfallbaender,
-                        sessionStart = s.startedAt,
+                        sessionStart = chartStart,
                         sessionEnde = sessionEndeFuerChart,
                         thresholdDb = schwelle.toDouble(),
                         laeqDb = kennwerte?.leqDb,

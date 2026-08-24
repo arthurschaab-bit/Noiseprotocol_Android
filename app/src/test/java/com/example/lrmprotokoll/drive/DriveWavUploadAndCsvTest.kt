@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -45,6 +46,8 @@ class DriveWavUploadAndCsvTest {
             records.filter { it.timestamp in von until bis && it.deletedAt == null }
         override fun zwischenZeitpunktFlow(von: Long, bis: Long): Flow<List<NoiseRecord>> =
             flowOf(records.filter { it.timestamp in von until bis && it.deletedAt == null })
+        override fun abZeitpunktFlow(von: Long): Flow<List<NoiseRecord>> =
+            flowOf(records.filter { it.timestamp >= von && it.deletedAt == null })
         override suspend fun insert(record: NoiseRecord) { records.add(record) }
         override suspend fun update(record: NoiseRecord) {}
         override suspend fun softDelete(id: Long, deletedAt: Long) {}
@@ -173,12 +176,17 @@ class DriveWavUploadAndCsvTest {
         val ergebnis = coordinator.syncEinenZyklus()
         assertTrue(ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
 
-        // 1. WAV-Datei wurde hochgeladen
-        assertTrue(
-            "WAV-Datei muss in Drive hochgeladen worden sein",
-            driveApi.hochgeladeneDateien.containsKey("noise_20260823_100000.wav")
-        )
-        assertEquals(7, driveApi.hochgeladeneDateien["noise_20260823_100000.wav"]?.size)
+        // 1. WAV-Dateien wurden stündlich gezippt und als ZIP hochgeladen
+        val zipDateien = driveApi.hochgeladeneDateien.filterKeys { it.endsWith(".zip") }
+        assertTrue("Stündliche ZIP-Datei muss in Drive hochgeladen worden sein", zipDateien.isNotEmpty())
+
+        val zipBytes = zipDateien.values.first()
+        val zipIn = java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(zipBytes))
+        val entry = zipIn.nextEntry
+        assertNotNull(entry)
+        assertEquals("noise_20260823_100000.wav", entry!!.name)
+        val extractedBytes = zipIn.readBytes()
+        assertEquals(7, extractedBytes.size)
 
         // 2. CSV-Datei wurde mit erweiterten Spalten erstellt
         val csvDateien = driveApi.hochgeladeneDateien.filterKeys { it.endsWith(".csv") || it.startsWith("file-laermprotokoll_") }

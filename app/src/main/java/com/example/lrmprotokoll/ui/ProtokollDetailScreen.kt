@@ -80,6 +80,18 @@ fun ProtokollDetailScreen(
         launch {
             db.sessionDao().byIdFlow(sessionId).collectLatest { geladeneSession ->
                 session = geladeneSession
+                if (geladeneSession != null) {
+                    val ende = geladeneSession.endedAt
+                    if (ende == null) {
+                        db.noiseDao().abZeitpunktFlow(geladeneSession.startedAt).collectLatest { recs ->
+                            sessionRecords = recs
+                        }
+                    } else {
+                        db.noiseDao().zwischenZeitpunktFlow(geladeneSession.startedAt, ende).collectLatest { recs ->
+                            sessionRecords = recs
+                        }
+                    }
+                }
             }
         }
 
@@ -108,10 +120,6 @@ fun ProtokollDetailScreen(
             session = initialSession
             val events = db.connectionEventDao().fuerSession(sessionId)
             ausfallbaender = leiteAusfallbaenderAb(events, initialSession.endedAt)
-            val ende = initialSession.endedAt ?: System.currentTimeMillis()
-            db.noiseDao().zwischenZeitpunktFlow(initialSession.startedAt, ende).collectLatest { recs ->
-                sessionRecords = recs
-            }
         }
         geladen = true
     }

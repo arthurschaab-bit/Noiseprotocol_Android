@@ -24,6 +24,9 @@ interface NoiseDao {
     @Query("SELECT * FROM noise_records WHERE timestamp >= :von AND timestamp <= :bis AND deletedAt IS NULL ORDER BY timestamp DESC")
     fun zwischenZeitpunktFlow(von: Long, bis: Long): Flow<List<NoiseRecord>>
 
+    @Query("SELECT * FROM noise_records WHERE timestamp >= :von AND deletedAt IS NULL ORDER BY timestamp DESC")
+    fun abZeitpunktFlow(von: Long): Flow<List<NoiseRecord>>
+
     @Insert
     suspend fun insert(record: NoiseRecord)
 

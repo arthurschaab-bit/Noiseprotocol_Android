@@ -82,37 +82,54 @@ class DriveSyncCoordinator(
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
         val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
 
-        var wavUploadedCount = 0
-        // WAV-Dateien hochladen, wenn Option aktiviert ist (prüft alle aktiven Aufnahmen mit lokaler Datei)
+        var zipPackagesUploadedCount = 0
+        var totalWavCountInZips = 0
+
+        // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
             if (wavRecords.isNotEmpty()) {
-                val existierendeNamen = driveApi.dateienInOrdnerAuflisten(ordnerId).getOrElse { emptySet() }
-                for (record in wavRecords) {
-                    val file = java.io.File(record.filePath)
-                    if (file.exists() && file.isFile) {
-                        val dateiName = file.name
+                val stundenZips = WavHourlyZipper.packeStundenZips(wavRecords, jetzt, zone)
+                if (stundenZips.isNotEmpty()) {
+                    val existierendeNamen = driveApi.dateienInOrdnerAuflisten(ordnerId).getOrElse { emptySet() }
+                    for (zipPackage in stundenZips) {
+                        val dateiName = zipPackage.zipFileName
+                        // Wenn die Datei noch nicht auf Drive existiert -> Neu anlegen
                         if (!existierendeNamen.contains(dateiName)) {
-                            val bytes = runCatching { file.readBytes() }.getOrNull()
-                            if (bytes != null && bytes.isNotEmpty()) {
-                                val uploadResult = driveApi.dateiAnlegen(
-                                    name = dateiName,
-                                    ordnerId = ordnerId,
-                                    inhalt = bytes,
-                                    mimeType = "audio/wav",
+                            val uploadResult = driveApi.dateiAnlegen(
+                                name = dateiName,
+                                ordnerId = ordnerId,
+                                inhalt = zipPackage.zipBytes,
+                                mimeType = "application/zip",
+                                gzip = false,
+                            )
+                            if (uploadResult.isFailure) {
+                                val err = uploadResult.exceptionOrNull()
+                                val httpCode = (err as? DriveApiException)?.httpCode
+                                Log.w(TAG, "ZIP-Upload fehlgeschlagen für $dateiName: ${err?.message}")
+                                if (httpCode == 403 || httpCode == 429) {
+                                    Log.w(TAG, "Drive-Rate-Limit (HTTP $httpCode) beim ZIP-Upload erreicht – breche Batch ab")
+                                    break
+                                }
+                            } else {
+                                zipPackagesUploadedCount++
+                                totalWavCountInZips += zipPackage.wavCount
+                                Log.i(TAG, "Stündliches ZIP-Archiv hochgeladen: $dateiName (${zipPackage.wavCount} WAVs)")
+                            }
+                        } else if (!zipPackage.isClosedHour) {
+                            // Laufende Stunde existiert bereits, hat aber eventuell neue WAVs erhalten -> Aktualisieren
+                            val suchenResult = driveApi.dateiSuchen(dateiName, ordnerId)
+                            val existierendeDatei = suchenResult.getOrNull()
+                            if (existierendeDatei != null) {
+                                val updateResult = driveApi.dateiAktualisieren(
+                                    fileId = existierendeDatei.id,
+                                    inhalt = zipPackage.zipBytes,
+                                    mimeType = "application/zip",
                                     gzip = false,
                                 )
-                                if (uploadResult.isFailure) {
-                                    val err = uploadResult.exceptionOrNull()
-                                    val httpCode = (err as? DriveApiException)?.httpCode
-                                    Log.w(TAG, "WAV-Upload fehlgeschlagen für $dateiName: ${err?.message}")
-                                    if (httpCode == 403 || httpCode == 429) {
-                                        Log.w(TAG, "Drive-Rate-Limit (HTTP $httpCode) beim WAV-Upload erreicht – breche Batch ab")
-                                        break
-                                    }
-                                } else {
-                                    wavUploadedCount++
-                                    Log.i(TAG, "WAV-Upload erfolgreich für $dateiName (ID: ${uploadResult.getOrNull()})")
+                                if (updateResult.isSuccess) {
+                                    zipPackagesUploadedCount++
+                                    totalWavCountInZips += zipPackage.wavCount
                                 }
                             }
                         }
@@ -123,21 +140,21 @@ class DriveSyncCoordinator(
 
         val registry = dailyFileDao.byDate(datumSchluessel)
         if (zeilen.isEmpty()) {
-            if (wavUploadedCount > 0) {
+            if (zipPackagesUploadedCount > 0) {
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
-                settings.driveSyncLastMessage = "$wavUploadedCount WAV-Aufnahme(n) erfolgreich synchronisiert"
-                return SyncErgebnis.Erfolgreich(wavUploadedCount)
+                settings.driveSyncLastMessage = "$zipPackagesUploadedCount ZIP-Paket(e) ($totalWavCountInZips WAVs) synchronisiert"
+                return SyncErgebnis.Erfolgreich(zipPackagesUploadedCount)
             }
             settings.driveSyncLastMessage = "Keine neuen Messwerte zu synchronisieren"
             return SyncErgebnis.KeineAenderung
         }
 
         if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
-            if (wavUploadedCount > 0) {
+            if (zipPackagesUploadedCount > 0) {
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
-                settings.driveSyncLastMessage = "${zeilen.size} Zeilen & $wavUploadedCount WAV(s) synchronisiert"
+                settings.driveSyncLastMessage = "${zeilen.size} Zeilen & $zipPackagesUploadedCount ZIP(s) synchronisiert"
                 return SyncErgebnis.Erfolgreich(zeilen.size)
             }
             settings.driveSyncLastMessage = "Aktuell (${zeilen.size} Zeilen synchronisiert)"
@@ -159,8 +176,8 @@ class DriveSyncCoordinator(
                 )
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
-                val message = if (wavUploadedCount > 0) {
-                    "${zeilen.size} Zeilen & $wavUploadedCount WAV(s) erfolgreich hochgeladen"
+                val message = if (zipPackagesUploadedCount > 0) {
+                    "${zeilen.size} Zeilen & $zipPackagesUploadedCount ZIP(s) ($totalWavCountInZips WAVs) hochgeladen"
                 } else {
                     "${zeilen.size} Zeilen erfolgreich hochgeladen"
                 }
