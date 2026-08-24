@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,11 @@ class BleScanner(private val context: Context) {
             return@callbackFlow
         }
 
+        if (BluetoothPermissions.isLocationRequiredForScan() && !BluetoothPermissions.isLocationEnabled(context)) {
+            close(IllegalStateException("Standortdienste (GPS) müssen auf diesem Gerät für die Bluetooth-Suche aktiviert sein."))
+            return@callbackFlow
+        }
+
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             close(IllegalStateException("Bluetooth-LE-Scanner ist nicht verfügbar."))
@@ -46,7 +52,7 @@ class BleScanner(private val context: Context) {
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val deviceName = try {
-                    result.device.name
+                    result.scanRecord?.deviceName ?: result.device.name
                 } catch (e: SecurityException) {
                     null
                 }
@@ -64,10 +70,14 @@ class BleScanner(private val context: Context) {
             }
         }
 
+        val scanSettings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
         try {
-            scanner.startScan(callback)
+            scanner.startScan(null, scanSettings, callback)
         } catch (e: SecurityException) {
-            close(IllegalStateException("Bluetooth-Berechtigung (BLUETOOTH_SCAN) fehlt oder wurde verweigert.", e))
+            close(IllegalStateException("Bluetooth-Berechtigung fehlt oder wurde verweigert.", e))
             return@callbackFlow
         }
 

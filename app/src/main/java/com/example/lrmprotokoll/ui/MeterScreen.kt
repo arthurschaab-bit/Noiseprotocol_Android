@@ -112,11 +112,15 @@ fun MeterScreen(
     var hasBluetoothPermissions by remember {
         mutableStateOf(BluetoothPermissions.hasPermissions(context))
     }
+    var isLocationEnabled by remember {
+        mutableStateOf(BluetoothPermissions.isLocationEnabled(context))
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 hasBluetoothPermissions = BluetoothPermissions.hasPermissions(context)
+                isLocationEnabled = BluetoothPermissions.isLocationEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -142,6 +146,10 @@ fun MeterScreen(
     }
 
     fun starteScan() {
+        if (BluetoothPermissions.isLocationRequiredForScan() && !BluetoothPermissions.isLocationEnabled(context)) {
+            scanFehler = "Standortdienste (GPS) müssen am Gerät aktiviert sein, um Bluetooth-Geräte zu finden."
+            return
+        }
         foundDevices.clear()
         scanFehler = null
         isScanning = true
@@ -179,6 +187,7 @@ fun MeterScreen(
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         hasBluetoothPermissions = BluetoothPermissions.hasPermissions(context)
+        isLocationEnabled = BluetoothPermissions.isLocationEnabled(context)
         if (hasBluetoothPermissions) {
             starteScan()
         }
@@ -396,6 +405,40 @@ fun MeterScreen(
                                 )
                             ) {
                                 Text(stringResource(R.string.permission_grant_button))
+                            }
+                        }
+                    }
+                } else if (BluetoothPermissions.isLocationRequiredForScan() && !isLocationEnabled) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "Standortdienste (GPS) deaktiviert",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Auf Android 10/11 kann die Bluetooth-Suche nach dem PCE-323 nur ausgeführt werden, wenn die Standortdienste (GPS) aktiviert sind.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    context.startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("Standort aktivieren")
                             }
                         }
                     }

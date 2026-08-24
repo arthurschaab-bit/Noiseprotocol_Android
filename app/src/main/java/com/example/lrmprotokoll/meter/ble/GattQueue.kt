@@ -44,10 +44,17 @@ class GattQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
      * Fuehrt [start] aus (typischerweise ein gatt.xxx()-Aufruf, der true zurueckgibt, wenn die
      * Operation vom Stack angenommen wurde) und wartet auf den zugehoerigen GATT-Callback, der
      * [complete] aufruft. Liefert false, wenn [start] das Absetzen bereits ablehnt, der Callback
-     * einen Fehlerstatus meldet, [timeoutMs] verstreicht, oder die Queue nach einem
+     * einen Fehlerstatus meldet, [timeoutOverrideMs] verstreicht, oder die Queue nach einem
      * vorangegangenen Timeout gesperrt ist.
+     *
+     * Wenn [isCritical] false ist (z. B. bei optionalem MTU-Request), sperrt ein Timeout die Queue
+     * nicht für nachfolgende Operationen wie Descriptor-Writes.
      */
-    suspend fun execute(start: () -> Boolean): Boolean = mutex.withLock {
+    suspend fun execute(
+        isCritical: Boolean = true,
+        timeoutOverrideMs: Long = timeoutMs,
+        start: () -> Boolean
+    ): Boolean = mutex.withLock {
         val deferred = CompletableDeferred<Boolean>()
         synchronized(lock) {
             if (poisoned) return@withLock false
@@ -60,13 +67,22 @@ class GattQueue(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
             return@withLock false
         }
 
-        val result = withTimeoutOrNull(timeoutMs) { deferred.await() }
+        val result = withTimeoutOrNull(timeoutOverrideMs) { deferred.await() }
         synchronized(lock) {
             if (pending === deferred) pending = null
-            if (result == null) poisoned = true
+            if (result == null && isCritical) poisoned = true
         }
         result ?: false
     }
+
+    /**
+     * Führt eine optionale GATT-Operation (z. B. requestMtu) mit kürzerem Timeout aus. Ein Timeout
+     * oder Fehlschlag sperrt die Queue nicht für nachfolgende kritische Operationen.
+     */
+    suspend fun executeOptional(
+        timeoutOverrideMs: Long = 1_000L,
+        start: () -> Boolean
+    ): Boolean = execute(isCritical = false, timeoutOverrideMs = timeoutOverrideMs, start = start)
 
     /**
      * Von der GATT-Callback-Methode aufzurufen, sobald die laufende Operation abgeschlossen ist.

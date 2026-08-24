@@ -62,4 +62,21 @@ object BluetoothPermissions {
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
     }
+
+    /**
+     * Gibt an, ob auf dieser Android-Version die Standortdienste (GPS) für einen BLE-Scan aktiviert sein müssen.
+     * Auf Android 6.0 bis 11 (API 23–30) liefert BluetoothLeScanner nur bei aktiven Standortdiensten Ergebnisse.
+     */
+    fun isLocationRequiredForScan(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+    }
+
+    /**
+     * Prüft, ob Standortdienste (GPS / Netzwerk-Ortung) am Gerät aktiv geschaltet sind.
+     */
+    fun isLocationEnabled(context: Context): Boolean {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            ?: return false
+        return androidx.core.location.LocationManagerCompat.isLocationEnabled(locationManager)
+    }
 }
