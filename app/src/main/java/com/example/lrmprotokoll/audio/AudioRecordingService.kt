@@ -673,9 +673,8 @@ class AudioRecordingService : LifecycleService() {
             Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
         }
 
-        if (settingsManager.driveSyncEnabled && settingsManager.driveUploadWav) {
-            com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(applicationContext)
-        }
+        // WAV-Dateien verbleiben sicher auf dem Gerät und werden gebündelt alle 30 Minuten
+        // über den periodischen DriveSyncWorker synchronisiert, um Drive-Rate-Limits zu vermeiden.
 
         letzteAufnahmeEndeTimestamp = System.currentTimeMillis()
         isRecordingActive.set(false)

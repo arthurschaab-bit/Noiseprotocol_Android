@@ -135,6 +135,23 @@ class GoogleDriveApiClientTest {
     }
 
     @Test
+    fun dateienInOrdnerAuflistenLiefertAlleNamenImOrdner() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"files":[{"name":"datei1.wav"},{"name":"datei2.wav"}]}""")
+        )
+
+        val ergebnis = client.dateienInOrdnerAuflisten("ordner-123")
+
+        val namen = ergebnis.getOrThrow()
+        assertEquals(2, namen.size)
+        assertTrue(namen.contains("datei1.wav"))
+        assertTrue(namen.contains("datei2.wav"))
+        val anfrage = server.takeRequest()
+        assertEquals("GET", anfrage.method)
+        assertTrue(anfrage.path!!.contains("ordner-123"))
+    }
+
+    @Test
     fun suchanfrageEscaptAnfuehrungszeichenImDateinamen() = runTest {
         server.enqueue(MockResponse().setBody("""{"files":[]}"""))
 

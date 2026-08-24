@@ -88,6 +88,8 @@ class DriveWavUploadAndCsvTest {
         override suspend fun ordnerSuchen(name: String): Result<DriveDatei?> = Result.success(DriveDatei("folder-id", name))
         override suspend fun ordnerAuflisten(): Result<List<DriveDatei>> = Result.success(emptyList())
         override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String): Result<Unit> = Result.success(Unit)
+        override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> =
+            Result.success(hochgeladeneDateien.keys.toSet())
         override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> {
             return if (hochgeladeneDateien.containsKey(name)) Result.success(DriveDatei("file-$name", name)) else Result.success(null)
         }

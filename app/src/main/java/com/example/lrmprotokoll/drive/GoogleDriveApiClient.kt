@@ -138,6 +138,29 @@ class GoogleDriveApiClient(
         }
     }
 
+    override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> = mitToken { token ->
+        val query = "'$ordnerId' in parents and trashed = false"
+        val url = "$basisUrl/drive/v3/files".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("fields", "files(name)")
+            .addQueryParameter("pageSize", "1000")
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        val antwort = fuehreAus(request)
+        val dateien: JSONArray = JSONObject(antwort).getJSONArray("files")
+        val namen = mutableSetOf<String>()
+        for (i in 0 until dateien.length()) {
+            namen.add(dateien.getJSONObject(i).getString("name"))
+        }
+        namen
+    }
+
     override suspend fun dateiAnlegen(
         name: String,
         ordnerId: String,

@@ -46,6 +46,11 @@ interface DriveApiClient {
      */
     suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?>
 
+    /**
+     * Listet alle Dateinamen in [ordnerId] in einer einzigen Abfrage auf, um API-Quota zu schonen.
+     */
+    suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>>
+
     /** Legt eine neue Datei mit Inhalt an und liefert deren `id`. */
     suspend fun dateiAnlegen(
         name: String,
