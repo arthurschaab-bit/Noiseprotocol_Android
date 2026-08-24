@@ -145,6 +145,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         val showBottomNav = currentRoute == null || currentRoute in listOf("main", "meter", "protokoll", "diagnose", "settings")
 
         Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 if (showBottomNav) {
@@ -161,7 +162,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             NavHost(
                 navController = navController,
                 startDestination = "main",
-                modifier = Modifier.padding(scaffoldPadding),
+                modifier = Modifier.padding(bottom = scaffoldPadding.calculateBottomPadding()),
             ) {
                 composable("main") {
                     NoiseProtocolApp(

@@ -41,16 +41,17 @@ import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.lrmprotokoll.drive.DriveDatei
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.drive.auth.AutorisierungBenoetigtException
 import com.example.lrmprotokoll.ui.theme.TechBluePrimary
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,8 +79,9 @@ fun SettingsScreen(
     var sampleRate by remember { mutableIntStateOf(settings.audioSampleRate) }
 
     // KI-Parameter
-    var aiEnabled by remember { mutableStateOf(settings.aiEnabled) }
+    var aiMode by remember { mutableStateOf(settings.aiMode) }
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
+    var isBatchRunning by remember { mutableStateOf(false) }
 
     // F8: Ruhezeiten
     var quietHoursEnabled by remember { mutableStateOf(settings.quietHoursEnabled) }
@@ -479,26 +481,101 @@ fun SettingsScreen(
             // Sektion 2: KI-Erkennung
             SettingsSectionCard(
                 title = stringResource(R.string.settings_ai_title),
-                summary = if (aiEnabled) "Aktiv${if (isProMode) " (${(aiConfidence * 100).toInt()}% Schwelle)" else ""}" else "Deaktiviert",
+                summary = when (aiMode) {
+                    "BATCH" -> "Im Batch (Standard / Empfohlen)"
+                    "ONLINE" -> "Online / Live direkt"
+                    else -> "Deaktiviert"
+                },
                 expanded = expKi,
                 onToggle = { expKi = !expKi }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.settings_ai_title), style = MaterialTheme.typography.bodyLarge)
-                        Text(stringResource(R.string.settings_ai_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = aiEnabled,
-                        onCheckedChange = {
-                            aiEnabled = it
-                            settings.aiEnabled = it
-                        }
+                Text(
+                    text = "Wähle, wann die KI-Geräuschklassifikation (YAMNet) ausgeführt werden soll:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = aiMode == "BATCH",
+                        onClick = {
+                            aiMode = "BATCH"
+                            settings.aiMode = "BATCH"
+                        },
+                        label = { Text("Im Batch (Default)") },
+                        modifier = Modifier.weight(1.1f)
+                    )
+                    FilterChip(
+                        selected = aiMode == "ONLINE",
+                        onClick = {
+                            aiMode = "ONLINE"
+                            settings.aiMode = "ONLINE"
+                        },
+                        label = { Text("Online / Live") },
+                        modifier = Modifier.weight(1.0f)
+                    )
+                    FilterChip(
+                        selected = aiMode == "OFF",
+                        onClick = {
+                            aiMode = "OFF"
+                            settings.aiMode = "OFF"
+                        },
+                        label = { Text("Aus") },
+                        modifier = Modifier.weight(0.7f)
                     )
                 }
 
-                if (aiEnabled && isProMode) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = when (aiMode) {
+                        "BATCH" -> "Schont Akku und CPU während der kontinuierlichen Lärmmessung. Aufnahmen werden nach Abschluss der Messung oder im Hintergrund klassifiziert."
+                        "ONLINE" -> "Klassifiziert jede Audioaufnahme sofort live im Moment der Schwellwertüberschreitung."
+                        else -> "Keine automatische KI-Klassifikation von Geräuschen."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (aiMode != "OFF") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                isBatchRunning = true
+                                try {
+                                    val count: Int = withContext(Dispatchers.IO) {
+                                        val classifier = NoiseClassifier(context)
+                                        classifier.classifyUnclassifiedBatch(container.database.noiseDao())
+                                    }
+                                    val msg = if (count > 0) "$count Aufnahme(n) erfolgreich nachträglich klassifiziert" else "Alle Aufnahmen sind bereits klassifiziert"
+                                    onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isBatchRunning = false
+                                }
+                            }
+                        },
+                        enabled = !isBatchRunning,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isBatchRunning) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Analysiere Aufnahmen...")
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Unklassifizierte Aufnahmen jetzt analysieren")
+                        }
+                    }
+                }
+
+                if (aiMode != "OFF" && isProMode) {
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(stringResource(R.string.settings_ai_confidence, (aiConfidence * 100).toInt()))
                     Slider(
                         value = aiConfidence,

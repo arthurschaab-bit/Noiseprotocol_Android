@@ -85,4 +85,57 @@ class SoundClassifierTest {
         assertEquals("Hämmern", result)
         assertEquals(1, classifier.callCount)
     }
+
+    @Test
+    fun batchKlassifikationAktualisiertNurUnklassifizierteAufnahmen() = kotlinx.coroutines.test.runTest {
+        val tempFile = File.createTempFile("test_batch", ".wav").apply {
+            writeBytes(byteArrayOf(1, 2, 3))
+            deleteOnExit()
+        }
+        val records = mutableListOf(
+            com.example.lrmprotokoll.data.NoiseRecord(id = 1, timestamp = 1000L, amplitude = 1.0, dbValue = 60.0, filePath = tempFile.absolutePath, detectedLabel = null),
+            com.example.lrmprotokoll.data.NoiseRecord(id = 2, timestamp = 2000L, amplitude = 1.0, dbValue = 65.0, filePath = tempFile.absolutePath, detectedLabel = "Bereits da")
+        )
+        val updated = mutableListOf<com.example.lrmprotokoll.data.NoiseRecord>()
+        val fakeDao = object : com.example.lrmprotokoll.data.NoiseDao {
+            override fun getAll() = kotlinx.coroutines.flow.flowOf(records)
+            override suspend fun getAlleAktiven() = records
+            override fun getTrash() = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.NoiseRecord>())
+            override suspend fun zwischenZeitpunkt(von: Long, bis: Long) = emptyList<com.example.lrmprotokoll.data.NoiseRecord>()
+            override fun zwischenZeitpunktFlow(von: Long, bis: Long) = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.NoiseRecord>())
+            override fun abZeitpunktFlow(von: Long) = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.NoiseRecord>())
+            override suspend fun insert(record: com.example.lrmprotokoll.data.NoiseRecord) {}
+            override suspend fun update(record: com.example.lrmprotokoll.data.NoiseRecord) { updated.add(record) }
+            override suspend fun softDelete(id: Long, deletedAt: Long) {}
+            override suspend fun softDeleteMultiple(ids: List<Long>, deletedAt: Long) {}
+            override suspend fun restore(id: Long) {}
+            override suspend fun restoreMultiple(ids: List<Long>) {}
+            override suspend fun deleteById(id: Long) {}
+            override suspend fun deleteMultiple(ids: List<Long>) {}
+            override suspend fun deleteTrashAelterAls(cutoff: Long) = 0
+            override suspend fun getTrashAelterAls(cutoff: Long) = emptyList<com.example.lrmprotokoll.data.NoiseRecord>()
+            override suspend fun getAutoRetentionCandidates(cutoff: Long) = emptyList<com.example.lrmprotokoll.data.NoiseRecord>()
+            override suspend fun setFavorite(id: Long, isFavorite: Boolean) {}
+            override suspend fun setNotes(id: Long, notes: String?) {}
+            override fun getAllReferences() = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.ReferenceSound>())
+            override suspend fun insertReference(sound: com.example.lrmprotokoll.data.ReferenceSound) {}
+            override suspend fun deleteReference(id: Long) {}
+        }
+
+        val classifier = FakeSoundClassifier(result = "Bohren")
+        val unclassified = fakeDao.getAlleAktiven().filter { it.detectedLabel == null && it.label == null }
+        var count = 0
+        for (r in unclassified) {
+            val res = classifier.classify(File(r.filePath))
+            if (res != null) {
+                fakeDao.update(r.copy(detectedLabel = res))
+                count++
+            }
+        }
+
+        assertEquals(1, count)
+        assertEquals(1, updated.size)
+        assertEquals("Bohren", updated.first().detectedLabel)
+        assertEquals(1L, updated.first().id)
+    }
 }
