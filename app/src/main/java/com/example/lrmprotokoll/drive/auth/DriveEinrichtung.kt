@@ -18,9 +18,9 @@ class DriveEinrichtung(
     private val driveApi: DriveApiClient,
     private val tokenProvider: GoogleSignInAccessTokenProvider? = null,
 ) {
-    suspend fun richteEin(ordnerName: String): Result<Unit> = runCatching {
+    suspend fun richteEin(ordnerName: String, uiContext: Context? = null): Result<Unit> = runCatching {
         if (settings.googleAccountEmail.isNullOrBlank() && tokenProvider != null) {
-            tokenProvider.meldeAnInteraktiv().getOrThrow()
+            tokenProvider.meldeAnInteraktiv(uiContext).getOrThrow()
         }
         val trimmed = ordnerName.trim().ifBlank { "Lärmprotokoll" }
         val bestehend = driveApi.ordnerSuchen(trimmed).getOrNull()

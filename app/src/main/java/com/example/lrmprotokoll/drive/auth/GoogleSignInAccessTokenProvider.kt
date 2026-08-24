@@ -1,7 +1,9 @@
 package com.example.lrmprotokoll.drive.auth
 
 import android.accounts.Account
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.IntentSender
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -15,6 +17,17 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+
+/**
+ * Löst bei Bedarf eine Activity aus einem Context oder ContextWrapper auf.
+ * CredentialManager benötigt zwingend einen Activity-basierten Context, um die Konto-Auswahl
+ * (Bottom Sheet) anzuzeigen.
+ */
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 /**
  * Signalisiert, dass Google einen expliziten Zustimmungsbildschirm verlangt, bevor
@@ -58,13 +71,16 @@ class GoogleSignInAccessTokenProvider(
      * Interaktiver Login-Schritt aus der Benutzeroberfläche:
      * Fordert über CredentialManager das Google-Konto an, speichert E-Mail und Anzeigename
      * in [settings] und holt die Autorisierung für drive.file ein.
+     *
+     * [uiContext] sollte der UI-/Activity-Context (z. B. aus `LocalContext.current`) sein,
+     * damit das Bottom-Sheet der Kontoauswahl gestartet werden kann.
      */
-    suspend fun meldeAnInteraktiv(): Result<String> = runCatching {
+    suspend fun meldeAnInteraktiv(uiContext: Context? = null): Result<String> = runCatching {
         check(GoogleClientConfig.konfiguriert) {
             "Keine echte OAuth-Client-ID eingerichtet - siehe GoogleClientConfig"
         }
-        val kontoEmail = ermittleAngemeldetesKonto()
-        autorisiereDriveZugriff(kontoEmail)
+        val kontoEmail = ermittleAngemeldetesKonto(uiContext)
+        autorisiereDriveZugriff(kontoEmail, uiContext)
     }
 
     /**
@@ -82,7 +98,8 @@ class GoogleSignInAccessTokenProvider(
     /**
      * Liest oder erfragt das Google-Konto über CredentialManager.
      */
-    private suspend fun ermittleAngemeldetesKonto(): String {
+    private suspend fun ermittleAngemeldetesKonto(uiContext: Context? = null): String {
+        val targetContext = uiContext?.findActivity() ?: uiContext ?: context.findActivity() ?: context
         val anfrage = GetCredentialRequest.Builder()
             .addCredentialOption(
                 GetSignInWithGoogleOption.Builder(GoogleClientConfig.SERVER_CLIENT_ID)
@@ -91,7 +108,7 @@ class GoogleSignInAccessTokenProvider(
             )
             .build()
 
-        val antwort = CredentialManager.create(context).getCredential(context, anfrage)
+        val antwort = CredentialManager.create(targetContext).getCredential(targetContext, anfrage)
         val zugangsdaten = GoogleIdTokenCredential.createFrom(antwort.credential.data)
         val email = zugangsdaten.id
         settings?.googleAccountEmail = email
@@ -99,7 +116,8 @@ class GoogleSignInAccessTokenProvider(
         return email
     }
 
-    private suspend fun autorisiereDriveZugriff(kontoEmail: String): String {
+    private suspend fun autorisiereDriveZugriff(kontoEmail: String, uiContext: Context? = null): String {
+        val targetContext = uiContext?.findActivity() ?: uiContext ?: context.findActivity() ?: context
         val anfrageBuilder = AuthorizationRequest.Builder()
             .setRequestedScopes(listOf(Scope(GoogleClientConfig.DRIVE_FILE_SCOPE)))
 
@@ -108,7 +126,7 @@ class GoogleSignInAccessTokenProvider(
         }
         val anfrage = anfrageBuilder.build()
 
-        val client = Identity.getAuthorizationClient(context)
+        val client = Identity.getAuthorizationClient(targetContext)
         return suspendCancellableCoroutine { fortsetzung ->
             client.authorize(anfrage)
                 .addOnSuccessListener { ergebnis ->

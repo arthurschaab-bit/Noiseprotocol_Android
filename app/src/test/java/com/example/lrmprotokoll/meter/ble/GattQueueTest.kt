@@ -110,4 +110,21 @@ class GattQueueTest {
         queue.complete(true)
         assertTrue(c.await())
     }
+
+    @Test
+    fun executeOptionalTimeoutSperrtDieQueueNicht() = runTest {
+        val queue = GattQueue(timeoutMs = 10_000)
+
+        val optionalDeferred = async { queue.executeOptional(timeoutOverrideMs = 500) { true } }
+        runCurrent()
+        advanceTimeBy(600)
+        runCurrent()
+        assertFalse("Optionaler Aufruf muss nach Timeout false liefern", optionalDeferred.await())
+
+        // Nachfolgende kritische Operation darf NICHT gesperrt sein!
+        val criticalDeferred = async { queue.execute { true } }
+        runCurrent()
+        queue.complete(true)
+        assertTrue("Kritische Operation muss trotz optionalem Timeout erfolgreich sein", criticalDeferred.await())
+    }
 }

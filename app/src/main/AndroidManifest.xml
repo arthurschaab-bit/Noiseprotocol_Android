@@ -17,6 +17,7 @@
     <!-- Legacy-Bluetooth-Berechtigungen für Android 10/11 (API 29/30, z.B. Huawei P30) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Ab Android 12 (API 31+) moderne Bluetooth-Berechtigungen -->

@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import android.app.AlarmManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.net.Uri
@@ -132,7 +133,7 @@ fun SettingsScreen(
     var expSystem by remember { mutableStateOf(false) }
 
     suspend fun verarbeiteDriveEinrichtungsVersuch(ordner: String = driveOrdnerName) {
-        when (val versuch = versucheDriveEinrichtung(container, settings, ordner)) {
+        when (val versuch = versucheDriveEinrichtung(container, settings, ordner, context)) {
             is DriveEinrichtungsVersuch.Erfolg -> {
                 googleAccountEmail = settings.googleAccountEmail
                 googleAccountName = settings.googleAccountName
@@ -979,9 +980,10 @@ internal suspend fun versucheDriveEinrichtung(
     container: AppContainer,
     settings: SettingsManager,
     ordnerName: String,
+    context: Context? = null,
 ): DriveEinrichtungsVersuch {
     val name = ordnerName.ifBlank { "Lärmprotokoll" }
-    return container.driveEinrichtung.richteEin(name).fold(
+    return container.driveEinrichtung.richteEin(name, context).fold(
         onSuccess = {
             DriveEinrichtungsVersuch.Erfolg(
                 nachricht = "Verbunden. Ordner \"$name\" wurde angelegt.",

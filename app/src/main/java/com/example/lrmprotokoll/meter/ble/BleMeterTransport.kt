@@ -154,8 +154,8 @@ class BleMeterTransport(
 
             // Best effort: gelingt requestMtu, kommt das Frame womoeglich in einer einzigen
             // Notification statt zwei. Der Decoder deckt beide Faelle ab (M0), das Ergebnis
-            // wird deshalb nicht ausgewertet.
-            gattQueue.execute { gatt?.requestMtu(PREFERRED_MTU) ?: false }
+            // wird deshalb nicht ausgewertet und blockiert bei Timeout nicht die Subskription.
+            gattQueue.executeOptional { gatt?.requestMtu(PREFERRED_MTU) ?: false }
 
             val notifyCharacteristic = gatt
                 ?.getService(Pce323Profile.SERVICE_UUID)

@@ -100,6 +100,7 @@ fun BluetoothStatusBadge(
                     .background(statusColor)
                     .then(if (isAnimating) Modifier.alpha(pulseAlpha) else Modifier)
             )
+            Spacer(modifier = Modifier.width(6.dp))
             val connectedStr = stringResource(R.string.status_connected)
             val offStr = stringResource(R.string.status_off)
             val displayText = when {
@@ -114,6 +115,8 @@ fun BluetoothStatusBadge(
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }
