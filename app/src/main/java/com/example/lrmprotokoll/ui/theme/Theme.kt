@@ -64,6 +64,7 @@ fun LaermprotokollTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = provideAppTypography(),
         content = content
     )
 }
