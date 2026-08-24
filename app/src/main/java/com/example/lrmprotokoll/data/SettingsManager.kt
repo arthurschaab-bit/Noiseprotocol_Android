@@ -79,9 +79,26 @@ class SettingsManager(
         get() = prefs.getInt("duration", 3)
         set(value) = prefs.edit().putInt("duration", value).apply()
 
+    /**
+     * KI-Erkennungsmodus:
+     * - "BATCH": Abschließend / Nachträglich im Batch (Standard / Default, schont Akku & Latenz)
+     * - "ONLINE": Live direkt nach jeder einzelnen Aufnahme
+     * - "OFF": Deaktiviert
+     */
+    var aiMode: String
+        get() = prefs.getString("ai_mode", "BATCH") ?: "BATCH"
+        set(value) = prefs.edit().putString("ai_mode", value).apply()
+
     var aiEnabled: Boolean
-        get() = prefs.getBoolean("ai_enabled", true)
-        set(value) = prefs.edit().putBoolean("ai_enabled", value).apply()
+        get() = aiMode != "OFF"
+        set(value) {
+            val neuerModus = if (value) {
+                if (aiMode == "OFF") "BATCH" else aiMode
+            } else {
+                "OFF"
+            }
+            aiMode = neuerModus
+        }
 
     var aiConfidenceThreshold: Float
         get() = prefs.getFloat("ai_confidence", 0.3f)

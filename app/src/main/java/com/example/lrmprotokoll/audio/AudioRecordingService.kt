@@ -651,7 +651,8 @@ class AudioRecordingService : LifecycleService() {
             Log.e("AudioRecordingService", "Fehler beim Finalisieren der WAV-Datei", e)
         }
 
-        val detected = classifySafely(classifier, settingsManager.aiEnabled, file)
+        val shouldClassifyOnline = settingsManager.aiMode == "ONLINE"
+        val detected = if (shouldClassifyOnline) classifySafely(classifier, true, file) else null
 
         try {
             val dao = (application as LaermprotokollApp).container.database.noiseDao()
@@ -668,7 +669,7 @@ class AudioRecordingService : LifecycleService() {
                     isQuietHour = isQuiet,
                 ),
             )
-            Log.i("AudioRecordingService", "NoiseRecord erfolgreich gespeichert: $fileName (KI: $detected)")
+            Log.i("AudioRecordingService", "NoiseRecord erfolgreich gespeichert: $fileName (Modus: ${settingsManager.aiMode}, KI: $detected)")
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
         }
