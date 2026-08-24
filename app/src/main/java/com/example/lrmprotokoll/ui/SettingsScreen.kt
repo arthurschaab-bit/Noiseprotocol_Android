@@ -73,6 +73,7 @@ fun SettingsScreen(
 
     // Aufnahme-Parameter
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
+    var recordWavAudio by remember { mutableStateOf(settings.recordWavAudio) }
     var audioTriggerQuelle by remember { mutableStateOf(settings.audioTriggerQuelle) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
     var duration by remember { mutableFloatStateOf(settings.recordDurationSeconds.toFloat()) }
@@ -381,7 +382,7 @@ fun SettingsScreen(
             // Sektion 1: Aufnahme & Mikrofon
             SettingsSectionCard(
                 title = stringResource(R.string.settings_section_thresholds),
-                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle (${when (audioTriggerQuelle) { "PCE_323" -> "Nur PCE-323"; "MIKROFON" -> "Nur Mikrofon"; else -> "Auto" }})${if (isProMode) " · ${preRoll.toInt()}s · ${duration.toInt()}s" else ""}",
+                summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle · ${if (recordWavAudio) "WAV-Audio aktiv" else "Reine Pegelmessung (Kein Audio)"}",
                 expanded = expAufnahme,
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
@@ -403,42 +404,61 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_ta_laerm_presets), color = TechBluePrimary)
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(stringResource(R.string.settings_trigger_source_title), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = audioTriggerQuelle == "AUTO",
-                        onClick = {
-                            audioTriggerQuelle = "AUTO"
-                            settings.audioTriggerQuelle = "AUTO"
-                        },
-                        label = { Text(stringResource(R.string.settings_trigger_source_auto)) }
-                    )
-                    FilterChip(
-                        selected = audioTriggerQuelle == "PCE_323",
-                        onClick = {
-                            audioTriggerQuelle = "PCE_323"
-                            settings.audioTriggerQuelle = "PCE_323"
-                        },
-                        label = { Text(stringResource(R.string.settings_trigger_source_meter)) }
-                    )
-                    FilterChip(
-                        selected = audioTriggerQuelle == "MIKROFON",
-                        onClick = {
-                            audioTriggerQuelle = "MIKROFON"
-                            settings.audioTriggerQuelle = "MIKROFON"
-                        },
-                        label = { Text(stringResource(R.string.settings_trigger_source_mic)) }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Audioaufzeichnung an/aus (DSGVO / Datenschutz-Modus)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_record_wav_title), style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_record_wav_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = recordWavAudio,
+                        onCheckedChange = {
+                            recordWavAudio = it
+                            settings.recordWavAudio = it
+                        }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.settings_trigger_source_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (recordWavAudio) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(stringResource(R.string.settings_trigger_source_title), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = audioTriggerQuelle == "AUTO",
+                            onClick = {
+                                audioTriggerQuelle = "AUTO"
+                                settings.audioTriggerQuelle = "AUTO"
+                            },
+                            label = { Text(stringResource(R.string.settings_trigger_source_auto)) }
+                        )
+                        FilterChip(
+                            selected = audioTriggerQuelle == "PCE_323",
+                            onClick = {
+                                audioTriggerQuelle = "PCE_323"
+                                settings.audioTriggerQuelle = "PCE_323"
+                            },
+                            label = { Text(stringResource(R.string.settings_trigger_source_meter)) }
+                        )
+                        FilterChip(
+                            selected = audioTriggerQuelle == "MIKROFON",
+                            onClick = {
+                                audioTriggerQuelle = "MIKROFON"
+                                settings.audioTriggerQuelle = "MIKROFON"
+                            },
+                            label = { Text(stringResource(R.string.settings_trigger_source_mic)) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_trigger_source_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 if (isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))

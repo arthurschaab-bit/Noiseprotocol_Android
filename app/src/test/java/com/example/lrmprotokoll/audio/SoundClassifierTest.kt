@@ -138,4 +138,23 @@ class SoundClassifierTest {
         assertEquals("Bohren", updated.first().detectedLabel)
         assertEquals(1L, updated.first().id)
     }
+
+    @Test
+    fun reinesPegelEreignisWirdOhneAudiodateiGespeichert() {
+        val record = com.example.lrmprotokoll.data.NoiseRecord(
+            timestamp = 1700000000L,
+            amplitude = 0.0,
+            dbValue = 68.5,
+            filePath = "",
+            calibratedDbA = 68.5,
+            meterWeighting = "A",
+            meterConnected = true,
+            isQuietHour = false
+        )
+
+        assertEquals("", record.filePath)
+        assertEquals(68.5, record.dbValue, 0.01)
+        assertEquals(true, record.meterConnected)
+        assertNull(record.detectedLabel)
+    }
 }

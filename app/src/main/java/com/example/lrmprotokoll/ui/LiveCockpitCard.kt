@@ -189,7 +189,9 @@ fun LiveCockpitCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = when (settings.audioTriggerQuelle) {
+                                text = if (!settings.recordWavAudio) {
+                                    "Kein Audio (DSGVO)"
+                                } else when (settings.audioTriggerQuelle) {
                                     "PCE_323" -> stringResource(R.string.cockpit_trigger_meter_only)
                                     "MIKROFON" -> stringResource(R.string.cockpit_trigger_mic_only)
                                     else -> stringResource(R.string.cockpit_trigger_auto)
@@ -228,6 +230,14 @@ fun LiveCockpitCard(
                             text = { Text(stringResource(R.string.settings_trigger_source_mic)) },
                             onClick = {
                                 settings.audioTriggerQuelle = "MIKROFON"
+                                showTriggerMenu = false
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(if (settings.recordWavAudio) "WAV-Aufnahme: Aktiv" else "WAV-Aufnahme: Aus (DSGVO)") },
+                            onClick = {
+                                settings.recordWavAudio = !settings.recordWavAudio
                                 showTriggerMenu = false
                             }
                         )
