@@ -386,6 +386,10 @@
     <string name="badge_quiet_hour">Ruhezeit</string>
     <string name="source_microphone">Mikrofon (unkalibriert)</string>
     <string name="source_pce323">PCE-323 (kalibriert)</string>
+    <string name="settings_record_wav_title">Audio-Aufnahmen (WAV) speichern</string>
+    <string name="settings_record_wav_desc">Bei Grenzwertüberschreitung WAV-Dateien aufzeichnen. Wenn deaktiviert, werden nur Pegelwerte und Ereignisse ohne Ton archiviert (DSGVO- / Datenschutz-Modus).</string>
+    <string name="badge_no_audio">Kein Audio</string>
+    <string name="no_audio_event_desc">Reine Pegelmessung (Ohne Audiodatei)</string>
     <string name="label_ai_prefix">KI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
 </resources>

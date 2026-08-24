@@ -80,6 +80,16 @@ class SettingsManager(
         set(value) = prefs.edit().putInt("duration", value).apply()
 
     /**
+     * Steuert, ob bei Schwellenwertüberschreitungen WAV-Audiodateien auf dem Speicher
+     * aufgezeichnet werden sollen.
+     * - true: Vollständige Dokumentation inkl. WAV-Audio-Ausschnitt (Standard)
+     * - false: Reine Pegelmessung (Datenschutz- / DSGVO-Modus, keine Audiodateien)
+     */
+    var recordWavAudio: Boolean
+        get() = prefs.getBoolean("record_wav_audio", true)
+        set(value) = prefs.edit().putBoolean("record_wav_audio", value).apply()
+
+    /**
      * KI-Erkennungsmodus:
      * - "BATCH": Abschließend / Nachträglich im Batch (Standard / Default, schont Akku & Latenz)
      * - "ONLINE": Live direkt nach jeder einzelnen Aufnahme

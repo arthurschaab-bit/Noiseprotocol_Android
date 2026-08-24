@@ -491,11 +491,50 @@ class AudioRecordingService : LifecycleService() {
         )
 
         if (auswertung.ausgeloest) {
-            if (isRecordingActive.compareAndSet(false, true)) {
-                serviceScope.launch(Dispatchers.IO) {
-                    starteWavAufnahme(maxAmplitude, mikrofonDb ?: auswertung.pegel, auswertung, isQuiet)
+            if (settingsManager.recordWavAudio) {
+                if (isRecordingActive.compareAndSet(false, true)) {
+                    serviceScope.launch(Dispatchers.IO) {
+                        starteWavAufnahme(maxAmplitude, mikrofonDb ?: auswertung.pegel, auswertung, isQuiet)
+                    }
+                }
+            } else {
+                if (isRecordingActive.compareAndSet(false, true)) {
+                    serviceScope.launch(Dispatchers.IO) {
+                        speicherePegelEreignisOhneAudio(auswertung, isQuiet, mikrofonDb)
+                    }
                 }
             }
+        }
+    }
+
+    private suspend fun speicherePegelEreignisOhneAudio(
+        auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
+        isQuiet: Boolean,
+        mikrofonDb: Double?,
+    ) {
+        val timestamp = System.currentTimeMillis()
+        try {
+            val dao = (application as LaermprotokollApp).container.database.noiseDao()
+            dao.insert(
+                NoiseRecord(
+                    timestamp = timestamp,
+                    amplitude = 0.0,
+                    dbValue = mikrofonDb ?: auswertung.pegel,
+                    filePath = "",
+                    detectedLabel = null,
+                    calibratedDbA = auswertung.calibratedDbA,
+                    meterWeighting = auswertung.meterWeighting,
+                    meterConnected = auswertung.meterConnected,
+                    isQuietHour = isQuiet,
+                )
+            )
+            Log.i("AudioRecordingService", "Reines Pegelereignis gespeichert (DSGVO-Modus ohne Audio): ${auswertung.pegel} dB")
+        } catch (e: Throwable) {
+            Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord ohne Audio", e)
+        } finally {
+            letzteAufnahmeEndeTimestamp = System.currentTimeMillis()
+            delay(2000L)
+            isRecordingActive.set(false)
         }
     }
 

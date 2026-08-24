@@ -35,12 +35,16 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
     val mediaPlayer = remember { MediaPlayer() }
 
     DisposableEffect(filePath) {
-        try {
-            mediaPlayer.setDataSource(filePath)
-            mediaPlayer.prepare()
-        } catch (e: Exception) {
-            Log.w(TAG, "Wiedergabe fehlgeschlagen fuer $filePath", e)
-            wiedergabeFehler = wiedergabeFehlermeldung(e)
+        if (filePath.isBlank()) {
+            wiedergabeFehler = "Wiedergabe fehlgeschlagen: Keine Audiodatei vorhanden (Reine Pegelmessung)"
+        } else {
+            try {
+                mediaPlayer.setDataSource(filePath)
+                mediaPlayer.prepare()
+            } catch (e: Exception) {
+                Log.w(TAG, "Wiedergabe fehlgeschlagen fuer $filePath", e)
+                wiedergabeFehler = wiedergabeFehlermeldung(e)
+            }
         }
         onDispose {
             mediaPlayer.release()
@@ -169,7 +173,7 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
  * MeterScreen.kt.
  */
 internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) {
-    is java.io.IOException -> "Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?"
+    is java.io.IOException -> "Wiedergabe fehlgeschlagen: Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?"
     else -> "Wiedergabe fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
 }
 

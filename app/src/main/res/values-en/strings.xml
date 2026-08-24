@@ -386,6 +386,10 @@
     <string name="badge_quiet_hour">Quiet Hour</string>
     <string name="source_microphone">Microphone (uncalibrated)</string>
     <string name="source_pce323">PCE-323 (calibrated)</string>
+    <string name="settings_record_wav_title">Save Audio Recordings (WAV)</string>
+    <string name="settings_record_wav_desc">Record WAV audio files when thresholds are exceeded. When disabled, only level values and events are archived without sound (GDPR / Privacy mode).</string>
+    <string name="badge_no_audio">No Audio</string>
+    <string name="no_audio_event_desc">Level Only (No Audio File)</string>
     <string name="label_ai_prefix">AI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
 </resources>

@@ -1055,12 +1055,14 @@ fun NoiseRecordItem(
     onLongClick: () -> Unit,
     onAiRecognize: () -> Unit
 ) {
+    val hasAudio = record.filePath.isNotBlank()
+
     NoiseCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .combinedClickable(
-                onClick = onPlay,
+                onClick = { if (hasAudio) onPlay() },
                 onLongClick = onLongClick
             ),
         containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -1076,6 +1078,10 @@ fun NoiseRecordItem(
                     if (record.isQuietHour) {
                         Spacer(modifier = Modifier.width(6.dp))
                         StatusPill(text = stringResource(R.string.badge_quiet_hour), type = StatusPillType.WARNING)
+                    }
+                    if (!hasAudio) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        StatusPill(text = stringResource(R.string.badge_no_audio), type = StatusPillType.IDLE)
                     }
                 }
 
@@ -1145,11 +1151,13 @@ fun NoiseRecordItem(
                 )
             }
 
-            IconButton(
-                onClick = onAiRecognize,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch), tint = MaterialTheme.colorScheme.secondary)
+            if (hasAudio) {
+                IconButton(
+                    onClick = onAiRecognize,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch), tint = MaterialTheme.colorScheme.secondary)
+                }
             }
 
             IconButton(
@@ -1159,11 +1167,13 @@ fun NoiseRecordItem(
                 Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
             }
 
-            IconButton(
-                onClick = onPlay,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.audio_play), tint = MaterialTheme.colorScheme.primary)
+            if (hasAudio) {
+                IconButton(
+                    onClick = onPlay,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.audio_play), tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
 
