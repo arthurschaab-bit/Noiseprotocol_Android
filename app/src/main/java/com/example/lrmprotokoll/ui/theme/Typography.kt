@@ -15,9 +15,10 @@ import kotlin.math.min
 /**
  * Dynamische und auflösungsadaptive Typografie für Lärmprotokoll.
  *
- * Passt Schriftgrößen, Zeilenhöhen und Buchstabenspation dynamisch an die
- * Displayauflösung (z. B. 1080x2340 / 360-392dp auf Huawei P30) und die
- * Systemeinstellungen für Schriftgröße (fontScale) an.
+ * Passt Schriftgrößen, Zeilenhöhen und Buchstabenspation dynamisch und universell an jede
+ * Displayauflösung (kompakte Smartphones 320-360dp, Standard-Smartphones 360-400dp,
+ * Großbildschirme 400-600dp sowie Tablets/Foldables >600dp) und die Systemeinstellungen
+ * für Schriftgröße (fontScale) an.
  */
 @Composable
 fun provideAppTypography(): Typography {
@@ -28,10 +29,10 @@ fun provideAppTypography(): Typography {
     return remember(screenWidthDp, density.fontScale) {
         // Skalierungsfaktor für kompakte Bildschirme (Basis: 392dp Standard-Viewport)
         val scaleFactor = when {
-            screenWidthDp < 360 -> 0.88f
-            screenWidthDp < 400 -> 0.94f // z. B. Huawei P30 (360-392dp)
-            screenWidthDp < 600 -> 1.0f  // Standard moderne Smartphones
-            else -> 1.08f                 // Tablets / Foldables
+            screenWidthDp < 360 -> 0.88f // Kompakte Geräte (<360dp)
+            screenWidthDp < 400 -> 0.94f // Standard-Smartphones (360-392dp)
+            screenWidthDp < 600 -> 1.0f  // Größere moderne Smartphones (400-600dp)
+            else -> 1.08f                 // Tablets / Foldables (>600dp)
         }
 
         // Bei extrem hoher System-Schriftgröße (fontScale > 1.15) begrenzen wir
