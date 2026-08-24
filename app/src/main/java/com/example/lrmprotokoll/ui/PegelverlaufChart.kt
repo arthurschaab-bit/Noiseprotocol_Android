@@ -228,13 +228,21 @@ fun PegelverlaufChart(
             val segmente = mutableListOf<MutableList<ChartSpalte>>()
             var aktuellesSegment = mutableListOf<ChartSpalte>()
 
+            val spaltenAbstandSek = if (spalten.size > 1) {
+                (spalten.last().zeitOffsetSekunden - spalten.first().zeitOffsetSekunden) / (spalten.size - 1)
+            } else {
+                60L
+            }
+            // Eine Lücke liegt erst vor, wenn der Abstand zwischen zwei Spalten mehr als das 2.5-fache des regulären Rasters beträgt
+            val maxLueckeSekunden = maxOf(180L, (spaltenAbstandSek * 2.5).toLong())
+
             spalten.forEach { spalte ->
                 if (aktuellesSegment.isEmpty()) {
                     aktuellesSegment.add(spalte)
                 } else {
                     val vorherige = aktuellesSegment.last()
                     val deltaSek = spalte.zeitOffsetSekunden - vorherige.zeitOffsetSekunden
-                    if (deltaSek > 60L) {
+                    if (deltaSek > maxLueckeSekunden) {
                         segmente.add(aktuellesSegment)
                         aktuellesSegment = mutableListOf(spalte)
                     } else {
@@ -249,36 +257,45 @@ fun PegelverlaufChart(
             segmente.forEach { segment ->
                 if (segment.isEmpty()) return@forEach
 
-                // Min/Max Area
-                val bandPfad = Path().apply {
-                    var first = true
-                    segment.forEach { spalte ->
-                        val px = x(spalte.zeitOffsetSekunden)
-                        val pyMax = y(spalte.maxDb)
-                        if (first) {
-                            moveTo(px, pyMax)
-                            first = false
-                        } else {
-                            lineTo(px, pyMax)
+                if (segment.size == 1) {
+                    val spalte = segment.first()
+                    val px = x(spalte.zeitOffsetSekunden)
+                    val py = y(spalte.mittelDb)
+                    if (px in yAxisWidth..size.width && py in 0f..plotHeight) {
+                        drawCircle(color = curveColor, radius = 2.5f.dp.toPx(), center = Offset(px, py))
+                    }
+                } else {
+                    // Min/Max Area
+                    val bandPfad = Path().apply {
+                        var first = true
+                        segment.forEach { spalte ->
+                            val px = x(spalte.zeitOffsetSekunden)
+                            val pyMax = y(spalte.maxDb)
+                            if (first) {
+                                moveTo(px, pyMax)
+                                first = false
+                            } else {
+                                lineTo(px, pyMax)
+                            }
+                        }
+                        for (index in segment.indices.reversed()) {
+                            val spalte = segment[index]
+                            lineTo(x(spalte.zeitOffsetSekunden), y(spalte.minDb))
+                        }
+                        close()
+                    }
+                    drawPath(bandPfad, color = areaColor)
+
+                    // Mittelwertlinie
+                    val mittelPfad = Path().apply {
+                        segment.forEachIndexed { index, spalte ->
+                            val px = x(spalte.zeitOffsetSekunden)
+                            val py = y(spalte.mittelDb)
+                            if (index == 0) moveTo(px, py) else lineTo(px, py)
                         }
                     }
-                    for (index in segment.indices.reversed()) {
-                        val spalte = segment[index]
-                        lineTo(x(spalte.zeitOffsetSekunden), y(spalte.minDb))
-                    }
-                    close()
+                    drawPath(mittelPfad, color = curveColor, style = Stroke(width = 2.dp.toPx()))
                 }
-                drawPath(bandPfad, color = areaColor)
-
-                // Mittelwertlinie
-                val mittelPfad = Path().apply {
-                    segment.forEachIndexed { index, spalte ->
-                        val px = x(spalte.zeitOffsetSekunden)
-                        val py = y(spalte.mittelDb)
-                        if (index == 0) moveTo(px, py) else lineTo(px, py)
-                    }
-                }
-                drawPath(mittelPfad, color = curveColor, style = Stroke(width = 2.dp.toPx()))
             }
 
             // 5. Ereignis-Pins auf der Zeitachse
