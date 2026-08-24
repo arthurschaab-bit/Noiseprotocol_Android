@@ -105,9 +105,9 @@ fun MicrophoneControlCard(
             }
 
             StatusPill(
-                text = if (audioAufnahmeAktiv) "Mikrofon AKTIV" else "Mikrofon AUS",
-                icon = if (audioAufnahmeAktiv) Icons.Default.Check else null,
-                type = if (audioAufnahmeAktiv) StatusPillType.CONNECTED else StatusPillType.IDLE
+                text = if (!settings.recordWavAudio) "Audio AUS (DSGVO)" else if (audioAufnahmeAktiv) "Mikrofon AKTIV" else "Mikrofon AUS",
+                icon = if (settings.recordWavAudio && audioAufnahmeAktiv) Icons.Default.Check else null,
+                type = if (!settings.recordWavAudio) StatusPillType.IDLE else if (audioAufnahmeAktiv) StatusPillType.CONNECTED else StatusPillType.IDLE
             )
         }
 

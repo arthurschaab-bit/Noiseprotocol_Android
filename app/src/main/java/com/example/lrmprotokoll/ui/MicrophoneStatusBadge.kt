@@ -23,13 +23,26 @@ import com.example.lrmprotokoll.R
 @Composable
 fun MicrophoneStatusBadge(
     audioMonitoringActive: Boolean,
+    recordWavAudio: Boolean = true,
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val (statusColor, containerColor) = if (audioMonitoringActive) {
-        Color(0xFF15803D) to Color(0xFFDCFCE7) // Grün (Aktiv)
-    } else {
-        Color(0xFF64748B) to Color(0xFFF1F5F9) // Schiefergrau (Aus / Pausiert)
+    val (statusColor, containerColor, text) = when {
+        !recordWavAudio -> Triple(
+            Color(0xFF475569),
+            Color(0xFFF1F5F9),
+            "Audio AUS (DSGVO)"
+        )
+        audioMonitoringActive -> Triple(
+            Color(0xFF15803D),
+            Color(0xFFDCFCE7), // Grün (Aktiv)
+            stringResource(R.string.status_mic_on)
+        )
+        else -> Triple(
+            Color(0xFF64748B),
+            Color(0xFFF1F5F9), // Schiefergrau (Aus / Pausiert)
+            stringResource(R.string.status_mic_off)
+        )
     }
 
     Surface(
@@ -42,7 +55,7 @@ fun MicrophoneStatusBadge(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         ) {
             Text(
-                text = stringResource(if (audioMonitoringActive) R.string.status_mic_on else R.string.status_mic_off),
+                text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
                 fontWeight = FontWeight.SemiBold,

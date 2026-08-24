@@ -431,6 +431,7 @@ fun NoiseProtocolApp(
                 actions = {
                     MicrophoneStatusBadge(
                         audioMonitoringActive = dienstAktiv,
+                        recordWavAudio = settingsManager.recordWavAudio,
                         onClick = {
                             if (dienstAktiv) {
                                 val intent = Intent(context, AudioRecordingService::class.java).apply {

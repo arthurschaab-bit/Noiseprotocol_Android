@@ -75,7 +75,7 @@
     <string name="cockpit_level_desc_high">High noise level exceeding standard threshold</string>
     <string name="cockpit_collecting_live_data">Collecting live measurement data…</string>
     <string name="cockpit_start_to_see_history">Start a measurement to see sound level history.</string>
-    <string name="cockpit_mark_noise_event">+ Mark noise event</string>
+    <string name="cockpit_mark_noise_event">Mark Noise Event</string>
     <string name="cockpit_end_measurement">End measurement</string>
     <string name="cockpit_start_measurement">Start measurement</string>
     <string name="cockpit_quick_settings_title">Quick Settings</string>

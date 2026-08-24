@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -354,21 +356,59 @@ fun MeterScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (pairedAddress != null) {
+                    val isConnected = connectionState == ConnectionState.STREAMING
+                    val isConnecting = connectionState == ConnectionState.CONNECTING ||
+                        connectionState == ConnectionState.DISCOVERING ||
+                        connectionState == ConnectionState.SUBSCRIBING ||
+                        connectionState == ConnectionState.RECONNECTING
+
                     Text(
                         stringResource(R.string.meter_paired_info, pairedName ?: "Unbekannt", pairedAddress ?: ""),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            if (hasBluetoothPermissions) {
-                                ensureConnected()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                if (hasBluetoothPermissions) {
+                                    ensureConnected()
+                                } else {
+                                    permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
+                                }
+                            },
+                            enabled = !isConnected && !isConnecting,
+                            colors = if (isConnected) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                             } else {
-                                permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
+                                ButtonDefaults.buttonColors()
+                            }
+                        ) {
+                            if (isConnected) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Bereits verbunden")
+                            } else if (isConnecting) {
+                                Text("Verbinde…")
+                            } else {
+                                Text(stringResource(R.string.meter_action_connect))
                             }
                         }
-                    ) {
-                        Text(stringResource(R.string.meter_action_connect))
+
+                        if (isConnected) {
+                            OutlinedButton(
+                                onClick = {
+                                    supervisor.stop()
+                                }
+                            ) {
+                                Text("Trennen")
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }

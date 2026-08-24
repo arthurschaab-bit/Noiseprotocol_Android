@@ -75,7 +75,7 @@
     <string name="cockpit_level_desc_high">Hoher Lärmpegel über Standardgrenzwert</string>
     <string name="cockpit_collecting_live_data">Erfasse Live-Messdaten…</string>
     <string name="cockpit_start_to_see_history">Starte eine Messung, um den Pegelverlauf zu sehen.</string>
-    <string name="cockpit_mark_noise_event">+ Lärmereignis markieren</string>
+    <string name="cockpit_mark_noise_event">Lärmereignis markieren</string>
     <string name="cockpit_end_measurement">Messung beenden</string>
     <string name="cockpit_start_measurement">Messung starten</string>
     <string name="cockpit_quick_settings_title">Schnelleinstellungen</string>

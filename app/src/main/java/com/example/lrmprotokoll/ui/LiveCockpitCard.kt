@@ -156,19 +156,13 @@ fun LiveCockpitCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Title & Subtitle
+            // Left: Status / Subtitle (obere Überschrift Lärmprotokoll ist bereits in TopAppBar)
             Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
-                    text = stringResource(R.string.cockpit_title),
-                    style = MaterialTheme.typography.titleLarge,
+                    text = stringResource(if (dienstAktiv) R.string.cockpit_subtitle_live else R.string.cockpit_subtitle_ready),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-                Text(
-                    text = stringResource(if (dienstAktiv) R.string.cockpit_subtitle_live else R.string.cockpit_subtitle_ready),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
             }
@@ -444,6 +438,55 @@ fun LiveCockpitCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+        }
+
+        // ==========================================
+        // 3.5 DEDICATED AUDIOAUFZEICHNUNG TOGGLE (JA / NEIN)
+        // ==========================================
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        text = "Audioaufzeichnung (WAV)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (settings.recordWavAudio) "WAV-Dateien speichern (Audioaufnahme aktiv)" else "Reine Pegelmessung (Kein Audio / DSGVO)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = settings.recordWavAudio,
+                        onClick = { settings.recordWavAudio = true },
+                        label = { Text("Ja") }
+                    )
+                    FilterChip(
+                        selected = !settings.recordWavAudio,
+                        onClick = { settings.recordWavAudio = false },
+                        label = { Text("Nein") }
+                    )
                 }
             }
         }
