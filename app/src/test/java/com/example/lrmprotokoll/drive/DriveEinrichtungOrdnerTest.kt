@@ -54,6 +54,7 @@ class DriveEinrichtungOrdnerTest {
             return Result.success(Unit)
         }
 
+        override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> = Result.success(emptySet())
         override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> = Result.success(null)
         override suspend fun dateiAnlegen(name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean): Result<String> = Result.success("file-id")
         override suspend fun dateiAktualisieren(fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean): Result<Unit> = Result.success(Unit)

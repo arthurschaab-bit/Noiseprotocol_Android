@@ -86,27 +86,34 @@ class DriveSyncCoordinator(
         // WAV-Dateien hochladen, wenn Option aktiviert ist (prüft alle aktiven Aufnahmen mit lokaler Datei)
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
-            for (record in wavRecords) {
-                val file = java.io.File(record.filePath)
-                if (file.exists() && file.isFile) {
-                    val dateiName = file.name
-                    val suchenResult = driveApi.dateiSuchen(dateiName, ordnerId)
-                    val existiert = suchenResult.getOrNull()
-                    if (existiert == null && suchenResult.isSuccess) {
-                        val bytes = runCatching { file.readBytes() }.getOrNull()
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            val uploadResult = driveApi.dateiAnlegen(
-                                name = dateiName,
-                                ordnerId = ordnerId,
-                                inhalt = bytes,
-                                mimeType = "audio/wav",
-                                gzip = false,
-                            )
-                            if (uploadResult.isFailure) {
-                                Log.w(TAG, "WAV-Upload fehlgeschlagen für $dateiName: ${uploadResult.exceptionOrNull()?.message}")
-                            } else {
-                                wavUploadedCount++
-                                Log.i(TAG, "WAV-Upload erfolgreich für $dateiName (ID: ${uploadResult.getOrNull()})")
+            if (wavRecords.isNotEmpty()) {
+                val existierendeNamen = driveApi.dateienInOrdnerAuflisten(ordnerId).getOrElse { emptySet() }
+                for (record in wavRecords) {
+                    val file = java.io.File(record.filePath)
+                    if (file.exists() && file.isFile) {
+                        val dateiName = file.name
+                        if (!existierendeNamen.contains(dateiName)) {
+                            val bytes = runCatching { file.readBytes() }.getOrNull()
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                val uploadResult = driveApi.dateiAnlegen(
+                                    name = dateiName,
+                                    ordnerId = ordnerId,
+                                    inhalt = bytes,
+                                    mimeType = "audio/wav",
+                                    gzip = false,
+                                )
+                                if (uploadResult.isFailure) {
+                                    val err = uploadResult.exceptionOrNull()
+                                    val httpCode = (err as? DriveApiException)?.httpCode
+                                    Log.w(TAG, "WAV-Upload fehlgeschlagen für $dateiName: ${err?.message}")
+                                    if (httpCode == 403 || httpCode == 429) {
+                                        Log.w(TAG, "Drive-Rate-Limit (HTTP $httpCode) beim WAV-Upload erreicht – breche Batch ab")
+                                        break
+                                    }
+                                } else {
+                                    wavUploadedCount++
+                                    Log.i(TAG, "WAV-Upload erfolgreich für $dateiName (ID: ${uploadResult.getOrNull()})")
+                                }
                             }
                         }
                     }
@@ -227,8 +234,12 @@ class DriveSyncCoordinator(
                 state = DriveSyncState.FAILED,
             )
         )
-        val grund = fehler.message ?: "Unbekannter Fehler"
-        settings.driveSyncLastMessage = "Fehler: $grund"
+        val grund = when {
+            httpCode == 403 || httpCode == 429 -> "Google Drive Übertragungslimit erreicht – nächster Versuch in 30 Min."
+            httpCode == 401 -> "Anmeldung abgelaufen – bitte in Einstellungen neu verbinden"
+            else -> fehler.message ?: "Unbekannter Fehler"
+        }
+        settings.driveSyncLastMessage = if (grund.startsWith("Google Drive") || grund.startsWith("Anmeldung")) grund else "Fehler: $grund"
         return SyncErgebnis.Fehlgeschlagen(grund, httpCode)
     }
 }
