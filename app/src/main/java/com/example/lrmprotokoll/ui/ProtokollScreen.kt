@@ -65,6 +65,7 @@ fun ProtokollScreen(
     var searchQuery by remember { mutableStateOf("") }
     var filterOnlyWithEvents by remember { mutableStateOf(false) }
     var tagesreportSelectedDay by remember { mutableStateOf<Pair<String, List<SessionEntity>>?>(null) }
+    var showGesamtberichtDialog by remember { mutableStateOf(false) }
 
     val filteredSessions = remember(sessions, searchQuery, filterOnlyWithEvents) {
         sessions.filter { s ->
@@ -102,6 +103,13 @@ fun ProtokollScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showGesamtberichtDialog = true }) {
+                        Icon(
+                            imageVector = AppIcons.BarChart,
+                            contentDescription = "Gesamtbericht (PDF)",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }) {
                         Icon(
                             imageVector = AppIcons.FilterList,
@@ -280,6 +288,13 @@ fun ProtokollScreen(
             sessions = daySessions,
             db = db,
             onDismiss = { tagesreportSelectedDay = null }
+        )
+    }
+
+    if (showGesamtberichtDialog) {
+        com.example.lrmprotokoll.report.gesamtbericht.ui.GesamtberichtDialog(
+            db = db,
+            onDismiss = { showGesamtberichtDialog = false }
         )
     }
 }
