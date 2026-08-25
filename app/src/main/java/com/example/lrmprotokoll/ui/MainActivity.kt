@@ -197,7 +197,8 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     SettingsScreen(
                         onBack = { navController.popBackStack() },
                         onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                        onNavigateToDiagnose = { navController.navigate("diagnose") }
                     )
                 }
                 composable("meter") {

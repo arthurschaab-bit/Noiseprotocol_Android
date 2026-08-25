@@ -728,4 +728,43 @@ object AppIcons {
             close()
         }.build()
     }
+
+    val MicOff: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "MicOff",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(fill = SolidColor(Color.Black), pathFillType = PathFillType.NonZero) {
+            moveTo(19.0f, 11.0f)
+            horizontalLineToRelative(-1.7f)
+            curveToRelative(0.0f, 0.58f, -0.1f, 1.13f, -0.27f, 1.64f)
+            lineToRelative(1.27f, 1.27f)
+            curveToRelative(0.44f, -0.88f, 0.7f, -1.87f, 0.7f, -2.91f)
+            close()
+            moveTo(4.41f, 2.86f)
+            lineTo(3.0f, 4.27f)
+            lineToRelative(6.0f, 6.0f)
+            verticalLineTo(11.0f)
+            curveToRelative(0.0f, 1.66f, 1.34f, 3.0f, 3.0f, 3.0f)
+            curveToRelative(0.23f, 0.0f, 0.44f, -0.03f, 0.65f, -0.08f)
+            lineToRelative(4.07f, 4.07f)
+            curveToRelative(-1.18f, 0.78f, -2.59f, 1.26f, -4.12f, 1.33f)
+            verticalLineTo(21.0f)
+            horizontalLineToRelative(2.0f)
+            verticalLineToRelative(-1.68f)
+            curveToRelative(0.96f, -0.08f, 1.87f, -0.34f, 2.7f, -0.74f)
+            lineToRelative(2.49f, 2.49f)
+            lineToRelative(1.41f, -1.41f)
+            lineTo(4.41f, 2.86f)
+            close()
+            moveTo(12.0f, 4.0f)
+            curveToRelative(1.66f, 0.0f, 3.0f, 1.34f, 3.0f, 3.0f)
+            verticalLineToRelative(4.0f)
+            lineToRelative(-3.0f, -3.0f)
+            verticalLineTo(4.0f)
+            close()
+        }.build()
+    }
 }

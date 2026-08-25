@@ -37,6 +37,12 @@ interface SessionDao {
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC LIMIT 1")
     fun letzteSessionFlow(): Flow<SessionEntity?>
 
+    @Query("SELECT * FROM sessions WHERE endedAt IS NULL ORDER BY startedAt ASC")
+    suspend fun alleOffenen(): List<SessionEntity>
+
+    @Query("UPDATE sessions SET endedAt = startedAt WHERE endedAt IS NULL AND startedAt < :vorZeitpunkt")
+    suspend fun schliesseVerwaisteSessions(vorZeitpunkt: Long)
+
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
     fun alle(): Flow<List<SessionEntity>>
 }

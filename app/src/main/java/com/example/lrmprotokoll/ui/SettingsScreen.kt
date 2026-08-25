@@ -59,7 +59,8 @@ import java.util.Locale
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
-    onShowSnackbar: ((String) -> Unit)? = null
+    onShowSnackbar: ((String) -> Unit)? = null,
+    onNavigateToDiagnose: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -1000,10 +1001,11 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        val intent = Intent(context, MainActivity::class.java).apply {
-                            // Über Drawer/Navigation erreichbar
+                        if (onNavigateToDiagnose != null) {
+                            onNavigateToDiagnose()
+                        } else {
+                            onBack()
                         }
-                        onBack()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {

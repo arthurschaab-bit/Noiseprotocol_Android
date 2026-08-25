@@ -80,6 +80,14 @@ class MeasurementRecorder(
     fun start(device: BoundDevice) {
         if (job?.isActive == true) return
         job = scope.launch {
+            // Verwaiste, ungeschlossene Sessions aus früheren Messungen abschließen, damit sie nicht dauerhaft als aktiv gelten
+            val offeneSessions = sessionDao.alleOffenen()
+            for (offene in offeneSessions) {
+                val lastMeasurement = measurementDao.fuerSession(offene.id).lastOrNull()?.timestamp
+                val endTs = lastMeasurement ?: (offene.startedAt + 1000L)
+                sessionDao.update(offene.copy(endedAt = endTs))
+            }
+
             aktiveSessionId = sessionDao.insert(
                 SessionEntity(
                     startedAt = now.now().toEpochMilli(),

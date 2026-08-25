@@ -69,6 +69,7 @@ fun LiveCockpitCard(
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
     val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
+    val aktuellerMicDb by AudioRecordingService.aktuellerLiveDb.collectAsState()
 
     val db = container.database
     val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
@@ -80,9 +81,8 @@ fun LiveCockpitCard(
 
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
 
-    // Quick-Settings State
-    var autoEventDetection by remember { mutableStateOf(settings.aiEnabled) }
-    var audioSnippetEnabled by remember { mutableStateOf(settings.driveUploadWav) }
+    var recordWavAudioState by remember { mutableStateOf(settings.recordWavAudio) }
+    var triggerQuelleState by remember { mutableStateOf(settings.audioTriggerQuelle) }
 
     val hasAudioPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -131,9 +131,23 @@ fun LiveCockpitCard(
         }
     }
 
-    val liveLevel = letzterFrame?.level
-    val isCalibrated = verbindungszustand == ConnectionState.STREAMING && liveLevel != null
-    val weightingText = letzterFrame?.weighting?.let { "dB(${it.name})" } ?: if (isCalibrated) "dB(A)" else "dB"
+    val isMeterStreaming = verbindungszustand == ConnectionState.STREAMING && letzterFrame?.level != null
+    val liveLevel: Double? = if (isMeterStreaming) {
+        letzterFrame?.level
+    } else if (dienstAktiv && triggerQuelleState != "PCE_323") {
+        aktuellerMicDb
+    } else {
+        null
+    }
+
+    val isCalibrated = isMeterStreaming
+    val weightingText = if (isCalibrated) {
+        letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB(A)"
+    } else if (dienstAktiv && liveLevel != null) {
+        "dB (Mikrofon)"
+    } else {
+        "dB"
+    }
 
     // Laufzeituhr für aktive Messung
     val sessionStartTime = letzteSession?.startedAt
@@ -180,15 +194,13 @@ fun LiveCockpitCard(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = if (!settings.recordWavAudio) {
-                                    "Kein Audio (DSGVO)"
-                                } else when (settings.audioTriggerQuelle) {
-                                    "PCE_323" -> stringResource(R.string.cockpit_trigger_meter_only)
-                                    "MIKROFON" -> stringResource(R.string.cockpit_trigger_mic_only)
-                                    else -> stringResource(R.string.cockpit_trigger_auto)
+                                text = when (triggerQuelleState) {
+                                    "PCE_323" -> "Auslöser: PCE-323"
+                                    "MIKROFON" -> "Auslöser: Mikrofon"
+                                    else -> "Auslöser: Auto"
                                 },
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -207,31 +219,26 @@ fun LiveCockpitCard(
                         onDismissRequest = { showTriggerMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.settings_trigger_source_auto)) },
+                            text = { Text("Auslöser: Automatisch (PCE-323 bevorzugt)") },
                             onClick = {
                                 settings.audioTriggerQuelle = "AUTO"
+                                triggerQuelleState = "AUTO"
                                 showTriggerMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.settings_trigger_source_meter)) },
+                            text = { Text("Auslöser: Nur PCE-323 Messgerät") },
                             onClick = {
                                 settings.audioTriggerQuelle = "PCE_323"
+                                triggerQuelleState = "PCE_323"
                                 showTriggerMenu = false
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.settings_trigger_source_mic)) },
+                            text = { Text("Auslöser: Nur Smartphone-Mikrofon") },
                             onClick = {
                                 settings.audioTriggerQuelle = "MIKROFON"
-                                showTriggerMenu = false
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (settings.recordWavAudio) "WAV-Aufnahme: Aktiv" else "WAV-Aufnahme: Aus (DSGVO)") },
-                            onClick = {
-                                settings.recordWavAudio = !settings.recordWavAudio
+                                triggerQuelleState = "MIKROFON"
                                 showTriggerMenu = false
                             }
                         )
@@ -266,10 +273,10 @@ fun LiveCockpitCard(
             )
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Dynamisch skalierte dB-Zahl
+            // Dynamisch skalierte dB-Zahl (ohne Fake-Werte)
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = if (liveLevel != null && liveLevel > 0.0) String.format(Locale.US, "%.1f", liveLevel) else if (dienstAktiv) "36.3" else "--.-",
+                    text = if (liveLevel != null && liveLevel > 0.0) String.format(Locale.US, "%.1f", liveLevel) else "--.-",
                     style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -287,12 +294,12 @@ fun LiveCockpitCard(
                 )
             }
 
-            val levelVal = liveLevel ?: (if (dienstAktiv) 36.3 else 0.0)
             val levelDescription = when {
                 !dienstAktiv -> stringResource(R.string.cockpit_level_desc_ready)
-                levelVal <= 0.0 -> stringResource(R.string.cockpit_level_desc_waiting)
-                levelVal < 45.0 -> stringResource(R.string.cockpit_level_desc_low)
-                levelVal < 65.0 -> stringResource(R.string.cockpit_level_desc_moderate)
+                liveLevel == null && triggerQuelleState == "PCE_323" -> "Kein PCE-323 verbunden (Auslöser: Nur PCE-323)"
+                liveLevel == null -> stringResource(R.string.cockpit_level_desc_waiting)
+                liveLevel < 45.0 -> stringResource(R.string.cockpit_level_desc_low)
+                liveLevel < 65.0 -> stringResource(R.string.cockpit_level_desc_moderate)
                 else -> stringResource(R.string.cockpit_level_desc_high)
             }
 
@@ -443,50 +450,111 @@ fun LiveCockpitCard(
         }
 
         // ==========================================
-        // 3.5 DEDICATED AUDIOAUFZEICHNUNG TOGGLE (JA / NEIN)
+        // 3.5 DEDICATED AUDIOAUFZEICHNUNG CARD (JA / NEIN)
         // ==========================================
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text(
-                        text = "Audioaufzeichnung (WAV)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (settings.recordWavAudio) "WAV-Dateien speichern (Audioaufnahme aktiv)" else "Reine Pegelmessung (Kein Audio / DSGVO)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                containerColor = if (recordWavAudioState) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                 }
-
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = if (recordWavAudioState) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(18.dp)
+                )
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    FilterChip(
-                        selected = settings.recordWavAudio,
-                        onClick = { settings.recordWavAudio = true },
-                        label = { Text("Ja") }
-                    )
-                    FilterChip(
-                        selected = !settings.recordWavAudio,
-                        onClick = { settings.recordWavAudio = false },
-                        label = { Text("Nein") }
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (recordWavAudioState) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (recordWavAudioState) AppIcons.Mic else AppIcons.MicOff,
+                                    contentDescription = null,
+                                    tint = if (recordWavAudioState) Color(0xFF15803D) else Color(0xFF64748B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Audioaufzeichnung (WAV)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (recordWavAudioState) "Audio-Dateien bei Lärm speichern" else "Reine Pegelmessung (Kein Ton / DSGVO)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (recordWavAudioState) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Segmented Selector Buttons
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                    ) {
+                        Row(modifier = Modifier.padding(3.dp)) {
+                            // JA Button
+                            Surface(
+                                shape = RoundedCornerShape(9.dp),
+                                color = if (recordWavAudioState) Color(0xFF15803D) else Color.Transparent,
+                                modifier = Modifier
+                                    .clickable {
+                                        settings.recordWavAudio = true
+                                        recordWavAudioState = true
+                                    }
+                            ) {
+                                Text(
+                                    text = "Ja",
+                                    color = if (recordWavAudioState) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (recordWavAudioState) FontWeight.Bold else FontWeight.Medium,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                )
+                            }
+
+                            // NEIN Button
+                            Surface(
+                                shape = RoundedCornerShape(9.dp),
+                                color = if (!recordWavAudioState) Color(0xFF475569) else Color.Transparent,
+                                modifier = Modifier
+                                    .clickable {
+                                        settings.recordWavAudio = false
+                                        recordWavAudioState = false
+                                    }
+                            ) {
+                                Text(
+                                    text = "Nein",
+                                    color = if (!recordWavAudioState) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (!recordWavAudioState) FontWeight.Bold else FontWeight.Medium,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
