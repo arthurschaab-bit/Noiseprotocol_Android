@@ -282,5 +282,20 @@ abstract class AppDatabase : RoomDatabase() {
                 instance
             }
         }
+
+        /**
+         * F13 (Sicherung/Wiederherstellung): nach dem Überschreiben der Datenbankdatei mit einer
+         * Sicherung muss die nächste [getDatabase]-Anfrage eine frische Room-Instanz gegen die
+         * neue Datei öffnen, statt die bereits geschlossene alte [INSTANCE] weiterzureichen.
+         * Ersetzt NICHT die zwingende App-Neustart-Empfehlung nach einer Wiederherstellung - alle
+         * Stellen, die vor dem Reset schon eine [AppDatabase]-Referenz (z.B. über
+         * [com.example.lrmprotokoll.AppContainer]) gehalten haben, zeigen weiterhin auf die
+         * geschlossene alte Instanz, bis der Prozess neu startet.
+         */
+        internal fun resetInstance() {
+            synchronized(this) {
+                INSTANCE = null
+            }
+        }
     }
 }

@@ -159,7 +159,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen, die Google-Anmeldung mit der jetzt echten Client-ID sowie M8s Chaos-Checkliste und 24h-Dauerlauf (Teil C/D) — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M9 | UX-Überarbeitung — **größtenteils erledigt** (Datenpfad, Theme/Dunkelmodus-Infrastruktur, Navigation/Drawer, Start-Screen-Scroll+Leerzustand, App-weiter Snackbar/Papierkorb, Onboarding inkl. Wiederaufruf aus den Einstellungen, kalibrierter Wert sichtbar in Liste+Bericht, Alarmierung direkt unter Aufnahme). Offen: **Farbtokens** sind eingeführt, aber noch nicht in allen Dateien mit hartcodierten Farbliteralen übernommen (Befund A2 — das wäre eine sichtbare Farbänderung, bewusst als Owner-Entscheidung offengelassen), und **String-Ressourcen** für den Drive-Sync-Dialog sowie die Diagnose-Debug-Oberfläche fehlen noch — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | nein |
-| M10 | Neue Funktionen, Stufe 1 — **F1–F5 erledigt** (Schwellenwert-Assistent, Suche/Filter, Selbstprüfung, Notification-Aktionen, Speicherplatz) sowie F9 (Papierkorb, vorgezogen); F6–F8/F10–F15 nicht begonnen — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | nein |
+| M10 | Neue Funktionen — **F1–F5 (Stufe 1), F9 (Papierkorb) und F13 (Sicherung/Wiederherstellung), F15 (Alarm-Historie) erledigt**; F14 nur teilweise (Schnelleinstellungs-Kachel da, Homescreen-Widget fehlt); F6–F8/F10–F12 nicht begonnen — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
@@ -265,6 +265,12 @@ Abhängigkeits-Stil des Projekts.
   Retention-Mechanismus, 30 Tage), das ist keine Einschränkung — nur eine Abweichung von der
   dokumentierten Reihenfolge, hier zur Nachvollziehbarkeit festgehalten (siehe Korrektur in
   `docs/PROMPT_M10_FUNKTIONEN.md`).
+- **Sicherung/Wiederherstellung (F13, `backup/SicherungManager.kt`) ist nur durch JVM-/
+  Robolectric-Tests verifiziert, nie an einem echten Gerät durchgespielt.** Insbesondere der
+  erzwungene Prozess-Neustart nach einer Wiederherstellung (`Intent.makeRestartActivityTask` +
+  `Runtime.getRuntime().exit(0)`) und der echte SAF-Dateiauswahldialog sind unter Robolectric
+  nicht simulierbar. Muss im Gerätetest geprüft werden, bevor die Funktion als vollständig
+  verlässlich gilt.
 
 ---
 
@@ -284,7 +290,11 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 **Vor App-Updates mit gewachsener Datenbank:** Die Datenbank sichern, bevor eine neue Version
 installiert wird. Room migriert seit M-1 statt zu löschen — geht dabei etwas schief, ist das
-Backup die einzige Rückfalloption.
+Backup die einzige Rückfalloption. Seit M10 (F13) geht das **direkt in der App**: Einstellungen →
+„Sicherung und Wiederherstellung" → „Sicherung erstellen" schreibt Datenbank und Einstellungen
+über einen Storage-Access-Framework-Dialog in eine selbst gewählte ZIP-Datei, „Sicherung
+einspielen…" liest sie mit Warnung und Versionsprüfung zurück (erzwingt danach einen
+App-Neustart). Kein Terminal mehr nötig. Der `adb`-Weg bleibt als Alternative:
 
 ```bat
 adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > backup.db

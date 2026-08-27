@@ -221,7 +221,19 @@ inklusive Achsenbeschriftung als `PegelverlaufChart` — für ein PDF muss dasse
 **Achtung:** `PdfDocument` ist unter Robolectric nicht testbar (README, verifiziertes Limit) —
 nur am Gerät prüfbar, das gehört so in den PR geschrieben.
 
-#### F13 · Sicherung und Wiederherstellung aus der App · S–M · kein Schema
+#### F13 · Sicherung und Wiederherstellung aus der App · S–M · kein Schema — erledigt
+
+> **Nachtrag:** `backup/SicherungManager.kt` + `backup/SicherungEinstellungen.kt`, neuer
+> Einstellungs-Abschnitt „Sicherung und Wiederherstellung". Die Datenbankdatei wird erst nach
+> einem `PRAGMA wal_checkpoint(FULL)` roh kopiert (sonst könnten kürzlich geschriebene Zeilen im
+> WAL-Journal fehlen), Einstellungen laufen als Klartext-JSON über `SettingsManager`s eigene
+> Getter/Setter statt über eine rohe Kopie der `EncryptedSharedPreferences`-Datei - letztere wäre
+> nach einer Neuinstallation (neuer Keystore-Schlüssel) nicht mehr entschlüsselbar. Manifest mit
+> `formatVersion` deckt die geforderte Versionsprüfung ab; ein Warn-Dialog vor dem Einspielen
+> deckt die geforderte "deutliche Warnung" ab. Nach einer Wiederherstellung erzwingt die Funktion
+> einen Prozess-Neustart (`Intent.makeRestartActivityTask` + `Runtime.getRuntime().exit(0)`) -
+> die laufende `AppContainer`/`AppDatabase`-Instanz hält sonst eine Referenz auf die
+> überschriebene Datei. **Nicht am Gerät geprüft** (siehe README "Bekannte Einschränkungen").
 
 Die README weist den Nutzer für das Backup an `adb exec-out run-as … cat databases/noise_database`
 — unbenutzbar für jeden, der kein Terminal hat. Gleichzeitig sagt dieselbe README, das Backup sei

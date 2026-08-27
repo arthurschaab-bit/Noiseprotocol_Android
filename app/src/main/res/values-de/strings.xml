@@ -228,6 +228,14 @@
     <string name="settings_cleanup_preview_title">Automatische Bereinigung aktivieren?</string>
     <string name="settings_cleanup_preview_text">%1$d Aufnahmen älter als %2$d Tage (%3$s) würden ab jetzt automatisch in den Papierkorb verschoben. Favoriten und Aufnahmen mit Label bleiben davon ausgenommen. Aus dem Papierkorb sind sie noch 30 Tage lang wiederherstellbar.</string>
     <string name="settings_cleanup_preview_confirm">Aktivieren</string>
+    <string name="settings_backup_title">Sicherung und Wiederherstellung</string>
+    <string name="settings_backup_summary">Datenbank und Einstellungen in eine Datei sichern</string>
+    <string name="settings_backup_desc">Schreibt alle Aufnahmen, Sessions und Einstellungen in eine ZIP-Datei an einem selbst gewählten Ort (z. B. Google Drive, lokaler Speicher). Ersetzt die bisherige Anleitung über adb - kein Terminal nötig. Achtung: Die Sicherungsdatei enthält die Alarmierungs-Zugangsdaten (ntfy) im Klartext, gehört also sicher aufbewahrt wie ein Export.</string>
+    <string name="settings_backup_create">Sicherung erstellen</string>
+    <string name="settings_backup_restore">Sicherung einspielen…</string>
+    <string name="settings_backup_restore_warning_title">Wirklich wiederherstellen?</string>
+    <string name="settings_backup_restore_warning_text">Das ersetzt ALLE aktuellen Aufnahmen, Sessions und Einstellungen durch den Inhalt der gewählten Sicherungsdatei. Das kann nicht rückgängig gemacht werden. Die App wird danach automatisch neu gestartet.</string>
+    <string name="settings_backup_restore_confirm">Ja, wiederherstellen</string>
     <string name="settings_drive_title">Google Drive Synchronisation</string>
     <string name="settings_drive_desc">Automatischer CSV- &amp; WAV-Upload in Ihren Google Drive Ordner</string>
     <string name="settings_drive_connect">Mit Google verbinden</string>
