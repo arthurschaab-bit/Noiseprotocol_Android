@@ -4,8 +4,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -62,10 +64,17 @@ class DiagnoseScreenInstrumentedTest {
         // 1. Titel
         composeRule.onNodeWithText(diagTitle).assertIsDisplayed()
 
+        // PROMPT_M10_FUNKTIONEN.md F3: die Selbstprüfungs-Checkliste steht seither ganz oben
+        // (Index 0 der LazyColumn) - Zustand und Log-Eintrag sind dadurch auf Index 1
+        // gerutscht, außerhalb des initialen Viewports. Explizit per Index dorthin scrollen.
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
+
         // 2. Zustand
         composeRule.onNodeWithText(stateHeader).assertIsDisplayed()
 
-        // 3. Log-Eintrag
+        // 3. Log-Eintrag - eigener items(diagnoseLog)-Block, ein Index weiter als der
+        // Zustands-Block oben.
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(2)
         composeRule.onNodeWithText("Test-Diagnoseeintrag BLE Verbindung hergestellt", substring = true).assertIsDisplayed()
 
         // 4. Zurück-Button
