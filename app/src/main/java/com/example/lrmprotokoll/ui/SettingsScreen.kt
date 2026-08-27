@@ -43,7 +43,6 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.audio.AudioRecordingService
-import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.backup.SicherungManager
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
@@ -96,7 +95,6 @@ fun SettingsScreen(
     // KI-Parameter
     var aiMode by remember { mutableStateOf(settings.aiMode) }
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
-    var isBatchRunning by remember { mutableStateOf(false) }
 
     // F8: Ruhezeiten
     var quietHoursEnabled by remember { mutableStateOf(settings.quietHoursEnabled) }
@@ -808,39 +806,10 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (aiMode != "OFF") {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                isBatchRunning = true
-                                try {
-                                    val count: Int = withContext(Dispatchers.IO) {
-                                        val classifier = NoiseClassifier(context)
-                                        classifier.classifyUnclassifiedBatch(container.database.noiseDao())
-                                    }
-                                    val msg = if (count > 0) "$count Aufnahme(n) erfolgreich nachträglich klassifiziert" else "Alle Aufnahmen sind bereits klassifiziert"
-                                    onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                } finally {
-                                    isBatchRunning = false
-                                }
-                            }
-                        },
-                        enabled = !isBatchRunning,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isBatchRunning) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Analysiere Aufnahmen...")
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Unklassifizierte Aufnahmen jetzt analysieren")
-                        }
-                    }
-                }
+                // UX-Feedback: Einstellungen ist nur fuer die Default-Betriebsart zustaendig -
+                // der eigentliche "jetzt klassifizieren"-Trigger lebt seitdem pro Aufnahme (Home,
+                // ProtokollDetailScreen) bzw. pro Tag (Home-Tagesgruppen-Header), nicht mehr als
+                // globaler Batch-Lauf hier.
 
                 if (aiMode != "OFF" && isProMode) {
                     Spacer(modifier = Modifier.height(10.dp))

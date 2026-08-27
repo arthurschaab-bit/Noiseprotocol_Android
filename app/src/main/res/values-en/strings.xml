@@ -63,7 +63,7 @@
     <string name="status_meter_badge">• PCE-323</string>
 
     <!-- LiveCockpit & Start Screen -->
-    <string name="cockpit_title">Noise Protocol</string>
+    <string name="cockpit_title">Monitoring</string>
     <string name="cockpit_subtitle_live">Live Monitoring</string>
     <string name="cockpit_subtitle_ready">System Ready</string>
     <string name="cockpit_measuring_running">MEASUREMENT RUNNING</string>
@@ -380,6 +380,10 @@
     <string name="learned_patterns_count">Learned noise patterns (%1$d)</string>
     <string name="ai_classified_count">%1$d recording(s) classified by AI</string>
     <string name="action_ai_batch">AI batch recognition</string>
+    <string name="action_ai_batch_day">Classify unclassified recordings for this day now</string>
+    <string name="ai_batch_day_result">%1$d recording(s) classified for %2$s</string>
+    <string name="ai_batch_day_result_empty">None of the selected recordings could be classified</string>
+    <string name="action_ai_classify_now">Classify now</string>
     <string name="action_learn_pattern">+ Learn pattern</string>
     <string name="learn_pattern_title">Learn noise pattern</string>
     <string name="learn_pattern_desc">Give this noise pattern a name for automatic AI matching:</string>
