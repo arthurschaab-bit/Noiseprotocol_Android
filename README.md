@@ -220,6 +220,15 @@ Abhängigkeits-Stil des Projekts.
   produktiven Screen-Funktionen mit vollem `AppContainer` (nicht nur kompiliert). Die konkrete
   Optik (Icon-Wahl für „Messgerät"/„Protokoll" in der `NavigationBar`, Chart-Farben/-Proportionen)
   bleibt eine visuelle Entscheidung für eine Emulator-Session.
+- **Die `liveRegion`-Auszeichnung des Live-Pegels (`MeterScreen`, `LiveCockpitCard`,
+  PROMPT_M9_UX.md Aufgabe 4) ist nur durch `assembleDebug` verifiziert, nicht durch einen
+  Compose-Test.** `AppContainer.meterTransport` ist fest auf `BleMeterTransport` verdrahtet,
+  nicht über ein Test-Double ersetzbar — ein Robolectric-Test kann den STREAMING-Zustand mit
+  echtem Frame deshalb nicht erreichen, nur den unverbundenen IDLE-Pfad (siehe
+  `MeterScreenComposeTest`, `LiveCockpitCardTest`). Ob TalkBack den Pegel tatsächlich laufend
+  ansagt, muss am echten Gerät geprüft werden. Die `contentDescription` von `PegelverlaufChart`
+  (dieselbe Aufgabe) ist dagegen voll getestet — der Chart ist eine reine, parameterisierte
+  Composable ohne Container-Abhängigkeit.
 
 ---
 

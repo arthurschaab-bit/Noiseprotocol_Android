@@ -155,6 +155,7 @@
     <string name="protocol_live_curve">Live-Kurve</string>
     <string name="protocol_completed">Abgeschlossen</string>
     <string name="protocol_detail_no_chart_data">Keine Messwerte für den Pegelverlauf.</string>
+    <string name="chart_content_description">Pegelverlauf: aktuell %1$.1f dB, Mittelwert %2$.1f dB, Höchstwert %3$.1f dB, %4$d Verbindungsausfälle</string>
     <string name="action_reset_zoom">Zoom zurücksetzen</string>
     <string name="stat_duration">⏱️ Dauer</string>
     <string name="stat_incidents">📍 Vorfälle</string>

@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -81,5 +82,74 @@ class PegelverlaufChartTest {
             }
         }
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun chartTraegtEineContentDescriptionMitDenKernwertenFuerScreenreader() {
+        // PROMPT_M9_UX.md Aufgabe 4: das Canvas zeichnet nur Pixel, ohne contentDescription
+        // sieht ein Screenreader nichts davon - hier der Beweis, dass die Beschreibung
+        // tatsaechlich am Chart-Container haengt und die richtigen Werte enthaelt (aktueller
+        // Pegel = letzte Spalte, Mittelwert = laeqDb, Hoechstwert = Max ueber alle Spalten,
+        // Ausfallzahl = Groesse von ausfallbaender).
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        val spalten = listOf(
+            ChartSpalte(zeitOffsetSekunden = 0, minDb = 45.0, maxDb = 65.0, mittelDb = 55.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 60, minDb = 48.0, maxDb = 72.0, mittelDb = 60.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 120, minDb = 42.0, maxDb = 50.0, mittelDb = 46.0, anzahl = 10),
+        )
+        val ausfall = listOf(Ausfallband(von = 1030_000L, bis = 1050_000L))
+
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = true) {
+                PegelverlaufChart(
+                    spalten = spalten,
+                    ausfallbaender = ausfall,
+                    sessionStart = 1000L,
+                    sessionEnde = 1000L + 120_000L,
+                    laeqDb = 54.2,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        // Dieselbe Formatierung wie der Produktivcode (String.format ueber die Resource-API,
+        // nicht ein hartcodiertes Dezimaltrennzeichen) - sonst haengt der Test vom
+        // Standard-Locale des Testlaufs ab.
+        val erwarteteBeschreibung = composeRule.activity.getString(
+            com.example.lrmprotokoll.R.string.chart_content_description,
+            46.0, 54.2, 72.0, 1,
+        )
+        composeRule.onNodeWithContentDescription(erwarteteBeschreibung).assertIsDisplayed()
+    }
+
+    @Test
+    fun chartOhneUebergebenesLaeqNutztDenSpaltenMittelwertAlsNaeherung() {
+        // Gegenprobe zum Fallback: kein laeqDb -> arithmetisches Mittel der Spalten-Mittelwerte
+        // (50 + 60) / 2 = 55.0, nicht 0 oder ein Absturz.
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        val spalten = listOf(
+            ChartSpalte(zeitOffsetSekunden = 0, minDb = 45.0, maxDb = 65.0, mittelDb = 50.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 60, minDb = 48.0, maxDb = 72.0, mittelDb = 60.0, anzahl = 10),
+        )
+
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = true) {
+                PegelverlaufChart(
+                    spalten = spalten,
+                    ausfallbaender = emptyList(),
+                    sessionStart = 1000L,
+                    sessionEnde = 1000L + 60_000L,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        val erwarteteBeschreibung = composeRule.activity.getString(
+            com.example.lrmprotokoll.R.string.chart_content_description,
+            60.0, 55.0, 72.0, 0,
+        )
+        composeRule.onNodeWithContentDescription(erwarteteBeschreibung).assertIsDisplayed()
     }
 }

@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -303,10 +306,15 @@ fun LiveCockpitCard(
         // ==========================================
         // 2. CENTER LIVE DB DISPLAY
         // ==========================================
+        // liveRegion (PROMPT_M9_UX.md Aufgabe 4): der Pegel und seine Einordnung aendern sich
+        // laufend, ohne dass ein Screenreader das ohne Fokus mitbekaeme. mergeDescendants fasst
+        // die Kind-Texte (Zahl, Bewertungseinheit, Einordnung) zu EINER Ansage zusammen statt
+        // TalkBack fragmentweise vorlesen zu lassen.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 4.dp)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
