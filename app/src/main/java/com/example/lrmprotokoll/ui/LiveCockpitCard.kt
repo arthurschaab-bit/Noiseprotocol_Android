@@ -40,14 +40,45 @@ import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.messreihe.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 const val START_MEASUREMENT_BUTTON_TAG = "start_measurement_button"
 const val END_MEASUREMENT_BUTTON_TAG = "end_measurement_button"
 const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
+
+/** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
+ * Rasterung fuer [berechneDbFensterAb] - beide an einer Stelle, damit sie nicht auseinanderlaufen. */
+private const val LIVE_FENSTER_MS = 4 * 3600 * 1000L
+private const val LIVE_FENSTER_RASTER_MS = 5 * 60 * 1000L
+
+/**
+ * Untere Zeitgrenze fuer die DB-Abfrage des Live-Cockpits (PROMPT_M9A.md Aufgabe 1): dieselbe
+ * Fensterlogik wie die Chart-Anzeige (4 Stunden, nur waehrend die Ueberwachung noch laeuft -
+ * eine bereits beendete Session zeigt weiterhin ihre volle Laenge), aber auf [rasterMs]
+ * abgerundet. Ohne die Rasterung wuerde die Grenze bei jedem Sekundentick einen neuen Wert
+ * liefern und den Flow, der darauf lauscht, jede Sekunde neu abonnieren statt nur alle
+ * [rasterMs] - das waere schlimmer als der Ausgangszustand, nicht besser.
+ *
+ * Das Ergebnis liegt immer auf oder vor der exakten Fenstergrenze, nie danach - die Anzeige
+ * filtert selbst noch einmal exakt (siehe `chartStart` unten), die DB-Abfrage darf also
+ * hoechstens etwas MEHR laden als angezeigt wird, nie weniger.
+ */
+internal fun berechneDbFensterAb(
+    sessionStart: Long,
+    sessionEndeOderJetzt: Long,
+    dienstAktiv: Boolean,
+    fensterMs: Long = LIVE_FENSTER_MS,
+    rasterMs: Long = LIVE_FENSTER_RASTER_MS,
+): Long {
+    if (!dienstAktiv || sessionEndeOderJetzt - sessionStart <= fensterMs) return sessionStart
+    val versatz = sessionEndeOderJetzt - fensterMs - sessionStart
+    return sessionStart + (versatz / rasterMs) * rasterMs
+}
 
 /**
  * Modernes Cockpit für den Startscreen (Idle & Live-Messungs-Zustand)
@@ -96,14 +127,29 @@ fun LiveCockpitCard(
         }
     }
 
-    LaunchedEffect(letzteSession?.id) {
+    // Gerastertes Zeitfenster fuer die DB-Abfrage (PROMPT_M9A.md Aufgabe 1): "jetzt" tickt
+    // sekuendlich (siehe LaunchedEffect unten), berechneDbFensterAb() liefert daraus aber nur
+    // alle LIVE_FENSTER_RASTER_MS einen NEUEN Wert - dieser hier bleibt also die meiste Zeit
+    // stabil, und genau deshalb kann er unten als LaunchedEffect-Schluessel dienen, ohne die
+    // Datenbank-Abfrage jede Sekunde neu zu abonnieren.
+    val dbFensterAb = letzteSession?.let { s ->
+        berechneDbFensterAb(s.startedAt, s.endedAt ?: jetzt, dienstAktiv)
+    }
+
+    LaunchedEffect(letzteSession?.id, dbFensterAb) {
         val s = letzteSession
-        if (s != null) {
+        if (s != null && dbFensterAb != null) {
             launch {
-                db.measurementDao().fuerSessionFlow(s.id).collectLatest { geladeneMesswerte ->
+                db.measurementDao().fuerSessionAbFlow(s.id, dbFensterAb).collectLatest { geladeneMesswerte ->
                     messwerte = geladeneMesswerte
                     if (geladeneMesswerte.isNotEmpty()) {
-                        kennwerte = AkustischeKennwerte.berechne(geladeneMesswerte)
+                        // Dispatchers.Default statt im Kompositionskontext (der laeuft auf dem
+                        // Main-Thread) - leqUndMax() ist zwar ein einziger O(n)-Durchlauf ohne
+                        // Sortierung, aber bei einer langen Session trotzdem kein Fall fuer den
+                        // UI-Thread.
+                        kennwerte = withContext(Dispatchers.Default) {
+                            AkustischeKennwerte.leqUndMax(geladeneMesswerte)
+                        }
                     } else {
                         val geladeneAggregate = db.minuteAggregateDao().fuerSession(s.id)
                         aggregate = geladeneAggregate
@@ -399,9 +445,8 @@ fun LiveCockpitCard(
                 val s = letzteSession
                 if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
                     val sessionEndeFuerChart = s.endedAt ?: jetzt
-                    val vierStundenMs = 4 * 3600 * 1000L
-                    val chartStart = if (dienstAktiv && (sessionEndeFuerChart - s.startedAt) > vierStundenMs) {
-                        sessionEndeFuerChart - vierStundenMs
+                    val chartStart = if (dienstAktiv && (sessionEndeFuerChart - s.startedAt) > LIVE_FENSTER_MS) {
+                        sessionEndeFuerChart - LIVE_FENSTER_MS
                     } else {
                         s.startedAt
                     }

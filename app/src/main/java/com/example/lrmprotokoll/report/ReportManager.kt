@@ -11,6 +11,21 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+/**
+ * Einheit fuer einen kalibrierten Pegelwert - "dBA"/"dBC" nur, wenn die Frequenzbewertung fuer
+ * GENAU diesen Datensatz bestaetigt war ([NoiseRecord.meterWeighting] ist dann "A"/"C"), sonst
+ * "dB". Nicht pauschal "dBA" annehmen, nur weil ueberhaupt ein kalibrierter Wert vorliegt -
+ * [calibratedDbA][NoiseRecord.calibratedDbA] wird unabhaengig davon geschrieben, ob die
+ * Bewertung zum Zeitpunkt DIESES Datensatzes schon bestaetigt war (siehe
+ * MeasurementRecorder.onFrame). Als eigenstaendige Funktion pruefbar ohne den Context, den
+ * ReportManager selbst braucht.
+ */
+internal fun pegelEinheit(meterWeighting: String?): String = when (meterWeighting) {
+    "A" -> "dBA"
+    "C" -> "dBC"
+    else -> "dB"
+}
+
 class ReportManager(private val context: Context) {
 
     private fun getDateString(records: List<NoiseRecord>): String {
@@ -39,7 +54,7 @@ class ReportManager(private val context: Context) {
             val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
             content.append("Zeit: $time\n")
             if (record.calibratedDbA != null) {
-                content.append("Kalibrierter Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} dBA (PCE-323)\n")
+                content.append("Kalibrierter Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} (PCE-323)\n")
                 content.append("Mikrofonpegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB\n")
             } else {
                 content.append("Pegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)\n")
@@ -97,7 +112,7 @@ class ReportManager(private val context: Context) {
         records.sortedBy { it.timestamp }.forEach { record ->
             val time = fullFormat.format(Date(record.timestamp))
             val pegelStr = if (record.calibratedDbA != null) {
-                "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} dBA (PCE-323)"
+                "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} (PCE-323)"
             } else {
                 "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)"
             }

@@ -66,6 +66,33 @@ object AkustischeKennwerte {
         )
     }
 
+    /**
+     * Schneller Pfad fuer Anzeigen, die nur LAeq und Max brauchen (PROMPT_M9A.md Aufgabe 1: das
+     * Live-Cockpit zeigt beide Werte, aber keine Perzentile) - ein einziger Durchlauf ohne die
+     * beiden Sortierungen aus [berechne]. minDb/L10/L50/L90/Ueberschreitungsdauer bleiben
+     * bewusst `null` bzw. 0 statt sie halbherzig mitzuberechnen - wer sie braucht (z. B. die
+     * Protokoll-Detailansicht), ruft weiterhin [berechne] auf.
+     */
+    fun leqUndMax(messwerte: List<MeasurementEntity>): Kennwerte {
+        if (messwerte.isEmpty()) return LEER
+        var energetischeSumme = 0.0
+        var max = messwerte[0].levelDb
+        for (m in messwerte) {
+            energetischeSumme += 10.0.pow(m.levelDb / 10.0)
+            if (m.levelDb > max) max = m.levelDb
+        }
+        return Kennwerte(
+            leqDb = 10.0 * log10(energetischeSumme / messwerte.size),
+            maxDb = max,
+            minDb = null,
+            l10Db = null,
+            l50Db = null,
+            l90Db = null,
+            ueberschreitungsdauerMs = 0L,
+            sampleCount = messwerte.size,
+        )
+    }
+
     /** LN = "wird N % der Zeit ueberschritten" - L10 also der HOHE Pegel (90. Perzentil), L90
      * der NIEDRIGE (10. Perzentil). Nearest-Rank-Methode: einfach, deterministisch, ohne
      * Interpolationsartefakte bei kleinen Stichproben. */

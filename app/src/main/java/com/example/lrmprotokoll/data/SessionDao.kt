@@ -53,6 +53,13 @@ interface MeasurementDao {
     @Query("SELECT * FROM measurements WHERE sessionId = :sessionId ORDER BY timestamp")
     fun fuerSessionFlow(sessionId: Long): Flow<List<MeasurementEntity>>
 
+    /** Wie [fuerSessionFlow], aber auf Werte ab [ab] begrenzt (PROMPT_M9A.md Aufgabe 1): das
+     * Live-Cockpit zeigt ohnehin nur ein Zeitfenster (siehe LiveCockpitCard.kt), lud bislang
+     * aber ueber [fuerSessionFlow] bei jedem Messwert-Batch die komplette Session neu und wurde
+     * dadurch mit wachsender Sessiondauer immer teurer, obwohl die Anzeige laengst begrenzt war. */
+    @Query("SELECT * FROM measurements WHERE sessionId = :sessionId AND timestamp >= :ab ORDER BY timestamp")
+    fun fuerSessionAbFlow(sessionId: Long, ab: Long): Flow<List<MeasurementEntity>>
+
     @Query("SELECT * FROM measurements WHERE timestamp >= :von AND timestamp < :bis ORDER BY timestamp")
     suspend fun zwischen(von: Long, bis: Long): List<MeasurementEntity>
 
