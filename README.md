@@ -158,7 +158,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen, die Google-Anmeldung mit der jetzt echten Client-ID sowie M8s Chaos-Checkliste und 24h-Dauerlauf (Teil C/D) — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M9 | UX-Überarbeitung (Dunkelmodus, String-Ressourcen, Berechtigungen, Navigation, Zustände — der Datenpfad des Live-Diagramms ist mit M9a bereits behoben) — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | Emulator |
+| M9 | UX-Überarbeitung — **größtenteils erledigt** (Datenpfad, Theme/Dunkelmodus-Infrastruktur, Navigation/Drawer, Start-Screen-Scroll+Leerzustand, App-weiter Snackbar/Papierkorb, Onboarding inkl. Wiederaufruf aus den Einstellungen, kalibrierter Wert sichtbar in Liste+Bericht, Alarmierung direkt unter Aufnahme). Offen: **Farbtokens** sind eingeführt, aber noch nicht in allen Dateien mit hartcodierten Farbliteralen übernommen (Befund A2 — das wäre eine sichtbare Farbänderung, bewusst als Owner-Entscheidung offengelassen), und **String-Ressourcen** für den Drive-Sync-Dialog sowie die Diagnose-Debug-Oberfläche fehlen noch — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | nein |
 | M10 | Neue Funktionen (Vorschlagskatalog + Auftrag Stufe 1) — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -247,6 +247,24 @@ Abhängigkeits-Stil des Projekts.
   trotzdem zur Laufzeit eine per Reflection gebrauchte, aber gestrippte Klasse treffen — ob alle
   Features (insbesondere WorkManager-Worker, Google-Anmeldung, Drive-Sync) im minifizierten Build
   tatsächlich fehlerfrei laufen, muss der Gerätetest zeigen.
+- **30 hartcodierte Farbliterale (PROMPT_M9_UX.md Befund A2) sind noch nicht durch die
+  vorhandenen Farbtokens (`AppStatusColors`/`statusColors`, `ui/theme/Tokens.kt`) ersetzt** —
+  betroffen u. a. `StatusPill.kt`, `MicrophoneStatusBadge.kt`, `BluetoothStatusBadge.kt`,
+  `MeterScreen.kt`, `OemDeviceHelperCard.kt`, `ProtokollScreen.kt`. Jedes dieser Literale hat
+  eine andere Nuance für dieselbe Bedeutung (z. B. „verbunden = grün") — sie zu vereinheitlichen
+  wäre eine sichtbare, projektweite Farbänderung, keine reine Code-Aufräumung, deshalb bewusst
+  als Owner-Entscheidung offengelassen statt hier stillschweigend entschieden.
+- **~59 hartcodierte deutsche UI-Literale bleiben außerhalb von `strings.xml`**, konzentriert in
+  `DriveFolderPickerDialog.kt`, `DriveStatusCard.kt` und Debug-Reglern in `DiagnoseScreen.kt`
+  (PROMPT_M9_UX.md Aufgabe 3, Rest). Die übrige Oberfläche (Onboarding, Aufnahmeliste,
+  Einstellungslabels) ist vollständig auf `stringResource()` umgestellt.
+- **`TrashScreen.kt` (Papierkorb, weiches Löschen mit `NoiseRecord.deletedAt`,
+  `MIGRATION_11_12`) ist bereits vollständig umgesetzt und live** — das entspricht Funktion F9
+  aus `docs/PROMPT_M10_FUNKTIONEN.md`, die der Katalog dort ausdrücklich als „Stufe 2, erst nach
+  dem Gerätetest" vorschlägt. Die Funktion selbst ist fertig und läuft (eigener
+  Retention-Mechanismus, 30 Tage), das ist keine Einschränkung — nur eine Abweichung von der
+  dokumentierten Reihenfolge, hier zur Nachvollziehbarkeit festgehalten (siehe Korrektur in
+  `docs/PROMPT_M10_FUNKTIONEN.md`).
 
 ---
 

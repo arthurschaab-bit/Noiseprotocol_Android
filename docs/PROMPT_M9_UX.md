@@ -475,7 +475,16 @@ Reine Fließarbeit, aber Voraussetzung für alles Weitere. Nicht auslassen.
 - Fehlermeldungen (Scan, Drive, Player) bekommen eine Wiederholen-Aktion.
 - Toast (MainActivity.kt:765) entfällt zugunsten der Snackbar bzw. der Karte aus Aufgabe 8.
 
-=== AUFGABE 8: Berechtigungen und Onboarding (Befund A7) ===
+=== AUFGABE 8: Berechtigungen und Onboarding (Befund A7) — größtenteils erledigt ===
+
+> **Nachtrag:** `ui/OnboardingScreen.kt` deckt alle vier geforderten Seiten ab (Zweck,
+> ehrlicher Mikrofon-vs-PCE-323-Hinweis, Berechtigungsphilosophie, Akku-Optimierung), gegated
+> über `SettingsManager.onboardingCompleted`. Berechtigungsanfragen sind bereits kontextuell
+> (Mikrofon beim Start der Aufnahme, Bluetooth beim Scan) statt als Sammelaufruf beim ersten
+> Frame, und ein `ON_RESUME`-Beobachter liest den Berechtigungsstand neu. **Nachgezogen in
+> dieser Session:** ein Weg, das Onboarding jederzeit aus den Einstellungen erneut aufzurufen
+> (`SettingsScreen.kt` Sektion „Hilfe", `AppNavigation` in `MainActivity.kt`) — vorher gab es
+> dafür keinen Einstiegspunkt.
 
 - Der Sammelaufruf beim ersten Frame (MainActivity.kt:288-298) entfällt.
 - RECORD_AUDIO und POST_NOTIFICATIONS werden angefragt, wenn der Nutzer "Aufnahme starten"
@@ -491,7 +500,18 @@ Reine Fließarbeit, aber Voraussetzung für alles Weitere. Nicht auslassen.
   ehrlichen Hinweis auf die fehlende Kalibrierung / Berechtigungen / Akku-Optimierung), einmalig,
   Merker in SettingsManager, jederzeit aus den Einstellungen wieder aufrufbar.
 
-=== AUFGABE 9: Kalibrierten Wert und Quelle sichtbar machen (Befund A10) ===
+=== AUFGABE 9: Kalibrierten Wert und Quelle sichtbar machen (Befund A10) — größtenteils erledigt ===
+
+> **Nachtrag:** `NoiseRecordItem` (`MainActivity.kt`) unterscheidet bereits deutlich zwischen
+> `calibratedDbA` (StatusPill „PCE-323") und dem unkalibrierten Mikrofonwert (StatusPill
+> „Mikrofon") nebeneinander, die rohe Amplitude steht nicht mehr in der Hauptzeile.
+> `ReportManager` schreibt Quelle, kalibrierten Wert und Gerätename je Ereignis.
+> **Nachgezogen in dieser Session:** der geforderte ehrliche Kopf-Hinweis fehlte noch — ist
+> jetzt `unbestaetigteBewertungHinweis()` in `report/ReportManager.kt`, erscheint im Bericht,
+> sobald mindestens ein kalibrierter Wert ohne bestätigte A-/C-Bewertung enthalten ist (das
+> betrifft nur Altdaten von vor dem Geräte-Bestätigungscommit, siehe `Pce323Profile.kt`
+> `MODE_ASSUMPTION_CONFIRMED`). Der Gerätename kommt jetzt aus `SettingsManager.meterDeviceName`
+> statt einem hartcodierten „PCE-323".
 
 Der inhaltlich wichtigste Punkt dieses Meilensteins.
 - NoiseRecordItem zeigt, welche Quelle ausgelöst hat (meterConnected) und, falls vorhanden,
@@ -506,7 +526,14 @@ Der inhaltlich wichtigste Punkt dieses Meilensteins.
   es nicht belegt ist.
 - Aufpassen: NICHTS an der Room-Struktur ändern. Die Felder existieren, es geht nur ums Anzeigen.
 
-=== AUFGABE 10: Einstellungen gliedern (Befund A9) ===
+=== AUFGABE 10: Einstellungen gliedern (Befund A9) — größtenteils erledigt ===
+
+> **Nachtrag:** `SettingsScreen.kt` ist bereits in aufklappbare `SettingsSectionCard`-Abschnitte
+> mit Kopfzeile und Zustandszusammenfassung gegliedert (zugeklappt als Default), statt eines
+> durchgehenden Scrolls. **Nachgezogen in dieser Session:** Alarmierung stand noch als Sektion 5
+> von 8 (nach KI, Ruhezeiten, Aufräumen) — jetzt Sektion 2, direkt unter Aufnahme & Mikrofon, wie
+> gefordert. Offen bleibt weiterhin: sichtbares Warnen bei ungespeicherten Änderungen an
+> `ntfyServer`/`heartbeatUrl` beim Verlassen des Felds (kein Teil dieser Session).
 
 - Die sechs Abschnitte als eigenständige, aufklappbare Blöcke mit Kopfzeile und
   Zustandszusammenfassung ("Alarmierung — aktiv, Push konfiguriert"), zugeklappt als Default,

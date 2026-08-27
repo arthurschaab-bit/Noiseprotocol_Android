@@ -59,7 +59,8 @@ import java.util.Locale
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
-    onShowSnackbar: ((String) -> Unit)? = null
+    onShowSnackbar: ((String) -> Unit)? = null,
+    onShowOnboarding: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -134,6 +135,7 @@ fun SettingsScreen(
     var expAlarm by remember { mutableStateOf(false) }
     var expDrive by remember { mutableStateOf(false) }
     var expSystem by remember { mutableStateOf(false) }
+    var expHilfe by remember { mutableStateOf(false) }
 
     suspend fun verarbeiteDriveEinrichtungsVersuch(ordner: String = driveOrdnerName) {
         when (val versuch = versucheDriveEinrichtung(container, settings, ordner, context)) {
@@ -498,213 +500,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Sektion 2: KI-Erkennung
-            SettingsSectionCard(
-                title = stringResource(R.string.settings_ai_title),
-                summary = when (aiMode) {
-                    "BATCH" -> "Im Batch (Standard / Empfohlen)"
-                    "ONLINE" -> "Online / Live direkt"
-                    else -> "Deaktiviert"
-                },
-                expanded = expKi,
-                onToggle = { expKi = !expKi }
-            ) {
-                Text(
-                    text = "Wähle, wann die KI-Geräuschklassifikation (YAMNet) ausgeführt werden soll:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = aiMode == "BATCH",
-                        onClick = {
-                            aiMode = "BATCH"
-                            settings.aiMode = "BATCH"
-                        },
-                        label = { Text("Im Batch (Default)") },
-                        modifier = Modifier.weight(1.1f)
-                    )
-                    FilterChip(
-                        selected = aiMode == "ONLINE",
-                        onClick = {
-                            aiMode = "ONLINE"
-                            settings.aiMode = "ONLINE"
-                        },
-                        label = { Text("Online / Live") },
-                        modifier = Modifier.weight(1.0f)
-                    )
-                    FilterChip(
-                        selected = aiMode == "OFF",
-                        onClick = {
-                            aiMode = "OFF"
-                            settings.aiMode = "OFF"
-                        },
-                        label = { Text("Aus") },
-                        modifier = Modifier.weight(0.7f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = when (aiMode) {
-                        "BATCH" -> "Schont Akku und CPU während der kontinuierlichen Lärmmessung. Aufnahmen werden nach Abschluss der Messung oder im Hintergrund klassifiziert."
-                        "ONLINE" -> "Klassifiziert jede Audioaufnahme sofort live im Moment der Schwellwertüberschreitung."
-                        else -> "Keine automatische KI-Klassifikation von Geräuschen."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (aiMode != "OFF") {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                isBatchRunning = true
-                                try {
-                                    val count: Int = withContext(Dispatchers.IO) {
-                                        val classifier = NoiseClassifier(context)
-                                        classifier.classifyUnclassifiedBatch(container.database.noiseDao())
-                                    }
-                                    val msg = if (count > 0) "$count Aufnahme(n) erfolgreich nachträglich klassifiziert" else "Alle Aufnahmen sind bereits klassifiziert"
-                                    onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                } finally {
-                                    isBatchRunning = false
-                                }
-                            }
-                        },
-                        enabled = !isBatchRunning,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isBatchRunning) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Analysiere Aufnahmen...")
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Unklassifizierte Aufnahmen jetzt analysieren")
-                        }
-                    }
-                }
-
-                if (aiMode != "OFF" && isProMode) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(stringResource(R.string.settings_ai_confidence, (aiConfidence * 100).toInt()))
-                    Slider(
-                        value = aiConfidence,
-                        onValueChange = { aiConfidence = it },
-                        onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
-                        valueRange = 0.05f..0.95f
-                    )
-                }
-            }
-
-            // Sektion 3: F8 Ruhezeiten & Grenzwerte
-            SettingsSectionCard(
-                title = stringResource(R.string.settings_quiet_hours_title),
-                summary = if (quietHoursEnabled) "Aktiv (${quietHoursStartHour.toInt()}:00 - ${quietHoursEndHour.toInt()}:00 Uhr · ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB)" else "Deaktiviert",
-                expanded = expRuhezeiten,
-                onToggle = { expRuhezeiten = !expRuhezeiten }
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.settings_quiet_hours_title), style = MaterialTheme.typography.bodyLarge)
-                        Text(stringResource(R.string.settings_quiet_hours_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = quietHoursEnabled,
-                        onCheckedChange = {
-                            quietHoursEnabled = it
-                            settings.quietHoursEnabled = it
-                        }
-                    )
-                }
-
-                if (quietHoursEnabled) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(stringResource(R.string.settings_quiet_hours_threshold, quietHoursThreshold))
-                    Slider(
-                        value = quietHoursThreshold,
-                        onValueChange = { quietHoursThreshold = it },
-                        onValueChangeFinished = { settings.quietHoursThreshold = quietHoursThreshold },
-                        valueRange = 25f..80f
-                    )
-
-                    OutlinedButton(
-                        onClick = { showWohnraumDialog = true },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.settings_ta_laerm_presets), color = TechBluePrimary)
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(stringResource(R.string.settings_quiet_hours_start, quietHoursStartHour.toInt()))
-                    Slider(
-                        value = quietHoursStartHour,
-                        onValueChange = { quietHoursStartHour = it },
-                        onValueChangeFinished = { settings.quietHoursStartHour = quietHoursStartHour.toInt() },
-                        valueRange = 0f..23f,
-                        steps = 22
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(stringResource(R.string.settings_quiet_hours_end, quietHoursEndHour.toInt()))
-                    Slider(
-                        value = quietHoursEndHour,
-                        onValueChange = { quietHoursEndHour = it },
-                        onValueChangeFinished = { settings.quietHoursEndHour = quietHoursEndHour.toInt() },
-                        valueRange = 0f..23f,
-                        steps = 22
-                    )
-                }
-            }
-
-            // Sektion 4: F5 Speicherplatz & Auto-Bereinigung (nur Pro-Modus)
-            if (isProMode) {
-                SettingsSectionCard(
-                    title = stringResource(R.string.settings_cleanup_title),
-                    summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
-                    expanded = expRetention,
-                    onToggle = { expRetention = !expRetention }
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.settings_cleanup_title), style = MaterialTheme.typography.bodyLarge)
-                            Text(stringResource(R.string.settings_cleanup_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(
-                            checked = autoRetentionEnabled,
-                            onCheckedChange = {
-                                autoRetentionEnabled = it
-                                settings.autoRetentionEnabled = it
-                            }
-                        )
-                    }
-
-                    if (autoRetentionEnabled) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(stringResource(R.string.settings_cleanup_days, autoRetentionDays.toInt()))
-                        Slider(
-                            value = autoRetentionDays,
-                            onValueChange = { autoRetentionDays = it },
-                            onValueChangeFinished = { settings.autoRetentionDays = autoRetentionDays.toInt() },
-                            valueRange = 7f..180f
-                        )
-                    }
-                }
-            }
-
-            // Sektion 5: Alarmierung bei Verbindungsabbruch
+            // Sektion 2: Alarmierung bei Verbindungsabbruch
             SettingsSectionCard(
                 title = stringResource(R.string.settings_alerting_title),
                 summary = if (alarmierungAktiv) "Aktiv${if (isProMode) " (Karenzzeit ${karenzzeit.toInt()}s)" else ""}" else "Deaktiviert",
@@ -839,6 +635,212 @@ fun SettingsScreen(
                     testErgebnis?.let {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            // Sektion 3: KI-Erkennung
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_ai_title),
+                summary = when (aiMode) {
+                    "BATCH" -> "Im Batch (Standard / Empfohlen)"
+                    "ONLINE" -> "Online / Live direkt"
+                    else -> "Deaktiviert"
+                },
+                expanded = expKi,
+                onToggle = { expKi = !expKi }
+            ) {
+                Text(
+                    text = "Wähle, wann die KI-Geräuschklassifikation (YAMNet) ausgeführt werden soll:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = aiMode == "BATCH",
+                        onClick = {
+                            aiMode = "BATCH"
+                            settings.aiMode = "BATCH"
+                        },
+                        label = { Text("Im Batch (Default)") },
+                        modifier = Modifier.weight(1.1f)
+                    )
+                    FilterChip(
+                        selected = aiMode == "ONLINE",
+                        onClick = {
+                            aiMode = "ONLINE"
+                            settings.aiMode = "ONLINE"
+                        },
+                        label = { Text("Online / Live") },
+                        modifier = Modifier.weight(1.0f)
+                    )
+                    FilterChip(
+                        selected = aiMode == "OFF",
+                        onClick = {
+                            aiMode = "OFF"
+                            settings.aiMode = "OFF"
+                        },
+                        label = { Text("Aus") },
+                        modifier = Modifier.weight(0.7f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = when (aiMode) {
+                        "BATCH" -> "Schont Akku und CPU während der kontinuierlichen Lärmmessung. Aufnahmen werden nach Abschluss der Messung oder im Hintergrund klassifiziert."
+                        "ONLINE" -> "Klassifiziert jede Audioaufnahme sofort live im Moment der Schwellwertüberschreitung."
+                        else -> "Keine automatische KI-Klassifikation von Geräuschen."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (aiMode != "OFF") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                isBatchRunning = true
+                                try {
+                                    val count: Int = withContext(Dispatchers.IO) {
+                                        val classifier = NoiseClassifier(context)
+                                        classifier.classifyUnclassifiedBatch(container.database.noiseDao())
+                                    }
+                                    val msg = if (count > 0) "$count Aufnahme(n) erfolgreich nachträglich klassifiziert" else "Alle Aufnahmen sind bereits klassifiziert"
+                                    onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isBatchRunning = false
+                                }
+                            }
+                        },
+                        enabled = !isBatchRunning,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isBatchRunning) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Analysiere Aufnahmen...")
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Unklassifizierte Aufnahmen jetzt analysieren")
+                        }
+                    }
+                }
+
+                if (aiMode != "OFF" && isProMode) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(stringResource(R.string.settings_ai_confidence, (aiConfidence * 100).toInt()))
+                    Slider(
+                        value = aiConfidence,
+                        onValueChange = { aiConfidence = it },
+                        onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
+                        valueRange = 0.05f..0.95f
+                    )
+                }
+            }
+
+            // Sektion 4: F8 Ruhezeiten & Grenzwerte
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_quiet_hours_title),
+                summary = if (quietHoursEnabled) "Aktiv (${quietHoursStartHour.toInt()}:00 - ${quietHoursEndHour.toInt()}:00 Uhr · ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB)" else "Deaktiviert",
+                expanded = expRuhezeiten,
+                onToggle = { expRuhezeiten = !expRuhezeiten }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_quiet_hours_title), style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_quiet_hours_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = quietHoursEnabled,
+                        onCheckedChange = {
+                            quietHoursEnabled = it
+                            settings.quietHoursEnabled = it
+                        }
+                    )
+                }
+
+                if (quietHoursEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_quiet_hours_threshold, quietHoursThreshold))
+                    Slider(
+                        value = quietHoursThreshold,
+                        onValueChange = { quietHoursThreshold = it },
+                        onValueChangeFinished = { settings.quietHoursThreshold = quietHoursThreshold },
+                        valueRange = 25f..80f
+                    )
+
+                    OutlinedButton(
+                        onClick = { showWohnraumDialog = true },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(18.dp), tint = TechBluePrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_ta_laerm_presets), color = TechBluePrimary)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_quiet_hours_start, quietHoursStartHour.toInt()))
+                    Slider(
+                        value = quietHoursStartHour,
+                        onValueChange = { quietHoursStartHour = it },
+                        onValueChangeFinished = { settings.quietHoursStartHour = quietHoursStartHour.toInt() },
+                        valueRange = 0f..23f,
+                        steps = 22
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_quiet_hours_end, quietHoursEndHour.toInt()))
+                    Slider(
+                        value = quietHoursEndHour,
+                        onValueChange = { quietHoursEndHour = it },
+                        onValueChangeFinished = { settings.quietHoursEndHour = quietHoursEndHour.toInt() },
+                        valueRange = 0f..23f,
+                        steps = 22
+                    )
+                }
+            }
+
+            // Sektion 5: F5 Speicherplatz & Auto-Bereinigung (nur Pro-Modus)
+            if (isProMode) {
+                SettingsSectionCard(
+                    title = stringResource(R.string.settings_cleanup_title),
+                    summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
+                    expanded = expRetention,
+                    onToggle = { expRetention = !expRetention }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_cleanup_title), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.settings_cleanup_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = autoRetentionEnabled,
+                            onCheckedChange = {
+                                autoRetentionEnabled = it
+                                settings.autoRetentionEnabled = it
+                            }
+                        )
+                    }
+
+                    if (autoRetentionEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(stringResource(R.string.settings_cleanup_days, autoRetentionDays.toInt()))
+                        Slider(
+                            value = autoRetentionDays,
+                            onValueChange = { autoRetentionDays = it },
+                            onValueChangeFinished = { settings.autoRetentionDays = autoRetentionDays.toInt() },
+                            valueRange = 7f..180f
+                        )
                     }
                 }
             }
@@ -1010,6 +1012,24 @@ fun SettingsScreen(
                     Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Vollständige Diagnose aufrufen")
+                }
+            }
+
+            // Sektion 8: Hilfe (PROMPT_M9_UX.md Aufgabe 8: Erststart-Onboarding muss aus den
+            // Einstellungen jederzeit wieder aufrufbar sein, nicht nur einmalig beim ersten Start)
+            if (onShowOnboarding != null) {
+                SettingsSectionCard(
+                    title = stringResource(R.string.settings_help_title),
+                    summary = stringResource(R.string.settings_help_summary),
+                    expanded = expHilfe,
+                    onToggle = { expHilfe = !expHilfe }
+                ) {
+                    OutlinedButton(
+                        onClick = onShowOnboarding,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.settings_help_show_onboarding))
+                    }
                 }
             }
 

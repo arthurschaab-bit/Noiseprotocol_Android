@@ -190,6 +190,9 @@
     <!-- Settings Screen -->
     <string name="settings_section_general">General &amp; Display</string>
     <string name="settings_section_diagnostics">Diagnostics &amp; System Health</string>
+    <string name="settings_help_title">Help</string>
+    <string name="settings_help_summary">Watch the introduction again</string>
+    <string name="settings_help_show_onboarding">Show introduction again</string>
     <string name="settings_mode_lite">Lite Mode</string>
     <string name="settings_mode_pro">Pro Mode</string>
     <string name="settings_section_thresholds">Thresholds &amp; Audio</string>

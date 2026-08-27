@@ -157,6 +157,16 @@ Schema: ein Kennzeichen an `NoiseRecord`; die Fenster selbst können in `Setting
 
 #### F9 · Papierkorb · S · Schema
 
+> **Korrektur: bereits umgesetzt.** Entgegen dem Vorschlag unten ("Stufe 2, erst nach dem
+> Gerätetest") existiert der Papierkorb bereits vollständig: `ui/TrashScreen.kt` (Liste,
+> Wiederherstellen, endgültig löschen inkl. Audiodatei), `NoiseRecord.deletedAt: Long?` als
+> weiches Löschen (dient gleichzeitig als Flag und Zeitstempel), `MIGRATION_11_12` in
+> `data/AppDatabase.kt` (Schema-Version 11→12), automatische endgültige Löschung nach 30 Tagen
+> über den bestehenden `RetentionWorker`. Wurde im Rahmen paralleler Arbeit vor dem Gerätetest
+> gebaut, nicht auf dessen Abschluss gewartet — funktioniert und ist auf `main`, kein
+> Nacharbeitsbedarf. Diese Zeile bleibt stehen, damit sichtbar ist, dass die Reihenfolge unten
+> nicht eingehalten wurde, nicht weil die Funktion fehlt.
+
 Löschen ist heute überall endgültig, inklusive Datei (`MainActivity.kt:576`). Das
 Rückgängig-Machen per Snackbar aus M9 fängt den Fehlgriff der nächsten fünf Sekunden ab — nicht
 den von gestern.

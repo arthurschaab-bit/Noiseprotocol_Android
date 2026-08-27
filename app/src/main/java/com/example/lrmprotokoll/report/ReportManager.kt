@@ -26,6 +26,24 @@ internal fun pegelEinheit(meterWeighting: String?): String = when (meterWeightin
     else -> "dB"
 }
 
+/**
+ * PROMPT_M9_UX.md Aufgabe 9: ehrlicher Kopf-Hinweis, solange die Frequenzbewertung fuer
+ * mindestens einen kalibrierten Wert im Bericht unbestaetigt war ([NoiseRecord.meterWeighting]
+ * `null` trotz gesetztem [NoiseRecord.calibratedDbA] - das passiert bei Datensaetzen, die
+ * aufgezeichnet wurden, bevor [com.example.lrmprotokoll.meter.ble.Pce323Profile.MODE_ASSUMPTION_CONFIRMED]
+ * auf den Geraetetest-Beweis umgestellt wurde). [pegelEinheit] schreibt fuer diese Datensaetze
+ * bereits korrekt "dB" statt "dBA" - dieser Satz erklaert im Bericht selbst, warum, statt den
+ * Leser raten zu lassen. Liefert `null`, wenn kein solcher Datensatz im Bericht vorkommt.
+ */
+internal fun unbestaetigteBewertungHinweis(records: List<NoiseRecord>): String? {
+    val betroffen = records.count { it.calibratedDbA != null && it.meterWeighting == null }
+    if (betroffen == 0) return null
+    return "Hinweis: Bei $betroffen von ${records.size} Ereignissen war die Frequenzbewertung " +
+        "(A- oder C-Bewertung) des Messgeräts zum Aufnahmezeitpunkt nicht bestätigt - dort steht " +
+        "bewusst die reine Einheit \"dB\" ohne A- oder C-Kennzeichnung, um keine Genauigkeit " +
+        "vorzutäuschen, die nicht belegt war.\n\n"
+}
+
 class ReportManager(private val context: Context) {
 
     private fun getDateString(records: List<NoiseRecord>): String {
@@ -33,14 +51,16 @@ class ReportManager(private val context: Context) {
         return SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(timestamp))
     }
 
-    fun generateDailyReport(records: List<NoiseRecord>): File {
+    fun generateDailyReport(records: List<NoiseRecord>, deviceName: String? = null): File {
         val dateStr = getDateString(records)
         val fileName = "Tagesbericht_$dateStr.txt"
         val file = File(context.getExternalFilesDir(null), fileName)
+        val geraet = deviceName ?: "PCE-323"
 
         val content = StringBuilder()
         content.append("Lärmprotokoll - Tagesbericht für $dateStr\n")
         content.append("===========================================\n\n")
+        unbestaetigteBewertungHinweis(records)?.let { content.append(it) }
 
         val maxDb = records.maxOfOrNull { it.calibratedDbA ?: it.dbValue } ?: 0.0
         val quietHourCount = records.count { it.isQuietHour }
@@ -54,7 +74,7 @@ class ReportManager(private val context: Context) {
             val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
             content.append("Zeit: $time\n")
             if (record.calibratedDbA != null) {
-                content.append("Kalibrierter Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} (PCE-323)\n")
+                content.append("Kalibrierter Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} ($geraet)\n")
                 content.append("Mikrofonpegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB\n")
             } else {
                 content.append("Pegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)\n")
@@ -75,15 +95,17 @@ class ReportManager(private val context: Context) {
     /**
      * F12: Zeitraumbericht (Woche/Monat/Baulärm-Zusammenfassung).
      */
-    fun generatePeriodReport(records: List<NoiseRecord>, title: String): File {
+    fun generatePeriodReport(records: List<NoiseRecord>, title: String, deviceName: String? = null): File {
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
         val fileName = "Zeitraumbericht_${dateFormat.format(Date())}.txt"
         val file = File(context.getExternalFilesDir(null), fileName)
+        val geraet = deviceName ?: "PCE-323"
 
         val content = StringBuilder()
         content.append("LÄRMPROTOKOLL - $title\n")
         content.append("Erstellt am: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}\n")
         content.append("===========================================\n\n")
+        unbestaetigteBewertungHinweis(records)?.let { content.append(it) }
 
         val count = records.size
         val maxLevel = records.maxOfOrNull { it.calibratedDbA ?: it.dbValue } ?: 0.0
@@ -112,7 +134,7 @@ class ReportManager(private val context: Context) {
         records.sortedBy { it.timestamp }.forEach { record ->
             val time = fullFormat.format(Date(record.timestamp))
             val pegelStr = if (record.calibratedDbA != null) {
-                "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} (PCE-323)"
+                "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} ($geraet)"
             } else {
                 "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)"
             }

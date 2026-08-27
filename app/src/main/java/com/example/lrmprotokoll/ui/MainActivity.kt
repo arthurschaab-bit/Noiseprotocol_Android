@@ -111,11 +111,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val settingsManager = container.settingsManager
     var onboardingDone by remember { mutableStateOf(settingsManager.onboardingCompleted) }
+    var onboardingErneutAnzeigen by remember { mutableStateOf(false) }
 
-    if (!onboardingDone) {
+    if (!onboardingDone || onboardingErneutAnzeigen) {
         OnboardingScreen(onFinish = {
             settingsManager.onboardingCompleted = true
             onboardingDone = true
+            onboardingErneutAnzeigen = false
         })
         return
     }
@@ -197,7 +199,8 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     SettingsScreen(
                         onBack = { navController.popBackStack() },
                         onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                        onShowOnboarding = { onboardingErneutAnzeigen = true }
                     )
                 }
                 composable("meter") {
@@ -1002,7 +1005,7 @@ fun NoiseProtocolApp(
             text = { Text(stringResource(R.string.report_dialog_desc, target.size)) },
             confirmButton = {
                 Button(onClick = {
-                    val report = reportManager.generateDailyReport(target)
+                    val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
                     reportManager.createZipAndShare(target, report)
                     reportTargetRecords = null
                 }) {
@@ -1011,7 +1014,7 @@ fun NoiseProtocolApp(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    val report = reportManager.generateDailyReport(target)
+                    val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
                     reportManager.shareFile(report)
                     reportTargetRecords = null
                 }) {
