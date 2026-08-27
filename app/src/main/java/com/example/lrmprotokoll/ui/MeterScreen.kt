@@ -57,6 +57,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -315,7 +318,12 @@ fun MeterScreen(
                         } else {
                             "${String.format("%.1f", frame.level)} dB"
                         },
-                        style = MaterialTheme.typography.displayLarge
+                        style = MaterialTheme.typography.displayLarge,
+                        // liveRegion (PROMPT_M9_UX.md Aufgabe 4): der Pegel aendert sich rund
+                        // alle 515 ms, ohne dass ein Screenreader das ohne Fokus mitbekaeme.
+                        modifier = Modifier.semantics(mergeDescendants = true) {
+                            liveRegion = LiveRegionMode.Polite
+                        }
                     )
                     if (confirmedWeighting == null) {
                         Text(

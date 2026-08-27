@@ -20,6 +20,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -96,10 +99,23 @@ fun PegelverlaufChart(
     val leqColor = statusColors.connected
     val outageColor = statusColors.outageBand
 
+    // contentDescription (PROMPT_M9_UX.md Aufgabe 4): das Canvas zeichnet nur Pixel, ein
+    // Screenreader sieht davon nichts - hier die Kernaussage als ein Satz statt der leeren
+    // Flaeche. laeqDb kommt vom Aufrufer (echter energetischer Mittelwert der Session); ohne
+    // ihn ein grobes arithmetisches Mittel der Chart-Spalten als Naeherung, nur fuer die Ansage.
+    val aktuellerPegel = spalten.last().mittelDb
+    val hoechsterPegel = spalten.maxOf { it.maxDb }
+    val mittelwert = laeqDb ?: spalten.map { it.mittelDb }.average()
+    val chartBeschreibung = stringResource(
+        com.example.lrmprotokoll.R.string.chart_content_description,
+        aktuellerPegel, mittelwert, hoechsterPegel, ausfallbaender.size,
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
+            .semantics { contentDescription = chartBeschreibung }
     ) {
         Canvas(
             modifier = Modifier

@@ -403,21 +403,41 @@ Sämtliche UI-Literale nach res/values/strings.xml, Zugriff über stringResource
 - Mengenangaben ("Ausfälle (n)", "Diagnose-Log (n)", "Sync-Historie (n)", "n Messwerte")
   als <plurals>.
 - contentDescription = "AI Recognition" (MainActivity.kt:838) auf Deutsch.
-- Kein res/values-en/ anlegen. Deutsch bleibt die einzige Sprache (AGENTS.md §5: UI-Strings
-  sind Deutsch) — es geht hier um Wartbarkeit und Barrierefreiheit, nicht um Übersetzung.
+- ~~Kein res/values-en/ anlegen. Deutsch bleibt die einzige Sprache~~ — **überholt:** Die
+  App hat inzwischen vollständige Mehrsprachigkeit (`values/` Deutsch als Default, `values-de/`
+  identisch, `values-en/` Englisch, In-App-Sprachauswahl, Android-13+-Per-App-Language, siehe
+  README-Statustabelle). Diese Zeile stand hier, bevor das umgesetzt wurde — kein Widerspruch
+  zu AGENTS.md §5, nur eine spätere Owner-Entscheidung, die dieses Dokument nicht kannte.
 Reine Fließarbeit, aber Voraussetzung für alles Weitere. Nicht auslassen.
 
-=== AUFGABE 4: Barrierefreiheit (Befund A4) ===
+=== AUFGABE 4: Barrierefreiheit (Befund A4) — erledigt ===
 
-- Das 16-dp-Löschkreuz (MainActivity.kt:399) auf mindestens 48 dp bringen (IconButton statt
-  clickable-Icon).
-- AudioPlayerScreen.kt:8,77 zurück auf Icons.AutoMirrored.Filled.ArrowBack, wie die anderen
-  fünf Screens.
-- Live-Pegel und Dashboard-Werte als liveRegion auszeichnen, damit TalkBack Änderungen ansagt.
-- PegelverlaufChart bekommt ein contentDescription, das die Kernaussage in einem Satz nennt
-  (aktueller/mittlerer/höchster Pegel, Anzahl Ausfälle). Die Zahlen liegen bereits vor.
-- Der grüne Live-Punkt (MainActivity.kt:731-738) bekommt eine Textentsprechung; Farbe darf
-  nirgends der einzige Zustandsträger sein.
+> **Nachtrag:** Alle fünf Punkte sind erledigt, drei davon bereits durch das UI-Redesign
+> zwischen dieser Doku und ihrer Umsetzung (kein eigener Auftrag nötig), die restlichen zwei
+> nachgezogen:
+> - 16-dp-Löschkreuz: bereits behoben (kein `size(16.dp).clickable` mehr im Code).
+> - AudioPlayerScreen-ArrowBack: bereits behoben (`Icons.AutoMirrored.Filled.ArrowBack`).
+> - Grüner Live-Punkt: die alte Dashboard-Stelle (`MainActivity.kt:731-738`) existiert nach dem
+>   Redesign nicht mehr — Live-Status läuft jetzt durchgängig über `StatusPill`
+>   (`ui/components/StatusPill.kt`), das Farbe grundsätzlich mit einem Text-Label kombiniert.
+> - **Neu umgesetzt:** `liveRegion` auf dem Live-Pegel in `MeterScreen.kt` und
+>   `LiveCockpitCard.kt` (`Modifier.semantics { liveRegion = LiveRegionMode.Polite }`) und eine
+>   `contentDescription` auf `PegelverlaufChart` mit aktuellem/mittlerem/höchstem Pegel und
+>   Ausfallzahl (neue Resource `chart_content_description`, getestet in
+>   `PegelverlaufChartTest`). Die beiden `liveRegion`-Stellen sind nur durch `assembleDebug`
+>   verifiziert, nicht durch einen Compose-Test — `AppContainer.meterTransport` ist fest auf
+>   die echte BLE-Implementierung verdrahtet, ein Robolectric-Test erreicht den
+>   STREAMING-Zustand mit echtem Frame deshalb nicht (siehe README „Bekannte Einschränkungen").
+
+- ~~Das 16-dp-Löschkreuz (MainActivity.kt:399) auf mindestens 48 dp bringen (IconButton statt
+  clickable-Icon).~~
+- ~~AudioPlayerScreen.kt:8,77 zurück auf Icons.AutoMirrored.Filled.ArrowBack, wie die anderen
+  fünf Screens.~~
+- ~~Live-Pegel und Dashboard-Werte als liveRegion auszeichnen, damit TalkBack Änderungen ansagt.~~
+- ~~PegelverlaufChart bekommt ein contentDescription, das die Kernaussage in einem Satz nennt
+  (aktueller/mittlerer/höchster Pegel, Anzahl Ausfälle). Die Zahlen liegen bereits vor.~~
+- ~~Der grüne Live-Punkt (MainActivity.kt:731-738) bekommt eine Textentsprechung; Farbe darf
+  nirgends der einzige Zustandsträger sein.~~
 
 === AUFGABE 5: Navigation aufräumen (Befund A5) ===
 
