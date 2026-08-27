@@ -145,8 +145,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen und der Google-Anmeldung mit der jetzt echten Client-ID — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M8 | Härtung (Plan Abschnitt 12) | teilweise |
-| M9 | UX-Überarbeitung (Datenpfad des Live-Diagramms, Dunkelmodus, String-Ressourcen, Berechtigungen, Navigation, Zustände) — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | Emulator |
-| M9a | **Owner-Entscheidungen aus dem UX-Review** — Datenpfad des Live-Cockpits begrenzen, „dBA“ im Tagesbericht ehrlich machen — [`docs/PROMPT_M9A.md`](docs/PROMPT_M9A.md) | Emulator |
+| M9 | UX-Überarbeitung (Dunkelmodus, String-Ressourcen, Berechtigungen, Navigation, Zustände — der Datenpfad des Live-Diagramms ist mit M9a bereits behoben) — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | Emulator |
 | M10 | Neue Funktionen (Vorschlagskatalog + Auftrag Stufe 1) — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | teilweise |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
@@ -283,8 +282,8 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
 | [`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) | Bestandsaufnahme der App-UI nach dem ersten Gerätetest — Screen-Inventar, Live-Status-Lücken, fehlende Chart-Infrastruktur, Verbesserungsvorschläge |
 | [`docs/PROMPT_M7C.md`](docs/PROMPT_M7C.md) | Auftrag für M7c (erledigt) — Live-Status-Dashboard, Aufzeichnungs-Chart, Navigationsstruktur, Scroll-Fix `MeterScreen` |
 | [`docs/PROMPT_M8.md`](docs/PROMPT_M8.md) | Auftrag für M8, hardwarefreier Teil (offen) — Release-Build härten (R8/Minify), Herstellerspezifika |
-| [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | **UX-Review und Auftrag für M9 (offen)** — Befunde am Code mit Datei:Zeile (Live-Diagramm rechnet die Session alle 5 s neu, kein Dunkelmodus, keine String-Ressourcen, Barrierefreiheit, Navigation, leere/ladende/fehlerhafte Zustände, Berechtigungsablauf) plus Umsetzungsauftrag |
-| [`docs/PROMPT_M9A.md`](docs/PROMPT_M9A.md) | **Owner-Entscheidungen aus dem UX-Review (offen)** — Abgleich der vier Antworten gegen den Code: Dunkelmodus, kalibrierter Wert und Test-Suite sind erledigt; offen bleiben der unbegrenzte Datenpfad des Live-Cockpits und die unbelegte „dBA“-Angabe im Tagesbericht |
+| [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | **UX-Review und Auftrag für M9 (offen)** — Befunde am Code mit Datei:Zeile (kein Dunkelmodus, keine String-Ressourcen, Barrierefreiheit, Navigation, leere/ladende/fehlerhafte Zustände, Berechtigungsablauf) plus Umsetzungsauftrag; der ursprünglich mitgemeldete Befund „Live-Diagramm rechnet die Session alle 5 s neu“ ist mit M9a behoben |
+| [`docs/PROMPT_M9A.md`](docs/PROMPT_M9A.md) | **Owner-Entscheidungen aus dem UX-Review (erledigt, PR #80)** — Abgleich der vier Antworten gegen den Code (Dunkelmodus, kalibrierter Wert, Test-Suite waren bereits erledigt); umgesetzt: `MeasurementDao.fuerSessionAbFlow` begrenzt den Datenpfad des Live-Cockpits auf ein gerastertes 4-Stunden-Fenster statt bei jedem Batch die volle Session zu laden, `pegelEinheit()` leitet „dBA“/„dBC“/„dB“ im Tagesbericht aus `meterWeighting` ab statt es hart anzuhängen |
 | [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | **Funktionsvorschläge und Auftrag für M10 (offen)** — 15 Vorschläge in drei Stufen nach Migrationsbedarf, Umsetzungsauftrag für Stufe 1 (ohne Room-Migration), offene Owner-Entscheidungen |
 | [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code (umgesetzt & aktiv) |
 | [`docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md`](docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md) | **Diagnose-, Fehleranalyse- und Observability-Konzept** — Architektur für Sentry, Breadcrumbs, Redaction & Support-Bundle (umgesetzt) |
