@@ -27,6 +27,7 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log standardmäßig aktiv) | ✅ abgeschlossen & gehärtet |
 | **M7** UI-Ausbau (Protokollansicht, Diagnose-Screen, CSV/PDF-Export, Wohnraum-Presets, Pro/Lite-Modus) | ✅ abgeschlossen & erweitert |
 | **M7c** UI-Harmonisierung & Entkopplung (Startseite, 4 Tabs, stabile Sortierung) | ✅ abgeschlossen (PR #53) |
+| **M8** Härtung — Release-Build (R8/Minify) & Herstellerhinweis (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung) | ✅ hardwarefreier Teil abgeschlossen — Chaos-Checkliste/24h-Dauerlauf brauchen ein Gerät, siehe Gerätetest-Zeile unten |
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
 | **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 394 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
@@ -128,6 +129,19 @@ keine Änderung nötig.
 - **Hardware-Vibrationserkennung & NotificationChannel v3:** Direkte Vibrationsansteuerung mit `hasVibrator()`-Prüfung und NotificationChannel mit Priorität `MAX`.
 - **OemDeviceHelperCard:** Erkennt Xiaomi/HyperOS/MIUI-Besonderheiten, prüft Berechtigungen (`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, Akku-Optimierung, Autostart) und bietet 1-Klick-Intents zur Behebung.
 
+**Aus M8 (Härtung, hardwarefreier Teil):**
+- **Release-Build gehärtet:** `isMinifyEnabled`/`isShrinkResources` im release-Buildtype aktiv.
+  `./gradlew assembleRelease` geprüft: keine unerklärten R8-„Missing class"-Warnungen, die vier
+  WorkManager-Worker (`RetentionWorker`, `DiagnosticLogCleanupWorker`, `DriveSyncWorker`,
+  `HeartbeatWorker`) samt Konstruktor stehen in `seeds.txt`, Credentials/Tink/MediaPipe bringen
+  ihre Regeln bereits selbst über automatisch eingebundene consumer-rules.pro mit — keine
+  zusätzliche `-keep`/`-dontwarn`-Zeile in `proguard-rules.pro` nötig.
+- **Herstellerhinweis erweitert:** `leiteOemAutostartHinweisAb()` (`ui/OemAutostart.kt`) ist eine
+  reine, per JVM-Unit-Test geprüfte Ableitungsfunktion und deckt jetzt zusätzlich zu Xiaomi auch
+  Huawei/EMUI, Oppo/ColorOS, Vivo, OnePlus/OxygenOS und (mit Einschränkung, siehe Code-Kommentar)
+  Samsung ab. `OemDeviceHelperCard` zeigt bei erkanntem Hersteller Hinweistext + Best-Effort-Intent
+  zur herstellereigenen Autostart-Seite, robust gegen `ActivityNotFoundException`.
+
 ### Nicht vorhanden
 
 Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b). M8 (Härtung), M9 (UX-Feinschliff) und M10 (Neue Funktionen) sind als optionale Folge-Meilensteine spezifiziert.
@@ -143,8 +157,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 
 | # | Was | Braucht Hardware? |
 |---|-----|-------------------|
-| **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen und der Google-Anmeldung mit der jetzt echten Client-ID — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
-| M8 | Härtung (Plan Abschnitt 12) | teilweise |
+| **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen, die Google-Anmeldung mit der jetzt echten Client-ID sowie M8s Chaos-Checkliste und 24h-Dauerlauf (Teil C/D) — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M9 | UX-Überarbeitung (Dunkelmodus, String-Ressourcen, Berechtigungen, Navigation, Zustände — der Datenpfad des Live-Diagramms ist mit M9a bereits behoben) — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | Emulator |
 | M10 | Neue Funktionen (Vorschlagskatalog + Auftrag Stufe 1) — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | teilweise |
 
@@ -229,6 +242,11 @@ Abhängigkeits-Stil des Projekts.
   ansagt, muss am echten Gerät geprüft werden. Die `contentDescription` von `PegelverlaufChart`
   (dieselbe Aufgabe) ist dagegen voll getestet — der Chart ist eine reine, parameterisierte
   Composable ohne Container-Abhängigkeit.
+- **Der minifizierte Release-Build (M8) ist nur durch `assembleRelease` und R8-Log-Prüfung
+  verifiziert, nie an einem echten Gerät gestartet.** R8 kann beim Bauen unauffällig bleiben und
+  trotzdem zur Laufzeit eine per Reflection gebrauchte, aber gestrippte Klasse treffen — ob alle
+  Features (insbesondere WorkManager-Worker, Google-Anmeldung, Drive-Sync) im minifizierten Build
+  tatsächlich fehlerfrei laufen, muss der Gerätetest zeigen.
 
 ---
 
@@ -290,7 +308,7 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
 | [`docs/PROMPT_M7.md`](docs/PROMPT_M7.md) | Auftrag für M7 (erledigt) — Protokollansicht, Diagnose-Screen, CSV/PDF-Export |
 | [`docs/BESTANDSAUFNAHME_UI.md`](docs/BESTANDSAUFNAHME_UI.md) | Bestandsaufnahme der App-UI nach dem ersten Gerätetest — Screen-Inventar, Live-Status-Lücken, fehlende Chart-Infrastruktur, Verbesserungsvorschläge |
 | [`docs/PROMPT_M7C.md`](docs/PROMPT_M7C.md) | Auftrag für M7c (erledigt) — Live-Status-Dashboard, Aufzeichnungs-Chart, Navigationsstruktur, Scroll-Fix `MeterScreen` |
-| [`docs/PROMPT_M8.md`](docs/PROMPT_M8.md) | Auftrag für M8, hardwarefreier Teil (offen) — Release-Build härten (R8/Minify), Herstellerspezifika |
+| [`docs/PROMPT_M8.md`](docs/PROMPT_M8.md) | Auftrag für M8, hardwarefreier Teil (erledigt) — Release-Build härten (R8/Minify), Herstellerspezifika (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung); Chaos-Checkliste/24h-Dauerlauf bleiben Teil des Gerätetests |
 | [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | **UX-Review und Auftrag für M9 (offen)** — Befunde am Code mit Datei:Zeile (kein Dunkelmodus, keine String-Ressourcen, Barrierefreiheit, Navigation, leere/ladende/fehlerhafte Zustände, Berechtigungsablauf) plus Umsetzungsauftrag; der ursprünglich mitgemeldete Befund „Live-Diagramm rechnet die Session alle 5 s neu“ ist mit M9a behoben |
 | [`docs/PROMPT_M9A.md`](docs/PROMPT_M9A.md) | **Owner-Entscheidungen aus dem UX-Review (erledigt, PR #80)** — Abgleich der vier Antworten gegen den Code (Dunkelmodus, kalibrierter Wert, Test-Suite waren bereits erledigt); umgesetzt: `MeasurementDao.fuerSessionAbFlow` begrenzt den Datenpfad des Live-Cockpits auf ein gerastertes 4-Stunden-Fenster statt bei jedem Batch die volle Session zu laden, `pegelEinheit()` leitet „dBA“/„dBC“/„dB“ im Tagesbericht aus `meterWeighting` ab statt es hart anzuhängen |
 | [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | **Funktionsvorschläge und Auftrag für M10 (offen)** — 15 Vorschläge in drei Stufen nach Migrationsbedarf, Umsetzungsauftrag für Stufe 1 (ohne Room-Migration), offene Owner-Entscheidungen |

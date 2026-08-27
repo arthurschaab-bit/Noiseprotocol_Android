@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import android.Manifest
 import android.app.AlarmManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -44,6 +45,7 @@ fun OemDeviceHelperCard(
             manufacturer.contains("Redmi", ignoreCase = true) ||
             manufacturer.contains("POCO", ignoreCase = true)
     }
+    val oemHinweis = remember { leiteOemAutostartHinweisAb(manufacturer) }
 
     val hasVibrator = remember {
         val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -74,7 +76,8 @@ fun OemDeviceHelperCard(
         powerManager?.isIgnoringBatteryOptimizations(context.packageName) != true
     }
 
-    val hasIssues = !hasNotificationPermission || !canExactAlarm || isBatteryOptimized || (!hasVibrator && isXiaomi)
+    val hasIssues = !hasNotificationPermission || !canExactAlarm || isBatteryOptimized ||
+        (!hasVibrator && isXiaomi) || oemHinweis != null
 
     Card(
         modifier = modifier
@@ -216,15 +219,18 @@ fun OemDeviceHelperCard(
                     }
                 }
 
-                if (isXiaomi) {
+                if (oemHinweis != null) {
                     OutlinedButton(
                         onClick = {
                             try {
                                 val intent = Intent().apply {
-                                    setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+                                    setClassName(oemHinweis.intentPackage, oemHinweis.intentActivity)
                                 }
                                 context.startActivity(intent)
-                            } catch (_: Exception) {
+                            } catch (_: ActivityNotFoundException) {
+                                // Package/Activity variiert zwischen ROM-Versionen und ist nicht
+                                // garantiert vorhanden - Fallback auf die App-Detailseite, kein
+                                // Absturz (PROMPT_M8.md Aufgabe 2).
                                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                     data = Uri.parse("package:${context.packageName}")
                                 }
@@ -233,7 +239,7 @@ fun OemDeviceHelperCard(
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
-                        Text("Xiaomi / HyperOS Autostart prüfen")
+                        Text(oemHinweis.hinweistext)
                     }
                 }
             }
