@@ -199,6 +199,15 @@ fun bewerteSystemZustand(params: SystemHealthParams): SystemHealthOverview {
         )
     }
 
+    // 7. Diagnose-Log (PROMPT_M10_FUNKTIONEN.md F3: "Diagnose-Log an oder aus?" - rein
+    // informativ, ein deaktiviertes Log ist kein Problem, deshalb immer OK statt WARNING/ERROR.
+    items += HealthCheckItem(
+        id = "diagnose_log",
+        title = "Diagnose-Log",
+        description = if (params.isDiagnoseLoggingActive) "Aktiv" else "Deaktiviert",
+        status = HealthStatus.OK
+    )
+
     // Gesamtauswertung
     val overallStatus = when {
         items.any { it.status == HealthStatus.ERROR } -> HealthStatus.ERROR

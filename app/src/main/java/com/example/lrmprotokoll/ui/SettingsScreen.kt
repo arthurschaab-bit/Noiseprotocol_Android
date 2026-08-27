@@ -46,6 +46,11 @@ import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
+import com.example.lrmprotokoll.messreihe.RetentionVorschau
+import com.example.lrmprotokoll.messreihe.SpeicherplatzUebersicht
+import com.example.lrmprotokoll.messreihe.ermittleRetentionVorschau
+import com.example.lrmprotokoll.messreihe.ermittleSpeicherplatz
+import com.example.lrmprotokoll.messreihe.formatiereBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.lrmprotokoll.drive.DriveDatei
@@ -101,6 +106,8 @@ fun SettingsScreen(
     // F5: Auto-Bereinigung & Speicherplatz
     var autoRetentionEnabled by remember { mutableStateOf(settings.autoRetentionEnabled) }
     var autoRetentionDays by remember { mutableFloatStateOf(settings.autoRetentionDays.toFloat()) }
+    var speicherplatz by remember { mutableStateOf<SpeicherplatzUebersicht?>(null) }
+    var retentionVorschau by remember { mutableStateOf<RetentionVorschau?>(null) }
 
     // Alarmierung
     var alarmierungAktiv by remember { mutableStateOf(settings.alarmierungAktiv) }
@@ -889,6 +896,30 @@ fun SettingsScreen(
                     expanded = expRetention,
                     onToggle = { expRetention = !expRetention }
                 ) {
+                    // PROMPT_M10_FUNKTIONEN.md F5: erst beim Aufklappen ermitteln, nicht bei
+                    // jedem Öffnen der Einstellungen - das Zählen der Audiodateien ist Datei-I/O.
+                    LaunchedEffect(expRetention) {
+                        if (expRetention) speicherplatz = ermittleSpeicherplatz(context)
+                    }
+                    speicherplatz?.let { belegung ->
+                        Text(
+                            text = stringResource(
+                                R.string.settings_cleanup_storage_audio,
+                                formatiereBytes(belegung.audioBytes)
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.settings_cleanup_storage_database,
+                                formatiereBytes(belegung.datenbankBytes)
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.settings_cleanup_title), style = MaterialTheme.typography.bodyLarge)
@@ -896,9 +927,22 @@ fun SettingsScreen(
                         }
                         Switch(
                             checked = autoRetentionEnabled,
-                            onCheckedChange = {
-                                autoRetentionEnabled = it
-                                settings.autoRetentionEnabled = it
+                            onCheckedChange = { eingeschaltet ->
+                                if (eingeschaltet) {
+                                    // PROMPT_M10_FUNKTIONEN.md F5: "Vor der ersten Aktivierung
+                                    // zeigen, wie viele Aufnahmen und wie viel Platz das jetzt
+                                    // beträfe" - erst nach Bestätigung im Dialog unten wirklich
+                                    // einschalten, nicht sofort hier.
+                                    scope.launch {
+                                        retentionVorschau = ermittleRetentionVorschau(
+                                            container.database.noiseDao(),
+                                            autoRetentionDays.toInt(),
+                                        )
+                                    }
+                                } else {
+                                    autoRetentionEnabled = false
+                                    settings.autoRetentionEnabled = false
+                                }
                             }
                         )
                     }
@@ -914,6 +958,37 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            retentionVorschau?.let { vorschau ->
+                AlertDialog(
+                    onDismissRequest = { retentionVorschau = null },
+                    title = { Text(stringResource(R.string.settings_cleanup_preview_title)) },
+                    text = {
+                        Text(
+                            stringResource(
+                                R.string.settings_cleanup_preview_text,
+                                vorschau.anzahlAufnahmen,
+                                autoRetentionDays.toInt(),
+                                formatiereBytes(vorschau.audioBytes),
+                            )
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            autoRetentionEnabled = true
+                            settings.autoRetentionEnabled = true
+                            retentionVorschau = null
+                        }) {
+                            Text(stringResource(R.string.settings_cleanup_preview_confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { retentionVorschau = null }) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                    }
+                )
             }
 
             // Sektion 6: Google Drive Synchronisation

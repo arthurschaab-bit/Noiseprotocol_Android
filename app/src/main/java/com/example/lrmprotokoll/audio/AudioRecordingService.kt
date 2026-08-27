@@ -154,6 +154,18 @@ class AudioRecordingService : LifecycleService() {
                 if (state != ConnectionState.STREAMING) letzterMeterFrame = null
             }
         }
+
+        // PROMPT_M10_FUNKTIONEN.md F4: der aktuelle Pegel soll in der Notification stehen, aber
+        // NICHT bei jedem Audio-Buffer (~515 ms) neu gesetzt werden - das kostet spuerbar Akku
+        // und das System drosselt haeufige Notification-Updates ohnehin. Alle 5 Sekunden reicht,
+        // um "live" zu wirken, ohne die Update-Rate von connectionSupervisor.state (nur bei
+        // echten Zustandswechseln) zu erhoehen.
+        lifecycleScope.launch {
+            while (isActive) {
+                delay(5000L)
+                if (isForegroundActive) updateNotification(connectionSupervisor.state.value)
+            }
+        }
     }
 
     /**
@@ -355,16 +367,22 @@ class AudioRecordingService : LifecycleService() {
         }
         val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
-        val contentText = if (settingsManager.meterDeviceAddress != null) {
-            "Überwacht die Umgebungslautstärke. Messgerät: ${meterState.label()}"
+        val contentText = leiteNotificationTextAb(
+            istMessgeraetGepinnt = settingsManager.meterDeviceAddress != null,
+            meterState = meterState,
+            meterPegel = letzterMeterFrame?.level,
+            mikrofonPegel = _currentMicDb.value,
+        )
+        val icon = if (istNotificationZustandGestoert(meterState)) {
+            android.R.drawable.stat_sys_warning
         } else {
-            "Die App überwacht die Umgebungslautstärke im Hintergrund."
+            android.R.drawable.ic_btn_speak_now
         }
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Lärm-Monitoring aktiv")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(icon)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stoppen", stopPendingIntent)
             .build()
