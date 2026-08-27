@@ -72,10 +72,23 @@ existiert wieder.
 **Kein Auftrag.** Der Befund A12 in `PROMPT_M9_UX.md` ist sachlich falsch und wird mit diesem
 Commit korrigiert (siehe Teil B Aufgabe 3).
 
-### A5 · Neu aufgefallen: der Tagesbericht behauptet „dBA", obwohl das Projekt das nirgends belegt
+### A5 · Neu aufgefallen: der Tagesbericht behauptet „dBA", ohne das je Datensatz zu prüfen
 
-Dieser Befund stammt nicht vom Owner, sondern aus dem Abgleich zu A2. Er wiegt schwer, weil er
-genau die Ehrlichkeit verletzt, die sich dieses Projekt an jeder anderen Stelle auferlegt.
+> **Korrektur, nachträglich, nach Umsetzung:** Dieser Abschnitt unterstellte ursprünglich, die
+> A/C-Zuordnung des PCE-323 sei insgesamt noch unbestätigt („Checkliste Teil B2 steht aus"). Das
+> war zum Zeitpunkt dieses Dokuments bereits falsch — `Pce323Profile.MODE_ASSUMPTION_CONFIRMED`
+> stand schon in Commit `762b465` (der Basis dieses Dokuments) auf `true`, mit KDoc-Beleg: „Vom
+> Owner am 2026-08-20 im Gerätetest bestätigt (dB(A)/dB(C) und Fast/Slow stimmten live exakt mit
+> der Geräteanzeige überein, siehe `docs/PROTOKOLL_PCE-323.md` Abschnitt 10)". Hätte ich das vor
+> dem Schreiben geprüft statt es aus einem älteren Stand zu übernehmen, wäre dieser Abschnitt
+> nie in dieser Schärfe entstanden. Der **Kern des Befunds bleibt trotzdem gültig** und ist unten
+> unverändert stehen gelassen: `ReportManager.kt:42,100` leitet die Einheit nicht aus dem
+> Datensatz ab, sondern hängt sie hart an — das ist heute (Flag global `true`) folgenlos, wäre
+> aber falsch für jeden Datensatz, dessen `meterWeighting` `null` ist (z. B. Altbestand von vor
+> der Bestätigung). Deshalb bleibt Aufgabe 2 bestehen, jetzt als Robustheits-/Korrektheitsfix,
+> nicht mehr als Ehrlichkeitsdringlichkeit.
+
+Dieser Befund stammt nicht vom Owner, sondern aus dem Abgleich zu A2.
 
 **[C]** `report/ReportManager.kt:42` schreibt in den Tagesbericht:
 
@@ -92,10 +105,13 @@ Frequenzbewertung behauptet: `MeterScreen.kt:311` (`frame.weighting.takeIf { fra
 speichert die Bewertung konsequent als `null`, solange sie unbestätigt ist — die README hält
 das als ausdrückliche Warnung fest.
 
-Der Tagesbericht ist damit die **einzige** Stelle der App, die „dBA" behauptet — und
-ausgerechnet die, die als Beleg gegenüber Dritten gedacht ist. Solange die Zuordnung, welcher
-Bytewert A und welcher C bedeutet, nur eine Annahme ist (Checkliste Teil B2 steht aus), ist das
-eine Aussage, die die Datenlage nicht trägt.
+Der Tagesbericht ist damit die **einzige** Stelle der App, die eine Einheit unabhängig vom
+Datensatz anhängt statt sie aus `NoiseRecord.meterWeighting` abzuleiten — genau dem Feld, das
+M4 pro Datensatz `null` lässt, solange die Bewertung zum Zeitpunkt DIESES Messwerts unbestätigt
+war. Die A/C-Zuordnung selbst ist inzwischen global bestätigt (siehe Korrekturhinweis oben), aber
+`meterWeighting` bleibt die pro Datensatz korrekte Quelle — für Altbestand von vor der
+Bestätigung ebenso wie für den (heute rein hypothetischen) Fall, dass die Zuordnung je wieder
+zurückgesetzt würde. Ein hart angehängtes „dBA" merkt davon nichts.
 
 ---
 
@@ -277,8 +293,9 @@ Aufgabe 1 ausdrücklich, das *nicht* zu tun.
 - **Der Kontrast des Dunkelmodus ist ungeprüft.** Das Farbschema existiert (A3), ob die
   Kombinationen die 4,5:1 erreichen, ist eine visuelle Prüfung und steht weiter in
   `PROMPT_M9_UX.md` Aufgabe 2.
-- **Die A/C-Zuordnung des PCE-323 bleibt unbestätigt.** Aufgabe 2 macht den Bericht ehrlich,
-  sie löst die offene Messfrage nicht. Dafür braucht es Teil B2 der
-  [Gerätetest-Checkliste](CHECKLISTE_GERAETETEST.md). Erst danach darf irgendwo „dBA" stehen.
+- **Die A/C-Zuordnung des PCE-323 ist bestätigt** (`Pce323Profile.MODE_ASSUMPTION_CONFIRMED =
+  true`, siehe Korrekturhinweis bei A5) — anders als eine frühere Fassung dieses Abschnitts
+  behauptete. Aufgabe 2 ist damit kein Warten mehr auf eine offene Messfrage, sondern macht den
+  Bericht robust gegenüber Altbestand und einem hypothetischen künftigen Zurücksetzen des Flags.
 - **Der Rest von M9 und ganz M10 sind unberührt.** Dieses Dokument deckt nur ab, was der Owner
   entschieden hat.

@@ -109,6 +109,57 @@ class AkustischeKennwerteTest {
     }
 
     @Test
+    fun leqUndMaxLeereListeLiefertNullwerte() {
+        val k = AkustischeKennwerte.leqUndMax(emptyList())
+        assertNull(k.leqDb)
+        assertNull(k.maxDb)
+        assertEquals(0, k.sampleCount)
+    }
+
+    @Test
+    fun leqUndMaxLiefertDenselbenLeqUndMaxWieBerechne() {
+        // leqUndMax() ist der schnelle, unsortierte Pfad fuer das Live-Cockpit (PROMPT_M9A.md
+        // Aufgabe 1) - er darf fuer LAeq und Max nichts anderes ausrechnen als berechne(),
+        // nur eben ohne die beiden Sortierungen.
+        val werte = listOf(
+            messwert(0, 55.0), messwert(1, 80.0), messwert(2, 40.0), messwert(3, 65.0), messwert(4, 55.0),
+        )
+        val voll = AkustischeKennwerte.berechne(werte)
+        val schnell = AkustischeKennwerte.leqUndMax(werte)
+
+        assertEquals(voll.leqDb!!, schnell.leqDb!!, 0.0000001)
+        assertEquals(voll.maxDb!!, schnell.maxDb!!, 0.0000001)
+        assertEquals(voll.sampleCount, schnell.sampleCount)
+    }
+
+    @Test
+    fun leqUndMaxLaesstPerzentileUndUeberschreitungsdauerBewusstAus() {
+        // Wer L10/L50/L90 oder die Ueberschreitungsdauer braucht, muss weiterhin berechne()
+        // aufrufen - leqUndMax() taeuscht diese Werte nicht mit einer erfundenen Naeherung vor.
+        val k = AkustischeKennwerte.leqUndMax(listOf(messwert(0, 55.0), messwert(1, 65.0)))
+        assertNull(k.minDb)
+        assertNull(k.l10Db)
+        assertNull(k.l50Db)
+        assertNull(k.l90Db)
+        assertEquals(0L, k.ueberschreitungsdauerMs)
+    }
+
+    @Test
+    fun leqUndMaxFunktioniertUnabhaengigVonDerEingabereihenfolge() {
+        // Anders als berechne() sortiert leqUndMax() nicht nach Zeit - Max und LAeq duerfen
+        // trotzdem nicht von der Reihenfolge abhaengen.
+        val sortiert = listOf(messwert(0, 40.0), messwert(1, 90.0), messwert(2, 60.0))
+        val unsortiert = listOf(messwert(2, 60.0), messwert(0, 40.0), messwert(1, 90.0))
+
+        val kSortiert = AkustischeKennwerte.leqUndMax(sortiert)
+        val kUnsortiert = AkustischeKennwerte.leqUndMax(unsortiert)
+
+        assertEquals(kSortiert.leqDb!!, kUnsortiert.leqDb!!, 0.0000001)
+        assertEquals(kSortiert.maxDb!!, kUnsortiert.maxDb!!, 0.0000001)
+        assertEquals(90.0, kUnsortiert.maxDb!!, 0.0001)
+    }
+
+    @Test
     fun leereAggregatlisteLiefertNullwerte() {
         val k = AkustischeKennwerte.ausAggregaten(emptyList())
         assertNull(k.leqDb)

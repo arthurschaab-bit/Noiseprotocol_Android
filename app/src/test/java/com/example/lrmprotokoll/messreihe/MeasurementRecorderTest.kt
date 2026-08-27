@@ -57,6 +57,7 @@ class MeasurementRecorderTest {
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) { geschrieben += messwerte }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
+        override fun fuerSessionAbFlow(sessionId: Long, ab: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = geschrieben.filter { it.timestamp in von until bis }
         override suspend fun aelterAls(grenze: Long) = geschrieben.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { geschrieben.removeAll { it.timestamp < grenze } }

@@ -310,17 +310,18 @@ verschweigt.
 - **[C]** Compose-BOM `2024.05.00` (`app/build.gradle.kts:101`) bei compileSdk 36 / Kotlin 2.2 —
   siehe Teil C, Entscheidung 3.
 
-### A12 — Was den Testrahmen dieses Meilensteins verändert hat
+### A12 — korrigiert: die instrumentierte Test-Suite war nie gelöscht
 
-**[C]** Die instrumentierte UI-Test-Suite existiert nicht mehr. `app/src/androidTest/…/ui/` ist
-mit PR #43–#46 vollständig entfernt worden (übrig ist nur `ExampleInstrumentedTest.kt`), und
-`.github/workflows/emulator-tests.yml` ebenfalls. `docs/TESTPLAN_INSTRUMENTIERT.md` beschreibt
-damit einen Stand, den es nicht mehr gibt.
-
-Für M9 heißt das: **Absicherung läuft über die Robolectric-Compose-Tests** in
-`app/src/test/…/ui/*ComposeTest.kt`, die es weiterhin gibt und die in der normalen `test`-Suite
-mitlaufen. Nicht versuchen, die gelöschte androidTest-Suite wiederzubeleben — ob und wie sie
-zurückkommt, ist eine eigene Entscheidung und nicht Teil dieses Meilensteins.
+> **Korrektur (siehe `docs/PROMPT_M9A.md` A4).** Dieser Abschnitt behauptete ursprünglich, die
+> instrumentierte UI-Test-Suite sei „mit PR #43–#46 vollständig entfernt worden". Das war
+> falsch: der Merge von PR #38, der die Suite gebracht hatte, ist schlicht nie in `main`
+> gelandet (`git merge-base --is-ancestor 4c60f3e origin/main` schlägt fehl — kein Vorfahre).
+> Es wurde also nichts gelöscht, weil die Arbeit dort nie ankam. Inzwischen liegt sie auf
+> `main`: 10 Testklassen unter `app/src/androidTest/…/ui/` plus `.github/workflows/emulator-tests.yml`.
+> **Für M9 heißt das:** Die instrumentierte Suite existiert und läuft in CI — sie ist beim
+> Umsetzen zu pflegen wie jede andere Testsuite auch, nicht zu ignorieren. Wo Aufgaben in
+> diesem Dokument Texte oder `contentDescription`s verschieben (Aufgabe 3, 5), auf Treffer in
+> `app/src/androidTest/…/ui/*.kt` genauso achten wie auf `app/src/test/…/ui/*ComposeTest.kt`.
 
 ---
 
