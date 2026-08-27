@@ -319,7 +319,12 @@ Am Schwellen-Slider in SettingsScreen:
 - Nicht vergessen: seit PR #43 gibt es KEINEN eigenen Messgerät-Schwellwert mehr (bei
   bestehender Verbindung wird durchgehend aufgezeichnet). Keinen wieder einführen.
 
-=== AUFGABE 2: Suche und Filter-Vorlagen (F2) ===
+=== AUFGABE 2: Suche und Filter-Vorlagen (F2) — erledigt ===
+
+> **Nachtrag:** Bereits vollständig umgesetzt, bevor dieser Auftragstext geschrieben wurde
+> (parallele Arbeit) - `messreihe/RecordFilter.kt` (reine, JVM-getestete `filtereNoiseRecords()`
+> mit Suche über label/detectedLabel/notes, meterConnected/calibratedDbA/Favoriten-Filtern),
+> Filterzustand in `SettingsManager` persistiert. Kein Nacharbeitsbedarf.
 
 Auf dem Start-Screen:
 - Suchfeld über label und detectedLabel.
@@ -332,7 +337,14 @@ Auf dem Start-Screen:
 - Die gesamte Filterung als reine Funktion (Liste rein, Liste raus), JVM-getestet. Nicht
   wieder inline im Composable wie heute in MainActivity.
 
-=== AUFGABE 3: Selbstprüfung (F3) ===
+=== AUFGABE 3: Selbstprüfung (F3) — erledigt ===
+
+> **Nachtrag:** `diagnose/SystemHealthChecker.kt` (`bewerteSystemZustand()`) deckte bereits fast
+> alle Zeilen ab (Berechtigungen, Akku, exakte Alarme, Bluetooth-Adapter, Messgerät-Verbindung,
+> Alarmierung, Drive-Sync), plus den Start-Screen-Warnbanner bei "Problem" während laufender
+> Überwachung. **Nachgezogen in dieser Session:** die fehlende Diagnose-Log-Zeile (Parameter
+> existierte, wurde aber nie ausgewertet) und die Position - die Checkliste stand am Ende von
+> `DiagnoseScreen.kt`, jetzt als erstes `item{}` der LazyColumn, wie im Auftrag gefordert.
 
 Neue Prüfliste ganz oben auf DiagnoseScreen, je Zeile Zustand (ok / Hinweis / Problem), Text
 und, wo möglich, ein Knopf, der es behebt:
@@ -351,7 +363,15 @@ das Wegklicken an.
 Die Auswertung (Einzelzustände rein, Zeilen und Gesamtbewertung raus) als reine Funktion,
 JVM-getestet, inklusive der Fälle "alles ok" und "mehrere Probleme gleichzeitig".
 
-=== AUFGABE 4: Notification-Aktionen (F4) ===
+=== AUFGABE 4: Notification-Aktionen (F4) — erledigt ===
+
+> **Nachtrag:** Die "Beenden"-Aktion existierte bereits. **Nachgezogen in dieser Session:**
+> aktueller Pegel im Notification-Text (Mikrofon oder Messgerät, je nachdem was gepinnt ist),
+> als reine Funktion `leiteNotificationTextAb()` in `audio/NotificationText.kt` ausgelagert und
+> JVM-getestet. Aktualisierung alle 5 Sekunden statt pro Audio-Buffer (~515 ms) über eine
+> separate periodische Coroutine, NICHT über die vorhandene, nur bei echten Zustandswechseln
+> feuernde `connectionSupervisor.state`-Subscription erhöht. DEGRADED/FAILED bekommen ein
+> Warn-Icon (`android.R.drawable.stat_sys_warning`) statt nur eine geänderte Textzeile.
 
 In AudioRecordingService.buildNotification():
 - Aktion "Beenden" als echte Notification-Action (der Stop-Intent existiert bereits).
@@ -361,7 +381,17 @@ In AudioRecordingService.buildNotification():
 - Bei DEGRADED/FAILED sichtbar unterscheidbar werden, nicht nur eine geänderte Textzeile.
 - Die Aktion "Ereignis markieren" gehört zu F6 und ist NICHT Teil dieses Auftrags.
 
-=== AUFGABE 5: Speicherplatz und Aufräumen (F5) ===
+=== AUFGABE 5: Speicherplatz und Aufräumen (F5) — erledigt ===
+
+> **Nachtrag:** Die automatische Löschung über `RetentionWorker` (mit Schutz für Label/Favoriten)
+> existierte bereits. **Nachgezogen in dieser Session:** Speicherplatzanzeige (Audio getrennt von
+> Datenbank, `messreihe/SpeicherplatzUebersicht.kt`) und die Vorschau vor dem Einschalten
+> (`ermittleRetentionVorschau()`, als Bestätigungsdialog beim Umlegen des Schalters). Ein
+> Unterschied zur ursprünglichen Sorge unten: F9 (Papierkorb) existiert inzwischen ebenfalls -
+> die Auto-Bereinigung verschiebt in den Papierkorb (weiches Löschen), löscht also nicht sofort
+> endgültig. Das Risiko "Datenverlust mit Einstellungsschalter" ist dadurch bereits durch eine
+> zweite Sicherheitsstufe (30 Tage Papierkorb-Frist) abgefedert - die Vorschau bleibt trotzdem
+> sinnvoll, weil "verschoben" ohne Zahl dahinter immer noch unbestimmt beunruhigend wäre.
 
 In den Einstellungen, eigener Abschnitt:
 - Belegter Platz, getrennt nach Audiodateien und Datenbank.

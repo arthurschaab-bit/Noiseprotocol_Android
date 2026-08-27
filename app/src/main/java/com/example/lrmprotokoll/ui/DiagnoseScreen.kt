@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,8 @@ import kotlinx.coroutines.withContext
  * Enthält Live-Status, Remote-Diagnose, Diagnose-Log, F3 System-Selbstprüfung, F15 Alarm-Historie
  * und Google Drive Sync-Historie.
  */
+const val DIAGNOSE_LAZY_COLUMN_TAG = "diagnose_lazy_column"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnoseScreen(
@@ -156,7 +159,72 @@ fun DiagnoseScreen(
             )
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
+        LazyColumn(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp)
+                .testTag(DIAGNOSE_LAZY_COLUMN_TAG)
+        ) {
+            // Sektion: F3 System-Selbstprüfung Checkliste
+            item {
+                Text(stringResource(R.string.diagnose_self_check_header), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        healthOverview.items.forEach { checkItem ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(
+                                        imageVector = when (checkItem.status) {
+                                            HealthStatus.OK -> Icons.Default.Check
+                                            HealthStatus.WARNING -> Icons.Default.Warning
+                                            HealthStatus.ERROR -> Icons.Default.Close
+                                        },
+                                        contentDescription = null,
+                                        tint = when (checkItem.status) {
+                                            HealthStatus.OK -> MaterialTheme.colorScheme.statusColors.connected
+                                            HealthStatus.WARNING -> MaterialTheme.colorScheme.statusColors.warning
+                                            HealthStatus.ERROR -> MaterialTheme.colorScheme.error
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(checkItem.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(checkItem.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+
+                                checkItem.actionLabel?.let { label ->
+                                    TextButton(onClick = {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", context.packageName, null)
+                                        }
+                                        context.startActivity(intent)
+                                    }) {
+                                        Text(label)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                OemDeviceHelperCard()
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             item {
                 Text(stringResource(R.string.diagnose_state_header), style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(4.dp))
@@ -289,66 +357,6 @@ fun DiagnoseScreen(
                 }
             }
             items(diagnoseLog) { eintrag -> DiagnoseLogZeile(eintrag) }
-
-            // Sektion: F3 System-Selbstprüfung Checkliste
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(stringResource(R.string.diagnose_self_check_header), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        healthOverview.items.forEach { checkItem ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Icon(
-                                        imageVector = when (checkItem.status) {
-                                            HealthStatus.OK -> Icons.Default.Check
-                                            HealthStatus.WARNING -> Icons.Default.Warning
-                                            HealthStatus.ERROR -> Icons.Default.Close
-                                        },
-                                        contentDescription = null,
-                                        tint = when (checkItem.status) {
-                                            HealthStatus.OK -> MaterialTheme.colorScheme.statusColors.connected
-                                            HealthStatus.WARNING -> MaterialTheme.colorScheme.statusColors.warning
-                                            HealthStatus.ERROR -> MaterialTheme.colorScheme.error
-                                        },
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(checkItem.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                        Text(checkItem.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-
-                                checkItem.actionLabel?.let { label ->
-                                    TextButton(onClick = {
-                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.fromParts("package", context.packageName, null)
-                                        }
-                                        context.startActivity(intent)
-                                    }) {
-                                        Text(label)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                OemDeviceHelperCard()
-            }
 
             // Sektion: Alarm-Historie (F15)
             item {

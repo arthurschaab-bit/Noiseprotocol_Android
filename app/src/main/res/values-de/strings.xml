@@ -223,6 +223,11 @@
     <string name="settings_cleanup_title">Automatische Bereinigung</string>
     <string name="settings_cleanup_desc">Verschiebt alte Aufnahmen automatisch in den Papierkorb (Favoriten sind geschützt)</string>
     <string name="settings_cleanup_days">Aufbewahrungsdauer: %1$d Tage</string>
+    <string name="settings_cleanup_storage_audio">Audiodateien: %1$s</string>
+    <string name="settings_cleanup_storage_database">Datenbank: %1$s</string>
+    <string name="settings_cleanup_preview_title">Automatische Bereinigung aktivieren?</string>
+    <string name="settings_cleanup_preview_text">%1$d Aufnahmen älter als %2$d Tage (%3$s) würden ab jetzt automatisch in den Papierkorb verschoben. Favoriten und Aufnahmen mit Label bleiben davon ausgenommen. Aus dem Papierkorb sind sie noch 30 Tage lang wiederherstellbar.</string>
+    <string name="settings_cleanup_preview_confirm">Aktivieren</string>
     <string name="settings_drive_title">Google Drive Synchronisation</string>
     <string name="settings_drive_desc">Automatischer CSV- &amp; WAV-Upload in Ihren Google Drive Ordner</string>
     <string name="settings_drive_connect">Mit Google verbinden</string>
