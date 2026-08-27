@@ -190,20 +190,4 @@ class NoiseClassifier(private val context: Context) : SoundClassifier {
             return null
         }
     }
-
-    suspend fun classifyUnclassifiedBatch(noiseDao: com.example.lrmprotokoll.data.NoiseDao): Int {
-        val unclassified = noiseDao.getAlleAktiven().filter { it.detectedLabel == null && it.label == null }
-        var count = 0
-        for (record in unclassified) {
-            val file = File(record.filePath)
-            if (file.exists() && file.isFile) {
-                val detected = classify(file)
-                if (detected != null) {
-                    noiseDao.update(record.copy(detectedLabel = detected))
-                    count++
-                }
-            }
-        }
-        return count
-    }
 }

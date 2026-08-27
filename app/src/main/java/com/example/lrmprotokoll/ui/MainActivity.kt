@@ -9,7 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -77,7 +77,15 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-class MainActivity : ComponentActivity() {
+// Bugfix (UX-Feedback): AppCompatDelegate.setApplicationLocales() (Sprachumschaltung Deutsch/
+// Englisch in den Einstellungen) wirkt unterhalb von Android 13 (API 33) nur, wenn die Activity
+// AppCompatActivity erbt - AppCompat wrappt den Base-Context dort in attachBaseContext() mit der
+// gewaehlten Locale. Eine reine ComponentActivity bekommt dieses Wrapping nicht: die Einstellung
+// wurde zwar gespeichert, aber nie tatsaechlich angewendet ("Umstellung auf Englisch passiert
+// nichts"). Theme.Material3.DayNight ist selbst ein Nachfahre von Theme.AppCompat, daher hier
+// unproblematisch; setContent()/enableEdgeToEdge() bleiben unveraendert nutzbar, da
+// AppCompatActivity ueber FragmentActivity weiterhin eine ComponentActivity ist.
+class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as LaermprotokollApp).container
@@ -94,7 +102,15 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    // UX-Feedback: alle Texte sollen markierbar/kopierbar sein - ein einzelner
+                    // Wrap um die gesamte Navigation deckt jeden Screen ab, statt jeden Screen
+                    // einzeln zu aendern. SelectionContainer greift nur an `Text()`, TextField/
+                    // BasicTextField verwalten ihre eigene Selektion unabhaengig davon; Klicks
+                    // (Buttons, NavigationBar, etc.) bleiben unberuehrt, da die Textauswahl per
+                    // Long-Press+Drag ausgeloest wird, nicht per Tap.
+                    SelectionContainer {
+                        AppNavigation()
+                    }
                 }
             }
         }
@@ -319,6 +335,10 @@ fun NoiseProtocolApp(
 
     val selectedIds = remember { mutableStateListOf<Long>() }
     val collapsedDays = remember { mutableStateListOf<String>() }
+    // UX-Feedback: Tagesweise KI-Klassifizierung (ersetzt den entfernten globalen Batch-Button
+    // aus den Einstellungen) - der Tag, fuer den gerade klassifiziert wird, damit der Button in
+    // genau dieser Tagesgruppe einen Ladezustand zeigt statt eines globalen Spinners.
+    val klassifizierendeTage = remember { mutableStateListOf<String>() }
 
     // F2: Persistenter Filter-State
     var filterState by remember {
@@ -874,6 +894,48 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
+                            val unklassifizierteDesTages = dailyRecords.filter {
+                                it.detectedLabel == null && it.label == null && it.filePath.isNotBlank()
+                            }
+                            if (unklassifizierteDesTages.isNotEmpty()) {
+                                val wirdKlassifiziert = klassifizierendeTage.contains(date)
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            klassifizierendeTage.add(date)
+                                            try {
+                                                var count = 0
+                                                for (record in unklassifizierteDesTages) {
+                                                    val file = File(record.filePath)
+                                                    if (file.exists() && file.isFile) {
+                                                        val detected = classifier.classify(file)
+                                                        if (detected != null) {
+                                                            dao.update(record.copy(detectedLabel = detected))
+                                                            count++
+                                                        }
+                                                    }
+                                                }
+                                                val msg = if (count > 0) {
+                                                    context.getString(R.string.ai_batch_day_result, count, date)
+                                                } else {
+                                                    context.getString(R.string.ai_batch_day_result_empty)
+                                                }
+                                                onShowSnackbar(msg, null, null)
+                                            } finally {
+                                                klassifizierendeTage.remove(date)
+                                            }
+                                        }
+                                    },
+                                    enabled = !wirdKlassifiziert,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    if (wirdKlassifiziert) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch_day))
+                                    }
+                                }
+                            }
                             IconButton(
                                 onClick = { reportTargetRecords = dailyRecords },
                                 modifier = Modifier.size(36.dp)

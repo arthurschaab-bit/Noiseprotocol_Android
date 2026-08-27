@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
@@ -40,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.time.Duration
 import java.util.Date
@@ -60,8 +62,13 @@ fun ProtokollDetailScreen(
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
     val export = remember { MessreiheExport(context) }
+    val classifier = remember { NoiseClassifier(context) }
     val supervisor = container.connectionSupervisor
     val connectionState by supervisor.state.collectAsState()
+
+    // UX-Feedback: pro Aufnahme "jetzt klassifizieren" statt des entfernten globalen
+    // Batch-Buttons in den Einstellungen - IDs, fuer die gerade eine Klassifizierung laeuft.
+    val klassifizierendeIds = remember { mutableStateListOf<Long>() }
 
     var session by remember { mutableStateOf<SessionEntity?>(null) }
     var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
@@ -341,6 +348,42 @@ fun ProtokollDetailScreen(
                                         text = stringResource(R.string.protocol_notes_label, record.notes),
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                            }
+
+                            if (record.label == null && record.detectedLabel == null && record.filePath.isNotBlank()) {
+                                val wirdKlassifiziert = klassifizierendeIds.contains(record.id)
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            klassifizierendeIds.add(record.id)
+                                            try {
+                                                val file = File(record.filePath)
+                                                val detected = if (file.exists() && file.isFile) {
+                                                    withContext(Dispatchers.IO) { classifier.classify(file) }
+                                                } else {
+                                                    null
+                                                }
+                                                if (detected != null) {
+                                                    container.database.noiseDao().update(record.copy(detectedLabel = detected))
+                                                }
+                                            } finally {
+                                                klassifizierendeIds.remove(record.id)
+                                            }
+                                        }
+                                    },
+                                    enabled = !wirdKlassifiziert,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    if (wirdKlassifiziert) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = stringResource(R.string.action_ai_classify_now),
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                        )
+                                    }
                                 }
                             }
                         }

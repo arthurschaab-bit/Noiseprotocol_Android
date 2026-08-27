@@ -281,6 +281,15 @@ Abhängigkeits-Stil des Projekts.
   echten Homescreen-Widgethost simulieren — dieselbe Einschränkung gilt bereits für die
   Schnelleinstellungs-Kachel (`service/NoiseMonitoringTileService.kt`), für die ebenfalls kein
   Test existiert.
+- **UX-Review-Korrekturen (Nutzer-Feedback anhand von Gerät-Screenshots) sind nur durch
+  `assembleDebug`/JVM-Tests verifiziert, nicht visuell am Gerät geprüft:** app-weite
+  Text-Selektierbarkeit (`SelectionContainer` um `AppNavigation` in `MainActivity.kt`), die
+  tagesweise/pro-Aufnahme-KI-Klassifizierung in `MainActivity.kt`/`ProtokollDetailScreen.kt`
+  anstelle des entfernten globalen Batch-Buttons in den Einstellungen, sowie der Bugfix, dass
+  `MainActivity` nun `AppCompatActivity` statt `ComponentActivity` erbt (die
+  Sprachumschaltung Deutsch/Englisch über `AppCompatDelegate.setApplicationLocales()` griff
+  unterhalb von Android 13 sonst nicht, weil das dafür nötige Context-Wrapping in
+  `attachBaseContext()` nur `AppCompatActivity` bereitstellt).
 
 ---
 

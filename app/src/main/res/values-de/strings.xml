@@ -63,7 +63,7 @@
     <string name="status_meter_badge">• PCE-323</string>
 
     <!-- LiveCockpit & Start Screen -->
-    <string name="cockpit_title">Lärmprotokoll</string>
+    <string name="cockpit_title">Überwachung</string>
     <string name="cockpit_subtitle_live">Live-Messung</string>
     <string name="cockpit_subtitle_ready">System bereit</string>
     <string name="cockpit_measuring_running">MESSUNG LÄUFT</string>
@@ -380,6 +380,10 @@
     <string name="learned_patterns_count">Gelernte Geräusch-Muster (%1$d)</string>
     <string name="ai_classified_count">%1$d Aufnahme(n) durch KI klassifiziert</string>
     <string name="action_ai_batch">KI-Batch-Erkennung</string>
+    <string name="action_ai_batch_day">Unklassifizierte Aufnahmen dieses Tages jetzt klassifizieren</string>
+    <string name="ai_batch_day_result">%1$d Aufnahme(n) für %2$s klassifiziert</string>
+    <string name="ai_batch_day_result_empty">Keine der ausgewählten Aufnahmen konnte klassifiziert werden</string>
+    <string name="action_ai_classify_now">Jetzt klassifizieren</string>
     <string name="action_learn_pattern">+ Muster lernen</string>
     <string name="learn_pattern_title">Geräusch lernen</string>
     <string name="learn_pattern_desc">Geben Sie diesem Geräusch-Muster einen Namen für den automatischen KI-Abgleich:</string>
