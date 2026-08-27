@@ -295,7 +295,17 @@ unverändert grün bleiben und app/schemas/ darf sich nicht ändern. Wenn eine A
 scheinbar ein neues Feld braucht: Das ist ein Denkfehler oder gehört zu Stufe 2 — melden,
 nicht heimlich migrieren.
 
-=== AUFGABE 1: Schwellenwert-Assistent (F1) ===
+=== AUFGABE 1: Schwellenwert-Assistent (F1) — erledigt ===
+
+> **Nachtrag/Korrektur:** Ein Mikrofonpegel-Flow war entgegen der Annahme unten NICHT bereits
+> vorhanden - `AudioRecordingService` berechnete `currentDb` pro Audio-Buffer nur lokal für den
+> Schwellenvergleich, ohne ihn nach außen zu geben. Ergänzt: `AudioRecordingService.currentMicDb`
+> (statischer `StateFlow<Double?>`, `null` solange keine Überwachung läuft, analog zu
+> `laeuft`/`audioAufnahmeAktiv`). Die Vorschlagsknöpfe wirken bewusst NUR auf den Mikrofonpegel,
+> nicht auf `container.meterTransport.frames` (den es wie beschrieben bereits gibt) - die
+> Schwelle wird ausschließlich gegen den Mikrofonpfad geprüft, ein Vorschlag auf Basis des
+> kalibrierten Messgerätewerts läge auf der falschen Skala. Der Messgerätewert wird hier deshalb
+> nicht zusätzlich anzeigt; das wäre eine separate, kleinere Ergänzung.
 
 Am Schwellen-Slider in SettingsScreen:
 - Aktueller Pegel live neben dem Slider, als Zahl und als Marker auf der Skala. Quelle: der

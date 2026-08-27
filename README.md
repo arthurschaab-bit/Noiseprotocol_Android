@@ -159,7 +159,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen, die Google-Anmeldung mit der jetzt echten Client-ID sowie M8s Chaos-Checkliste und 24h-Dauerlauf (Teil C/D) — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M9 | UX-Überarbeitung — **größtenteils erledigt** (Datenpfad, Theme/Dunkelmodus-Infrastruktur, Navigation/Drawer, Start-Screen-Scroll+Leerzustand, App-weiter Snackbar/Papierkorb, Onboarding inkl. Wiederaufruf aus den Einstellungen, kalibrierter Wert sichtbar in Liste+Bericht, Alarmierung direkt unter Aufnahme). Offen: **Farbtokens** sind eingeführt, aber noch nicht in allen Dateien mit hartcodierten Farbliteralen übernommen (Befund A2 — das wäre eine sichtbare Farbänderung, bewusst als Owner-Entscheidung offengelassen), und **String-Ressourcen** für den Drive-Sync-Dialog sowie die Diagnose-Debug-Oberfläche fehlen noch — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | nein |
-| M10 | Neue Funktionen (Vorschlagskatalog + Auftrag Stufe 1) — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | teilweise |
+| M10 | Neue Funktionen, Stufe 1 — F1 (Schwellenwert-Assistent), F2 (Suche/Filter) und F9 (Papierkorb, vorgezogen) erledigt; F3/F4/F5 teilweise (Kernfunktion da, einzelne Punkte offen); F6–F8/F10–F15 nicht begonnen — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 

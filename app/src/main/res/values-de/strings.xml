@@ -197,6 +197,10 @@
     <string name="settings_mode_pro">Pro-Modus</string>
     <string name="settings_section_thresholds">Schwellenwerte &amp; Audio</string>
     <string name="settings_threshold_day">Aufnahme-Schwellenwert (Tag): %1$.1f dB(A)</string>
+    <string name="settings_threshold_current_level">Aktueller Pegel (Mikrofon): %1$.1f dB</string>
+    <string name="settings_threshold_no_live_level">Überwachung starten, um den aktuellen Pegel zu sehen</string>
+    <string name="settings_threshold_use_current">Auf aktuellen Pegel</string>
+    <string name="settings_threshold_use_current_plus_5">+5 dB über aktuell</string>
     <string name="settings_ta_laerm_presets">Grenzwerte nach Wohnraum (TA Lärm)</string>
     <string name="settings_trigger_source_title">Trigger-Quelle für Audioaufnahmen:</string>
     <string name="settings_trigger_source_auto">Automatisch (Standard)</string>
