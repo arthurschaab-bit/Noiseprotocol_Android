@@ -44,6 +44,7 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.backup.SicherungManager
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
 import com.example.lrmprotokoll.messreihe.RetentionVorschau
@@ -150,6 +151,11 @@ fun SettingsScreen(
     var expDrive by remember { mutableStateOf(false) }
     var expSystem by remember { mutableStateOf(false) }
     var expHilfe by remember { mutableStateOf(false) }
+    var expSicherung by remember { mutableStateOf(false) }
+
+    // F13 Sicherung und Wiederherstellung
+    var sicherungLaeuft by remember { mutableStateOf(false) }
+    var ausstehendeWiederherstellungUri by remember { mutableStateOf<Uri?>(null) }
 
     suspend fun verarbeiteDriveEinrichtungsVersuch(ordner: String = driveOrdnerName) {
         when (val versuch = versucheDriveEinrichtung(container, settings, ordner, context)) {
@@ -213,6 +219,29 @@ fun SettingsScreen(
             driveZustimmungLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
             ausstehendeZustimmung = null
         }
+    }
+
+    // F13 Sicherung: SAF-Dialog zum Wählen des Speicherorts, das eigentliche Schreiben passiert
+    // in SicherungManager.erstelleSicherung.
+    val sicherungErstellenLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                sicherungLaeuft = true
+                val ergebnis = SicherungManager.erstelleSicherung(context, uri, settings)
+                sicherungLaeuft = false
+                onShowSnackbar?.invoke(ergebnis.nachricht)
+            }
+        }
+    }
+
+    // F13 Wiederherstellung: die eigentliche, destruktive Aktion (Datenbank überschreiben)
+    // passiert erst nach Bestätigung im Warn-Dialog unten - hier nur die Datei auswählen.
+    val sicherungEinspielenLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) ausstehendeWiederherstellungUri = uri
     }
 
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
@@ -1112,7 +1141,78 @@ fun SettingsScreen(
                 }
             }
 
-            // Sektion 7: Diagnose & Systemgesundheit
+            // Sektion 7: F13 Sicherung und Wiederherstellung
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_backup_title),
+                summary = stringResource(R.string.settings_backup_summary),
+                expanded = expSicherung,
+                onToggle = { expSicherung = !expSicherung }
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_backup_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = {
+                        val dateiname = "laermprotokoll_sicherung_${System.currentTimeMillis()}.zip"
+                        sicherungErstellenLauncher.launch(dateiname)
+                    },
+                    enabled = !sicherungLaeuft,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.settings_backup_create))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { sicherungEinspielenLauncher.launch(arrayOf("application/zip")) },
+                    enabled = !sicherungLaeuft,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.settings_backup_restore))
+                }
+                if (sicherungLaeuft) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            ausstehendeWiederherstellungUri?.let { uri ->
+                AlertDialog(
+                    onDismissRequest = { ausstehendeWiederherstellungUri = null },
+                    title = { Text(stringResource(R.string.settings_backup_restore_warning_title)) },
+                    text = { Text(stringResource(R.string.settings_backup_restore_warning_text)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            ausstehendeWiederherstellungUri = null
+                            scope.launch {
+                                sicherungLaeuft = true
+                                val ergebnis = SicherungManager.spieleSicherungEin(context, uri, settings)
+                                sicherungLaeuft = false
+                                if (ergebnis.erfolg) {
+                                    SicherungManager.starteNeustart(context)
+                                } else {
+                                    onShowSnackbar?.invoke(ergebnis.nachricht)
+                                }
+                            }
+                        }) {
+                            Text(
+                                stringResource(R.string.settings_backup_restore_confirm),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { ausstehendeWiederherstellungUri = null }) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                    }
+                )
+            }
+
+            // Sektion 8: Diagnose & Systemgesundheit
             SettingsSectionCard(
                 title = stringResource(R.string.settings_section_diagnostics),
                 summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
@@ -1161,7 +1261,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Sektion 8: Hilfe (PROMPT_M9_UX.md Aufgabe 8: Erststart-Onboarding muss aus den
+            // Sektion 9: Hilfe (PROMPT_M9_UX.md Aufgabe 8: Erststart-Onboarding muss aus den
             // Einstellungen jederzeit wieder aufrufbar sein, nicht nur einmalig beim ersten Start)
             if (onShowOnboarding != null) {
                 SettingsSectionCard(

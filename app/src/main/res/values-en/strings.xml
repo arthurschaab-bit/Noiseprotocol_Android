@@ -228,6 +228,14 @@
     <string name="settings_cleanup_preview_title">Enable automatic cleanup?</string>
     <string name="settings_cleanup_preview_text">%1$d recordings older than %2$d days (%3$s) would be moved to the trash automatically from now on. Favorites and labeled recordings are excluded. They stay restorable from the trash for another 30 days.</string>
     <string name="settings_cleanup_preview_confirm">Enable</string>
+    <string name="settings_backup_title">Backup and Restore</string>
+    <string name="settings_backup_summary">Save database and settings to a file</string>
+    <string name="settings_backup_desc">Writes all recordings, sessions and settings to a ZIP file at a location of your choice (e.g. Google Drive, local storage). Replaces the previous adb-based instructions - no terminal needed. Note: the backup file contains the alerting credentials (ntfy) in plain text, so keep it as safe as any other export.</string>
+    <string name="settings_backup_create">Create backup</string>
+    <string name="settings_backup_restore">Restore backup…</string>
+    <string name="settings_backup_restore_warning_title">Really restore?</string>
+    <string name="settings_backup_restore_warning_text">This replaces ALL current recordings, sessions and settings with the content of the selected backup file. This cannot be undone. The app will restart automatically afterwards.</string>
+    <string name="settings_backup_restore_confirm">Yes, restore</string>
     <string name="settings_drive_title">Google Drive Sync</string>
     <string name="settings_drive_desc">Automatic CSV &amp; WAV upload to your Google Drive folder</string>
     <string name="settings_drive_connect">Connect to Google</string>
