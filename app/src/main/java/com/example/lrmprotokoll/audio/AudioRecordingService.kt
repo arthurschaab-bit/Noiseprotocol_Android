@@ -27,6 +27,7 @@ import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.label
 import com.example.lrmprotokoll.messreihe.RetentionPlanung
+import com.example.lrmprotokoll.widget.NoiseMonitoringWidgetProvider
 import java.time.Instant
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -163,7 +164,12 @@ class AudioRecordingService : LifecycleService() {
         lifecycleScope.launch {
             while (isActive) {
                 delay(5000L)
-                if (isForegroundActive) updateNotification(connectionSupervisor.state.value)
+                if (isForegroundActive) {
+                    updateNotification(connectionSupervisor.state.value)
+                    // F14: dieselbe 5-Sekunden-Kadenz wie die Notification, keine eigene
+                    // Alarm-/Timer-Infrastruktur fuer das Homescreen-Widget.
+                    NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
+                }
             }
         }
     }
@@ -250,6 +256,7 @@ class AudioRecordingService : LifecycleService() {
             _audioAufnahmeAktiv.value = false
             _currentMicDb.value = null
             _laeuft.value = false
+            NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -262,6 +269,7 @@ class AudioRecordingService : LifecycleService() {
             settingsManager.audioMonitoringWasActive = false
             diagnosticsReporter.breadcrumb("AudioService", "Audio-Aufnahme gestoppt (Hintergrund-Dienst bleibt aktiv)")
             updateNotification(connectionSupervisor.state.value)
+            NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
             return START_STICKY
         }
 
@@ -289,6 +297,7 @@ class AudioRecordingService : LifecycleService() {
         // alte Rohwerte sollen verdichtet werden, sobald der Dienst ueberhaupt einmal laeuft,
         // unabhaengig davon, ob gerade ein Messgeraet gepinnt oder Drive-Sync aktiv ist.
         com.example.lrmprotokoll.messreihe.RetentionPlanung.plane(applicationContext)
+        NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
         return START_STICKY
     }
 
@@ -790,6 +799,7 @@ class AudioRecordingService : LifecycleService() {
         _audioAufnahmeAktiv.value = false
         _currentMicDb.value = null
         _laeuft.value = false
+        NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
         diagnosticsReporter.breadcrumb("AudioService", "AudioRecordingService wird beendet")
         connectionSupervisor.stop()
         // Der Koordinator wird gestoppt, der Heartbeat aber NICHT: Er meldet "App und Gerät

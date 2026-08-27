@@ -413,4 +413,15 @@
     <string name="no_audio_event_desc">Reine Pegelmessung (Ohne Audiodatei)</string>
     <string name="label_ai_prefix">KI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
+    <string name="period_report_action">Zeitraumbericht erstellen</string>
+    <string name="period_report_dialog_title">Zeitraumbericht</string>
+    <string name="period_report_preset_7_days">Letzte 7 Tage</string>
+    <string name="period_report_preset_30_days">Letzte 30 Tage</string>
+    <string name="period_report_preset_this_month">Dieser Monat</string>
+    <string name="period_report_generating">Bericht wird erstellt…</string>
+    <string name="widget_description">Zeigt Überwachungsstatus und aktuellen Pegel, tippen zum Starten/Stoppen.</string>
+    <string name="widget_status_active">Aktiv</string>
+    <string name="widget_status_inactive">Inaktiv</string>
+    <string name="widget_action_start">Starten</string>
+    <string name="widget_action_stop">Stoppen</string>
 </resources>

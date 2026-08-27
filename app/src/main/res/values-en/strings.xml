@@ -413,4 +413,15 @@
     <string name="no_audio_event_desc">Level Only (No Audio File)</string>
     <string name="label_ai_prefix">AI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
+    <string name="period_report_action">Create period report</string>
+    <string name="period_report_dialog_title">Period Report</string>
+    <string name="period_report_preset_7_days">Last 7 days</string>
+    <string name="period_report_preset_30_days">Last 30 days</string>
+    <string name="period_report_preset_this_month">This month</string>
+    <string name="period_report_generating">Generating report…</string>
+    <string name="widget_description">Shows monitoring status and the current level, tap to start/stop.</string>
+    <string name="widget_status_active">Active</string>
+    <string name="widget_status_inactive">Inactive</string>
+    <string name="widget_action_start">Start</string>
+    <string name="widget_action_stop">Stop</string>
 </resources>

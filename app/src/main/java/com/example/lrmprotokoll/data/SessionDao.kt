@@ -39,6 +39,15 @@ interface SessionDao {
 
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
     fun alle(): Flow<List<SessionEntity>>
+
+    /** Fuer den Zeitraumbericht (F12, PROMPT_M10_FUNKTIONEN.md): alle Sessions, die den Zeitraum
+     * [von, bis) ueberlappen - nicht nur die, deren [SessionEntity.startedAt] darin liegt. Anders
+     * als [MeasurementDao.zwischen]/[MinuteAggregateDao.zwischen] (Zeitpunkt-Werte) hat eine
+     * Session eine Dauer: eine Session, die kurz vor [von] begann und in den Zeitraum hineinlaeuft,
+     * muss fuer die Ausfallbaender-Ableitung trotzdem mitgezaehlt werden. `endedAt IS NULL` heisst
+     * "laeuft noch", also ebenfalls ueberlappend. */
+    @Query("SELECT * FROM sessions WHERE startedAt < :bis AND (endedAt IS NULL OR endedAt >= :von) ORDER BY startedAt")
+    suspend fun zwischen(von: Long, bis: Long): List<SessionEntity>
 }
 
 @Dao

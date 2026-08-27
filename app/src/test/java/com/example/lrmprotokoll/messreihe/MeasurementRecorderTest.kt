@@ -50,6 +50,9 @@ class MeasurementRecorderTest {
         override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
         override fun letzteSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override fun alle() = throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun zwischen(von: Long, bis: Long) = zeilen.values.filter {
+            it.startedAt < bis && (it.endedAt == null || it.endedAt >= von)
+        }
     }
 
     private class FakeMeasurementDao : MeasurementDao {

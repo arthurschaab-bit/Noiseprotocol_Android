@@ -207,7 +207,7 @@ Referenz selbst unbestätigt (README-Warnung, Checkliste Teil B2) — die Funkti
 höchstens „kalibriert gegen PCE-323 (Bewertung unbestätigt)" behaupten. **Deshalb erst nach dem
 Gerätetest umsetzen.**
 
-#### F12 · Wochen- und Monatsbericht mit Diagramm · M · kein Schema
+#### F12 · Wochen- und Monatsbericht mit Diagramm · M · kein Schema — erledigt
 
 Berichte gibt es heute in zwei Formen: ein Tagesbericht als reiner Text
 (`ReportManager.generateDailyReport`) und ein Session-PDF ohne jede Grafik (`MessreiheExport`,
@@ -220,6 +220,24 @@ inklusive Achsenbeschriftung als `PegelverlaufChart` — für ein PDF muss dasse
 `PdfDocument`s `Canvas` gezeichnet werden. Der Aufwand ist dadurch deutlich kleiner geworden.
 **Achtung:** `PdfDocument` ist unter Robolectric nicht testbar (README, verifiziertes Limit) —
 nur am Gerät prüfbar, das gehört so in den PR geschrieben.
+
+> **Nachtrag:** `report/PeriodenBerichtDaten.kt` (`ermittlePeriodenBericht`) fasst mehrere
+> Sessions zu einem Zeitraum zusammen — `downsampleMesswerteFuerChart`/
+> `AkustischeKennwerte.berechne` pruefen keine Session-Zugehoerigkeit und laufen deshalb
+> unveraendert auf der zeitraumuebergreifenden Messwerteliste; nur `leiteAusfallbaenderAb` ist
+> pro Session, daher hier je ueberlappender Session (`SessionDao.zwischen`, neue Query) aufgerufen
+> und die Baender anschliessend auf den angefragten Zeitraum zurechtgeschnitten. `SessionDao.zwischen`
+> filtert bewusst auf Ueberlappung (`startedAt < bis AND (endedAt IS NULL OR endedAt >= von)`), nicht
+> nur auf `startedAt` wie `MeasurementDao.zwischen`/`MinuteAggregateDao.zwischen` — eine Session
+> kann vor dem Zeitraum beginnen und hineinlaufen. `report/PeriodenBerichtExport.kt` zeichnet das
+> Diagramm auf `android.graphics.Canvas`, portiert aus `PegelverlaufChart` (Zoom/Pan und der
+> Live-Puls-Punkt entfallen, ein PDF ist statisch). UI-Einstieg: neue TopAppBar-Aktion in
+> `ProtokollScreen.kt` mit Presets „Letzte 7 Tage"/„Letzte 30 Tage"/„Dieser Monat" — bewusst kein
+> voller Kalender-Datumsbereichspicker (Scope-Begrenzung). Bewusst eine einzelne PDF-Seite wie
+> `MessreiheExport.exportierePdf` — Ausfälle/Ereignisse laufen bis zum unteren Rand, der Rest als
+> „… und N weitere". **Nicht am Gerät geprüft** — `PdfDocument`/das gezeichnete Diagramm sind unter
+> Robolectric nicht testbar (siehe README „Bekannte Einschränkungen"), nur `SessionDao.zwischen`
+> und `ermittlePeriodenBericht` haben JVM-Tests.
 
 #### F13 · Sicherung und Wiederherstellung aus der App · S–M · kein Schema — erledigt
 
@@ -244,11 +262,29 @@ Storage Access Framework-Dialog; „Sicherung einspielen" liest sie zurück, mit
 und Versionsprüfung. Der FileProvider-Weg dafür existiert bereits; der Support-Bundle-Exporter
 aus PR #39 (`diagnose/export/SupportBundleExporter.kt`) zeigt das ZIP-Muster bereits vor.
 
-#### F14 · Widget und Schnelleinstellungs-Kachel · M · kein Schema
+#### F14 · Widget und Schnelleinstellungs-Kachel · M · kein Schema — erledigt
 
 Start und Stopp der Überwachung erfordern heute das Öffnen der App. Eine Kachel in den
 Schnelleinstellungen (`TileService`) und ein kleines Homescreen-Widget mit Zustand und aktuellem
 Pegel machen aus einer App, die man bedient, eine, die man einschaltet.
+
+> **Nachtrag:** Die Schnelleinstellungs-Kachel (`service/NoiseMonitoringTileService.kt`) war
+> bereits vorhanden. Neu: `widget/NoiseMonitoringWidgetProvider.kt` — klassischer
+> `AppWidgetProvider`/`RemoteViews`, kein `androidx.glance`-Dependency (derselbe minimale
+> Abhaengigkeits-Stil wie bei den handgezeichneten Icons in `AppIcons.kt`, Owner-Entscheidung M9).
+> Ein `AppWidgetProvider` hat anders als `TileService` kein "solange sichtbar"-Callback — die
+> RemoteViews werden deshalb aktiv aus `AudioRecordingService` heraus aktualisiert: bei jedem
+> echten Start-/Stopp-Zustandswechsel und zusaetzlich alle 5 Sekunden aus derselben periodischen
+> Schleife, die dort ohnehin schon die Notification aktualisiert (F4) — keine neue Alarm-/
+> Timer-Infrastruktur. `updatePeriodMillis` in der Widget-Info-XML ist nur ein Sicherheitsnetz
+> (Systemminimum 30 Minuten). Ein Tipp auf den Start/Stopp-Button broadcastet an den Provider
+> selbst (`exported="false"`, wie `AlarmDeadlineReceiver`/`AlarmDismissReceiver` — der
+> System-Widgethost darf trotzdem aktualisieren, aber keine fremde App kann die Ueberwachung
+> fernsteuern); ein Tipp auf den restlichen Widget-Bereich oeffnet die App. **Kein
+> Robolectric-Test fuer den Widget-Provider selbst** (dieselbe Einschraenkung wie bei der bereits
+> ungetesteten Tile Service — ein Android-Homescreen-Widgethost laesst sich unter Robolectric
+> nicht simulieren; die zugrunde liegende Zustandslogik in `AudioRecordingService` ist bereits
+> anderswo getestet). **Nicht am Gerät geprüft.**
 
 #### F15 · Alarm-Historie im Protokoll · S · kein Schema
 
