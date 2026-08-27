@@ -197,6 +197,10 @@
     <string name="settings_mode_pro">Pro Mode</string>
     <string name="settings_section_thresholds">Thresholds &amp; Audio</string>
     <string name="settings_threshold_day">Day Threshold: %1$.1f dB(A)</string>
+    <string name="settings_threshold_current_level">Current level (microphone): %1$.1f dB</string>
+    <string name="settings_threshold_no_live_level">Start monitoring to see the current level</string>
+    <string name="settings_threshold_use_current">Use current level</string>
+    <string name="settings_threshold_use_current_plus_5">+5 dB above current</string>
     <string name="settings_ta_laerm_presets">TA Lärm Presets (German Standard)</string>
     <string name="settings_trigger_source_title">Audio Recording Trigger Source:</string>
     <string name="settings_trigger_source_auto">Automatic (Standard)</string>

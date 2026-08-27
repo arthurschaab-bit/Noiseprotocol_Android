@@ -66,11 +66,20 @@ class AudioRecordingService : LifecycleService() {
         private val _audioAufnahmeAktiv = MutableStateFlow(false)
         val audioAufnahmeAktiv: StateFlow<Boolean> = _audioAufnahmeAktiv.asStateFlow()
 
+        // PROMPT_M10_FUNKTIONEN.md F1 (Schwellenwert-Assistent): der zuletzt berechnete
+        // Mikrofonpegel, damit SettingsScreen ihn live neben dem Schwellen-Slider zeigen kann,
+        // ohne selbst eine Aufnahme zu starten. `null`, solange keine Überwachung läuft - ein
+        // eingefrorener Restwert aus einer frueheren Session waere irrefuehrend (dasselbe
+        // Prinzip wie [com.example.lrmprotokoll.messreihe.leiteDashboardAnzeigeAb]).
+        private val _currentMicDb = MutableStateFlow<Double?>(null)
+        val currentMicDb: StateFlow<Double?> = _currentMicDb.asStateFlow()
+
         /** Nur fuer Compose-UI-Tests, die den Servicestart nicht real ausloesen koennen (kein
          * Mikrofon unter Robolectric) - internal statt private, damit das Testmodul zugreifen
          * kann, ohne den Setter Teil der eigentlichen Produktions-API zu machen. */
         internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
         internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) { _audioAufnahmeAktiv.value = wert }
+        internal fun testSetzeCurrentMicDb(wert: Double?) { _currentMicDb.value = wert }
     }
 
     private val serviceJob = SupervisorJob()
@@ -227,6 +236,7 @@ class AudioRecordingService : LifecycleService() {
             com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(applicationContext)
             isRunning = false
             _audioAufnahmeAktiv.value = false
+            _currentMicDb.value = null
             _laeuft.value = false
             stopSelf()
             return START_NOT_STICKY
@@ -236,6 +246,7 @@ class AudioRecordingService : LifecycleService() {
             // Stoppt nur die Audioaufnahme/Schwellenwert-Überwachung, Foreground-Service und BLE-Verbindung bleiben aktiv
             isRunning = false
             _audioAufnahmeAktiv.value = false
+            _currentMicDb.value = null
             settingsManager.audioMonitoringWasActive = false
             diagnosticsReporter.breadcrumb("AudioService", "Audio-Aufnahme gestoppt (Hintergrund-Dienst bleibt aktiv)")
             updateNotification(connectionSupervisor.state.value)
@@ -441,6 +452,7 @@ class AudioRecordingService : LifecycleService() {
 
                     val currentDb = calculateDb(buffer, readSize)
                     letzterMikrofonDb = currentDb
+                    _currentMicDb.value = currentDb
 
                     // M7b-Nachtrag: dieser Aufruf fehlte bislang komplett - der Mikrofon-Pfad hat
                     // nie in den Drive-Sync-Puffer geschrieben, obwohl der PCE-323-Pfad das schon
@@ -758,6 +770,7 @@ class AudioRecordingService : LifecycleService() {
     override fun onDestroy() {
         isRunning = false
         _audioAufnahmeAktiv.value = false
+        _currentMicDb.value = null
         _laeuft.value = false
         diagnosticsReporter.breadcrumb("AudioService", "AudioRecordingService wird beendet")
         connectionSupervisor.stop()

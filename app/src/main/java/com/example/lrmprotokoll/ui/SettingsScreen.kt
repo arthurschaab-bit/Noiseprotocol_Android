@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,7 @@ import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
@@ -71,6 +73,11 @@ fun SettingsScreen(
     // Ansichtsmodus (Lite vs. Pro) & Presets-Dialog
     var isProMode by remember { mutableStateOf(settings.isProMode) }
     var showWohnraumDialog by remember { mutableStateOf(false) }
+
+    // F1 Schwellenwert-Assistent (PROMPT_M10_FUNKTIONEN.md): Live-Mikrofonpegel neben dem
+    // Schwellen-Slider - null, solange die Überwachung nicht läuft.
+    val audioAufnahmeAktiv by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
+    val currentMicDb by AudioRecordingService.currentMicDb.collectAsState()
 
     // Aufnahme-Parameter
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
@@ -389,12 +396,76 @@ fun SettingsScreen(
                 onToggle = { expAufnahme = !expAufnahme }
             ) {
                 Text(stringResource(R.string.settings_threshold_day, dbThreshold), fontWeight = FontWeight.SemiBold)
+
+                // F1 Schwellenwert-Assistent: aktueller Mikrofonpegel live neben dem Slider, als
+                // Zahl und als Marker auf der Skala - ohne laufende Überwachung gibt es keinen
+                // Live-Wert, dann bewusst nicht 0 dB anzeigen (PROMPT_M10_FUNKTIONEN.md Aufgabe 1).
+                if (audioAufnahmeAktiv && currentMicDb != null) {
+                    val aktuellerPegel = currentMicDb!!
+                    Text(
+                        text = stringResource(R.string.settings_threshold_current_level, aktuellerPegel),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(6.dp)) {
+                        // Naeherung: der Slider hat intern einen Rand fuer den Thumb-Radius, den
+                        // wir hier nicht kennen - reicht als grobe Orientierung auf der Skala,
+                        // kein pixelgenauer Zeiger auf den Thumb.
+                        val anteil = ((aktuellerPegel.toFloat() - 30f) / (100f - 30f)).coerceIn(0f, 1f)
+                        Box(
+                            modifier = Modifier
+                                .offset(x = maxWidth * anteil)
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.settings_threshold_no_live_level),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 Slider(
                     value = dbThreshold,
                     onValueChange = { dbThreshold = it },
                     onValueChangeFinished = { settings.dbThreshold = dbThreshold },
                     valueRange = 30f..100f
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            currentMicDb?.let {
+                                dbThreshold = schwellenvorschlagAufAktuellemPegel(it)
+                                settings.dbThreshold = dbThreshold
+                            }
+                        },
+                        enabled = audioAufnahmeAktiv && currentMicDb != null,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.settings_threshold_use_current))
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            currentMicDb?.let {
+                                dbThreshold = schwellenvorschlagMitSicherheitsabstand(it)
+                                settings.dbThreshold = dbThreshold
+                            }
+                        },
+                        enabled = audioAufnahmeAktiv && currentMicDb != null,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.settings_threshold_use_current_plus_5))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedButton(
                     onClick = { showWohnraumDialog = true },
