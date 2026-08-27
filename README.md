@@ -159,7 +159,7 @@ Nichts mehr aus dem ursprünglichen Bluetooth-Plan-Umfang (M-1 bis M7 sowie M7b)
 |---|-----|-------------------|
 | **Gerätetest** | M2, M3, M4, M5, M6, M7, M7c + M7b am realen Gerät, plus die zwei offenen Messfragen, die Google-Anmeldung mit der jetzt echten Client-ID sowie M8s Chaos-Checkliste und 24h-Dauerlauf (Teil C/D) — Checkliste: [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **ja** |
 | M9 | UX-Überarbeitung — **größtenteils erledigt** (Datenpfad, Theme/Dunkelmodus-Infrastruktur, Navigation/Drawer, Start-Screen-Scroll+Leerzustand, App-weiter Snackbar/Papierkorb, Onboarding inkl. Wiederaufruf aus den Einstellungen, kalibrierter Wert sichtbar in Liste+Bericht, Alarmierung direkt unter Aufnahme). Offen: **Farbtokens** sind eingeführt, aber noch nicht in allen Dateien mit hartcodierten Farbliteralen übernommen (Befund A2 — das wäre eine sichtbare Farbänderung, bewusst als Owner-Entscheidung offengelassen), und **String-Ressourcen** für den Drive-Sync-Dialog sowie die Diagnose-Debug-Oberfläche fehlen noch — [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | nein |
-| M10 | Neue Funktionen — **F1–F5 (Stufe 1), F9 (Papierkorb) und F13 (Sicherung/Wiederherstellung), F15 (Alarm-Historie) erledigt**; F14 nur teilweise (Schnelleinstellungs-Kachel da, Homescreen-Widget fehlt); F6–F8/F10–F12 nicht begonnen — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | nein |
+| M10 | Neue Funktionen — **F1–F5 (Stufe 1), F9 (Papierkorb), F12 (Zeitraumbericht mit Diagramm), F13 (Sicherung/Wiederherstellung), F14 (Widget + Schnelleinstellungs-Kachel), F15 (Alarm-Historie) erledigt**; F6–F8/F10–F11 nicht begonnen — [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | nein |
 
 Fertige Prompts für Umsetzungs-Sessions liegen in [`docs/`](docs/).
 
@@ -271,6 +271,16 @@ Abhängigkeits-Stil des Projekts.
   `Runtime.getRuntime().exit(0)`) und der echte SAF-Dateiauswahldialog sind unter Robolectric
   nicht simulierbar. Muss im Gerätetest geprüft werden, bevor die Funktion als vollständig
   verlässlich gilt.
+- **Zeitraumbericht (F12, `report/PeriodenBerichtExport.kt`) ist nur durch JVM-Tests der
+  Datenzusammenführung (`ermittlePeriodenBericht`, `SessionDao.zwischen`) verifiziert.** Das
+  gezeichnete Diagramm selbst hängt an `android.graphics.pdf.PdfDocument`, das unter Robolectric
+  nicht testbar ist (dasselbe verifizierte Limit wie bei `MessreiheExport.exportierePdf`) — nur am
+  Gerät prüfbar.
+- **Homescreen-Widget (F14, `widget/NoiseMonitoringWidgetProvider.kt`) ist nicht am Gerät
+  geprüft.** `AppWidgetProvider`/`RemoteViews` lassen sich unter Robolectric nicht gegen einen
+  echten Homescreen-Widgethost simulieren — dieselbe Einschränkung gilt bereits für die
+  Schnelleinstellungs-Kachel (`service/NoiseMonitoringTileService.kt`), für die ebenfalls kein
+  Test existiert.
 
 ---
 

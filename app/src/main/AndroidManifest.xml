@@ -107,6 +107,21 @@
             </intent-filter>
         </receiver>
 
+        <!-- F14: Homescreen-Widget. exported=false wie bei AlarmDeadlineReceiver/
+             AlarmDismissReceiver oben: der System-Widgethost darf trotzdem aktualisieren
+             ("privileged system components" sind von exported=false ausgenommen), aber keine
+             fremde App kann die ACTION_TOGGLE-Aktion faelschen und die Ueberwachung fernsteuern. -->
+        <receiver
+            android:name=".widget.NoiseMonitoringWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/noise_monitoring_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.example.lrmprotokoll.fileprovider"
