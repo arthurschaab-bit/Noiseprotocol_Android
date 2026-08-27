@@ -190,6 +190,9 @@
     <!-- Settings Screen -->
     <string name="settings_section_general">Allgemein &amp; Anzeige</string>
     <string name="settings_section_diagnostics">Diagnose &amp; Systemgesundheit</string>
+    <string name="settings_help_title">Hilfe</string>
+    <string name="settings_help_summary">Einführung erneut ansehen</string>
+    <string name="settings_help_show_onboarding">Einführung erneut anzeigen</string>
     <string name="settings_mode_lite">Lite-Modus</string>
     <string name="settings_mode_pro">Pro-Modus</string>
     <string name="settings_section_thresholds">Schwellenwerte &amp; Audio</string>
