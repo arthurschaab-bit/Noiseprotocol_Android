@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.audio
 
+import com.example.lrmprotokoll.data.KlassifikationsRohdatenDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import java.io.File
@@ -15,18 +16,31 @@ import java.io.File
  * zusätzlich manuell gelabelte Aufnahmen, siehe
  * [com.example.lrmprotokoll.messreihe.unklassifizierteAufnahmen]).
  *
+ * KI-Umbau Etappe 1.4: nutzt [NoiseClassifier.klassifiziereMitRohdaten] statt der reinen
+ * [SoundClassifier.classify]-Schnittstelle, damit auch nachtraeglich (Batch-)klassifizierte
+ * Aufnahmen einen [com.example.lrmprotokoll.data.KlassifikationsRohdaten]-Datensatz bekommen -
+ * jede Aufnahme wird sonst nur einmal ueberhaupt inferenziert, hier ist bereits eine `recordId`
+ * bekannt (anders als beim Online-Pfad), die Rohdaten koennen also direkt mitgespeichert werden.
+ *
  * @return Anzahl der tatsächlich neu klassifizierten Aufnahmen.
  */
 suspend fun klassifiziereUndSpeichere(
     kandidaten: List<NoiseRecord>,
-    classifier: SoundClassifier,
+    classifier: RohdatenClassifier,
     dao: NoiseDao,
+    rohdatenDao: KlassifikationsRohdatenDao,
 ): Int {
     var anzahl = 0
     for (record in kandidaten) {
         val file = File(record.filePath)
         if (!file.exists() || !file.isFile) continue
-        val erkannt = classifier.classify(file) ?: continue
+        val ergebnis = classifier.klassifiziereMitRohdaten(file) ?: continue
+        // Ersetzt statt anzuhaeufen: eine erneute Batch-Klassifizierung derselben Aufnahme (z.B.
+        // weil der erste Versuch kein Label ueber der Schwelle fand) soll nicht mehrere
+        // Rohdatensaetze fuer dieselbe recordId hinterlassen.
+        rohdatenDao.loescheFuerRecord(record.id)
+        rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
+        val erkannt = ergebnis.label ?: continue
         dao.update(record.copy(detectedLabel = erkannt))
         anzahl++
     }

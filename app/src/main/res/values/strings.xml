@@ -215,6 +215,8 @@
     <string name="settings_ai_title">Automatische KI-Erkennung</string>
     <string name="settings_ai_desc">Klassifiziert Geräusche automatisch nach der Aufnahme</string>
     <string name="settings_ai_confidence">KI-Vertrauensschwelle: %1$d%%</string>
+    <string name="settings_ai_normalisierung_title">Pegel vor der KI-Analyse normalisieren</string>
+    <string name="settings_ai_normalisierung_desc">Hebt leise Aufnahmen für die Erkennung an - betrifft nur die KI-Analyse, nicht die gespeicherte Audiodatei</string>
     <string name="settings_quiet_hours_title">Ruhezeiten berücksichtigen</string>
     <string name="settings_quiet_hours_desc">Verwendet in den Ruhezeiten einen separaten Schwellenwert</string>
     <string name="settings_quiet_hours_threshold">Ruhezeit-Schwellenwert (Nacht): %1$.1f dB(A)</string>
@@ -383,6 +385,9 @@
     <string name="action_ai_batch_day">Unklassifizierte Aufnahmen dieses Tages jetzt klassifizieren</string>
     <string name="ai_batch_day_result">%1$d Aufnahme(n) für %2$s klassifiziert</string>
     <string name="ai_batch_day_result_empty">Keine der ausgewählten Aufnahmen konnte klassifiziert werden</string>
+    <string name="action_neu_bewerten">Neu bewerten (ohne erneute KI-Analyse)</string>
+    <string name="ai_reevaluated_count">%1$d Aufnahme(n) neu bewertet</string>
+    <string name="ai_reevaluated_empty">Keine Aufnahme mit gespeicherten Rohdaten gefunden - Neu bewerten wirkt erst ab neu klassifizierten Aufnahmen</string>
     <string name="action_ai_classify_now">Jetzt klassifizieren</string>
     <string name="action_learn_pattern">+ Muster lernen</string>
     <string name="learn_pattern_title">Geräusch lernen</string>

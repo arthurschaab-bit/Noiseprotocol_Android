@@ -6,8 +6,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -93,13 +97,24 @@ class AudioRecordingService : LifecycleService() {
     private val bytesPerSample = 2
     private var bufferSize = 0
 
+    // KI-Umbau Etappe 1.2/1.3: die tatsaechlichen Aufnahmebedingungen der laufenden Mikrofon-
+    // Ueberwachung - koennen von den Einstellungen abweichen, wenn das Geraet die gewuenschte
+    // Abtastrate nicht unterstuetzt (siehe waehleAufnahmerate()). @Volatile, weil starteWavAufnahme
+    // aus einer anderen Coroutine als startMonitoring() liest.
+    @Volatile private var aktiveAufnahmequelle: Int? = null
+    @Volatile private var aktiveAbtastrate: Int? = null
+    @Volatile private var aktiveKanalzahl: Int? = null
+    @Volatile private var aktiveAgcAktiv: Boolean? = null
+
     private lateinit var settingsManager: SettingsManager
     private lateinit var connectionSupervisor: ConnectionSupervisor
     private lateinit var alarmCoordinator: AlarmCoordinator
     private lateinit var meterTransport: MeterTransport
     private lateinit var levelSampleCollector: LevelSampleCollector
     private lateinit var diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter
-    private var classifier: SoundClassifier? = null
+    // KI-Umbau Etappe 1.4: RohdatenClassifier statt SoundClassifier - liefert zusaetzlich die
+    // Rohdaten fuer die Persistenz. NoiseClassifier implementiert beide Interfaces.
+    private var classifier: RohdatenClassifier? = null
 
     private var rollingBuffer: ByteArray = ByteArray(0)
     private var writeHead = 0
@@ -230,7 +245,11 @@ class AudioRecordingService : LifecycleService() {
     }
 
     private fun updateRollingBuffer() {
-        val sampleRate = settingsManager.audioSampleRate
+        // Nach dem Start der Ueberwachung mit der TATSAECHLICH ausgehandelten Rate rechnen
+        // (kann von der Einstellung abweichen, siehe waehleAufnahmerate()), davor mit der
+        // gewuenschten Einstellung - es existiert noch kein AudioRecord, dessen echte Rate man
+        // kennen koennte.
+        val sampleRate = aktiveAbtastrate ?: settingsManager.audioSampleRate
         val size = sampleRate * settingsManager.preRollSeconds * bytesPerSample
         if (rollingBuffer.size != size) {
             rollingBuffer = ByteArray(size)
@@ -407,13 +426,39 @@ class AudioRecordingService : LifecycleService() {
                 return@launch
             }
 
-            val sampleRate = settingsManager.audioSampleRate
+            // KI-Umbau Etappe 1.2: UNPROCESSED bevorzugt (kein AGC, keine Rauschunterdrueckung,
+            // kein Hochpassfilter - siehe waehleAufnahmequelle()-KDoc), sonst MIC. Bewusst nie
+            // VOICE_RECOGNITION/VOICE_COMMUNICATION/CAMCORDER.
+            val audioManager = getSystemService(AudioManager::class.java)
+            val unterstuetztUnprocessed = audioManager
+                ?.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
+            val audioSource = waehleAufnahmequelle(unterstuetztUnprocessed)
+
+            // Gewuenschte Rate aus den Einstellungen, aber niemals eine niedrigere als die
+            // gewaehlte, falls das Geraet sie nicht unterstuetzt (siehe waehleAufnahmerate()).
+            val gewuenschteRate = settingsManager.audioSampleRate
+            val sampleRate = waehleAufnahmerate(gewuenschteRate) { kandidat ->
+                AudioRecord.getMinBufferSize(kandidat, channelConfig, audioFormat) > 0
+            }
             bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            diagnosticsReporter.breadcrumb("AudioService", "Mikrofon-Monitoring gestartet (sampleRate=$sampleRate)")
+
+            // KI-Umbau Etappe 1.1 (Diagnose, siehe Auftrag Abschnitt 1.1): diese Werte sind das
+            // wichtigste Ergebnis der Etappe - auf einem echten Geraet mit Logcat pruefen, ob sie
+            // den Erwartungen entsprechen (insbesondere: bleibt sampleRate == gewuenschteRate?).
+            Log.i(
+                "AudioRecordingService",
+                "KI-Diagnose: audioSource=$audioSource (UNPROCESSED unterstuetzt=$unterstuetztUnprocessed), " +
+                    "gewuenschteRate=$gewuenschteRate, tatsaechlicheRate=$sampleRate, " +
+                    "channelConfig=$channelConfig, audioFormat=$audioFormat",
+            )
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "Mikrofon-Monitoring gestartet (audioSource=$audioSource, sampleRate=$sampleRate)",
+            )
 
             val audioRecord = try {
                 AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
+                    audioSource,
                     sampleRate,
                     channelConfig,
                     audioFormat,
@@ -452,6 +497,14 @@ class AudioRecordingService : LifecycleService() {
             }
 
             audioRecord.startRecording()
+
+            // KI-Umbau Etappe 1.2/1.3: Aufnahmebedingungen fuer die Beweisdokumentation
+            // festhalten - erst NACH startRecording(), weil erst dann audioSessionId belegt ist.
+            aktiveAufnahmequelle = audioSource
+            aktiveAbtastrate = audioRecord.sampleRate
+            aktiveKanalzahl = if (channelConfig == AudioFormat.CHANNEL_IN_MONO) 1 else 2
+            aktiveAgcAktiv = deaktiviereAudioEffekteUndMeldeAgcZustand(audioRecord.audioSessionId)
+
             val buffer = ShortArray(bufferSize / 2)
             val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
             while (isRunning) {
@@ -498,6 +551,44 @@ class AudioRecordingService : LifecycleService() {
             }
             audioRecord.stop()
             audioRecord.release()
+        }
+    }
+
+    /**
+     * KI-Umbau Etappe 1.2: schaltet die drei Plattform-Audioeffekte ab, die genau die
+     * Pegeldynamik verfaelschen wuerden, die Impulslaerm erkennbar macht - AGC normalisiert
+     * Lautstaerkeunterschiede weg, die Rauschunterdrueckung ist darauf trainiert, stationaere
+     * Geraeusche zu ENTFERNEN. Jeder Effekt einzeln try/catch-abgesichert: `create()`/
+     * `isAvailable()` sind pro Geraet/Hersteller unterschiedlich zuverlaessig implementiert,
+     * ein Fehler hier darf die laufende Ueberwachung nicht gefaehrden (Robustheitsgebot).
+     *
+     * @return `false`, wenn AGC verfuegbar war und erfolgreich abgeschaltet wurde; `null`, wenn
+     * sich der Zustand nicht zuverlaessig feststellen liess (Effekt nicht verfuegbar oder
+     * Fehler) - eine ehrliche "unbekannt"-Aussage statt eines erratenen `false`.
+     */
+    private fun deaktiviereAudioEffekteUndMeldeAgcZustand(audioSessionId: Int): Boolean? {
+        try {
+            if (AcousticEchoCanceler.isAvailable()) {
+                AcousticEchoCanceler.create(audioSessionId)?.enabled = false
+            }
+        } catch (e: Throwable) {
+            Log.w("AudioRecordingService", "AcousticEchoCanceler konnte nicht deaktiviert werden", e)
+        }
+        try {
+            if (NoiseSuppressor.isAvailable()) {
+                NoiseSuppressor.create(audioSessionId)?.enabled = false
+            }
+        } catch (e: Throwable) {
+            Log.w("AudioRecordingService", "NoiseSuppressor konnte nicht deaktiviert werden", e)
+        }
+        return try {
+            if (!AutomaticGainControl.isAvailable()) return null
+            val agc = AutomaticGainControl.create(audioSessionId) ?: return null
+            agc.enabled = false
+            false
+        } catch (e: Throwable) {
+            Log.w("AudioRecordingService", "AutomaticGainControl konnte nicht deaktiviert werden", e)
+            null
         }
     }
 
@@ -565,6 +656,10 @@ class AudioRecordingService : LifecycleService() {
                     meterWeighting = auswertung.meterWeighting,
                     meterConnected = auswertung.meterConnected,
                     isQuietHour = isQuiet,
+                    aufnahmeQuelle = aktiveAufnahmequelle,
+                    abtastrate = aktiveAbtastrate,
+                    kanalzahl = aktiveKanalzahl,
+                    agcAktiv = aktiveAgcAktiv,
                 )
             )
             Log.i("AudioRecordingService", "Reines Pegelereignis gespeichert (DSGVO-Modus ohne Audio): ${auswertung.pegel} dB")
@@ -730,11 +825,25 @@ class AudioRecordingService : LifecycleService() {
         }
 
         val shouldClassifyOnline = settingsManager.aiMode == "ONLINE"
-        val detected = if (shouldClassifyOnline) classifySafely(classifier, true, file) else null
+        // KI-Umbau Etappe 1.4: klassifiziereMitRohdaten() statt classifySafely()/classify() -
+        // liefert zusaetzlich den RohdatenBauplan fuer die Persistenz, aus DERSELBEN Inferenz
+        // (keine zweite Inferenz fuer die Rohdaten noetig). Wie classifySafely() jede Exception
+        // abfangend: Klassifikation darf die Aufnahme nie gefaehrden.
+        val ergebnis = if (shouldClassifyOnline) {
+            try {
+                classifier?.klassifiziereMitRohdaten(file)
+            } catch (e: Throwable) {
+                Log.w("AudioRecordingService", "Klassifikation fehlgeschlagen, Aufnahme laeuft trotzdem weiter", e)
+                null
+            }
+        } else {
+            null
+        }
+        val detected = ergebnis?.label
 
         try {
-            val dao = (application as LaermprotokollApp).container.database.noiseDao()
-            dao.insert(
+            val database = (application as LaermprotokollApp).container.database
+            val neueId = database.noiseDao().insert(
                 NoiseRecord(
                     timestamp = timestamp,
                     amplitude = recorder.maxAmplitude,
@@ -745,8 +854,19 @@ class AudioRecordingService : LifecycleService() {
                     meterWeighting = auswertung.meterWeighting,
                     meterConnected = auswertung.meterConnected,
                     isQuietHour = isQuiet,
+                    aufnahmeQuelle = aktiveAufnahmequelle,
+                    abtastrate = aktiveAbtastrate,
+                    kanalzahl = aktiveKanalzahl,
+                    agcAktiv = aktiveAgcAktiv,
                 ),
             )
+            if (ergebnis != null) {
+                try {
+                    database.klassifikationsRohdatenDao().insert(ergebnis.rohdaten.mitRecordId(neueId))
+                } catch (e: Throwable) {
+                    Log.e("AudioRecordingService", "Fehler beim Speichern der Klassifikations-Rohdaten", e)
+                }
+            }
             Log.i("AudioRecordingService", "NoiseRecord erfolgreich gespeichert: $fileName (Modus: ${settingsManager.aiMode}, KI: $detected)")
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)

@@ -27,8 +27,14 @@ interface NoiseDao {
     @Query("SELECT * FROM noise_records WHERE timestamp >= :von AND deletedAt IS NULL ORDER BY timestamp DESC")
     fun abZeitpunktFlow(von: Long): Flow<List<NoiseRecord>>
 
+    /**
+     * KI-Umbau Etappe 1.4: liefert die generierte Id zurueck, damit
+     * [com.example.lrmprotokoll.data.KlassifikationsRohdaten] direkt nach dem Einfuegen mit der
+     * richtigen `recordId` verknuepft werden kann (Online-Klassifizierung kennt die Id erst
+     * NACH dem Insert, siehe [com.example.lrmprotokoll.audio.AudioRecordingService]).
+     */
     @Insert
-    suspend fun insert(record: NoiseRecord)
+    suspend fun insert(record: NoiseRecord): Long
 
     @Update
     suspend fun update(record: NoiseRecord)
@@ -65,6 +71,10 @@ interface NoiseDao {
 
     @Query("UPDATE noise_records SET notes = :notes WHERE id = :id")
     suspend fun setNotes(id: Long, notes: String?)
+
+    /** KI-Umbau Etappe 1.5 ("Neu bewerten"): Label direkt setzen, ohne den ganzen Datensatz zu lesen. */
+    @Query("UPDATE noise_records SET detectedLabel = :label WHERE id = :id")
+    suspend fun setDetectedLabel(id: Long, label: String?)
 
     // Reference Sounds
     @Query("SELECT * FROM reference_sounds")

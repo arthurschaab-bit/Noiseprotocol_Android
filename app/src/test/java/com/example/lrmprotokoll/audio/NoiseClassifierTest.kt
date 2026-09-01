@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.audio
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -50,5 +51,24 @@ class NoiseClassifierTest {
         val result = wavSampleRateOrFallback(header, fallback = 16_000)
 
         assertEquals(16_000, result)
+    }
+
+    /**
+     * KI-Umbau Etappe 1.1: [wavBitsPerSample] liefert die im Header dokumentierte Bit-Tiefe -
+     * Teil der geforderten Diagnosewerte (Auftrag Abschnitt 1.1).
+     */
+    @Test
+    fun liestBitTiefeAusHeader() {
+        val header = ByteArray(44)
+        ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN).putShort(34, 16)
+
+        assertEquals(16, wavBitsPerSample(header))
+    }
+
+    @Test
+    fun liefertNullBeiZuKurzemHeaderStattEinesGeratenenWerts() {
+        val tooShort = ByteArray(20)
+
+        assertNull(wavBitsPerSample(tooShort))
     }
 }

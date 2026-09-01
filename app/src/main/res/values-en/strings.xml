@@ -215,6 +215,8 @@
     <string name="settings_ai_title">Automatic AI Classification</string>
     <string name="settings_ai_desc">Automatically classifies sounds after recording</string>
     <string name="settings_ai_confidence">AI Confidence Threshold: %1$d%%</string>
+    <string name="settings_ai_normalisierung_title">Normalize level before AI analysis</string>
+    <string name="settings_ai_normalisierung_desc">Boosts quiet recordings for detection - affects only the AI analysis, not the stored audio file</string>
     <string name="settings_quiet_hours_title">Quiet Hours</string>
     <string name="settings_quiet_hours_desc">Uses a separate threshold during night/quiet hours</string>
     <string name="settings_quiet_hours_threshold">Night Threshold: %1$.1f dB(A)</string>
@@ -383,6 +385,9 @@
     <string name="action_ai_batch_day">Classify unclassified recordings for this day now</string>
     <string name="ai_batch_day_result">%1$d recording(s) classified for %2$s</string>
     <string name="ai_batch_day_result_empty">None of the selected recordings could be classified</string>
+    <string name="action_neu_bewerten">Re-evaluate (without new AI analysis)</string>
+    <string name="ai_reevaluated_count">%1$d recording(s) re-evaluated</string>
+    <string name="ai_reevaluated_empty">No recording with stored raw data found - re-evaluate only affects recordings classified since this update</string>
     <string name="action_ai_classify_now">Classify now</string>
     <string name="action_learn_pattern">+ Learn pattern</string>
     <string name="learn_pattern_title">Learn noise pattern</string>
