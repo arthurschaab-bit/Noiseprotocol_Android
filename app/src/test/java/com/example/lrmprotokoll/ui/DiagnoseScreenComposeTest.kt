@@ -32,6 +32,13 @@ import org.robolectric.annotation.GraphicsMode
  * initialen Viewports und außerhalb der Lazy-Prefetch-Reichweite. Deshalb hier erst explizit per
  * Index dorthin scrollen (performScrollToIndex über den DIAGNOSE_LAZY_COLUMN_TAG), statt sich auf
  * performScrollTo() eines noch gar nicht komponierten Knotens zu verlassen.
+ *
+ * timeoutMillis = 30_000 (ursprünglich 10_000): dasselbe bekannte Timing-Problem wie bei
+ * ProtokollDetailScreenComposeTest - auf einem voll ausgelasteten CI-Runner (voller
+ * ./gradlew test-Lauf, mehrere Robolectric-JVM-Forks auf begrenzten CPU-Kernen) reicht ein
+ * knappes Budget stellenweise nicht aus und der Test schlägt mit ComposeTimeoutException fehl,
+ * obwohl er lokal isoliert zuverlässig grün läuft - kein Logikfehler, sondern
+ * Ressourcenkonkurrenz auf dem Runner.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -56,7 +63,7 @@ class DiagnoseScreenComposeTest {
         composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
 
         val logTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_header, 1)
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(logTitle).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(logTitle).assertExists()

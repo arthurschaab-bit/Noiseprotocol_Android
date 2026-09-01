@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
+    alias(libs.plugins.kover)
+    alias(libs.plugins.ktlint)
 }
 
 val releaseStoreFile = (findProperty("releaseStoreFile") as String?)?.let { file(it) }
@@ -62,7 +64,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }
@@ -180,4 +182,35 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.navigation:navigation-testing:2.7.7")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+}
+
+// Testluecken-Auftrag Stufe 1: Kover misst die Line-Coverage, damit die weiteren Stufen gegen
+// eine echte Zahl arbeiten koennen statt zu schaetzen. HTML fuers Durchklicken lokal, XML als
+// maschinenlesbare Grundlage fuer den CI-Summary-Schritt (siehe androidci.yml).
+kover {
+    reports {
+        total {
+            html {
+                onCheck = false
+            }
+            xml {
+                onCheck = false
+            }
+        }
+        filters {
+            excludes {
+                // Generierter Code ohne eigene Logik - taeuschte sonst eine falsche Coverage vor,
+                // ohne dass ein Test dagegen ueberhaupt sinnvoll waere.
+                classes("*.BuildConfig", "*_Impl", "*_Impl\$*")
+            }
+        }
+    }
+}
+
+// Testluecken-Auftrag Stufe 1: android.set(true) passt u.a. die Import-Reihenfolge an das in
+// Android-Projekten uebliche Schema an. Wildcard-Importe (import ...*) sind im Bestand
+// durchgaengiger, bewusster Stil (siehe MainActivity.kt etc.) - die Regel dagegen bleibt
+// deshalb ueber .editorconfig deaktiviert statt den ganzen Bestand umzuschreiben.
+ktlint {
+    android.set(true)
 }

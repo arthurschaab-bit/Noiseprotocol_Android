@@ -42,6 +42,17 @@ jobs:
       - name: Run Android Lint
         run: ./gradlew lintDebug --no-daemon --stacktrace
 
+      # Testluecken-Auftrag Stufe 1: eigener Kotlin-Stil-Linter neben Android Lint (der prueft
+      # Android-spezifische Dinge wie Ressourcen/API-Level, nicht Formatierung/Stil). Bestand hat
+      # aktuell mehrere tausend Verstoesse (nie zuvor gegen ktlint gelaufen) - ein Vollformat-Pass
+      # ist eine eigene, bewusst zu treffende Entscheidung, keine Nebenwirkung dieses Auftrags.
+      # continue-on-error haelt den Schritt deshalb sichtbar (roter Status auf der Actions-Seite,
+      # Report als Artefakt), blockiert aber den Job nicht.
+      - name: Run ktlint
+        id: ktlint
+        continue-on-error: true
+        run: ./gradlew ktlintCheck --no-daemon --stacktrace
+
       # --continue, damit ein fehlgeschlagener Test die uebrigen nicht abschneidet: Sonst zeigt
       # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu
       # sehen.
@@ -55,6 +66,19 @@ jobs:
         if: always()
         run: python3 .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY"
 
+      # Testluecken-Auftrag Stufe 1: Line-Coverage messen, damit die weiteren Stufen gegen eine
+      # echte Zahl arbeiten statt zu schaetzen. continue-on-error: schlaegt schon
+      # testDebugUnitTest fehl, soll das nicht als zweiter, redundanter roter Schritt erscheinen -
+      # der Testbericht oben zeigt die eigentliche Ursache bereits.
+      - name: Coverage-Report erzeugen
+        if: always()
+        continue-on-error: true
+        run: ./gradlew koverXmlReportDebug koverHtmlReportDebug --no-daemon --stacktrace
+
+      - name: Coverage in die Zusammenfassung schreiben
+        if: always()
+        run: python3 .github/scripts/coverage.py app/build/reports/kover/reportDebug.xml >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload Lint Reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,12 +89,30 @@ jobs:
             app/build/reports/lint-results-debug.txt
           retention-days: 7
 
+      - name: Upload ktlint Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktlint-reports
+          path: app/build/reports/ktlint/
+          retention-days: 7
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
           path: app/build/reports/tests/
+          retention-days: 7
+
+      - name: Upload Coverage-Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            app/build/reports/kover/reportDebug.xml
+            app/build/reports/kover/htmlDebug/
           retention-days: 7
 
       # Erlaubt, eine PR-Fassung auf dem Telefon zu installieren, ohne sie selbst zu bauen:
