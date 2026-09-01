@@ -24,15 +24,21 @@ private const val WORK_NAME = "drive_sync"
  * Bei Netzverlust waere ein exakter Wecker ohnehin nutzlos, und die Datenlage auf dem Geraet
  * bleibt vollstaendig (Plan 8.4.5) - Puenktlichkeit ist hier keine Anforderung.
  */
-class DriveSyncWorker(
+class DriveSyncWorker @JvmOverloads constructor(
     context: Context,
     parameter: WorkerParameters,
+    /** Testluecken-Auftrag Stufe 2: Testseam - `null` (Standard) verwendet den echten
+     * Koordinator aus dem Container, wie bisher. Ein Test uebergibt hier einen mit
+     * Fake-Abhaengigkeiten aufgebauten [DriveSyncCoordinator] ueber eine eigene [WorkerFactory],
+     * ohne den echten (netzwerkbehafteten) Container-Pfad ueberhaupt zu beruehren. */
+    private val coordinatorOverride: DriveSyncCoordinator? = null,
 ) : CoroutineWorker(context, parameter) {
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
+        val coordinator = coordinatorOverride ?: container.driveSyncCoordinator
         container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync-Zyklus gestartet")
-        return when (val ergebnis = container.driveSyncCoordinator.syncEinenZyklus()) {
+        return when (val ergebnis = coordinator.syncEinenZyklus()) {
             is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> {
                 container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync erfolgreich: ${ergebnis.zeilen} Zeilen")
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)

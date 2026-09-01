@@ -98,15 +98,7 @@ class SettingsScreenInstrumentedTest {
         composeRule.waitForIdle()
     }
 
-    @Test
-    fun formatiereDriveFehlerEnthaeltUrsacheWennVorhanden() {
-        val mitUrsache = RuntimeException("Token-Fehler", IllegalStateException("Keine OAuth-Client-ID"))
-        val textMitUrsache = formatiereDriveFehler(mitUrsache)
-        assertTrue(textMitUrsache.contains("Token-Fehler"))
-        assertTrue(textMitUrsache.contains("Keine OAuth-Client-ID"))
-
-        val ohneUrsache = RuntimeException("Netzwerkfehler")
-        val textOhneUrsache = formatiereDriveFehler(ohneUrsache)
-        assertTrue(textOhneUrsache.contains("Netzwerkfehler"))
-    }
+    // formatiereDriveFehlerEnthaeltUrsacheWennVorhanden entfernt (Testluecken-Auftrag Stufe 6):
+    // reine Funktion ohne Android-Abhaengigkeit, bereits vollstaendig in FormatiereDriveFehlerTest
+    // (Robolectric-frei, test/) abgedeckt - ein Geraetetest dafuer war reine Dopplung.
 }

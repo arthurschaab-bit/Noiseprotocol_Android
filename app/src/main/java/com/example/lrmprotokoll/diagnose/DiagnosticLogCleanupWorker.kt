@@ -15,14 +15,18 @@ private const val WORK_NAME = "diagnostic_log_cleanup"
  * Der taegliche Bereinigungs-Job fuer das Diagnose-Log (Plan Abschnitt 6). Reine WorkManager-Glue
  * - die Entscheidungslogik steht in [DiagnosticLogCleanupCoordinator].
  */
-class DiagnosticLogCleanupWorker(
+class DiagnosticLogCleanupWorker @JvmOverloads constructor(
     context: Context,
     parameter: WorkerParameters,
+    /** Testluecken-Auftrag Stufe 2: Testseam, `null` (Standard) verwendet den echten Koordinator
+     * aus dem Container. */
+    private val coordinatorOverride: DiagnosticLogCleanupCoordinator? = null,
 ) : CoroutineWorker(context, parameter) {
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
-        return runCatching { container.diagnosticLogCleanupCoordinator.bereinige() }
+        val coordinator = coordinatorOverride ?: container.diagnosticLogCleanupCoordinator
+        return runCatching { coordinator.bereinige() }
             .fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
     }
 }

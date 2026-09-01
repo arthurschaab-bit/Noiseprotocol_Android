@@ -14,8 +14,6 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -131,17 +129,8 @@ class AppNavigationBarInstrumentedTest {
         }
     }
 
-    @Test
-    fun bottomNavHilfsfunktionErkenntPrefixZieleKorrekt() {
-        assertTrue(istBottomNavZielAktiv("main", "main"))
-        assertTrue(istBottomNavZielAktiv("meter", "meter"))
-        assertTrue(istBottomNavZielAktiv("protokoll", "protokoll"))
-        assertTrue(istBottomNavZielAktiv("protokoll/{sessionId}", "protokoll"))
-        assertTrue(istBottomNavZielAktiv("diagnose", "diagnose"))
-        assertTrue(istBottomNavZielAktiv("settings", "settings"))
-
-        assertFalse(istBottomNavZielAktiv("player?path={path}", "main"))
-        assertFalse(istBottomNavZielAktiv(null, "main"))
-        assertFalse(istBottomNavZielAktiv("protokollverlauf", "protokoll"))
-    }
+    // bottomNavHilfsfunktionErkenntPrefixZieleKorrekt entfernt (Testluecken-Auftrag Stufe 6):
+    // reine Funktion ohne Android-Abhaengigkeit, bereits vollstaendig in
+    // HomeNavigationComposeTest.istBottomNavZielAktivErkenntGenauesUndParametrisiertesZiel
+    // (Robolectric, test/) abgedeckt - ein Geraetetest dafuer war reine Dopplung.
 }

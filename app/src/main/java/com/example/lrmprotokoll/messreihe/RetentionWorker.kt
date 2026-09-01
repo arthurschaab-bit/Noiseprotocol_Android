@@ -16,9 +16,14 @@ private const val WORK_NAME = "retention"
  * Der taegliche Retention-Job (Plan Abschnitt 8.2/13.2). Reine WorkManager-Glue - die
  * Entscheidungslogik steht in [RetentionCoordinator].
  */
-class RetentionWorker(
+class RetentionWorker @JvmOverloads constructor(
     context: Context,
     parameter: WorkerParameters,
+    /** Testluecken-Auftrag Stufe 2: Testseam, `null` (Standard) verwendet den echten Koordinator
+     * aus dem Container. Betrifft nur Schritt 1 (Messreihen-Verdichtung) - die Schritte 2/3
+     * laufen bewusst weiter gegen den echten (unter Robolectric problemlosen) Container, weil
+     * Room und SharedPreferences dort ohnehin deterministisch funktionieren. */
+    private val retentionCoordinatorOverride: RetentionCoordinator? = null,
 ) : CoroutineWorker(context, parameter) {
 
     override suspend fun doWork(): Result {
@@ -29,7 +34,7 @@ class RetentionWorker(
 
         return runCatching {
             // 1. Messreihen-Verdichtung (M4)
-            container.retentionCoordinator.verdichte()
+            (retentionCoordinatorOverride ?: container.retentionCoordinator).verdichte()
 
             // 2. F5: Automatische Aufbewahrungs-Bereinigung (Favoriten bleiben geschützt)
             if (settings.autoRetentionEnabled && settings.autoRetentionDays > 0) {
