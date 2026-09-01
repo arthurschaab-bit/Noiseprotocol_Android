@@ -7,9 +7,11 @@ import android.content.ContextWrapper
 import android.content.IntentSender
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -48,13 +50,35 @@ class AutorisierungBenoetigtException(val intentSender: IntentSender) :
  * aus [settings], um Hintergrund-Synchronisationen und Wiederverbindungen ohne wiederholte
  * interaktive Konto-Auswahldialoge auszuführen.
  *
- * ⚠ NICHT lauffaehig ohne echte [GoogleClientConfig.SERVER_CLIENT_ID] und NICHT in einem
- * JVM-Unit-Test pruefbar: `CredentialManager` und `Identity.getAuthorizationClient` brauchen
- * echte Play Services auf einem echten Geraet.
+ * ⚠ NICHT lauffaehig ohne echte [GoogleClientConfig.SERVER_CLIENT_ID]. Die eigentliche
+ * Entscheidungslogik (welches Konto, welcher Fehlerfall, wann [AutorisierungBenoetigtException])
+ * IST per JVM-Unit-Test pruefbar - siehe `GoogleSignInAccessTokenProviderTest`, das
+ * [holeCredential]/[autorisiere] durch Fakes ersetzt. Was dabei NICHT geprueft wird: ob die
+ * echten Play-Services-Implementierungen dahinter tatsaechlich so funktionieren wie angenommen -
+ * das bleibt Sache des Geraetetests.
  */
 class GoogleSignInAccessTokenProvider(
     private val context: Context,
     private val settings: SettingsManager? = null,
+    /** Testluecken-Auftrag Stufe 5: als suspend-Funktion statt als injizierter
+     * `CredentialManager` - so bleibt der Konstruktor testbar, ohne das Interface (mehrere
+     * ungenutzte Async-Methoden) nachbilden zu muessen. Default ruft den echten CredentialManager
+     * auf. */
+    private val holeCredential: suspend (Context, GetCredentialRequest) -> GetCredentialResponse =
+        { ctx, anfrage -> CredentialManager.create(ctx).getCredential(ctx, anfrage) },
+    /** Testluecken-Auftrag Stufe 5: ebenfalls als suspend-Funktion statt als injizierter
+     * `AuthorizationClient` - dessen `HasApiKey<...>`-Basis verlangt einen internen, von aussen
+     * nicht konstruierbaren `ApiKey`-Typ und liesse sich ohne Mocking-Framework gar nicht fake
+     * implementieren (dieses Projekt verwendet bewusst nur handgeschriebene Fakes, siehe die
+     * uebrigen Tests). Default kapselt den Task-basierten Identity-Services-Aufruf wie zuvor. */
+    private val autorisiere: suspend (Context, AuthorizationRequest) -> AuthorizationResult =
+        { ctx, anfrage ->
+            suspendCancellableCoroutine { fortsetzung ->
+                Identity.getAuthorizationClient(ctx).authorize(anfrage)
+                    .addOnSuccessListener { fortsetzung.resume(it) }
+                    .addOnFailureListener { fehler -> fortsetzung.resumeWithException(fehler) }
+            }
+        },
 ) : AccessTokenProvider {
 
     override suspend fun holeToken(): Result<String> = runCatching {
@@ -108,7 +132,7 @@ class GoogleSignInAccessTokenProvider(
             )
             .build()
 
-        val antwort = CredentialManager.create(targetContext).getCredential(targetContext, anfrage)
+        val antwort = holeCredential(targetContext, anfrage)
         val zugangsdaten = GoogleIdTokenCredential.createFrom(antwort.credential.data)
         val email = zugangsdaten.id
         settings?.googleAccountEmail = email
@@ -126,24 +150,14 @@ class GoogleSignInAccessTokenProvider(
         }
         val anfrage = anfrageBuilder.build()
 
-        val client = Identity.getAuthorizationClient(targetContext)
-        return suspendCancellableCoroutine { fortsetzung ->
-            client.authorize(anfrage)
-                .addOnSuccessListener { ergebnis ->
-                    val token = ergebnis.accessToken
-                    val pendingIntent = ergebnis.pendingIntent
-                    when {
-                        token != null -> fortsetzung.resume(token)
-                        ergebnis.hasResolution() && pendingIntent != null ->
-                            fortsetzung.resumeWithException(
-                                AutorisierungBenoetigtException(pendingIntent.intentSender)
-                            )
-                        else -> fortsetzung.resumeWithException(
-                            IllegalStateException("Autorisierung ohne Zugriffstoken - erneute Zustimmung nötig")
-                        )
-                    }
-                }
-                .addOnFailureListener { fehler -> fortsetzung.resumeWithException(fehler) }
+        val ergebnis = autorisiere(targetContext, anfrage)
+        val token = ergebnis.accessToken
+        val pendingIntent = ergebnis.pendingIntent
+        return when {
+            token != null -> token
+            ergebnis.hasResolution() && pendingIntent != null ->
+                throw AutorisierungBenoetigtException(pendingIntent.intentSender)
+            else -> throw IllegalStateException("Autorisierung ohne Zugriffstoken - erneute Zustimmung nötig")
         }
     }
 }
