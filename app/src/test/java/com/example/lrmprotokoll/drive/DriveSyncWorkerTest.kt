@@ -6,6 +6,7 @@ import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
+import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
@@ -16,6 +17,8 @@ import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.data.SettingsManager
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -114,13 +117,20 @@ class DriveSyncWorkerTest {
     private lateinit var context: Context
     private lateinit var driveApi: FakeDriveApiClient
     private lateinit var settings: SettingsManager
+    private lateinit var uhr: TestUhr
+    private val zone: ZoneId = ZoneId.of("Europe/Berlin")
 
-    private fun baueKoordinator() = DriveSyncCoordinator(
+    private fun baueKoordinator(
+        levelSampleDao: LevelSampleDao = FakeLevelSampleDao(),
+        noiseDao: NoiseDao = FakeNoiseDao(),
+    ) = DriveSyncCoordinator(
         driveApi = driveApi,
-        levelSampleDao = FakeLevelSampleDao(),
+        levelSampleDao = levelSampleDao,
         dailyFileDao = FakeDailyFileDao(),
-        noiseDao = FakeNoiseDao(),
+        noiseDao = noiseDao,
         settings = settings,
+        now = uhr,
+        zone = zone,
     )
 
     private fun bauWorker(coordinator: DriveSyncCoordinator) =
@@ -132,6 +142,20 @@ class DriveSyncWorkerTest {
             })
             .build()
 
+    /**
+     * Ein Pegelwert eine Stunde vor der fixen Testuhr-Zeit ([uhr]) - unabhaengig von der echten
+     * Systemuhr. Vorher fiel dieser Test sporadisch auf CI durch: `at` kam aus
+     * `System.currentTimeMillis()`, [DriveSyncCoordinator] las "jetzt" aber ueber die echte
+     * Systemuhr erst beim spaeteren `worker.doWork()`-Aufruf - lag der Sample-Zeitstempel durch
+     * Runner-Last oder eine NTP-Korrektur zwischen beiden Aufrufen einmal NACH "jetzt", fiel er
+     * aus dem `zwischen(von, jetzt)`-Fenster heraus und der Koordinator meldete faelschlich
+     * KeineAenderung statt Retry/Failure. Mit der injizierten [TestUhr] ist "jetzt" fest und die
+     * Race-Bedingung strukturell ausgeschlossen.
+     */
+    private fun sampleVorEinerStunde() = LevelSampleEntity(
+        at = uhr.now().minusSeconds(3600).toEpochMilli(), levelDb = 55.0, source = LevelSource.PCE_323,
+    )
+
     @Before
     fun aufbauen() {
         context = ApplicationProvider.getApplicationContext()
@@ -140,6 +164,7 @@ class DriveSyncWorkerTest {
         settings.driveSyncEnabled = true
         settings.driveFolderId = "ordner-id"
         settings.driveAggregationSekunden = 10
+        uhr = TestUhr(Instant.parse("2026-08-19T12:00:00Z"))
     }
 
     @Test
@@ -163,14 +188,8 @@ class DriveSyncWorkerTest {
         driveApi.dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("kein Netz", httpCode = null))
         settings.driveAggregationSekunden = 3600
         // Mindestens ein Pegelwert, sonst gibt es nichts hochzuladen und der Fehlerpfad greift nie.
-        val koordinatorMitDaten = DriveSyncCoordinator(
-            driveApi = driveApi,
-            levelSampleDao = FakeLevelSampleDao().apply {
-                eingefuegt += LevelSampleEntity(at = System.currentTimeMillis(), levelDb = 55.0, source = LevelSource.PCE_323)
-            },
-            dailyFileDao = FakeDailyFileDao(),
-            noiseDao = FakeNoiseDao(),
-            settings = settings,
+        val koordinatorMitDaten = baueKoordinator(
+            levelSampleDao = FakeLevelSampleDao().apply { eingefuegt += sampleVorEinerStunde() },
         )
         val worker = bauWorker(koordinatorMitDaten)
 
@@ -187,14 +206,8 @@ class DriveSyncWorkerTest {
     fun ordnerNichtGefundenLiefertResultFailureStattEndlosemRetry() = runTest {
         driveApi.dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("Ordner weg", httpCode = 404))
         settings.driveAggregationSekunden = 3600
-        val koordinatorMitDaten = DriveSyncCoordinator(
-            driveApi = driveApi,
-            levelSampleDao = FakeLevelSampleDao().apply {
-                eingefuegt += LevelSampleEntity(at = System.currentTimeMillis(), levelDb = 55.0, source = LevelSource.PCE_323)
-            },
-            dailyFileDao = FakeDailyFileDao(),
-            noiseDao = FakeNoiseDao(),
-            settings = settings,
+        val koordinatorMitDaten = baueKoordinator(
+            levelSampleDao = FakeLevelSampleDao().apply { eingefuegt += sampleVorEinerStunde() },
         )
         val worker = bauWorker(koordinatorMitDaten)
 
