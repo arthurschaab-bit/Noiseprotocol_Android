@@ -13,6 +13,12 @@ import androidx.room.PrimaryKey
  * zusätzlich `null`, solange die A/C-Bewertung unbestätigt ist (siehe [MeasurementEntity]-KDoc) -
  * auch wenn [calibratedDbA] selbst gesetzt ist. [meterConnected] hält fest, welche Quelle den
  * Trigger tatsächlich ausgelöst hat, unabhängig davon, ob ein kalibrierter Wert vorliegt.
+ *
+ * KI-Umbau Etappe 1 (Beweisdokumentation Baulärm): [aufnahmeQuelle], [abtastrate], [kanalzahl]
+ * und [agcAktiv] halten fest, unter welchen Aufnahmebedingungen eine WAV-Datei entstand - im
+ * Beweiskontext muss nachvollziehbar bleiben, ob z.B. eine automatische Verstärkungsregelung
+ * (AGC) aktiv war, die Pegeldynamik verfälscht haben könnte. Alle vier `null` bei Altaufnahmen
+ * und beim reinen Pegelereignis ohne Audio (DSGVO-Modus).
  */
 @Entity(tableName = "noise_records")
 data class NoiseRecord(
@@ -30,6 +36,10 @@ data class NoiseRecord(
     val deletedAt: Long? = null,
     val favorite: Boolean = false,
     val notes: String? = null,
+    val aufnahmeQuelle: Int? = null,
+    val abtastrate: Int? = null,
+    val kanalzahl: Int? = null,
+    val agcAktiv: Boolean? = null,
 )
 
 @Entity(tableName = "reference_sounds")
