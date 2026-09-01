@@ -95,6 +95,7 @@ fun SettingsScreen(
     // KI-Parameter
     var aiMode by remember { mutableStateOf(settings.aiMode) }
     var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
+    var aiNormalisierung by remember { mutableStateOf(settings.aiNormalisierung) }
 
     // F8: Ruhezeiten
     var quietHoursEnabled by remember { mutableStateOf(settings.quietHoursEnabled) }
@@ -820,6 +821,27 @@ fun SettingsScreen(
                         onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
                         valueRange = 0.05f..0.95f
                     )
+
+                    // KI-Umbau Etappe 1.6: Peak-Normalisierung vor der Inferenz - betrifft NUR
+                    // den Inferenz-Puffer, nicht die gespeicherte WAV-Datei.
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_ai_normalisierung_title), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                stringResource(R.string.settings_ai_normalisierung_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = aiNormalisierung,
+                            onCheckedChange = {
+                                aiNormalisierung = it
+                                settings.aiNormalisierung = it
+                            }
+                        )
+                    }
                 }
             }
 
