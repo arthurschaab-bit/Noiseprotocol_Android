@@ -56,6 +56,7 @@ import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.ui.components.NoiseCard
@@ -511,14 +512,11 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showOverflowMenu = false
                                     scope.launch {
-                                        var count = 0
-                                        records.filter { it.detectedLabel == null }.forEach { r ->
-                                            val detected = classifier.classify(File(r.filePath))
-                                            if (detected != null) {
-                                                dao.update(r.copy(detectedLabel = detected))
-                                                count++
-                                            }
-                                        }
+                                        val count = klassifiziereUndSpeichere(
+                                            kandidaten = records.filter { it.detectedLabel == null },
+                                            classifier = classifier,
+                                            dao = dao,
+                                        )
                                         onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
                                     }
                                 }
@@ -855,9 +853,7 @@ fun NoiseProtocolApp(
                 }
             }
         } else {
-            val groupedRecords = filteredRecords.groupBy {
-                SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(it.timestamp))
-            }
+            val groupedRecords = gruppiereNachTag(filteredRecords)
 
             groupedRecords.forEach { (date, dailyRecords) ->
                 val isCollapsed = collapsedDays.contains(date)
@@ -894,9 +890,7 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
-                            val unklassifizierteDesTages = dailyRecords.filter {
-                                it.detectedLabel == null && it.label == null && it.filePath.isNotBlank()
-                            }
+                            val unklassifizierteDesTages = unklassifizierteAufnahmen(dailyRecords)
                             if (unklassifizierteDesTages.isNotEmpty()) {
                                 val wirdKlassifiziert = klassifizierendeTage.contains(date)
                                 IconButton(
@@ -904,17 +898,11 @@ fun NoiseProtocolApp(
                                         scope.launch {
                                             klassifizierendeTage.add(date)
                                             try {
-                                                var count = 0
-                                                for (record in unklassifizierteDesTages) {
-                                                    val file = File(record.filePath)
-                                                    if (file.exists() && file.isFile) {
-                                                        val detected = classifier.classify(file)
-                                                        if (detected != null) {
-                                                            dao.update(record.copy(detectedLabel = detected))
-                                                            count++
-                                                        }
-                                                    }
-                                                }
+                                                val count = klassifiziereUndSpeichere(
+                                                    kandidaten = unklassifizierteDesTages,
+                                                    classifier = classifier,
+                                                    dao = dao,
+                                                )
                                                 val msg = if (count > 0) {
                                                     context.getString(R.string.ai_batch_day_result, count, date)
                                                 } else {
