@@ -21,14 +21,19 @@ private const val WORK_NAME = "heartbeat"
  * Ueberwachungsfenster auf der Gegenseite (Vorschlag: 45 min) faengt den groeberen Takt auf.
  * Die Abweichung ist im PR vermerkt.
  */
-class HeartbeatWorker(
+class HeartbeatWorker @JvmOverloads constructor(
     context: Context,
     parameter: WorkerParameters,
+    /** Testluecken-Auftrag Stufe 2: Testseam, `null` (Standard) verwendet den echten Pinger aus
+     * dem Container. Ein Test uebergibt hier einen [HeartbeatPinger] gegen einen MockWebServer,
+     * ueber eine eigene WorkerFactory. */
+    private val pingerOverride: HeartbeatPinger? = null,
 ) : CoroutineWorker(context, parameter) {
 
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
-        return when (val ergebnis = container.heartbeatPinger.ping()) {
+        val pinger = pingerOverride ?: container.heartbeatPinger
+        return when (val ergebnis = pinger.ping()) {
             HeartbeatPinger.Ergebnis.GESENDET -> {
                 container.diagnosticsReporter.breadcrumb("Heartbeat", "Heartbeat erfolgreich gesendet")
                 Result.success()
