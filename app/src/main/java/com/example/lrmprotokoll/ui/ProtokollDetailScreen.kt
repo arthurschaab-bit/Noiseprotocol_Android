@@ -279,7 +279,8 @@ fun ProtokollDetailScreen(
                         onClick = {
                             val k = kennwerte ?: return@Button
                             scope.launch {
-                                val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender) }
+                                val fotos = withContext(Dispatchers.IO) { container.fotoDokumentation.fuerSession(s.id) }
+                                val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender, fotos) }
                                 export.teilen(datei)
                             }
                         },

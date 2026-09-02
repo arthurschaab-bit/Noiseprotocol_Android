@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.example.lrmprotokoll.ui
 
 import android.app.AlarmManager
@@ -77,6 +79,12 @@ fun SettingsScreen(
 
     // Ansichtsmodus (Lite vs. Pro) & Presets-Dialog
     var isProMode by remember { mutableStateOf(settings.isProMode) }
+    var expFoto by remember { mutableStateOf(false) }
+    var fotoDokuAktiv by remember { mutableStateOf(settings.fotoDokuAktiv) }
+    var fotoMessaufbau by remember { mutableStateOf(settings.fotoDokuMessaufbau) }
+    var fotoKalibrierung by remember { mutableStateOf(settings.fotoDokuKalibrierung) }
+    var fotoMax by remember { mutableFloatStateOf(settings.fotoDokuMaxProKategorie.toFloat()) }
+    var fotoDriveUpload by remember { mutableStateOf(settings.fotoDokuDriveUpload) }
     var showWohnraumDialog by remember { mutableStateOf(false) }
 
     // F1 Schwellenwert-Assistent (PROMPT_M10_FUNKTIONEN.md): Live-Mikrofonpegel neben dem
@@ -1243,6 +1251,89 @@ fun SettingsScreen(
             }
 
             // Sektion 8: Diagnose & Systemgesundheit
+            SettingsSectionCard(
+                title = "Fotodokumentation",
+                summary = if (fotoDokuAktiv) "Aktiv" else "Deaktiviert",
+                expanded = expFoto,
+                onToggle = { expFoto = !expFoto }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Beim Start eines Messvorgangs nach Fotos fragen")
+                    Switch(checked = fotoDokuAktiv, onCheckedChange = {
+                        fotoDokuAktiv = it
+                        settings.fotoDokuAktiv = it
+                    })
+                }
+                Text(
+                    "Ein Foto vom Messaufbau belegt später, wie und wo gemessen wurde – die häufigste " +
+                        "Entkräftung eines privaten Messprotokolls. Die Messung läuft dabei schon; " +
+                        "sie wird nie durch die Fotoabfrage verzögert.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                if (fotoDokuAktiv) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    listOf(
+                        Triple("Messaufbau", fotoMessaufbau) { wert: String ->
+                            fotoMessaufbau = wert; settings.fotoDokuMessaufbau = wert
+                        },
+                        Triple("Kalibrierung", fotoKalibrierung) { wert: String ->
+                            fotoKalibrierung = wert; settings.fotoDokuKalibrierung = wert
+                        },
+                    ).forEach { (bezeichnung, aktuell, setzen) ->
+                        Text(bezeichnung, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            listOf("AUS" to "Aus", "OPTIONAL" to "Optional", "PFLICHT" to "Empfohlen").forEach { (wert, beschriftung) ->
+                                FilterChip(
+                                    selected = aktuell == wert,
+                                    onClick = { setzen(wert) },
+                                    label = { Text(beschriftung) },
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    Text(
+                        "\"Empfohlen\" hebt die Kategorie hervor und hält eine Auslassung im Diagnoseprotokoll " +
+                            "fest – die Messung wird nie blockiert.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    if (isProMode) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Höchstens ${fotoMax.toInt()} Fotos je Kategorie")
+                        Slider(
+                            value = fotoMax,
+                            onValueChange = { fotoMax = it },
+                            onValueChangeFinished = { settings.fotoDokuMaxProKategorie = fotoMax.toInt() },
+                            valueRange = 1f..10f,
+                            steps = 8,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Fotos nach Google Drive hochladen")
+                            Switch(checked = fotoDriveUpload, onCheckedChange = {
+                                fotoDriveUpload = it
+                                settings.fotoDokuDriveUpload = it
+                            })
+                        }
+                    }
+                }
+            }
+
             SettingsSectionCard(
                 title = stringResource(R.string.settings_section_diagnostics),
                 summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
