@@ -48,6 +48,9 @@ Etappe A und Etappe B sind **zwei getrennte PRs**, nicht einer.
    „wenn ich schon mal hier bin"-Aufräumarbeiten.
 4. **Offene Entscheidungen (Abschnitt 4) entscheidest du nicht selbst.** Du fragst den Owner.
    Wo dieses Dokument eine Empfehlung ausspricht, ist das eine Empfehlung, kein Beschluss.
+   **Ausnahme: Abschnitt 4a.** Dort stehen die Punkte, die der Owner bereits entschieden hat
+   (E1 und E4) — die sind Vorgabe. **Lies Abschnitt 4a, bevor du mit Etappe A oder B
+   anfängst**, er ändert an beiden Etappen etwas Wesentliches.
 
 ---
 
@@ -121,7 +124,10 @@ kein Freibrief — auch im Messgerät-Betrieb schneidet der Service weiter Audio
 Fachlich ist die **`SessionEntity` der richtige Anker** für eine Fotodokumentation: sie hat eine
 ID, einen Start, ein Ende, ein Gerät, und der Sessionbericht (`report/MessreiheExport.kt`) wird
 genau daraus erzeugt. Ein reiner Mikrofonlauf erzeugt heute dagegen **keine** Session-Zeile.
-→ **Entscheidung E1.**
+
+→ **E1 ist entschieden: die Fotodokumentation gilt auch für den Mikrofonlauf.** Damit muss der
+Mikrofonlauf eine Session bekommen — das ist eine Vorarbeit vor der eigentlichen Fotofunktion.
+**Siehe Abschnitt 4a**, dort steht, wie und welche vier Nebenwirkungen zu prüfen sind.
 
 ### F-6 · Berichte sind handgezeichnete PdfDocument-Seiten
 
@@ -232,8 +238,9 @@ Neue Tabelle `dokumentationsfotos`:
 @Entity(tableName = "dokumentationsfotos")
 data class DokumentationsFotoEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    /** Zugehörige Session; null, falls E1 einen mikrofonbasierten Lauf ohne Session zulässt. */
-    val sessionId: Long?,
+    /** Zugehoerige Session - non-null, weil nach der Vorarbeit aus Abschnitt 4a (E1) auch
+     *  ein Mikrofonlauf eine Session eroeffnet. Jeder Messvorgang hat damit genau einen Anker. */
+    val sessionId: Long,
     /** Wert von [FotoKategorie], als String gespeichert — kein Room-TypeConverter nötig,
      *  gleiche Konvention wie ConnectionEventEntity.type. */
     val kategorie: String,
@@ -315,7 +322,8 @@ Lite/Pro: Der Hauptschalter gehört in die Lite-Ansicht, `fotoDokuMaxProKategori
 
 ### A.3 Aufnahme-Ablauf
 
-1. Nutzer startet den Messvorgang (welcher Startpunkt genau: **E1**).
+1. Nutzer startet den Messvorgang — **beides zählt**: Messgerät-Session wie Mikrofonlauf
+   (E1, entschieden; die Session für den Mikrofonlauf ist die Vorarbeit aus Abschnitt 4a).
 2. `fotoDokuAktiv == false` → nichts passiert, Messung startet wie bisher. **Dieser Pfad muss
    bit-identisch zum heutigen Verhalten sein.**
 3. Sonst: Die Messung startet **sofort und unverändert**, und *danach* erscheint ein
@@ -501,6 +509,9 @@ Reine JVM-/Robolectric-Tests, handgeschriebene Fakes (F-10):
 - [ ] `fotoDokuAktiv = false` (Default) verändert das bisherige Verhalten an keiner Stelle.
 - [ ] Umfang ist in den Einstellungen konfigurierbar: je Kategorie AUS/OPTIONAL/PFLICHT plus
       Obergrenze — die wörtliche Owner-Anforderung.
+- [ ] **Der Mikrofonlauf eröffnet eine Session** (E1, Abschnitt 4a), in einem eigenen Commit vor
+      der Fotofunktion; die vier dort genannten Nebenwirkungen sind einzeln geprüft und im PR
+      beantwortet.
 - [ ] Fotos erscheinen im Session-PDF; ein fehlendes Foto erzeugt einen Platzhalter statt eines
       Absturzes.
 - [ ] Fotos landen in Drive, genau einmal, nur unter der eingestellten WLAN-Bedingung.
@@ -521,6 +532,9 @@ Reine JVM-/Robolectric-Tests, handgeschriebene Fakes (F-10):
 
 Während einer laufenden Aufzeichnung startet der Nutzer per Knopfdruck eine Videoaufnahme als
 Beweismittel. Das Video wird der Session zugeordnet und nach Drive hochgeladen.
+
+**E4 ist entschieden: mit Tonspur** (Abschnitt 4a). V1 entfällt, die Kamera-Frage aus B.2 ist
+damit zugunsten von CameraX beantwortet, und B.1 entscheidet nur noch zwischen V2 und V3.
 
 ### B.1 Vorbedingung — Gerätemessung des Mikrofon-Konflikts
 
@@ -545,12 +559,13 @@ stumm (Pegel fällt auf ~0, ohne Fehler) · `AudioRecord` liefert Fehler · beid
 
 | Variante | Beschreibung | Kosten |
 |---|---|---|
-| **V1** | Video **ohne** Tonspur | Mikrofon-Konflikt existiert nicht. Preis: Das Video belegt, *was* zu sehen war, nicht *wie laut* es war. Für den Nachweis „Bagger stand um 6:12 Uhr vor dem Haus" reicht das oft. |
+| ~~**V1**~~ | ~~Video **ohne** Tonspur~~ | **Vom Owner verworfen (E4).** Nur noch hier aufgeführt, damit nachvollziehbar bleibt, was abgewogen wurde. |
 | **V2** | Mikrofon-Monitoring für die Dauer der Videoaufnahme pausieren, Video **mit** Ton | Ehrlich und einfach zu erklären. Preis: eine bewusste, sichtbare **Lücke in der Messreihe** — die muss dann auch als Lücke protokolliert werden, wie die Ausfallbänder in `ConnectionEventEntity`. Bei verbundenem PCE-323 entsteht **keine** Pegel-Lücke (F-4), nur eine Lücke in der WAV-Erfassung. |
 | **V3** | Beides parallel, weil B.1 gezeigt hat, dass es auf den Zielgeräten funktioniert | Das Beste — **nur wenn gemessen.** Niemals als Annahme. |
 
-**Empfehlung:** V1 als Default, V2 als Option, V3 nur nach positivem B.1-Ergebnis auf mindestens
-zwei verschiedenen Geräten. Die Entscheidung trifft der Owner.
+**Der Owner hat entschieden: mit Ton** (Abschnitt 4a). Es bleiben V2 und V3, und B.1 entscheidet
+zwischen ihnen: V3, wenn der Parallelbetrieb auf mindestens zwei Geräten nachweislich
+konfliktfrei läuft — sonst V2 mit den drei Pflichtauflagen aus Abschnitt 4a.
 
 ### B.2 Kamera-Anbindung
 
@@ -561,19 +576,19 @@ Hier ist die Abwägung anders als bei den Fotos.
   fremden Kamera-App selbst beenden, du kannst Dauer, Auflösung und Tonspur **nicht** steuern
   (`EXTRA_DURATION_LIMIT` und `EXTRA_VIDEO_QUALITY` sind Empfehlungen, die viele Kamera-Apps
   ignorieren) — und **eine Tonspur abzuschalten ist über den Intent gar nicht möglich.** Damit
-  ist V1 auf diesem Weg nicht baubar.
+  ist auf diesem Weg weder eine verlässliche Maximaldauer noch ein kontrolliertes Tonverhalten
+  baubar.
 - **CameraX `VideoCapture` + `Recorder`** (`androidx.camera:camera-video`): volle Kontrolle über
   Tonspur, Qualität und Maximaldauer. Preis: vier neue Abhängigkeiten (`camera-core`,
   `camera-camera2`, `camera-lifecycle`, `camera-video`), `CAMERA`-Berechtigung, eigener
   Vorschau-Screen und — auf Android 14+ — ein Foreground Service vom Typ `camera`, wenn die
   Aufnahme weiterlaufen soll, während die App im Hintergrund ist.
 
-**Empfehlung: CameraX**, weil ohne Kontrolle über die Tonspur weder V1 noch eine verlässliche
-Maximaldauer machbar ist. Das ist ein bewusster Bruch mit dem minimalen Abhängigkeitsstil des
-Projekts — **benenne ihn im PR ausdrücklich**, statt ihn nebenbei einzuführen.
-
-Falls CameraX abgelehnt wird, ist nur V2 mit der System-Kamera möglich, mit allen genannten
-Einschränkungen. Auch das ist **E4**.
+**Entschieden: CameraX.** Mit der Owner-Entscheidung „mit Ton" (E4) ist die System-Kamera keine
+tragfähige Option mehr — ohne Kontrolle über Tonspur und Maximaldauer wäre weder die
+Speicherobergrenze aus B.5 noch das Pausier-/Wiederanlauf-Verhalten aus B.8 zuverlässig
+umsetzbar. Das ist ein bewusster Bruch mit dem minimalen Abhängigkeitsstil des Projekts —
+**benenne ihn im PR ausdrücklich**, statt ihn nebenbei einzuführen.
 
 ### B.3 Manifest und Foreground Service
 
@@ -608,7 +623,7 @@ Analog zu A.1, Tabelle `beweisvideos`:
 @Entity(tableName = "beweisvideos")
 data class BeweisVideoEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val sessionId: Long?,
+    val sessionId: Long,
     val dateiPfad: String,
     val gestartetAm: Long,
     val dauerMs: Long,
@@ -719,11 +734,11 @@ zu einem Neustart, nicht zu einer Endlosschleife.
   Aufzeichnung** — der Owner-Auftrag lautet „während Aufzeichnung".
 - Vorschau-Screen mit Aufnahmeknopf, laufender Dauer, Restdauer bis zum Maximum und
   Stopp-Knopf.
-- Bei V1 (ohne Ton) **muss** sichtbar dastehen: „Aufnahme ohne Ton (Mikrofon misst weiter)".
-  Ein Nutzer, der erst beim Abspielen merkt, dass der Beweis stumm ist, ist zu Recht verärgert.
 - Bei V2 **muss** vor dem Start eine Bestätigung kommen: „Die Pegelmessung pausiert für die
   Dauer der Videoaufnahme." Das ist eine Lücke im Beweismittel — sie darf nicht stillschweigend
-  entstehen.
+  entstehen; zusätzlich wird sie protokolliert (Abschnitt 4a, Punkt 2).
+- Bei V3 (Parallelbetrieb) entfällt diese Bestätigung — dann aber im PR belegen, dass die
+  Messung während der Videoaufnahme nachweislich weiterlief, statt es anzunehmen.
 - Videos im Session-Detail auflisten, Abspielen über einen `ACTION_VIEW`-Intent mit
   FileProvider-Uri (kein eingebauter Player — dafür gibt es keinen Grund und keine
   Abhängigkeit).
@@ -744,7 +759,8 @@ Speicher), Stopp (mit Dauer und Dateigröße), Fehler, Uploadfortschritt je Bloc
 
 - [ ] **B.1 ist durchgeführt und das Ergebnis dokumentiert** — mit Gerät, Android-Version und
       gemessenen Werten, nicht mit Vermutungen.
-- [ ] E4 ist vom Owner entschieden; die gebaute Variante entspricht der Entscheidung.
+- [ ] Das Video hat eine Tonspur (E4, entschieden); die gebaute Variante ist V2 oder V3, je
+      nach B.1-Ergebnis, und die Wahl ist mit den gemessenen Werten begründet.
 - [ ] `assembleDebug` und `test` grün, Ausgabe im PR.
 - [ ] Migration + Migrationstest vorhanden.
 - [ ] Der resumable Upload ist gegen `MockWebServer` getestet, inklusive Wiederaufnahme nach
@@ -767,14 +783,104 @@ nicht — frag den Owner."
 
 | Nr. | Frage | Empfehlung |
 |---|---|---|
-| **E1** | Woran hängt die Fotodokumentation: an der **Messgerät-Session** (`SessionEntity`, F-5) oder auch an einem reinen Mikrofonlauf, der heute gar keine Session-Zeile erzeugt? | An der Session. Ein Beleg-Foto ohne Messvorgang, dem es zugeordnet ist, hat wenig Wert. Falls Mikrofonläufe mitsollen, müssten die erst eine Session bekommen — das wäre ein eigener Auftrag. |
+| ~~**E1**~~ | Woran hängt die Fotodokumentation: nur an der Messgerät-Session oder auch am reinen Mikrofonlauf? | **ENTSCHIEDEN (Owner): auch mit Mikrofonlauf.** Siehe Abschnitt 4a — das zieht eine Vorarbeit nach sich. |
 | **E2** | Soll `PFLICHT` die Messung tatsächlich **blockieren**, bis fotografiert wurde? | Nein. Eine Nebenfunktion darf die Kernfunktion nicht verhindern. `PFLICHT` = Dialog erscheint + Auslassung wird protokolliert. |
 | **E3** | Foto über die **System-Kamera** (`ACTION_IMAGE_CAPTURE`, keine Abhängigkeit) oder **In-App-Kamera** (CameraX, Zeitstempel-Overlay möglich)? | System-Kamera. Der Zeitstempel steht bereits in der Datenbank und im Bericht; ein eingebranntes Overlay ist nicht mehr wert und kostet erheblich mehr. |
-| **E4** | Video **mit oder ohne Tonspur** — V1, V2 oder V3 (B.1)? Und damit: CameraX oder System-Kamera? | Erst B.1 messen. Danach: V1 (ohne Ton) als Default, V2 als Option. V3 nur bei bestätigt konfliktfreiem Parallelbetrieb auf ≥ 2 Geräten. |
+| ~~**E4**~~ | Video **mit oder ohne Tonspur** — V1, V2 oder V3? | **ENTSCHIEDEN (Owner): mit Ton.** V1 entfällt. B.1 entscheidet nur noch V2 gegen V3 — siehe Abschnitt 4a. |
 | **E5** | Drive-Ablage: alles weiter **flach** in einen Ordner (F-7) oder **Unterordner** `fotos/` und `videos/`? | Unterordner. Bei mehreren Fotos je Messung wird der flache Ordner sonst schnell unbrauchbar. Kostet nur einen zusätzlichen `ordnerAnlegen`-Aufruf plus eine gecachte Ordner-ID. |
 | **E6** | **GPS-Koordinaten** im Foto-EXIF behalten? | Nein, entfernen. Sichtbar in den Einstellungen anbieten, falls der Owner sie im Beweismittel haben will — aber nie als stiller Default. |
 | **E7** | Sollen Fotos auch im **Zeitraumbericht** (`PeriodenBerichtExport`) erscheinen? | In Etappe A nicht. Über viele Sessions hinweg wird das Dokument unbrauchbar groß. Später als eigene Anlage denkbar. |
 | **E8** | **Aufbewahrungsfrist für Videos** — dieselben 90 Tage wie für Messwerte (Plan 13.2), oder kürzer? | Kürzer, Vorschlag 30 Tage mit Einstellung. Videos sind das größte Datenvolumen der App; wer eines dauerhaft braucht, kann es als Favorit markieren. |
+
+---
+
+## 4a · Getroffene Entscheidungen des Owners — verbindlich
+
+Zwei der acht Punkte aus Abschnitt 4 sind entschieden. **Sie sind keine Empfehlung mehr,
+sondern Vorgabe.** Beide ziehen Arbeit nach sich, die sonst nicht angefallen wäre; das steht
+hier, damit niemand sie beim Schätzen übersieht.
+
+### E1 (entschieden) · Fotodokumentation gilt auch für den reinen Mikrofonlauf
+
+**Das ist mehr als ein Häkchen.** Heute erzeugt ein Mikrofonlauf **keine `SessionEntity`** —
+`MeasurementRecorder.kt:83` ist die einzige Stelle im gesamten Code, die eine Session anlegt,
+und sie wird ausschließlich aus `AudioRecordingService.kt:221` mit einem `BoundDevice`
+aufgerufen. Ein Foto „zum Messvorgang" hätte bei einem Mikrofonlauf also nichts, woran es
+hängen könnte.
+
+**Vorgabe: Der Mikrofonlauf bekommt eine eigene Session** — nicht die Fotos einen zweiten,
+konkurrierenden Anker.
+
+Das ist die einzige Variante, die nicht neuen Wildwuchs erzeugt. Der KDoc von `SessionEntity`
+definiert eine Session ausdrücklich als „die Klammer um *wie lange wurde überwacht*, nicht *wie
+lange stand die Verbindung*" — ein Mikrofonlauf ist genau so eine Klammer. Die Alternative
+(`sessionId = null` plus Zuordnung über ein Zeitfenster) würde zwei verschiedene Arten von
+„Messvorgang" nebeneinander etablieren, die jede spätere Auswertung doppelt behandeln muss.
+
+**Konkret, und ohne Schemaänderung machbar:**
+
+- Beim Start der Mikrofon-Überwachung eine `SessionEntity` anlegen mit
+  `deviceName = "Smartphone-Mikrofon"` und `deviceAddress = ""`; beim Stoppen `endedAt` setzen.
+  Beide Spalten sind `String` (non-null) — ein leerer `deviceAddress` ist der ehrliche Wert
+  („es gibt keine BLE-Adresse"), ein erfundener wäre eine gespeicherte Tatsachenbehauptung.
+  **Keine Migration nötig.**
+- `weighting`, `timeWeighting` und `range` bleiben `null` — beim Mikrofon ist nichts davon
+  bekannt, und der `SessionEntity`-KDoc verlangt für Unbekanntes ausdrücklich `null`.
+
+**Diese vier Nebenwirkungen musst du prüfen und im PR beantworten** — sie entstehen dadurch,
+dass es plötzlich Sessions ohne Messgerät gibt:
+
+1. `ui/ProtokollScreen.kt` listet Sessions auf. Mikrofon-Sessions erscheinen dort ab sofort
+   mit. Ist die Darstellung mit leerem `deviceAddress` erträglich, oder braucht sie eine
+   eigene Kennzeichnung („Mikrofon" statt Gerätename)?
+2. `PeriodenBericht.sessionCount` (`report/PeriodenBerichtDaten.kt`) zählt ab sofort mehr
+   Sessions. Ist das gewollt (ja — es *waren* Messvorgänge) und im Bericht verständlich?
+3. `leiteAusfallbaenderAb` liefert für eine Mikrofon-Session immer eine leere Liste, weil es
+   keine `ConnectionEventEntity` gibt. Das ist korrekt, darf aber im Bericht nicht als
+   „keine Ausfälle, alles gut" missverstanden werden, wo in Wahrheit „nicht anwendbar" gilt.
+4. `MessreiheExport.exportierePdf` für eine Mikrofon-Session hat **keine**
+   `MeasurementEntity`-Zeilen, die Kennwerte sind also leer. Der Bericht muss das aushalten und
+   verständlich beschriften, statt Nullen oder Striche zu zeigen.
+
+**Reihenfolge:** Diese Vorarbeit kommt **vor** der Fototabelle und gehört in einen eigenen
+Commit („Mikrofonlauf eröffnet eine Session"), damit sie im Review von der Fotofunktion
+trennbar bleibt. `dokumentationsfotos.sessionId` kann dadurch **non-null** werden — jeder
+Messvorgang hat dann eine Session.
+
+### E4 (entschieden) · Videobeweis wird **mit Tonspur** aufgenommen
+
+**V1 (ohne Ton) entfällt.** Damit ist auch die Kamera-Frage entschieden: Über den
+System-Kamera-Intent lässt sich die Tonspur nicht steuern, aber ohne Steuerung auch keine
+verlässliche Maximaldauer setzen (B.2) — es bleibt **CameraX** (`camera-core`,
+`camera-camera2`, `camera-lifecycle`, `camera-video`) mit `CAMERA`-Berechtigung. Der Bruch mit
+dem minimalen Abhängigkeitsstil des Projekts ist damit vom Owner gedeckt; **benenne ihn im PR
+trotzdem ausdrücklich.**
+
+**B.1 bleibt trotzdem Pflicht** — die Entscheidung „mit Ton" beantwortet das *Ziel*, nicht den
+*Mechanismus*. Die Messung entscheidet jetzt nur noch zwischen zwei Wegen:
+
+- **V3 (Parallelbetrieb)**, falls die Messung zeigt, dass Videoaufnahme mit Ton und laufender
+  `AudioRecord` auf den Zielgeräten koexistieren: der gewünschte Zustand, keine Messlücke.
+- **V2 (Monitoring pausieren)**, falls nicht: Das Mikrofon-Monitoring pausiert für die Dauer
+  der Videoaufnahme.
+
+**Wenn es V2 wird, sind die folgenden drei Punkte nicht optional:**
+
+1. Vor dem Start eine Bestätigung: „Die Pegelmessung pausiert für die Dauer der
+   Videoaufnahme." Eine Lücke im Beweismittel darf nicht stillschweigend entstehen.
+2. Die Lücke wird **protokolliert**, nicht nur angezeigt — als `ConnectionEventEntity` der
+   laufenden Session, damit sie in den Ausfallbändern des Berichts auftaucht wie jeder andere
+   Ausfall. Eine Messreihe, in der Lücken einfach fehlen, ist forensisch wertlos; genau dafür
+   existiert die Tabelle bereits.
+3. Der Wiederanlauf des Monitorings gehört in ein `finally` — auch eine mit Fehler beendete
+   Videoaufnahme muss die Messung zurückbringen (B.8).
+
+**Wichtige Differenzierung aus F-4, die du beim Messen offenlegen musst:** Bei verbundenem
+PCE-323 kommt der maßgebliche kalibrierte Pegel über BLE, nicht vom Mikrofon. Dort kostet V2
+**keine** Pegel-Lücke, sondern nur eine Lücke in der WAV-Erfassung. Bei
+`audioTriggerQuelle = "MIKROFON"` kostet V2 dagegen die Messung selbst. Miss beide
+Konstellationen und benenne sie im Ergebnis getrennt — es ist gut möglich, dass V2 im
+Messgerät-Betrieb völlig unproblematisch und im Mikrofonbetrieb inakzeptabel ist.
 
 ---
 
