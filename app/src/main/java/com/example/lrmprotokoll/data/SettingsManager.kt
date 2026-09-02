@@ -323,6 +323,45 @@ class SettingsManager(
         get() = prefs.getBoolean("drive_ordner_blockiert", false)
         set(value) = prefs.edit().putBoolean("drive_ordner_blockiert", value).apply()
 
+    // ---------------------------------------------------------------- M11: Fotodokumentation
+
+    /**
+     * Schaltet die gesamte Fotodokumentation. Default AUS: Eine Kamera-Aufforderung bei jedem
+     * Messstart ist fuer Bestandsnutzer eine unerwartete Verhaltensaenderung.
+     */
+    var fotoDokuAktiv: Boolean
+        get() = prefs.getBoolean("foto_doku_aktiv", false)
+        set(value) = prefs.edit().putBoolean("foto_doku_aktiv", value).apply()
+
+    /**
+     * Umfang je Kategorie: "AUS", "OPTIONAL" oder "PFLICHT" (Owner-Anforderung "Umfang soll
+     * konfigurierbar sein in Einstellungen").
+     *
+     * "PFLICHT" blockiert die Messung NICHT - es bedeutet, dass der Dialog erscheint und eine
+     * Auslassung protokolliert wird. Eine Nebenfunktion darf die Kernaufgabe nicht verhindern;
+     * dieselbe Regel wie bei der KI-Klassifikation (classifySafely).
+     */
+    var fotoDokuMessaufbau: String
+        get() = prefs.getString("foto_doku_messaufbau", "OPTIONAL") ?: "OPTIONAL"
+        set(value) = prefs.edit().putString("foto_doku_messaufbau", value).apply()
+
+    var fotoDokuKalibrierung: String
+        get() = prefs.getString("foto_doku_kalibrierung", "OPTIONAL") ?: "OPTIONAL"
+        set(value) = prefs.edit().putString("foto_doku_kalibrierung", value).apply()
+
+    /** Obergrenze je Kategorie - verhindert unbegrenztes Zumuellen von Speicher und Drive. */
+    var fotoDokuMaxProKategorie: Int
+        get() = prefs.getInt("foto_doku_max_pro_kategorie", 3).coerceAtLeast(1)
+        set(value) = prefs.edit().putInt("foto_doku_max_pro_kategorie", value.coerceAtLeast(1)).apply()
+
+    /**
+     * Eigener Schalter analog zu [driveUploadWav]: Fotos koennen Dritte oder Wohnungsinneres
+     * zeigen - dieselbe Datenschutzkategorie wie Audioaufnahmen, deshalb abschaltbar.
+     */
+    var fotoDokuDriveUpload: Boolean
+        get() = prefs.getBoolean("foto_doku_drive_upload", true)
+        set(value) = prefs.edit().putBoolean("foto_doku_drive_upload", value).apply()
+
     // ---------------------------------------------------------------- M6: Sicherheit
 
     /**

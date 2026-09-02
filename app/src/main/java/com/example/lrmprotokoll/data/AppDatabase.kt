@@ -289,9 +289,33 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
     }
 }
 
+/**
+ * Migration von Schema-Version 14 auf 15: Fotodokumentation (M11 Etappe A).
+ *
+ * Eine neue Tabelle, rein additiv - an bestehenden Tabellen aendert sich nichts, Altbestaende
+ * bleiben unangetastet. Das `CREATE TABLE` ist woertlich aus dem von Room erzeugten Schema
+ * `app/schemas/.../15.json` uebernommen: Die identityHash-Pruefung ist byte-genau, und ein von
+ * Hand formuliertes Statement weicht fast immer in Kleinigkeiten ab.
+ */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `dokumentationsfotos` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER NOT NULL, " +
+                "`kategorie` TEXT NOT NULL, " +
+                "`dateiPfad` TEXT NOT NULL, " +
+                "`aufgenommenAm` INTEGER NOT NULL, " +
+                "`notiz` TEXT, " +
+                "`driveFileId` TEXT, " +
+                "`pruefsumme` TEXT)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-    MIGRATION_12_13, MIGRATION_13_14,
+    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
 )
 
 @Database(
@@ -300,8 +324,9 @@ val ALLE_MIGRATIONEN = arrayOf(
         LevelSampleEntity::class, DriveDailyFileEntity::class,
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
+        DokumentationsFotoEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)
@@ -325,6 +350,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun diagnosticLogDao(): DiagnosticLogDao
 
     abstract fun klassifikationsRohdatenDao(): KlassifikationsRohdatenDao
+
+    abstract fun dokumentationsFotoDao(): DokumentationsFotoDao
 
     companion object {
         @Volatile

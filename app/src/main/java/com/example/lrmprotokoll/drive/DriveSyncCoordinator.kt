@@ -29,6 +29,11 @@ class DriveSyncCoordinator(
     private val settings: SettingsManager,
     private val now: InstantSource = InstantSource.System,
     private val zone: ZoneId = ZoneId.systemDefault(),
+    /**
+     * Optional, damit die zahlreichen bestehenden Test-Aufbauten nicht alle ein weiteres Fake
+     * mitschleppen muessen: `null` heisst schlicht "keine Fotos hochladen".
+     */
+    private val dokumentationsFotoDao: com.example.lrmprotokoll.data.DokumentationsFotoDao? = null,
 ) {
 
     sealed interface SyncErgebnis {
@@ -86,6 +91,8 @@ class DriveSyncCoordinator(
         var totalWavCountInZips = 0
 
         // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
+        ladeFotosHoch(ordnerId)
+
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
             if (wavRecords.isNotEmpty()) {
@@ -194,6 +201,39 @@ class DriveSyncCoordinator(
      * Zyklus koennte `dateiAnlegen` abgeschlossen, aber vor dem Speichern der Antwort abgebrochen
      * sein) und nur bei echtem Fehlen neu angelegt.
      */
+    /**
+     * Laedt Belegfotos hoch (M11 Etappe A). Nutzt bewusst den bestehenden
+     * [DriveApiClient.dateiAnlegen]-Pfad: Ein herunterskaliertes JPEG liegt weit unter 1 MB, der
+     * Spitzenspeicher von rund dem Doppelten der Dateigroesse ist dafuer unproblematisch.
+     *
+     * `gzip = false`, weil JPEG bereits komprimiert ist - Gzip darueber kostet CPU und bringt
+     * nichts. Eine gesetzte [DokumentationsFotoEntity.driveFileId] ist zugleich die
+     * Idempotenz-Sicherung: Ein Foto wird nie zweimal hochgeladen.
+     */
+    private suspend fun ladeFotosHoch(ordnerId: String) {
+        if (!settings.fotoDokuDriveUpload) return
+        val dao = dokumentationsFotoDao ?: return
+
+        val offene = runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        for (foto in offene) {
+            val datei = java.io.File(foto.dateiPfad)
+            if (!datei.exists()) continue
+
+            val name = datei.name
+            // Waisen-Absicherung wie bei CSV und WAV: Ein vorheriger, halb fehlgeschlagener
+            // Versuch koennte die Datei bereits angelegt haben.
+            val vorhanden = driveApi.dateiSuchen(name, ordnerId).getOrNull()
+            if (vorhanden != null) {
+                runCatching { dao.setzeDriveFileId(foto.id, vorhanden.id) }
+                continue
+            }
+
+            val inhalt = runCatching { datei.readBytes() }.getOrNull() ?: continue
+            driveApi.dateiAnlegen(name, ordnerId, inhalt, "image/jpeg", gzip = false)
+                .onSuccess { fileId -> runCatching { dao.setzeDriveFileId(foto.id, fileId) } }
+        }
+    }
+
     private suspend fun schreibeDatei(
         bekannteFileId: String?,
         dateiName: String,

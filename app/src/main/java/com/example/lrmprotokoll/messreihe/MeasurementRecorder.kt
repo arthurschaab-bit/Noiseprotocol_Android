@@ -27,6 +27,13 @@ import kotlinx.coroutines.sync.withLock
 private const val TAG = "MeasurementRecorder"
 
 /**
+ * Geraetename einer Session, die ohne Messgeraet nur mit dem Smartphone-Mikrofon lief. Bewusst
+ * ein sprechender Name statt eines leeren Feldes: In der Protokollansicht und im Bericht steht
+ * damit ausdruecklich da, womit gemessen wurde.
+ */
+const val MIKROFON_GERAETENAME = "Smartphone-Mikrofon"
+
+/**
  * Schreibt die Messreihe fuer M4 (Plan Abschnitt 8.1/8.2): eine [SessionEntity] pro
  * Ueberwachungsperiode, [MeasurementEntity] je Messwert, [ConnectionEventEntity] je
  * Verbindungsaenderung. Kennt nur [ConnectionState] und [MeterFrame] - weder BLE noch Room-
@@ -56,6 +63,9 @@ class MeasurementRecorder(
     private var job: Job? = null
 
     @Volatile private var aktiveSessionId: Long? = null
+
+    /** Ob die laufende Session ein reiner Mikrofonlauf ist (kein Messgeraet, keine Messwerte). */
+    @Volatile private var aktiveSessionIstMikrofon = false
     private var warJemalsVerbunden = false
     private var zuletztImAusfall = false
 
@@ -80,6 +90,11 @@ class MeasurementRecorder(
     fun start(device: BoundDevice) {
         if (job?.isActive == true) return
         job = scope.launch {
+            // Laeuft gerade ein reiner Mikrofonlauf, endet er hier: Die Messquelle wechselt vom
+            // Mikrofon auf das kalibrierte Geraet, und das sind zwei verschiedene Messvorgaenge.
+            // Beide in eine Session zu werfen wuerde einen Teil der Werte mit der falschen
+            // Quelle ausweisen.
+            beendeMikrofonSession()
             schliesseVerwaisteSessions()
 
             aktiveSessionId = sessionDao.insert(
@@ -109,6 +124,53 @@ class MeasurementRecorder(
                 }
             }
         }
+    }
+
+    /**
+     * Eroeffnet eine Session fuer einen reinen Mikrofonlauf - ohne Messgeraet.
+     *
+     * Bis M11/E1 erzeugte nur die Messgeraet-Verbindung eine [SessionEntity]; ein Mikrofonlauf
+     * lief voellig ohne. Damit hatte er keine Klammer, an der Fotodokumentation, Sessionbericht
+     * oder Protokollansicht haetten haengen koennen. Der KDoc von [SessionEntity] definiert eine
+     * Session ausdruecklich als "die Klammer um *wie lange wurde ueberwacht*" - ein Mikrofonlauf
+     * ist genau so eine Klammer.
+     *
+     * [SessionEntity.deviceAddress] bleibt leer statt eine Pseudo-Adresse zu erfinden: Es gibt
+     * keine BLE-Adresse, und ein erfundener Wert waere eine gespeicherte Tatsachenbehauptung.
+     * [SessionEntity.weighting], [SessionEntity.timeWeighting] und [SessionEntity.range] bleiben
+     * `null` - beim Mikrofon ist nichts davon bekannt.
+     *
+     * Es wird KEIN Frame-Collector gestartet: Das Mikrofon liefert keine [MeterFrame]s. Die
+     * Session bleibt deshalb ohne [com.example.lrmprotokoll.data.MeasurementEntity]-Zeilen; jede
+     * auswertende Stelle muss das aushalten.
+     */
+    fun starteMikrofonMessung() {
+        if (job?.isActive == true || aktiveSessionId != null) return
+        scope.launch {
+            schliesseVerwaisteSessions()
+            aktiveSessionId = sessionDao.insert(
+                SessionEntity(
+                    startedAt = now.now().toEpochMilli(),
+                    endedAt = null,
+                    deviceAddress = "",
+                    deviceName = MIKROFON_GERAETENAME,
+                    weighting = null,
+                    timeWeighting = null,
+                )
+            )
+            aktiveSessionIstMikrofon = true
+        }
+    }
+
+    /** Schliesst eine laufende Mikrofon-Session, falls es eine gibt. */
+    private suspend fun beendeMikrofonSession() {
+        if (!aktiveSessionIstMikrofon) return
+        val id = aktiveSessionId ?: return
+        aktiveSessionIstMikrofon = false
+        aktiveSessionId = null
+        runCatching {
+            sessionDao.byId(id)?.let { sessionDao.update(it.copy(endedAt = now.now().toEpochMilli())) }
+        }.onFailure { Log.w(TAG, "Mikrofon-Session $id konnte nicht geschlossen werden", it) }
     }
 
     /**
@@ -158,8 +220,23 @@ class MeasurementRecorder(
         job?.cancel()
         job = null
         val sessionId = aktiveSessionId
+        val warMikrofon = aktiveSessionIstMikrofon
         aktiveSessionId = null
+        aktiveSessionIstMikrofon = false
         if (sessionId == null) return
+
+        // Eine Mikrofon-Session hat keinen Puffer und keinen Frame-Kontext - nur den
+        // Endzeitpunkt.
+        if (warMikrofon) {
+            scope.launch {
+                runCatching {
+                    sessionDao.byId(sessionId)?.let {
+                        sessionDao.update(it.copy(endedAt = now.now().toEpochMilli()))
+                    }
+                }.onFailure { Log.w(TAG, "Mikrofon-Session $sessionId nicht geschlossen", it) }
+            }
+            return
+        }
 
         scope.launch {
             pufferMutex.withLock { flushOhneSperre() }
