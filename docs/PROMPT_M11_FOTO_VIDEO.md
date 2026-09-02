@@ -168,6 +168,36 @@ Vorbild für Migration + Test: `MIGRATION_12_13` und
 Komponenten werden dort registriert. **Tests benutzen ausschließlich handgeschriebene Fakes** —
 in diesem Repo gibt es weder Mockito noch MockK, und das bleibt so.
 
+### F-12 · Ein zweiter, moderner Berichtsgenerator liegt als offener PR daneben
+
+**PR #78 („Revisionssicherer Gesamtbericht (PDF) nach AVV Baulärm v10 mit TA-Lärm-Kennwerten &
+SHA-256-Manifest", Draft, offen seit 25.08.)** legt ein komplettes zweites Berichtssystem an:
+`report/gesamtbericht/` mit `GesamtberichtPdfGenerator`, `ChartRenderer` und `PdfCanvasExt`.
+Nachgesehen in `PdfCanvasExt.kt` auf `refs/pull/78/head`: dort stehen bereits Seitenmaße,
+Farbpalette, `drawHeader(..., pageNum)`, `drawFooter(..., pageNum, totalPages)`,
+`drawParagraph`, `drawCard`, `drawTable` und `drawStatusPill` — also genau die Bausteine, die
+der heutige `MessreiheExport` nicht hat (F-6), inklusive Mehrseitigkeit.
+
+Derselbe PR ändert außerdem `MicrophoneControlCard.kt`, `LiveCockpitCard.kt`,
+`MeasurementRecorder.kt` und `SessionDao.kt` — also **genau die Dateien, auf die sich F-5
+stützt.**
+
+**Was das für dich heißt:**
+
+- **Prüf beim Start, ob PR #78 inzwischen gemergt ist.** Wenn ja, sind F-5 und F-6 in Teilen
+  überholt: Der Fotoanhang gehört dann in den `GesamtberichtPdfGenerator` (der schon
+  Seitenumbrüche, Kopf- und Fußzeilen beherrscht), **nicht** in einen selbstgebauten
+  Seitenumbruch in `MessreiheExport` — und du kannst `PdfCanvasExt.drawCard`/`drawParagraph`
+  für Bildunterschrift und Rahmen mitbenutzen, statt es neu zu schreiben.
+- Wenn PR #78 noch offen ist: **bau nichts darauf auf** — ein offener Draft ist keine Grundlage.
+  Halte dich an F-6, aber kapsle den Fotoanhang so, dass er später mit wenig Aufwand in den
+  Gesamtbericht umziehen kann (eigene Funktion, die Canvas, Startposition und Fotoliste
+  entgegennimmt — nicht Code, der mitten in `exportierePdf` verwoben ist).
+- Das SHA-256-Manifest aus PR #78 zielt auf dieselbe Nachweisbarkeit wie die Foto-Prüfsumme in
+  A.5. **Wenn #78 gemergt ist, prüf, ob die Fotos in dieses Manifest gehören**, statt eine
+  zweite, konkurrierende Prüfsummen-Systematik daneben zu stellen. Das ist dann eine Frage an
+  den Owner, keine Entscheidung von dir.
+
 ### F-11 · Diagnose-Infrastruktur ist vorhanden und wird erwartet
 
 `diagnose/DiagnosticsReporter` bietet `breadcrumb(category, message, data: Map<String, Any?>,
@@ -374,6 +404,11 @@ Umbau.
 (Nutzer hat aufgeräumt, App-Daten teilweise verloren). Dann zeichnest du an dieser Stelle den
 Text `"[Foto nicht mehr verfügbar: <Dateiname>]"` und machst weiter. Ein Bericht, der wegen
 eines fehlenden Bildes gar nicht erst entsteht, ist der schlimmere Fehler.
+
+> **Vorher F-12 lesen.** Ist PR #78 zwischenzeitlich gemergt, existiert mit
+> `GesamtberichtPdfGenerator` und `PdfCanvasExt` bereits ein mehrseitiger Berichtsgenerator mit
+> Kopf-/Fußzeile und Textumbruch. Dann gehört der Fotoanhang dorthin, und der hier beschriebene
+> selbstgebaute Seitenumbruch entfällt ersatzlos.
 
 `PeriodenBerichtExport` bleibt in Etappe A **unverändert** — ein Zeitraumbericht über viele
 Sessions mit allen Fotos wäre ein anderes Dokument. Falls gewünscht: **E7.**
