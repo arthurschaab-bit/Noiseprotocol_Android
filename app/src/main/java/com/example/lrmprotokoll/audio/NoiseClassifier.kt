@@ -118,6 +118,11 @@ data class RohdatenBauplan(
     val klassenIndizes: IntArray,
     val frameScores: ByteArray,
     val topKlassen: String,
+    val impulsCrest: Float? = null,
+    val impulsKurtosis: Float? = null,
+    val impulsWiederholrateHz: Float? = null,
+    val impulsPeakSchaerfe: Float? = null,
+    val impulsMittlererPegel: Float? = null,
 ) {
     fun mitRecordId(recordId: Long): KlassifikationsRohdaten = KlassifikationsRohdaten(
         recordId = recordId,
@@ -129,6 +134,11 @@ data class RohdatenBauplan(
         klassenIndizes = klassenIndizes,
         frameScores = frameScores,
         topKlassen = topKlassen,
+        impulsCrest = impulsCrest,
+        impulsKurtosis = impulsKurtosis,
+        impulsWiederholrateHz = impulsWiederholrateHz,
+        impulsPeakSchaerfe = impulsPeakSchaerfe,
+        impulsMittlererPegel = impulsMittlererPegel,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -137,7 +147,10 @@ data class RohdatenBauplan(
         return modellVersion == other.modellVersion && klassifiziertAm == other.klassifiziertAm &&
             frameAnzahl == other.frameAnzahl && frameDauerMs == other.frameDauerMs &&
             frameHopMs == other.frameHopMs && klassenIndizes.contentEquals(other.klassenIndizes) &&
-            frameScores.contentEquals(other.frameScores) && topKlassen == other.topKlassen
+            frameScores.contentEquals(other.frameScores) && topKlassen == other.topKlassen &&
+            impulsCrest == other.impulsCrest && impulsKurtosis == other.impulsKurtosis &&
+            impulsWiederholrateHz == other.impulsWiederholrateHz &&
+            impulsPeakSchaerfe == other.impulsPeakSchaerfe && impulsMittlererPegel == other.impulsMittlererPegel
     }
 
     override fun hashCode(): Int {
@@ -149,6 +162,11 @@ data class RohdatenBauplan(
         result = 31 * result + klassenIndizes.contentHashCode()
         result = 31 * result + frameScores.contentHashCode()
         result = 31 * result + topKlassen.hashCode()
+        result = 31 * result + (impulsCrest?.hashCode() ?: 0)
+        result = 31 * result + (impulsKurtosis?.hashCode() ?: 0)
+        result = 31 * result + (impulsWiederholrateHz?.hashCode() ?: 0)
+        result = 31 * result + (impulsPeakSchaerfe?.hashCode() ?: 0)
+        result = 31 * result + (impulsMittlererPegel?.hashCode() ?: 0)
         return result
     }
 }
@@ -281,9 +299,22 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
     fun classifyDetailed(file: File): List<String>? = classifyDetailedScored(file)?.map { it.name }
 
     fun classifyDetailedScored(file: File): List<ScoredCategory>? {
-        val result = leseUndKlassifiziere(file) ?: return null
-        return extrahiereTopKategorien(result, TOP_KLASSEN_KANDIDATEN_SCHWELLE)
+        val gelesen = leseUndKlassifiziere(file) ?: return null
+        return extrahiereTopKategorien(gelesen.result, TOP_KLASSEN_KANDIDATEN_SCHWELLE)
     }
+
+    /**
+     * KI-Umbau Etappe 3.4: buendelt das MediaPipe-Ergebnis mit dem ROHEN (nicht
+     * peak-normalisierten) Sample-Puffer und der tatsaechlich verwendeten Abtastrate - die
+     * Impulsanalyse braucht das echte, unveraenderte Signal, die Peak-Normalisierung aus
+     * Etappe 1.6 wuerde die fuer [ImpulsMerkmale.mittlererPegel] noetigen relativen
+     * Pegelunterschiede zwischen Aufnahmen sonst wegnivellieren.
+     */
+    private data class GeleseneKlassifizierung(
+        val result: AudioClassifierResult,
+        val rohePuffer: ShortArray,
+        val sampleRate: Int,
+    )
 
     /**
      * KI-Umbau Etappe 1.4: liest die WAV-Datei und fuehrt EINE Inferenz aus - gemeinsame
@@ -292,7 +323,7 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
      * des jeweiligen Aufrufers, damit die Diagnose-Meldung weiterhin den richtigen `operation`-
      * Namen traegt (z.B. "classifyDetailed" vs. ein neuer Rohdaten-Kontext).
      */
-    private fun leseUndKlassifiziere(file: File): AudioClassifierResult? {
+    private fun leseUndKlassifiziere(file: File): GeleseneKlassifizierung? {
         val currentClassifier = classifier ?: return null
 
         val fileLength = file.length().toInt()
@@ -342,7 +373,8 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
         val audioData = AudioData.create(format, inferenzPuffer.size)
         audioData.load(inferenzPuffer)
 
-        return currentClassifier.classify(audioData)
+        val result = currentClassifier.classify(audioData) ?: return null
+        return GeleseneKlassifizierung(result, shortArray, sampleRate)
     }
 
     /**
@@ -353,8 +385,13 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
      */
     private fun buildeRohdatenBauplan(file: File): RohdatenBauplan? {
         try {
-            val result = leseUndKlassifiziere(file) ?: return null
+            val gelesen = leseUndKlassifiziere(file) ?: return null
+            val result = gelesen.result
             val topKategorien = extrahiereTopKategorien(result, TOP_KLASSEN_KANDIDATEN_SCHWELLE)
+
+            // KI-Umbau Etappe 3.4: dieselbe Inferenz-Runde liefert zusaetzlich die physikalischen,
+            // YAMNet-unabhaengigen Huellkurven-Merkmale - kein zweiter Datei-/Inferenzzugriff.
+            val impulsMerkmale = berechneImpulsMerkmale(gelesen.rohePuffer, gelesen.sampleRate)
 
             val frames = result.classificationResults()
             val zeitstempel = frames.map { it.timestampMs().orElse(0L) }
@@ -398,6 +435,11 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
                 klassenIndizes = klassenIndizes,
                 frameScores = frameScores,
                 topKlassen = kodiereTopKlassen(topKategorien),
+                impulsCrest = impulsMerkmale.crest,
+                impulsKurtosis = impulsMerkmale.kurtosis,
+                impulsWiederholrateHz = impulsMerkmale.wiederholrateHz,
+                impulsPeakSchaerfe = impulsMerkmale.peakSchaerfe,
+                impulsMittlererPegel = impulsMerkmale.mittlererPegel,
             )
         } catch (e: Throwable) {
             Log.e(TAG, "Error during raw classification: ${e.message}", e)

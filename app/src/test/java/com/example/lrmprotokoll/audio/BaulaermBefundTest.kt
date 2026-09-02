@@ -95,6 +95,103 @@ class BaulaermBefundTest {
         assertEquals(Einstufung.BAULAERM, befund.einstufung)
     }
 
+    // --- Etappe 3.5: Fusion (Gruppen-Score ODER Impuls-Regel) --------------------------------
+
+    @Test
+    fun impulsRegelHebtEinstufungAufBaulaermWennGruppenScoreAlleinNichtReicht() {
+        // Kein Kern-/Kontext-/Impuls-Klassenscore gesetzt -> Gruppen-Score bleibt bei 0, aber
+        // die physikalischen Merkmale sprechen fuer einen impulshaften, periodischen Vorgang
+        // (Kurtosis ueber der Schwelle, Rate im 5-30-Hz-Fenster) mit ausreichendem relativem Pegel.
+        val rohdaten = rohdatenMitFrames(frame(), frame(), frame()).copy(
+            impulsKurtosis = 5f,
+            impulsWiederholrateHz = 12f,
+            impulsMittlererPegel = 0.1f,
+        )
+
+        val befund = leiteBaulaermBefundAb(rohdaten, konfiguration)
+
+        assertEquals(Einstufung.BAULAERM, befund.einstufung)
+        assertTrue(befund.ueberImpulsRegelErkannt)
+        assertEquals(12f, befund.impulsRateHz)
+        assertEquals(
+            "Die Impuls-Regel darf die vom Gruppen-Score unabhaengigen Kennzahlen nicht veraendern",
+            0f, befund.anteil, 0.001f,
+        )
+    }
+
+    @Test
+    fun impulsRegelGreiftNichtAusserhalbDesRatenbereichs() {
+        // Kurtosis und Pegel passen, aber 3 Hz liegt UNTER dem Fusion-Bereich [5,30] Hz - das ist
+        // der Bereich manuellen (nicht maschinellen) Haemmerns, den die Regel bewusst ausschliesst.
+        val rohdaten = rohdatenMitFrames(frame(), frame(), frame()).copy(
+            impulsKurtosis = 5f,
+            impulsWiederholrateHz = 3f,
+            impulsMittlererPegel = 0.1f,
+        )
+
+        val befund = leiteBaulaermBefundAb(rohdaten, konfiguration)
+
+        assertEquals(Einstufung.KEIN_BAULAERM, befund.einstufung)
+        assertTrue(befund.ueberImpulsRegelErkannt.not())
+    }
+
+    @Test
+    fun impulsRegelGreiftNichtUnterhalbDerPegelschwelle() {
+        val rohdaten = rohdatenMitFrames(frame(), frame(), frame()).copy(
+            impulsKurtosis = 5f,
+            impulsWiederholrateHz = 12f,
+            impulsMittlererPegel = 0.01f, // unter dem Default impulsPegelSchwelleRelativ = 0.05
+        )
+
+        val befund = leiteBaulaermBefundAb(rohdaten, konfiguration)
+
+        assertEquals(Einstufung.KEIN_BAULAERM, befund.einstufung)
+    }
+
+    @Test
+    fun kalibrierterPegelHatVorrangVorDemRelativenErsatzwert() {
+        // Der relative Pegel liegt UNTER seiner Schwelle, aber ein uebergebener kalibrierter
+        // PCE-323-Pegel UEBER seiner - laut Auftrag hat der kalibrierte Wert Vorrang.
+        val rohdaten = rohdatenMitFrames(frame(), frame(), frame()).copy(
+            impulsKurtosis = 5f,
+            impulsWiederholrateHz = 12f,
+            impulsMittlererPegel = 0.001f,
+        )
+
+        val befund = leiteBaulaermBefundAb(rohdaten, konfiguration, kalibrierterPegelDbA = 70.0)
+
+        assertEquals(Einstufung.BAULAERM, befund.einstufung)
+        assertTrue(befund.ueberImpulsRegelErkannt)
+    }
+
+    @Test
+    fun impulsRegelUeberschreibtEinenBereitsPerGruppenScoreErkanntenBaulaermBefundNicht() {
+        // Durchgehender Gruppen-Score-Treffer OHNE brauchbare Impuls-Merkmale - die Einstufung
+        // muss trotzdem BAULAERM bleiben (Gruppen-Score allein reicht schon), ueberImpulsRegelErkannt
+        // bleibt false, weil gar keine Impuls-Pruefung noetig war.
+        val frames = (1..5).map { frame(413 to rate(1.0f)) }.toTypedArray()
+        val rohdaten = rohdatenMitFrames(*frames)
+
+        val befund = leiteBaulaermBefundAb(rohdaten, konfiguration)
+
+        assertEquals(Einstufung.BAULAERM, befund.einstufung)
+        assertTrue(befund.ueberImpulsRegelErkannt.not())
+    }
+
+    @Test
+    fun formatierungZeigtDenHerkunftshinweisFuerImpulsErkennung() {
+        val befund = BaulaermBefund(
+            anteil = 0f, laengsterBlockSekunden = 0f, blockAnzahl = 0,
+            spitzenKlasse = null, spitzenScore = 0f, einstufung = Einstufung.BAULAERM,
+            ueberImpulsRegelErkannt = true, impulsRateHz = 12.4f,
+        )
+
+        assertEquals(
+            "Baulärm (impulsiv, 12 Hz) · 0% der Aufnahme",
+            formatiereBaulaermBefund(befund, emptyMap()),
+        )
+    }
+
     @Test
     fun kompletteStilleWirdAlsKeinBaulaermEingestuftNichtAlsUnklar() {
         // "Kein Signal" ist eine positive, sichere Aussage (die Aufnahme IST leise) - anders als

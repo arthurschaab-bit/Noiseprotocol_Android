@@ -30,9 +30,18 @@ data class AbleitungsKonfiguration(
  * [BaulaermBefund.gelernteQuelle]-KDoc fuer die Begruendung (Auftrag Abschnitt 3.3). Nur wenn
  * KEIN Referenzmuster passt, entscheidet der neue Gruppen-Score/Zeitaggregations-Pfad
  * ([leiteBaulaermBefundAb]) ueber Einstufung/Spitzenklasse.
+ *
+ * KI-Umbau Etappe 3.5: [kalibrierterPegelDbA] wird nur an die Impuls-Fusion durchgereicht (siehe
+ * [leiteBaulaermBefundAb]-KDoc) - Default `null`, damit bestehende Aufrufer ohne Zugriff auf den
+ * kalibrierten PCE-323-Messwert (Live-Klassifizieren) unveraendert kompilieren und automatisch
+ * auf den relativen Huellkurven-Pegel als Ersatz zurueckfallen.
  */
-fun leiteLabelAb(rohdaten: KlassifikationsRohdaten, konfiguration: AbleitungsKonfiguration): BaulaermBefund {
-    val befund = leiteBaulaermBefundAb(rohdaten, konfiguration.baulaermKonfiguration)
+fun leiteLabelAb(
+    rohdaten: KlassifikationsRohdaten,
+    konfiguration: AbleitungsKonfiguration,
+    kalibrierterPegelDbA: Double? = null,
+): BaulaermBefund {
+    val befund = leiteBaulaermBefundAb(rohdaten, konfiguration.baulaermKonfiguration, kalibrierterPegelDbA)
 
     val kandidaten = dekodiereTopKlassen(rohdaten.topKlassen)
     val erkannteNamen = kandidaten.map { it.name }

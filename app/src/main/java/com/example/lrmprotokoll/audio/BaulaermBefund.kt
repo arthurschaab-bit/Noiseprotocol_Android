@@ -31,6 +31,13 @@ enum class Einstufung { BAULAERM, MOEGLICH, KEIN_BAULAERM, UNKLAR }
  * ohne dieses Feld liesse sich die in Etappe 2.7 geforderte Tagessummenzeile ("wie viele Minuten
  * des Tages als Baulärm eingestuft sind") nicht korrekt aus mehreren Bloecken pro Aufnahme
  * berechnen.
+ *
+ * [ueberImpulsRegelErkannt]/[impulsRateHz] (Etappe 3.5): gesetzt, wenn NICHT der Gruppen-Score,
+ * sondern die von YAMNet unabhaengige Impuls-Regel (siehe [leiteBaulaermBefundAb]) den Ausschlag
+ * fuer BAULAERM gegeben hat - "die Herkunft der Entscheidung [muss] in der UI erkennbar" sein
+ * (Auftrag, Akzeptanzkriterien Etappe 3). [anteil]/[gesamtBaulaermSekunden] bleiben in diesem
+ * Fall bewusst UNVERAENDERT (weiterhin nur, was der Gruppen-Score tatsaechlich gemessen hat) -
+ * die Impuls-Regel aendert nur die Einstufung selbst, nicht die davon unabhaengigen Kennzahlen.
  */
 data class BaulaermBefund(
     val anteil: Float,
@@ -41,6 +48,8 @@ data class BaulaermBefund(
     val einstufung: Einstufung,
     val gelernteQuelle: String? = null,
     val gesamtBaulaermSekunden: Float = 0f,
+    val ueberImpulsRegelErkannt: Boolean = false,
+    val impulsRateHz: Float? = null,
 )
 
 /**
@@ -52,6 +61,15 @@ data class BaulaermBefund(
  * Aufnahmen" (Akzeptanzkriterien Etappe 2). Diese zwei Werte sind bewusst NICHT an ein
  * UI-Element gebunden (anders als [einSchwelle]/[ausSchwelle]) und muessen nach dem Gegentest
  * ggf. im Code angepasst werden.
+ *
+ * [impulsKurtosisSchwelle]/[impulsRateBereichHz]/[impulsPegelSchwelleDbA]/
+ * [impulsPegelSchwelleRelativ] (Etappe 3.5, "Fusion"): eigene Schwellen fuer die YAMNet-
+ * unabhaengige Impuls-Regel `kurtosis > K UND wiederholrateHz in [5,30] UND pegel > X`. Der
+ * Auftrag nennt den Rate-Bereich konkret (5-30 Hz - bewusst enger als der allgemeine
+ * Detektionsbereich der Huellkurven-Analyse selbst, 0.5-80 Hz, um gezielt maschinelle
+ * Taktraten wie Presslufthammer/Ruettelplatte zu treffen, nicht das langsamere manuelle
+ * Haemmern), aber keinen konkreten Kurtosis- oder Pegelschwellenwert - auch diese sind
+ * dokumentierte Startwerte, ueber den Gegentest nachjustierbar.
  */
 data class BaulaermKonfiguration(
     val einSchwelle: Float = 0.50f,
@@ -59,16 +77,32 @@ data class BaulaermKonfiguration(
     val glaettungsFenster: Int = 3,
     val anteilFuerBaulaerm: Float = 0.15f,
     val minimalerScoreFuerMoeglich: Float = 0.20f,
+    val impulsKurtosisSchwelle: Float = 3.0f,
+    val impulsRateBereichHz: ClosedFloatingPointRange<Float> = 5f..30f,
+    val impulsPegelSchwelleDbA: Double = 55.0,
+    val impulsPegelSchwelleRelativ: Float = 0.05f,
 )
 
 /**
  * KI-Umbau Etappe 2: der eigentliche Qualitätssprung - Gruppen-Score ([berechneGruppenScores])
  * plus Zeitaggregation ([medianGlaettung], [hysterese], [ermittleBloecke]) zu einem
  * [BaulaermBefund]. Reine Funktion (Arbeitsweise-Regel 3) ueber [rohdaten] und [konfiguration].
+ *
+ * KI-Umbau Etappe 3.5 ("Fusion"): [kalibrierterPegelDbA] ist der PCE-323-Messwert fuer den
+ * Aufnahmezeitraum, falls vorhanden (`null` sonst - dann greift innerhalb der Impuls-Regel der
+ * relative Hüllkurven-Pegel [KlassifikationsRohdaten.impulsMittlererPegel] als Ersatz, exakt wie
+ * im Auftrag beschrieben: "Der Pegel kommt vom PCE-323, [...] sonst ersatzweise der relative
+ * RMS"). Bewusst als eigener Parameter statt Teil von [rohdaten]: der kalibrierte Pegel gehoert
+ * zum [com.example.lrmprotokoll.data.NoiseRecord], nicht zu den YAMNet-Rohdaten, und ist beim
+ * Live-Klassifizieren (online/Batch) nicht ohne Weiteres verfuegbar - dort greift IMMER der
+ * relative Ersatzwert. Bei "Neu bewerten" (mit Datenbankzugriff auf den vollstaendigen
+ * [com.example.lrmprotokoll.data.NoiseRecord]) wird der kalibrierte Wert dagegen mitgegeben,
+ * siehe [leiteLabelAb] und `bewerteAlleNeu`.
  */
 internal fun leiteBaulaermBefundAb(
     rohdaten: KlassifikationsRohdaten,
     konfiguration: BaulaermKonfiguration,
+    kalibrierterPegelDbA: Double? = null,
 ): BaulaermBefund {
     val rohScores = berechneGruppenScores(rohdaten)
     if (rohScores.isEmpty()) {
@@ -86,10 +120,32 @@ internal fun leiteBaulaermBefundAb(
     val spitze = staerksterBlock?.let { spitzenklasseInBereich(rohdaten, it.vonFrame, it.bisFrame) }
 
     val maxRohScore = rohScores.max()
-    val einstufung = when {
+    var einstufung = when {
         anteil >= konfiguration.anteilFuerBaulaerm -> Einstufung.BAULAERM
         maxRohScore >= konfiguration.minimalerScoreFuerMoeglich -> Einstufung.MOEGLICH
         else -> Einstufung.KEIN_BAULAERM
+    }
+
+    // KI-Umbau Etappe 3.5: die Fusion greift nur, wenn der Gruppen-Score ALLEIN (noch) nicht zu
+    // BAULAERM fuehrt - ein bereits per Gruppen-Score erkannter Befund wird durch die Impuls-Regel
+    // nicht "entwertet", sie kann eine Einstufung nur nach oben, nie nach unten korrigieren.
+    var ueberImpulsRegel = false
+    var impulsRate: Float? = null
+    if (einstufung != Einstufung.BAULAERM) {
+        val kurtosis = rohdaten.impulsKurtosis
+        val rate = rohdaten.impulsWiederholrateHz
+        val pegelUeberSchwelle = when {
+            kalibrierterPegelDbA != null -> kalibrierterPegelDbA > konfiguration.impulsPegelSchwelleDbA
+            rohdaten.impulsMittlererPegel != null -> rohdaten.impulsMittlererPegel > konfiguration.impulsPegelSchwelleRelativ
+            else -> false
+        }
+        if (kurtosis != null && rate != null && pegelUeberSchwelle &&
+            kurtosis > konfiguration.impulsKurtosisSchwelle && rate in konfiguration.impulsRateBereichHz
+        ) {
+            einstufung = Einstufung.BAULAERM
+            ueberImpulsRegel = true
+            impulsRate = rate
+        }
     }
 
     return BaulaermBefund(
@@ -100,6 +156,8 @@ internal fun leiteBaulaermBefundAb(
         spitzenScore = spitze?.second ?: 0f,
         einstufung = einstufung,
         gesamtBaulaermSekunden = ueberSchwelle.count { it } * hopSekunden,
+        ueberImpulsRegelErkannt = ueberImpulsRegel,
+        impulsRateHz = impulsRate,
     )
 }
 
@@ -144,6 +202,14 @@ fun formatiereBaulaermBefund(befund: BaulaermBefund, labelMapping: Map<String, S
         Einstufung.KEIN_BAULAERM -> "Kein Baulärm erkannt"
         Einstufung.MOEGLICH, Einstufung.BAULAERM -> buildString {
             append(if (befund.einstufung == Einstufung.MOEGLICH) "Möglicher Baulärm" else "Baulärm")
+            // KI-Umbau Etappe 3.5: "Ein über die DSP-Regel erkannter Treffer wird in der UI als
+            // solcher gekennzeichnet (z.B. 'Baulärm (impulsiv, 12 Hz)'), damit die Herkunft der
+            // Aussage nachvollziehbar bleibt - im Beweiskontext ist das relevant."
+            if (befund.ueberImpulsRegelErkannt && befund.impulsRateHz != null) {
+                append(" (impulsiv, ")
+                append(befund.impulsRateHz.roundToInt())
+                append(" Hz)")
+            }
             append(" · ")
             append((befund.anteil * 100).roundToInt())
             append("% der Aufnahme")
