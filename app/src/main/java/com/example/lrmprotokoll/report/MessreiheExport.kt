@@ -1,18 +1,17 @@
 package com.example.lrmprotokoll.report
 
 import android.content.Context
-import android.content.Intent
-import android.graphics.Paint
-import android.graphics.pdf.PdfDocument
-import androidx.core.content.FileProvider
+import android.graphics.Canvas
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.MessreiheCsv
+import com.example.lrmprotokoll.report.pdf.BerichtLayout
+import com.example.lrmprotokoll.report.pdf.BerichtSeiten
+import com.example.lrmprotokoll.report.pdf.Seitenlauf
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,7 +47,7 @@ class MessreiheExport(private val context: Context) {
         } else {
             MessreiheCsv.ausAggregaten(aggregate)
         }
-        val file = File(context.getExternalFilesDir(null), dateiname(session, "csv"))
+        val file = File(BerichtDatei.ordner(context), dateiname(session, "csv"))
         file.writeText(inhalt, Charsets.UTF_8)
         return file
     }
@@ -58,69 +57,71 @@ class MessreiheExport(private val context: Context) {
         kennwerte: AkustischeKennwerte.Kennwerte,
         ausfallbaender: List<Ausfallband>,
     ): File {
-        val dokument = PdfDocument()
-        // A4 bei 72 dpi (595 x 842 pt) - eine Seite reicht fuer Kennwerte + Ausfallliste einer
-        // einzelnen Session; bei sehr vielen Ausfaellen laeuft der Text einfach ueber den
-        // unteren Rand hinaus statt eine zweite Seite anzulegen - fuer einen Kennwerte-Bericht
-        // kein praktisch relevanter Fall.
-        val seite = dokument.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
-        val canvas = seite.canvas
-        val titel = Paint().apply { textSize = 16f; isFakeBoldText = true }
-        val text = Paint().apply { textSize = 12f }
         val formatierer = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+        val titel = "Session ${formatierer.format(Date(session.startedAt))}"
 
-        var y = 48f
-        fun zeile(inhalt: String, paint: Paint = text, abstand: Float = 18f) {
-            canvas.drawText(inhalt, 40f, y, paint)
-            y += abstand
-        }
+        // Zwei Durchlaeufe ueber denselben Aufbau: zaehlen, dann zeichnen - siehe Seitenlauf.
+        // Frueher lief dieser Bericht auf genau einer Seite und liess alles, was darunter kam,
+        // kommentarlos ueber den Blattrand hinauslaufen. Bei einer Session mit vielen Ausfaellen
+        // fehlten damit genau die Eintraege, wegen derer man den Bericht zieht.
+        val aufbau: (Seitenlauf, () -> Canvas?) -> Unit = { lauf, canvasGeber ->
+            val x = Seitenlauf.RAND_LINKS
+            val titelPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 16f, fett = true)
+            val kopfPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 13f, fett = true)
+            val textPaint = BerichtLayout.paint(textSize = 11f)
 
-        zeile("Lärmprotokoll – Session ${formatierer.format(Date(session.startedAt))}", titel, 28f)
-        zeile("Gerät: ${session.deviceName} (${session.deviceAddress})")
-        y += 12f
+            var y = lauf.platziere(30f)
+            canvasGeber()?.drawText("Lärmprotokoll – $titel", x, y + 16f, titelPaint)
 
-        zeile("Kennwerte", titel, 24f)
-        listOfNotNull(
-            kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
-            kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
-            kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
-            kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
-            kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
-            kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
-        ).forEach { zeile(it) }
-        zeile("${kennwerte.sampleCount} Messwerte")
-        y += 12f
+            y = lauf.platziere(20f)
+            canvasGeber()?.drawText("Gerät: ${session.deviceName} (${session.deviceAddress})", x, y + 12f, textPaint)
+            lauf.abstand(12f)
 
-        zeile("Ausfälle (${ausfallbaender.size})", titel, 24f)
-        if (ausfallbaender.isEmpty()) {
-            zeile("Keine Verbindungsausfälle während dieser Session.")
-        } else {
-            ausfallbaender.forEach { band ->
-                val ende = band.bis?.let { formatierer.format(Date(it)) } ?: "andauernd"
-                zeile("${formatierer.format(Date(band.von))} – $ende")
+            y = lauf.platziere(24f)
+            canvasGeber()?.drawText("Kennwerte", x, y + 14f, kopfPaint)
+
+            val kennwertZeilen = listOfNotNull(
+                kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
+                kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
+                kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
+                kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
+                kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
+                kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
+            ).ifEmpty {
+                // Nach der Umstellung auf E1 kann eine Session auch ein reiner Mikrofonlauf ohne
+                // Messwerte sein. Dann ist "keine Kennwerte" die Aussage - nicht eine Liste
+                // von Strichen, die wie ein Messergebnis aussieht.
+                listOf("Für diese Session liegen keine Messwerte vor.")
+            }
+            kennwertZeilen.forEach { zeile ->
+                val zy = lauf.platziere(18f)
+                canvasGeber()?.drawText(zeile, x, zy + 12f, textPaint)
+            }
+            val zy = lauf.platziere(18f)
+            canvasGeber()?.drawText("${kennwerte.sampleCount} Messwerte", x, zy + 12f, textPaint)
+            lauf.abstand(12f)
+
+            var ay = lauf.platziere(24f)
+            canvasGeber()?.drawText("Ausfälle (${ausfallbaender.size})", x, ay + 14f, kopfPaint)
+
+            if (ausfallbaender.isEmpty()) {
+                ay = lauf.platziere(18f)
+                canvasGeber()?.drawText("Keine Verbindungsausfälle während dieser Session.", x, ay + 12f, textPaint)
+            } else {
+                ausfallbaender.forEach { band ->
+                    val ende = band.bis?.let { formatierer.format(Date(it)) } ?: "andauernd"
+                    val by = lauf.platziere(18f)
+                    canvasGeber()?.drawText("${formatierer.format(Date(band.von))} – $ende", x, by + 12f, textPaint)
+                }
             }
         }
 
-        dokument.finishPage(seite)
-        val file = File(context.getExternalFilesDir(null), dateiname(session, "pdf"))
-        FileOutputStream(file).use { dokument.writeTo(it) }
-        dokument.close()
-        return file
+        val datei = File(BerichtDatei.ordner(context), dateiname(session, "pdf"))
+        BerichtSeiten.schreibe(datei, abschnitt = "Sessionbericht", fussHinweis = titel, aufbau = aufbau)
+        return datei
     }
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
 
-    fun teilen(file: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = when (file.extension) {
-                "csv" -> "text/csv"
-                "pdf" -> "application/pdf"
-                else -> "application/octet-stream"
-            }
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "Teilen über…"))
-    }
+    fun teilen(file: File) = BerichtDatei.teile(context, file)
 }
