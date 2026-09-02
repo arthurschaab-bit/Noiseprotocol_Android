@@ -25,7 +25,8 @@ suspend fun bewerteAlleNeu(
 ): Int {
     val alleRohdaten = rohdatenDao.alle()
     alleRohdaten.forEach { rohdaten ->
-        val neuesLabel = leiteLabelAb(rohdaten, konfiguration)?.label
+        val befund = leiteLabelAb(rohdaten, konfiguration)
+        val neuesLabel = formatiereBaulaermBefund(befund, konfiguration.labelMapping)
         noiseDao.setDetectedLabel(rohdaten.recordId, neuesLabel)
     }
     return alleRohdaten.size

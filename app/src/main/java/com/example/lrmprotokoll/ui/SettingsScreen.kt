@@ -94,7 +94,8 @@ fun SettingsScreen(
 
     // KI-Parameter
     var aiMode by remember { mutableStateOf(settings.aiMode) }
-    var aiConfidence by remember { mutableFloatStateOf(settings.aiConfidenceThreshold) }
+    var aiEinSchwelle by remember { mutableFloatStateOf(settings.aiEinSchwelle) }
+    var aiAusSchwelle by remember { mutableFloatStateOf(settings.aiAusSchwelle) }
     var aiNormalisierung by remember { mutableStateOf(settings.aiNormalisierung) }
 
     // F8: Ruhezeiten
@@ -813,13 +814,42 @@ fun SettingsScreen(
                 // globaler Batch-Lauf hier.
 
                 if (aiMode != "OFF" && isProMode) {
+                    // KI-Umbau Etappe 2.6: die alte pauschale "KI-Vertrauensschwelle" (30% fuer
+                    // jede Klasse) ist durch die Hysterese-Schwellung auf den Baulärm-
+                    // Gruppen-Score ersetzt - Einstieg (aiEinSchwelle) und Ausstieg
+                    // (aiAusSchwelle, niedriger als der Einstieg) statt einer Einheitsschwelle.
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(stringResource(R.string.settings_ai_confidence, (aiConfidence * 100).toInt()))
+                    Text(stringResource(R.string.settings_ai_ein_schwelle, (aiEinSchwelle * 100).toInt()))
+                    Text(
+                        stringResource(R.string.settings_ai_ein_schwelle_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Slider(
-                        value = aiConfidence,
-                        onValueChange = { aiConfidence = it },
-                        onValueChangeFinished = { settings.aiConfidenceThreshold = aiConfidence },
-                        valueRange = 0.05f..0.95f
+                        value = aiEinSchwelle,
+                        onValueChange = { neuerWert ->
+                            aiEinSchwelle = neuerWert
+                            if (aiAusSchwelle >= neuerWert) aiAusSchwelle = (neuerWert - 0.05f).coerceAtLeast(0.05f)
+                        },
+                        onValueChangeFinished = {
+                            settings.aiEinSchwelle = aiEinSchwelle
+                            settings.aiAusSchwelle = aiAusSchwelle
+                        },
+                        valueRange = 0.10f..0.95f
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(stringResource(R.string.settings_ai_aus_schwelle, (aiAusSchwelle * 100).toInt()))
+                    Text(
+                        stringResource(R.string.settings_ai_aus_schwelle_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = aiAusSchwelle,
+                        onValueChange = { aiAusSchwelle = it.coerceAtMost(aiEinSchwelle - 0.01f) },
+                        onValueChangeFinished = { settings.aiAusSchwelle = aiAusSchwelle },
+                        valueRange = 0.05f..0.90f
                     )
 
                     // KI-Umbau Etappe 1.6: Peak-Normalisierung vor der Inferenz - betrifft NUR

@@ -24,7 +24,8 @@ internal fun buildEinstellungenJson(settings: SettingsManager): JSONObject {
     json.put("recordDurationSeconds", settings.recordDurationSeconds)
     json.put("recordWavAudio", settings.recordWavAudio)
     json.put("aiMode", settings.aiMode)
-    json.put("aiConfidenceThreshold", settings.aiConfidenceThreshold)
+    json.put("aiEinSchwelle", settings.aiEinSchwelle)
+    json.put("aiAusSchwelle", settings.aiAusSchwelle)
     json.put("audioSampleRate", settings.audioSampleRate)
     json.put("audioTriggerQuelle", settings.audioTriggerQuelle)
     json.put("alarmierungAktiv", settings.alarmierungAktiv)
@@ -67,7 +68,12 @@ internal fun wendeEinstellungenAn(json: JSONObject, settings: SettingsManager) {
     if (json.has("recordDurationSeconds")) settings.recordDurationSeconds = json.getInt("recordDurationSeconds")
     if (json.has("recordWavAudio")) settings.recordWavAudio = json.getBoolean("recordWavAudio")
     if (json.has("aiMode")) settings.aiMode = json.getString("aiMode")
-    if (json.has("aiConfidenceThreshold")) settings.aiConfidenceThreshold = json.getDouble("aiConfidenceThreshold").toFloat()
+    // KI-Umbau Etappe 2.6: "aiConfidenceThreshold" (Etappe 1 und frueher) ist ersatzlos
+    // entfallen - eine Sicherung aus dieser Zeit enthaelt den Schluessel noch, er wird beim
+    // Wiederherstellen einfach ignoriert (kein sinnvolles Mapping auf die neuen Hysterese-
+    // Schwellen moeglich), analog zum obigen Kommentar fuer FEHLENDE Schluessel.
+    if (json.has("aiEinSchwelle")) settings.aiEinSchwelle = json.getDouble("aiEinSchwelle").toFloat()
+    if (json.has("aiAusSchwelle")) settings.aiAusSchwelle = json.getDouble("aiAusSchwelle").toFloat()
     if (json.has("audioSampleRate")) settings.audioSampleRate = json.getInt("audioSampleRate")
     if (json.has("audioTriggerQuelle")) settings.audioTriggerQuelle = json.getString("audioTriggerQuelle")
     if (json.has("alarmierungAktiv")) settings.alarmierungAktiv = json.getBoolean("alarmierungAktiv")

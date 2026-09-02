@@ -24,6 +24,47 @@ private const val WAV_HEADER_SIZE = 44
 private val PLAUSIBLE_SAMPLE_RATES = 8000..192000
 
 /**
+ * KI-Umbau Etappe 2.6: bis Etappe 1 war dies die einstellbare "Einheitsschwelle"
+ * (`SettingsManager.aiConfidenceThreshold`), die zugleich entschied, ob UEBERHAUPT ein Label
+ * gezeigt wurde. Diese Rolle uebernimmt jetzt die Hysterese auf den Baulärm-Gruppen-Score
+ * ([BaulaermKonfiguration]). Der einzige verbleibende Zweck dieser Konstante ist, `topKlassen`
+ * (Anzeige/Referenzmuster-Abgleich, siehe [KlassifikationsRohdaten]-KDoc) nicht mit allen 521
+ * Kategorien jedes Frames zu fuellen - unveraendert der alte Default-Wert, damit sich das
+ * Referenzmuster-Abgleichsverhalten aus Etappe 1 nicht unbeabsichtigt mitaendert.
+ */
+private const val TOP_KLASSEN_KANDIDATEN_SCHWELLE = 0.3f
+
+/**
+ * KI-Umbau Etappe 2.2: gegen die tatsaechliche, im Modell eingebettete `yamnet_label_list.txt`
+ * verifiziert (nicht angenommen - siehe `LabelMappingValidierungTest`). Von den urspruenglich 19
+ * Eintraegen aus Etappe 1 waren 9, nicht wie dort vermerkt 10, tote Eintraege (die
+ * Etappe-1-KDoc-Zahl war ungenau - hier korrigiert): "Hammering"/"Drilling" waren reine
+ * Duplikate der bereits vorhandenen "Hammer"/"Drill"-Eintraege und entfallen ersatzlos;
+ * "Excavator"/"Machinery"/"Heavy machinery"/"Construction" haben keinerlei Entsprechung in den
+ * 521 YAMNet-Klassen und entfallen ebenfalls; "Traffic noise", "Beep" und "Saw" waren knapp
+ * daneben (der Modellname lautet exakt "Traffic noise, roadway noise", "Beep, bleep" bzw.
+ * "Sawing") und wurden auf den exakten Namen korrigiert statt entfernt.
+ *
+ * `internal` auf Modulebene statt `private` in [NoiseClassifier] (Etappe 1.4-Muster wie
+ * [ROHDATEN_KLASSEN_INDIZES]): so ist die Tabelle ohne echten Klassifikator/Context testbar.
+ */
+internal val labelMapping = mapOf(
+    "Hammer" to "Hämmern",
+    "Drill" to "Bohren",
+    "Vehicle" to "Verkehr",
+    "Traffic noise, roadway noise" to "Verkehr",
+    "Car" to "Verkehr",
+    "Truck" to "Verkehr",
+    "Engine" to "Motor",
+    "Siren" to "Sirene",
+    "Beep, bleep" to "Piepen",
+    "Lawn mower" to "Rasenmäher",
+    "Sawing" to "Säge",
+    "Wood" to "Holzarbeiten",
+    "Explosion" to "Knall",
+)
+
+/**
  * KI-Umbau Etappe 1.4: nominale Fenster-Dauer des YAMNet-Modells (960 ms) - aus der oeffentlichen
  * YAMNet-Dokumentation uebernommen, NICHT gegen diese exakte MediaPipe-Einbindung auf einem
  * Geraet verifiziert (kein Geraet/Mikrofon in dieser Entwicklungsumgebung verfuegbar). Die
@@ -141,38 +182,6 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
     private val settingsManager = container.settingsManager
 
     /**
-     * Testluecken-Auftrag KI-Umbau Etappe 1: 10 von 19 Eintraegen zeigen auf YAMNet-Klassen, die
-     * es in den tatsaechlichen 521 Modell-Kategorien gar nicht gibt (per eingebettetem
-     * `yamnet_label_list.txt` verifiziert: u.a. "Hammering", "Drilling", "Excavator",
-     * "Machinery", "Heavy machinery", "Construction", "Traffic noise", "Beep", "Saw" existieren
-     * nicht - korrekt waeren u.a. "Jackhammer", "Sawing", "Truck", "Air brake"). Diese Etappe
-     * aendert daran BEWUSST NICHTS - Etappe 1.5 verlangt, dass [leiteLabelAb] das bisherige
-     * Verhalten funktional unveraendert reproduziert. Die Korrektur der Tabelle ist explizit
-     * Etappe 2.2 (Mapping-Validierung als Test).
-     */
-    private val labelMapping = mapOf(
-        "Hammer" to "Hämmern",
-        "Hammering" to "Hämmern",
-        "Drill" to "Bohren",
-        "Drilling" to "Bohren",
-        "Excavator" to "Bagger",
-        "Machinery" to "Bagger",
-        "Heavy machinery" to "Bagger",
-        "Construction" to "Baustelle",
-        "Vehicle" to "Verkehr",
-        "Traffic noise" to "Verkehr",
-        "Car" to "Verkehr",
-        "Truck" to "Verkehr",
-        "Engine" to "Motor",
-        "Siren" to "Sirene",
-        "Beep" to "Piepen",
-        "Lawn mower" to "Rasenmäher",
-        "Saw" to "Säge",
-        "Wood" to "Holzarbeiten",
-        "Explosion" to "Knall"
-    )
-
-    /**
      * Dateiname + CRC32-Hash der eingebetteten `yamnet.tflite` (KI-Umbau Etappe 1.4), einmalig
      * beim Anlegen berechnet und danach unveraendert - falls sich das Modell-Asset zwischen
      * App-Versionen aendert, ist das an gespeicherten [KlassifikationsRohdaten] erkennbar,
@@ -238,13 +247,22 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
             Log.e(TAG, "Error checking references: ${e.message}", e)
             emptyList()
         }
-        return AbleitungsKonfiguration(referenzMuster = referenzen, labelMapping = labelMapping)
+        val baulaermKonfiguration = BaulaermKonfiguration(
+            einSchwelle = settingsManager.aiEinSchwelle,
+            ausSchwelle = settingsManager.aiAusSchwelle,
+        )
+        return AbleitungsKonfiguration(
+            referenzMuster = referenzen,
+            labelMapping = labelMapping,
+            baulaermKonfiguration = baulaermKonfiguration,
+        )
     }
 
     override fun classify(file: File): String? {
         val bauplan = buildeRohdatenBauplan(file) ?: return null
         val rohdaten = bauplan.mitRecordId(recordId = -1)
-        return leiteLabelAb(rohdaten, aktuelleKonfiguration())?.label
+        val konfiguration = aktuelleKonfiguration()
+        return formatiereBaulaermBefund(leiteLabelAb(rohdaten, konfiguration), konfiguration.labelMapping)
     }
 
     /**
@@ -254,7 +272,9 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
      */
     override fun klassifiziereMitRohdaten(file: File): KlassifikationsErgebnis? {
         val bauplan = buildeRohdatenBauplan(file) ?: return null
-        val label = leiteLabelAb(bauplan.mitRecordId(recordId = -1), aktuelleKonfiguration())?.label
+        val konfiguration = aktuelleKonfiguration()
+        val befund = leiteLabelAb(bauplan.mitRecordId(recordId = -1), konfiguration)
+        val label = formatiereBaulaermBefund(befund, konfiguration.labelMapping)
         return KlassifikationsErgebnis(label, bauplan)
     }
 
@@ -262,7 +282,7 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
 
     fun classifyDetailedScored(file: File): List<ScoredCategory>? {
         val result = leseUndKlassifiziere(file) ?: return null
-        return extrahiereTopKategorien(result, settingsManager.aiConfidenceThreshold)
+        return extrahiereTopKategorien(result, TOP_KLASSEN_KANDIDATEN_SCHWELLE)
     }
 
     /**
@@ -334,7 +354,7 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
     private fun buildeRohdatenBauplan(file: File): RohdatenBauplan? {
         try {
             val result = leseUndKlassifiziere(file) ?: return null
-            val topKategorien = extrahiereTopKategorien(result, settingsManager.aiConfidenceThreshold)
+            val topKategorien = extrahiereTopKategorien(result, TOP_KLASSEN_KANDIDATEN_SCHWELLE)
 
             val frames = result.classificationResults()
             val zeitstempel = frames.map { it.timestampMs().orElse(0L) }

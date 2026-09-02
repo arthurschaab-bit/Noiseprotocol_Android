@@ -145,6 +145,7 @@
     <string name="protocol_not_specified">Nicht angegeben</string>
     <string name="protocol_notes_label">Notiz: %1$s</string>
     <string name="protocol_records_count">%1$d Aufnahmen</string>
+    <string name="protocol_daily_baulaerm_minuten">Baulärm heute: %1$s Min.</string>
     <string name="protocol_daily_report_title">Tagesbericht exportieren</string>
     <string name="protocol_daily_report_desc">Möchten Sie den Textbericht oder ein ZIP-Paket inkl. Audioaufnahmen (%1$d Dateien) teilen?</string>
     <string name="protocol_share_zip">ZIP inkl. Audio teilen</string>
@@ -214,7 +215,10 @@
     <string name="settings_sample_rate_44k">44100 Hz (Qualität)</string>
     <string name="settings_ai_title">Automatische KI-Erkennung</string>
     <string name="settings_ai_desc">Klassifiziert Geräusche automatisch nach der Aufnahme</string>
-    <string name="settings_ai_confidence">KI-Vertrauensschwelle: %1$d%%</string>
+    <string name="settings_ai_ein_schwelle">Baulärm-Einstiegsschwelle: %1$d%%</string>
+    <string name="settings_ai_ein_schwelle_desc">Ab diesem Gruppen-Score gilt ein Frame als Baulärm</string>
+    <string name="settings_ai_aus_schwelle">Baulärm-Ausstiegsschwelle: %1$d%%</string>
+    <string name="settings_ai_aus_schwelle_desc">Darunter endet ein zusammenhängender Block - niedriger als die Einstiegsschwelle, verhindert flackernde Einzelblöcke</string>
     <string name="settings_ai_normalisierung_title">Pegel vor der KI-Analyse normalisieren</string>
     <string name="settings_ai_normalisierung_desc">Hebt leise Aufnahmen für die Erkennung an - betrifft nur die KI-Analyse, nicht die gespeicherte Audiodatei</string>
     <string name="settings_quiet_hours_title">Ruhezeiten berücksichtigen</string>
