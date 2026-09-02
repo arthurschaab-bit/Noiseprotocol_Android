@@ -319,6 +319,38 @@ App-Neustart). Kein Terminal mehr nötig. Der `adb`-Weg bleibt als Alternative:
 adb exec-out run-as com.example.lrmprotokoll cat databases/noise_database > backup.db
 ```
 
+### CI
+
+Drei Workflows unter [`.github/workflows/`](.github/workflows/), alle mit `pull_request` (gegen
+`main`), `push` (nach `main`) und manuellem `workflow_dispatch` als Auslöser, pro Ref jeweils nur
+ein gleichzeitiger Lauf (ein neuer Push bricht einen laufenden ab):
+
+1. **[`androidci.yml`](.github/workflows/androidci.yml)** (Job `build-and-test`, Ubuntu-Runner,
+   30 min Timeout):
+   - Baut Debug- und Test-APK (`assembleDebug assembleDebugAndroidTest
+     compileDebugAndroidTestKotlin`).
+   - **Android Lint** (`lintDebug`) — muss ohne Fehler durchlaufen.
+   - Die komplette JVM-/Robolectric-Testsuite (`test --continue`, inkl. der beiden
+     Room-Migrationstests); `--continue` sorgt dafür, dass ein einzelner fehlgeschlagener Test
+     nicht den Rest verdeckt. Das Ergebnis landet zusätzlich lesbar auf der
+     Zusammenfassungsseite des Laufs (`GITHUB_STEP_SUMMARY`), nicht nur im Artefakt.
+   - **Artefakte** (jeweils mit `if: always()` — werden auch bei fehlgeschlagenem Build/Test
+     hochgeladen, soweit vorhanden): `lint-reports` (7 Tage), `unit-test-reports` (7 Tage) und
+     **`app-debug-apk` (14 Tage)** — die fertig gebaute, mit dem fest eingecheckten
+     `app/debug.keystore` signierte Debug-APK aus `app/build/outputs/apk/debug/*.apk`. Das ist
+     der einzige Weg, eine PR-Fassung auf einem Telefon auszuprobieren, ohne selbst zu bauen —
+     siehe [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) für den genauen Weg vom PR bis
+     zur installierten APK (Artefakte hängen an der **Übersichtsseite des Laufs**, nicht an der
+     Job-Seite mit dem Protokoll — das ist die übliche Stolperstelle).
+2. **[`emulator-tests.yml`](.github/workflows/emulator-tests.yml)** (Job `instrumented-tests`,
+   25 min Timeout): baut Debug- und Test-APK, startet einen echten Android-Emulator (API 34,
+   `aosp_atd`, KVM-beschleunigt) und führt darauf `connectedDebugAndroidTest` aus — die
+   instrumentierten Compose-UI-Tests laufen damit bei jedem PR automatisch, nicht nur manuell.
+   Lädt Testberichte (`instrumented-test-reports-api-34`) und bei Fehlschlag zusätzlich
+   `logcat`/`dumpsys`-Diagnose hoch. **Deckt weiterhin kein echtes BLE ab** — der Emulator hat
+   keinen durchgereichten Bluetooth-Adapter, siehe
+   [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) Abschnitt 2 für die genaue Grenze.
+
 ### Release erstellen (Signierte APKs über GitHub Releases)
 
 Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
@@ -328,7 +360,7 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
    git tag v1.0.0
    git push origin v1.0.0
    ```
-2. **Automatischer Workflow (`.github/workflows/release.yml`):**
+2. **Automatischer Workflow ([`release.yml`](.github/workflows/release.yml)):**
    - Leitet `versionName` (`1.0.0`) und `versionCode` (`10000`) deterministisch aus dem Tag ab.
    - Führt die vollständige Test-Suite aus.
    - Baut und signiert das Release-APK mit dem hinterlegten Release-Keystore (`RELEASE_KEYSTORE_BASE64` in GitHub Secrets).
