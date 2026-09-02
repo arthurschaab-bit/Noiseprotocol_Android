@@ -291,10 +291,18 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
         }
 
         val sampleRate = wavSampleRateOrFallback(header, settingsManager.audioSampleRate)
+        val headerRate = wavSampleRateOrFallback(header, -1)
+        val bitTiefe = wavBitsPerSample(header)
         Log.i(
             TAG,
-            "KI-Diagnose: WAV-Header-Rate=${wavSampleRateOrFallback(header, -1)} " +
-                "(verwendet=$sampleRate), Bit-Tiefe=${wavBitsPerSample(header)}",
+            "KI-Diagnose: WAV-Header-Rate=$headerRate (verwendet=$sampleRate), Bit-Tiefe=$bitTiefe",
+        )
+        // Nachtrag zu Etappe 1.1: zusaetzlich als Breadcrumb, damit die Werte im
+        // Support-Bundle-Export landen (Logcat ist ohne Rechner nicht einsehbar).
+        container.diagnosticsReporter.breadcrumb(
+            "AI",
+            "WAV-Header geprueft (rate=$headerRate, verwendet=$sampleRate, bitTiefe=$bitTiefe)",
+            data = mapOf("headerRate" to headerRate, "verwendeteRate" to sampleRate, "bitTiefe" to bitTiefe),
         )
 
         // KI-Umbau Etappe 1.6: NUR der Inferenz-Puffer wird normalisiert - die oben bereits
@@ -345,6 +353,21 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
             }
 
             val frameHopMs = if (zeitstempel.size >= 2) (zeitstempel[1] - zeitstempel[0]).toInt() else 0
+
+            // Nachtrag zu Etappe 1.4: bestaetigt im Support-Bundle-Export, dass pro Aufnahme
+            // tatsaechlich ein Rohdaten-Bauplan entsteht (Frame-Anzahl > 0, Modellversion
+            // gesetzt) - unabhaengig davon, ob AudioRecordingService ihn erfolgreich in Room
+            // persistiert (das bestaetigt die separate "NoiseRecord gespeichert"-Breadcrumb).
+            container.diagnosticsReporter.breadcrumb(
+                "AI",
+                "Rohdaten-Bauplan erstellt (frames=${frames.size}, hopMs=$frameHopMs, topKlassen=${topKategorien.size})",
+                data = mapOf(
+                    "frameAnzahl" to frames.size,
+                    "frameHopMs" to frameHopMs,
+                    "modellVersion" to modellVersion,
+                    "topKlassenAnzahl" to topKategorien.size,
+                ),
+            )
 
             return RohdatenBauplan(
                 modellVersion = modellVersion,

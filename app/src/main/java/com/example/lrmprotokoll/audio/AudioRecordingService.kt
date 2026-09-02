@@ -451,9 +451,20 @@ class AudioRecordingService : LifecycleService() {
                     "gewuenschteRate=$gewuenschteRate, tatsaechlicheRate=$sampleRate, " +
                     "channelConfig=$channelConfig, audioFormat=$audioFormat",
             )
+            // Nachtrag zu Etappe 1.1: dieselben Werte zusaetzlich als Breadcrumb, damit sie im
+            // Support-Bundle-Export landen - Logcat ist ohne angeschlossenen Rechner nicht
+            // einsehbar, der Support-Bundle-Export dagegen schon.
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "Mikrofon-Monitoring gestartet (audioSource=$audioSource, sampleRate=$sampleRate)",
+                data = mapOf(
+                    "audioSource" to audioSource,
+                    "unterstuetztUnprocessed" to unterstuetztUnprocessed,
+                    "gewuenschteRate" to gewuenschteRate,
+                    "tatsaechlicheRate" to sampleRate,
+                    "channelConfig" to channelConfig,
+                    "audioFormat" to audioFormat,
+                ),
             )
 
             val audioRecord = try {
@@ -567,29 +578,64 @@ class AudioRecordingService : LifecycleService() {
      * Fehler) - eine ehrliche "unbekannt"-Aussage statt eines erratenen `false`.
      */
     private fun deaktiviereAudioEffekteUndMeldeAgcZustand(audioSessionId: Int): Boolean? {
-        try {
-            if (AcousticEchoCanceler.isAvailable()) {
-                AcousticEchoCanceler.create(audioSessionId)?.enabled = false
+        val aecStatus = try {
+            if (!AcousticEchoCanceler.isAvailable()) {
+                "nicht_verfuegbar"
+            } else {
+                val aec = AcousticEchoCanceler.create(audioSessionId)
+                if (aec == null) {
+                    "nicht_erstellbar"
+                } else {
+                    aec.enabled = false
+                    "deaktiviert"
+                }
             }
         } catch (e: Throwable) {
             Log.w("AudioRecordingService", "AcousticEchoCanceler konnte nicht deaktiviert werden", e)
+            "fehler"
         }
-        try {
-            if (NoiseSuppressor.isAvailable()) {
-                NoiseSuppressor.create(audioSessionId)?.enabled = false
+        val nsStatus = try {
+            if (!NoiseSuppressor.isAvailable()) {
+                "nicht_verfuegbar"
+            } else {
+                val ns = NoiseSuppressor.create(audioSessionId)
+                if (ns == null) {
+                    "nicht_erstellbar"
+                } else {
+                    ns.enabled = false
+                    "deaktiviert"
+                }
             }
         } catch (e: Throwable) {
             Log.w("AudioRecordingService", "NoiseSuppressor konnte nicht deaktiviert werden", e)
+            "fehler"
         }
-        return try {
-            if (!AutomaticGainControl.isAvailable()) return null
-            val agc = AutomaticGainControl.create(audioSessionId) ?: return null
-            agc.enabled = false
-            false
+        val agcAktiv = try {
+            if (!AutomaticGainControl.isAvailable()) {
+                null
+            } else {
+                val agc = AutomaticGainControl.create(audioSessionId)
+                if (agc == null) {
+                    null
+                } else {
+                    agc.enabled = false
+                    false
+                }
+            }
         } catch (e: Throwable) {
             Log.w("AudioRecordingService", "AutomaticGainControl konnte nicht deaktiviert werden", e)
             null
         }
+
+        // Nachtrag zu Etappe 1.2: bislang wurde nur AGC in der DB persistiert (agcAktiv-Spalte),
+        // der Erfolg/Misserfolg von AEC/NS blieb nur im (fluechtigen) Logcat sichtbar. Als
+        // Breadcrumb landet der vollstaendige Status jetzt im Support-Bundle-Export.
+        diagnosticsReporter.breadcrumb(
+            "AudioService",
+            "Audioeffekte geprueft (aec=$aecStatus, ns=$nsStatus, agcAktiv=$agcAktiv)",
+            data = mapOf("aec" to aecStatus, "ns" to nsStatus, "agcAktiv" to agcAktiv),
+        )
+        return agcAktiv
     }
 
     private fun pruefeSchwellenwertUndTrigger(
@@ -860,14 +906,40 @@ class AudioRecordingService : LifecycleService() {
                     agcAktiv = aktiveAgcAktiv,
                 ),
             )
+            var rohdatenGespeichert = false
             if (ergebnis != null) {
                 try {
                     database.klassifikationsRohdatenDao().insert(ergebnis.rohdaten.mitRecordId(neueId))
+                    rohdatenGespeichert = true
                 } catch (e: Throwable) {
                     Log.e("AudioRecordingService", "Fehler beim Speichern der Klassifikations-Rohdaten", e)
+                    diagnosticsReporter.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DB_WRITE_FAILED,
+                        component = "AudioRecordingService",
+                        operation = "starteWavAufnahme.rohdaten",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        cause = e,
+                        message = "Klassifikations-Rohdaten konnten nicht gespeichert werden",
+                    )
                 }
             }
             Log.i("AudioRecordingService", "NoiseRecord erfolgreich gespeichert: $fileName (Modus: ${settingsManager.aiMode}, KI: $detected)")
+            // Nachtrag zu Etappe 1.1/1.3/1.4: fasst die fuer die Beweiskette relevanten Werte
+            // dieser Aufnahme an EINER Stelle zusammen, damit der Owner sie ueber den
+            // Support-Bundle-Export pruefen kann, ohne adb/Logcat zu benoetigen.
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "NoiseRecord gespeichert (KI=$detected, Rohdaten=$rohdatenGespeichert)",
+                data = mapOf(
+                    "recordId" to neueId,
+                    "detectedLabel" to detected,
+                    "rohdatenGespeichert" to rohdatenGespeichert,
+                    "aufnahmeQuelle" to aktiveAufnahmequelle,
+                    "abtastrate" to aktiveAbtastrate,
+                    "kanalzahl" to aktiveKanalzahl,
+                    "agcAktiv" to aktiveAgcAktiv,
+                ),
+            )
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
         }
