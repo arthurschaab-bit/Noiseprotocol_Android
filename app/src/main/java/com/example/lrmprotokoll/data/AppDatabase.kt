@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -232,8 +233,47 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
+/**
+ * Migration von Schema-Version 12 auf 13: KI-Umbau Etappe 1 (Beweisdokumentation Baulärm).
+ *
+ * Vier neue, nullable Spalten auf `noise_records` (Aufnahmebedingungen, Etappe 1.3) und die neue
+ * Tabelle `klassifikations_rohdaten` (rohe YAMNet-Frame-Scores, Etappe 1.4). Rein additiv wie
+ * die Migrationen zuvor - keine bestehende Spalte oder Tabelle wird angefasst, kein Datensatz
+ * verändert. Altaufnahmen bleiben ohne Rohdaten (kein `klassifikations_rohdaten`-Eintrag) -
+ * "Neu bewerten" überspringt sie dann, statt abzustürzen (Akzeptanzkriterium Etappe 1).
+ */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `aufnahmeQuelle` INTEGER")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `abtastrate` INTEGER")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `kanalzahl` INTEGER")
+        db.execSQL("ALTER TABLE `noise_records` ADD COLUMN `agcAktiv` INTEGER")
+
+        // Identisch zum exportierten Schema 13.json, damit Rooms Validierung im Anschluss traegt.
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `klassifikations_rohdaten` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`recordId` INTEGER NOT NULL, " +
+                "`modellVersion` TEXT NOT NULL, " +
+                "`klassifiziertAm` INTEGER NOT NULL, " +
+                "`frameAnzahl` INTEGER NOT NULL, " +
+                "`frameDauerMs` INTEGER NOT NULL, " +
+                "`frameHopMs` INTEGER NOT NULL, " +
+                "`klassenIndizes` TEXT NOT NULL, " +
+                "`frameScores` BLOB NOT NULL, " +
+                "`topKlassen` TEXT NOT NULL, " +
+                "FOREIGN KEY(`recordId`) REFERENCES `noise_records`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_klassifikations_rohdaten_recordId` " +
+                "ON `klassifikations_rohdaten` (`recordId`)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+    MIGRATION_12_13,
 )
 
 @Database(
@@ -241,11 +281,12 @@ val ALLE_MIGRATIONEN = arrayOf(
         NoiseRecord::class, ReferenceSound::class, AlertEntity::class,
         LevelSampleEntity::class, DriveDailyFileEntity::class,
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
-        MinuteAggregateEntity::class, DiagnosticLogEntity::class,
+        MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
+@TypeConverters(RohdatenConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noiseDao(): NoiseDao
 
@@ -264,6 +305,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun minuteAggregateDao(): MinuteAggregateDao
 
     abstract fun diagnosticLogDao(): DiagnosticLogDao
+
+    abstract fun klassifikationsRohdatenDao(): KlassifikationsRohdatenDao
 
     companion object {
         @Volatile

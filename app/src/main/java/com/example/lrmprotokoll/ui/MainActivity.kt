@@ -56,6 +56,7 @@ import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.audio.bewerteAlleNeu
 import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
@@ -319,6 +320,7 @@ fun NoiseProtocolApp(
     val settingsManager = container.settingsManager
     val db = container.database
     val dao = db.noiseDao()
+    val rohdatenDao = db.klassifikationsRohdatenDao()
     val records by dao.getAll().collectAsState(initial = emptyList())
     val references by dao.getAllReferences().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -516,8 +518,29 @@ fun NoiseProtocolApp(
                                             kandidaten = records.filter { it.detectedLabel == null },
                                             classifier = classifier,
                                             dao = dao,
+                                            rohdatenDao = rohdatenDao,
                                         )
                                         onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_neu_bewerten)) },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    scope.launch {
+                                        val count = bewerteAlleNeu(
+                                            noiseDao = dao,
+                                            rohdatenDao = rohdatenDao,
+                                            konfiguration = classifier.aktuelleKonfiguration(),
+                                        )
+                                        val msg = if (count > 0) {
+                                            context.getString(R.string.ai_reevaluated_count, count)
+                                        } else {
+                                            context.getString(R.string.ai_reevaluated_empty)
+                                        }
+                                        onShowSnackbar(msg, null, null)
                                     }
                                 }
                             )
@@ -902,6 +925,7 @@ fun NoiseProtocolApp(
                                                     kandidaten = unklassifizierteDesTages,
                                                     classifier = classifier,
                                                     dao = dao,
+                                                    rohdatenDao = rohdatenDao,
                                                 )
                                                 val msg = if (count > 0) {
                                                     context.getString(R.string.ai_batch_day_result, count, date)

@@ -108,4 +108,31 @@ class SupportBundleExporterTest {
             assertTrue(!breadcrumbs.contains("supersecret"))
         }
     }
+
+    /**
+     * KI-Umbau Etappe 1 (Nachtrag): ein `null`-Wert in `data` (z.B. "AGC-Zustand unbekannt") ist
+     * selbst ein Diagnosewert und muss im Export als JSON-`null` erscheinen - nicht als
+     * fehlender Schluessel, der spaeter mit "nie gemessen" verwechselt werden koennte.
+     */
+    @Test
+    fun createBundleSchreibtNullWerteAlsJsonNullStattSieZuUeberspringen() {
+        val reporter = CompositeDiagnosticsReporter(
+            sinks = emptyList(),
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
+        )
+        reporter.breadcrumb(
+            category = "AudioService",
+            message = "Audioeffekte geprueft",
+            data = mapOf("aec" to "deaktiviert", "agcAktiv" to null)
+        )
+
+        val exporter = SupportBundleExporter(context, reporter)
+        val zipFile = exporter.createBundle(emptyList())
+
+        ZipFile(zipFile).use { zip ->
+            val breadcrumbs = zip.getInputStream(zip.getEntry("breadcrumbs.jsonl")).bufferedReader().readText()
+            assertTrue(breadcrumbs.contains("\"agcAktiv\":null"))
+            assertTrue(breadcrumbs.contains("\"aec\":\"deaktiviert\""))
+        }
+    }
 }

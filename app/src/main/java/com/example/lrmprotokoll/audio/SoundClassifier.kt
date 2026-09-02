@@ -20,6 +20,18 @@ interface SoundClassifier {
 }
 
 /**
+ * KI-Umbau Etappe 1.4: wie [SoundClassifier], liefert aber zusaetzlich die Rohdaten fuer die
+ * Persistenz ([KlassifikationsErgebnis.rohdaten]) - eigene, schlanke Schnittstelle statt die
+ * konkrete [NoiseClassifier]-Klasse direkt zu verwenden, damit [klassifiziereUndSpeichere] und
+ * [AudioRecordingService] weiterhin mit einem handgeschriebenen Fake testbar bleiben (dieses
+ * Projekt nutzt bewusst kein Mocking-Framework - [NoiseClassifier] selbst ist nicht `open` und
+ * braucht in seinem Konstruktor einen echten Android-[android.content.Context]).
+ */
+interface RohdatenClassifier {
+    fun klassifiziereMitRohdaten(file: File): KlassifikationsErgebnis?
+}
+
+/**
  * Ruft [classifier] nur auf, wenn die KI-Erkennung aktiviert ist, und faengt dabei JEDE
  * Ausnahme ab - nicht nur die von [classifier] selbst schon behandelten Faelle, sondern auch
  * einen komplett fehlgeschlagenen (null) Klassifikator oder eine unerwartete Ausnahme an der

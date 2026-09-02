@@ -128,9 +128,12 @@ class SupportBundleExporter(
             val redactedData = DiagnosticRedactor.redactMap(bc.data)
             val dataObj = JSONObject()
             redactedData.forEach { (k, v) ->
-                if (v != null) {
-                    dataObj.put(k, v)
-                }
+                // KI-Umbau Etappe 1 (Nachtrag): ein echtes `null` (z.B. "AGC-Zustand unbekannt")
+                // ist ein Diagnosewert an sich und muss von "Schluessel nie gesetzt"
+                // unterscheidbar bleiben - JSONObject.put() mit einem Kotlin-`null` wuerfe eine
+                // NullPointerException, darum explizit JSONObject.NULL statt den Eintrag zu
+                // ueberspringen.
+                dataObj.put(k, v ?: JSONObject.NULL)
             }
             json.put("data", dataObj)
             sb.append(json.toString()).append("\n")

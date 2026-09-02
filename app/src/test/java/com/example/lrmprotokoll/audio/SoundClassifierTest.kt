@@ -104,7 +104,7 @@ class SoundClassifierTest {
             override suspend fun zwischenZeitpunkt(von: Long, bis: Long) = emptyList<com.example.lrmprotokoll.data.NoiseRecord>()
             override fun zwischenZeitpunktFlow(von: Long, bis: Long) = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.NoiseRecord>())
             override fun abZeitpunktFlow(von: Long) = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.NoiseRecord>())
-            override suspend fun insert(record: com.example.lrmprotokoll.data.NoiseRecord) {}
+            override suspend fun insert(record: com.example.lrmprotokoll.data.NoiseRecord): Long = 0
             override suspend fun update(record: com.example.lrmprotokoll.data.NoiseRecord) { updated.add(record) }
             override suspend fun softDelete(id: Long, deletedAt: Long) {}
             override suspend fun softDeleteMultiple(ids: List<Long>, deletedAt: Long) {}
@@ -117,6 +117,7 @@ class SoundClassifierTest {
             override suspend fun getAutoRetentionCandidates(cutoff: Long) = emptyList<com.example.lrmprotokoll.data.NoiseRecord>()
             override suspend fun setFavorite(id: Long, isFavorite: Boolean) {}
             override suspend fun setNotes(id: Long, notes: String?) {}
+            override suspend fun setDetectedLabel(id: Long, label: String?) {}
             override fun getAllReferences() = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.ReferenceSound>())
             override suspend fun insertReference(sound: com.example.lrmprotokoll.data.ReferenceSound) {}
             override suspend fun deleteReference(id: Long) {}

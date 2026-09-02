@@ -114,6 +114,15 @@ class SettingsManager(
         get() = prefs.getFloat("ai_confidence", 0.3f)
         set(value) = prefs.edit().putFloat("ai_confidence", value).apply()
 
+    /**
+     * KI-Umbau Etappe 1.6: Peak-Normalisierung des Sample-Puffers vor der YAMNet-Inferenz
+     * (Ziel-Peak ca. 0,95) - Default an, betrifft NUR den Inferenz-Puffer, nicht die
+     * gespeicherte WAV-Datei (die bleibt unveraendertes Beweismittel).
+     */
+    var aiNormalisierung: Boolean
+        get() = prefs.getBoolean("ai_normalisierung", true)
+        set(value) = prefs.edit().putBoolean("ai_normalisierung", value).apply()
+
     var audioSampleRate: Int
         get() = prefs.getInt("sample_rate", 16000)
         set(value) = prefs.edit().putInt("sample_rate", value).apply()
