@@ -145,6 +145,7 @@
     <string name="protocol_not_specified">Not specified</string>
     <string name="protocol_notes_label">Note: %1$s</string>
     <string name="protocol_records_count">%1$d recordings</string>
+    <string name="protocol_daily_baulaerm_minuten">Construction noise: %1$s min</string>
     <string name="protocol_daily_report_title">Export daily report</string>
     <string name="protocol_daily_report_desc">Do you want to share the text report or a ZIP package including audio recordings (%1$d files)?</string>
     <string name="protocol_share_zip">Share ZIP incl. audio</string>
@@ -214,7 +215,10 @@
     <string name="settings_sample_rate_44k">44100 Hz (High Quality)</string>
     <string name="settings_ai_title">Automatic AI Classification</string>
     <string name="settings_ai_desc">Automatically classifies sounds after recording</string>
-    <string name="settings_ai_confidence">AI Confidence Threshold: %1$d%%</string>
+    <string name="settings_ai_ein_schwelle">Construction noise entry threshold: %1$d%%</string>
+    <string name="settings_ai_ein_schwelle_desc">A frame counts as construction noise once its group score reaches this level</string>
+    <string name="settings_ai_aus_schwelle">Construction noise exit threshold: %1$d%%</string>
+    <string name="settings_ai_aus_schwelle_desc">Below this a contiguous block ends - lower than the entry threshold, prevents flickering blocks</string>
     <string name="settings_ai_normalisierung_title">Normalize level before AI analysis</string>
     <string name="settings_ai_normalisierung_desc">Boosts quiet recordings for detection - affects only the AI analysis, not the stored audio file</string>
     <string name="settings_quiet_hours_title">Quiet Hours</string>

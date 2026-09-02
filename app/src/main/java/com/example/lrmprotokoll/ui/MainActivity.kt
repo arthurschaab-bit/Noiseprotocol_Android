@@ -55,7 +55,9 @@ import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
+import com.example.lrmprotokoll.audio.BaulaermKonfiguration
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.audio.berechneBaulaermMinutenDesTages
 import com.example.lrmprotokoll.audio.bewerteAlleNeu
 import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
 import com.example.lrmprotokoll.data.MeasurementEntity
@@ -892,6 +894,7 @@ fun NoiseProtocolApp(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.small
                     ) {
+                      Column {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -955,6 +958,34 @@ fun NoiseProtocolApp(
                                 Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
                             }
                         }
+
+                        // KI-Umbau Etappe 2.7: "wie viele Minuten des Tages als Baulärm
+                        // eingestuft sind - das ist die beweisrelevante Kennzahl". Reine
+                        // Aggregation ueber bereits gespeicherte Rohdaten (kein Datei-/
+                        // Inferenz-Zugriff), darum unbedenklich bei jedem Rendering neu
+                        // berechnet - siehe berechneBaulaermMinutenDesTages()-KDoc.
+                        val baulaermMinuten by produceState(initialValue = 0f, dailyRecords) {
+                            value = berechneBaulaermMinutenDesTages(
+                                records = dailyRecords,
+                                rohdatenDao = rohdatenDao,
+                                konfiguration = BaulaermKonfiguration(
+                                    einSchwelle = settingsManager.aiEinSchwelle,
+                                    ausSchwelle = settingsManager.aiAusSchwelle,
+                                ),
+                            )
+                        }
+                        if (baulaermMinuten > 0f) {
+                            Text(
+                                text = stringResource(
+                                    R.string.protocol_daily_baulaerm_minuten,
+                                    "%.1f".format(baulaermMinuten),
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 44.dp, bottom = 6.dp),
+                            )
+                        }
+                      }
                     }
                 }
 

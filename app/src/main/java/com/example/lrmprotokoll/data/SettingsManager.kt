@@ -110,9 +110,24 @@ class SettingsManager(
             aiMode = neuerModus
         }
 
-    var aiConfidenceThreshold: Float
-        get() = prefs.getFloat("ai_confidence", 0.3f)
-        set(value) = prefs.edit().putFloat("ai_confidence", value).apply()
+    /**
+     * KI-Umbau Etappe 2.6: die alte, pauschale "Einheitsschwelle" (`ai_confidence`, 30% fuer
+     * jede Klasse) ist abgeschafft - bei einem Sigmoid-Multilabel-Modell wie YAMNet erreichen
+     * breite Klassen wie "Speech" regelmaessig 0.8+, spezifische wie "Jackhammer" oft nur
+     * 0.1-0.3, eine Einheitsschwelle bevorzugt damit strukturell die falschen Klassen. An ihre
+     * Stelle tritt die Hysterese-Schwellung auf den Baulärm-GRUPPEN-Score: [aiEinSchwelle]
+     * (Einstieg) und [aiAusSchwelle] (Ausstieg, niedriger als der Einstieg - verhindert
+     * zerhackte Bloecke bei einem Score, der knapp um eine einzelne Schwelle pendelt).
+     * Der alte `ai_confidence`-Schluessel wird nicht weiterverwendet und braucht keine Migration
+     * (SharedPreferences, kein Room-Schema) - ein verwaister Eintrag dort ist harmlos.
+     */
+    var aiEinSchwelle: Float
+        get() = prefs.getFloat("ai_ein_schwelle", 0.50f)
+        set(value) = prefs.edit().putFloat("ai_ein_schwelle", value).apply()
+
+    var aiAusSchwelle: Float
+        get() = prefs.getFloat("ai_aus_schwelle", 0.35f)
+        set(value) = prefs.edit().putFloat("ai_aus_schwelle", value).apply()
 
     /**
      * KI-Umbau Etappe 1.6: Peak-Normalisierung des Sample-Puffers vor der YAMNet-Inferenz
