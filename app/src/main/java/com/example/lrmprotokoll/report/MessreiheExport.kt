@@ -1,7 +1,11 @@
 package com.example.lrmprotokoll.report
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.RectF
+import com.example.lrmprotokoll.data.DokumentationsFotoEntity
+import com.example.lrmprotokoll.data.FotoKategorie
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
@@ -56,6 +60,7 @@ class MessreiheExport(private val context: Context) {
         session: SessionEntity,
         kennwerte: AkustischeKennwerte.Kennwerte,
         ausfallbaender: List<Ausfallband>,
+        fotos: List<DokumentationsFotoEntity> = emptyList(),
     ): File {
         val formatierer = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         val titel = "Session ${formatierer.format(Date(session.startedAt))}"
@@ -116,9 +121,69 @@ class MessreiheExport(private val context: Context) {
             }
         }
 
+        val mitFotos: (Seitenlauf, () -> Canvas?) -> Unit = { lauf, canvasGeber ->
+            aufbau(lauf, canvasGeber)
+            zeichneFotoanhang(lauf, canvasGeber, fotos, formatierer)
+        }
+
         val datei = File(BerichtDatei.ordner(context), dateiname(session, "pdf"))
-        BerichtSeiten.schreibe(datei, abschnitt = "Sessionbericht", fussHinweis = titel, aufbau = aufbau)
+        BerichtSeiten.schreibe(datei, abschnitt = "Sessionbericht", fussHinweis = titel, aufbau = mitFotos)
         return datei
+    }
+
+    /**
+     * Fotoanhang am Ende des Sessionberichts (M11 Etappe A).
+     *
+     * Ein Foto, dessen Datei nicht mehr existiert, erzeugt einen Textplatzhalter statt eines
+     * Absturzes: Ein Bericht, der wegen eines fehlenden Bildes gar nicht erst entsteht, ist der
+     * schlimmere Fehler.
+     */
+    private fun zeichneFotoanhang(
+        lauf: Seitenlauf,
+        canvasGeber: () -> Canvas?,
+        fotos: List<DokumentationsFotoEntity>,
+        formatierer: SimpleDateFormat,
+    ) {
+        if (fotos.isEmpty()) return
+
+        val x = Seitenlauf.RAND_LINKS
+        val kopfPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 13f, fett = true)
+        val textPaint = BerichtLayout.paint(textSize = 11f)
+        val kleinPaint = BerichtLayout.paint(BerichtLayout.COLOR_TEXT_MUTED, textSize = 9f)
+
+        lauf.abstand(14f)
+        val ky = lauf.platziere(24f)
+        canvasGeber()?.drawText("Fotodokumentation (${fotos.size})", x, ky + 14f, kopfPaint)
+
+        fotos.forEach { foto ->
+            val kategorie = FotoKategorie.vonName(foto.kategorie).anzeigename
+            val zeitpunkt = formatierer.format(Date(foto.aufgenommenAm))
+            val datei = File(foto.dateiPfad)
+
+            val bild = if (datei.exists()) {
+                runCatching { BitmapFactory.decodeFile(foto.dateiPfad) }.getOrNull()
+            } else {
+                null
+            }
+
+            if (bild == null) {
+                val zy = lauf.platziere(18f)
+                canvasGeber()?.drawText("[Foto nicht mehr verfügbar: ${datei.name}]", x, zy + 12f, textPaint)
+                return@forEach
+            }
+
+            val breite = minOf(240f, Seitenlauf.INHALT_BREITE)
+            val hoehe = breite * bild.height / bild.width.coerceAtLeast(1)
+            // Bild und Bildunterschrift als EIN Block reservieren, damit die Unterschrift nicht
+            // ohne ihr Bild auf der Folgeseite landet.
+            val by = lauf.platziere(hoehe + 30f)
+            canvasGeber()?.let { c ->
+                c.drawBitmap(bild, null, RectF(x, by, x + breite, by + hoehe), null)
+                c.drawText("$kategorie · $zeitpunkt", x, by + hoehe + 12f, kleinPaint)
+                foto.notiz?.let { notiz -> c.drawText(notiz, x, by + hoehe + 24f, kleinPaint) }
+            }
+            bild.recycle()
+        }
     }
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
