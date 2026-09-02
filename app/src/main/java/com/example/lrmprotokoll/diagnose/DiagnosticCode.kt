@@ -16,6 +16,12 @@ enum class DiagnosticCode {
     AUDIO_FILE_WRITE_FAILED,
     AUDIO_FOREGROUND_SERVICE_FAILED,
 
+    /**
+     * Ueber der Schwelle gemessen, aber ueber ein ganzes Zeitfenster kein einziges Ereignis
+     * gespeichert - die Ausloesung funktioniert stillschweigend nicht. Siehe [TriggerWachhund].
+     */
+    TRIGGER_STILLER_AUSFALL,
+
     // KI & Klassifikation
     AI_MODEL_INIT_FAILED,
     AI_INFERENCE_FAILED,

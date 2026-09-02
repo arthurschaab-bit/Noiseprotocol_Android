@@ -180,6 +180,7 @@ class AudioRecordingService : LifecycleService() {
             while (isActive) {
                 delay(5000L)
                 if (isForegroundActive) {
+                    pruefeStillenAusfall()
                     updateNotification(connectionSupervisor.state.value)
                     // F14: dieselbe 5-Sekunden-Kadenz wie die Notification, keine eigene
                     // Alarm-/Timer-Infrastruktur fuer das Homescreen-Widget.
@@ -275,6 +276,9 @@ class AudioRecordingService : LifecycleService() {
             _audioAufnahmeAktiv.value = false
             _currentMicDb.value = null
             _laeuft.value = false
+            triggerWachhund.zuruecksetzen()
+            wavOhneMikrofonGemeldet = false
+            stillerAusfallHinweis = null
             NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
             stopSelf()
             return START_NOT_STICKY
@@ -285,6 +289,9 @@ class AudioRecordingService : LifecycleService() {
             isRunning = false
             _audioAufnahmeAktiv.value = false
             _currentMicDb.value = null
+            triggerWachhund.zuruecksetzen()
+            wavOhneMikrofonGemeldet = false
+            stillerAusfallHinweis = null
             settingsManager.audioMonitoringWasActive = false
             diagnosticsReporter.breadcrumb("AudioService", "Audio-Aufnahme gestoppt (Hintergrund-Dienst bleibt aktiv)")
             updateNotification(connectionSupervisor.state.value)
@@ -395,13 +402,16 @@ class AudioRecordingService : LifecycleService() {
         }
         val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
-        val contentText = leiteNotificationTextAb(
+        // Ein erkannter stiller Ausfall verdraengt den normalen Statustext: Er ist die
+        // wichtigere Information, und die Notification ist der einzige Ort, an dem der Nutzer
+        // ihn zuverlaessig sieht, ohne die App zu oeffnen.
+        val contentText = stillerAusfallHinweis ?: leiteNotificationTextAb(
             istMessgeraetGepinnt = settingsManager.meterDeviceAddress != null,
             meterState = meterState,
             meterPegel = letzterMeterFrame?.level,
             mikrofonPegel = _currentMicDb.value,
         )
-        val icon = if (istNotificationZustandGestoert(meterState)) {
+        val icon = if (stillerAusfallHinweis != null || istNotificationZustandGestoert(meterState)) {
             android.R.drawable.stat_sys_warning
         } else {
             android.R.drawable.ic_btn_speak_now
@@ -643,7 +653,18 @@ class AudioRecordingService : LifecycleService() {
         mikrofonDb: Double?,
         maxAmplitude: Double = 0.0,
     ) {
-        if (!isRunning) return
+        // Frueher stand hier "if (!isRunning) return". isRunning ist aber ausschliesslich das
+        // Flag der MIKROFON-Ueberwachung (gesetzt nur ueber ACTION_START_AUDIO_MONITORING).
+        // Der PCE-323-Frame-Collector ruft diese Methode zwar bei jedem Frame auf - jeder
+        // Aufruf fiel jedoch hier heraus, solange die Mikrofon-Ueberwachung nicht separat lief.
+        // Ergebnis beim Owner: 12 Stunden durchgehend ueber der Schwelle, null Ereignisse, bei
+        // gleichzeitig weiterlaufender Session, Messreihe und Drive-Sync.
+        //
+        // Gemeint war "laeuft die Ueberwachung ueberhaupt" - und das ist der Fall, sobald
+        // ENTWEDER die Mikrofonschleife laeuft ODER ein Messgeraet streamt.
+        val mikrofonLaeuft = isRunning
+        val messgeraetStreamt = connectionSupervisor.state.value == ConnectionState.STREAMING
+        if (!mikrofonLaeuft && !messgeraetStreamt) return
         if (isRecordingActive.get()) return
         // Mindestens 1s Cooldown nach Beendigung der letzten WAV-Aufnahme
         if (System.currentTimeMillis() - letzteAufnahmeEndeTimestamp < 1000L) return
@@ -666,21 +687,57 @@ class AudioRecordingService : LifecycleService() {
             triggerQuelle = settingsManager.audioTriggerQuelle,
         )
 
-        if (auswertung.ausgeloest) {
-            if (settingsManager.recordWavAudio) {
-                if (isRecordingActive.compareAndSet(false, true)) {
-                    serviceScope.launch(Dispatchers.IO) {
-                        starteWavAufnahme(maxAmplitude, mikrofonDb ?: auswertung.pegel, auswertung, isQuiet)
-                    }
-                }
-            } else {
-                if (isRecordingActive.compareAndSet(false, true)) {
-                    serviceScope.launch(Dispatchers.IO) {
-                        speicherePegelEreignisOhneAudio(auswertung, isQuiet, mikrofonDb)
-                    }
+        triggerWachhund.pegelGesehen(System.currentTimeMillis(), auswertung.ausgeloest)
+
+        if (!auswertung.ausgeloest) return
+
+        // Die WAV-Daten stammen ausschliesslich aus der Mikrofonschleife: writeChunk() wird nur
+        // dort aufgerufen, und getPreRollData() liest den Rolling Buffer, der ebenfalls nur dort
+        // gefuellt wird. Der PCE-323 liefert Pegelwerte ueber BLE, kein Audio. Ohne laufendes
+        // Mikrofon eine WAV-Aufnahme zu starten wuerde eine Datei mit Header und leerem
+        // Datenteil erzeugen - schlimmer als kein Beleg, weil sie wie einer aussieht.
+        val wavMoeglich = settingsManager.recordWavAudio && mikrofonLaeuft
+
+        if (wavMoeglich) {
+            if (isRecordingActive.compareAndSet(false, true)) {
+                serviceScope.launch(Dispatchers.IO) {
+                    starteWavAufnahme(maxAmplitude, mikrofonDb ?: auswertung.pegel, auswertung, isQuiet)
                 }
             }
+            return
         }
+
+        if (settingsManager.recordWavAudio && !mikrofonLaeuft) {
+            meldeWavOhneMikrofon()
+        }
+
+        // Ein Ereignis mit Pegel, Zeitstempel und kalibriertem Wert - aber ohne Audio - ist
+        // ungleich mehr wert als gar keins. Genau das fehlte in den 12 Stunden des Owners.
+        if (isRecordingActive.compareAndSet(false, true)) {
+            serviceScope.launch(Dispatchers.IO) {
+                speicherePegelEreignisOhneAudio(auswertung, isQuiet, mikrofonDb)
+            }
+        }
+    }
+
+    /**
+     * Weist einmal je Ueberwachungsperiode darauf hin, dass Ereignisse ohne Tonaufnahme
+     * gespeichert werden. Die Kombination "Trigger = Messgeraet" + "WAV = an" +
+     * "Mikrofon-Ueberwachung aus" ist technisch unmoeglich; bisher hat die App dazu geschwiegen.
+     */
+    private fun meldeWavOhneMikrofon() {
+        if (wavOhneMikrofonGemeldet) return
+        wavOhneMikrofonGemeldet = true
+        diagnosticsReporter.breadcrumb(
+            "AudioService",
+            "Ereignis ohne Tonaufnahme gespeichert - Mikrofon-Ueberwachung ist aus",
+            data = mapOf(
+                "triggerQuelle" to settingsManager.audioTriggerQuelle,
+                "recordWavAudio" to true,
+                "mikrofonLaeuft" to false,
+            ),
+        )
+        updateNotification(connectionSupervisor.state.value)
     }
 
     private suspend fun speicherePegelEreignisOhneAudio(
@@ -708,6 +765,8 @@ class AudioRecordingService : LifecycleService() {
                     agcAktiv = aktiveAgcAktiv,
                 )
             )
+            triggerWachhund.ereignisGespeichert(timestamp)
+            stillerAusfallHinweis = null
             Log.i("AudioRecordingService", "Reines Pegelereignis gespeichert (DSGVO-Modus ohne Audio): ${auswertung.pegel} dB")
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord ohne Audio", e)
@@ -716,6 +775,43 @@ class AudioRecordingService : LifecycleService() {
             delay(2000L)
             isRecordingActive.set(false)
         }
+    }
+
+    /**
+     * Der Wachhund gegen den stillen Ausfall (siehe [TriggerWachhund]).
+     *
+     * Die Meldung geht bewusst in die Notification und nicht nur ins Diagnose-Log: Der Owner hat
+     * 12 Stunden lang nicht in den Diagnose-Screen geschaut, und dafuer gibt es keinen Grund.
+     * Sie nennt ausserdem den vermuteten Grund, nicht nur den Zustand - "Trigger-Problem
+     * erkannt" waere unbrauchbar.
+     */
+    private fun pruefeStillenAusfall() {
+        val jetzt = System.currentTimeMillis()
+        if (!triggerWachhund.stillerAusfall(jetzt)) return
+
+        val minuten = triggerWachhund.dauerUeberSchwelleMs(jetzt) / 60_000L
+        val grund = if (!isRunning && settingsManager.recordWavAudio) {
+            "Mikrofon-Überwachung ist aus"
+        } else {
+            "Ursache unklar"
+        }
+        stillerAusfallHinweis = "Seit $minuten Min. über der Schwelle, aber keine Ereignisse – $grund"
+
+        diagnosticsReporter.report(
+            code = com.example.lrmprotokoll.diagnose.DiagnosticCode.TRIGGER_STILLER_AUSFALL,
+            component = "AudioRecordingService",
+            operation = "pruefeStillenAusfall",
+            severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+            message = stillerAusfallHinweis ?: "",
+            details = mapOf(
+                "minutenUeberSchwelle" to minuten,
+                "mikrofonLaeuft" to isRunning,
+                "triggerQuelle" to settingsManager.audioTriggerQuelle,
+                "recordWavAudio" to settingsManager.recordWavAudio,
+                "verbindung" to connectionSupervisor.state.value.name,
+            ),
+        )
+        updateNotification(connectionSupervisor.state.value)
     }
 
     private fun calculateDb(buffer: ShortArray, readSize: Int): Double {
@@ -803,6 +899,15 @@ class AudioRecordingService : LifecycleService() {
 
     @Volatile private var activeWavRecorder: ActiveWavRecorder? = null
 
+    /** Erkennt, dass ueber der Schwelle gemessen wird, aber keine Ereignisse entstehen. */
+    private val triggerWachhund = TriggerWachhund()
+
+    /** Damit der Hinweis "Ereignisse ohne Ton" hoechstens einmal je Ueberwachungsperiode kommt. */
+    @Volatile private var wavOhneMikrofonGemeldet = false
+
+    /** Sichtbarer Text des Wachhunds, wird in die Notification uebernommen. */
+    @Volatile private var stillerAusfallHinweis: String? = null
+
     private suspend fun starteWavAufnahme(
         initialAmplitude: Double,
         dbValue: Double,
@@ -889,6 +994,10 @@ class AudioRecordingService : LifecycleService() {
 
         try {
             val database = (application as LaermprotokollApp).container.database
+            // Auch der WAV-Pfad meldet dem Wachhund ein Ereignis - sonst wuerde er anschlagen,
+            // obwohl die Ausloesung einwandfrei funktioniert.
+            triggerWachhund.ereignisGespeichert(timestamp)
+            stillerAusfallHinweis = null
             val neueId = database.noiseDao().insert(
                 NoiseRecord(
                     timestamp = timestamp,

@@ -91,6 +91,8 @@
     <string name="cockpit_trigger_auto">Automatisch</string>
     <string name="cockpit_trigger_meter_only">Nur PCE-323</string>
     <string name="cockpit_trigger_mic_only">Nur Mikrofon</string>
+    <string name="cockpit_trigger_active_meter">Messgerät</string>
+    <string name="cockpit_trigger_active_mic">Mikrofon</string>
     <string name="cockpit_threshold_display">Aufnahme-Schwelle: %1$.1f dB</string>
     <string name="cockpit_history_title">Schallpegel-Verlauf</string>
     <string name="cockpit_laeq_label">LAeq (Avg)</string>

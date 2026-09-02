@@ -61,7 +61,7 @@ import com.example.lrmprotokoll.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -530,44 +530,53 @@ fun SettingsScreen(
                     )
                 }
 
-                if (recordWavAudio) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(stringResource(R.string.settings_trigger_source_title), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = audioTriggerQuelle == "AUTO",
-                            onClick = {
-                                audioTriggerQuelle = "AUTO"
-                                settings.audioTriggerQuelle = "AUTO"
-                            },
-                            label = { Text(stringResource(R.string.settings_trigger_source_auto)) }
-                        )
-                        FilterChip(
-                            selected = audioTriggerQuelle == "PCE_323",
-                            onClick = {
-                                audioTriggerQuelle = "PCE_323"
-                                settings.audioTriggerQuelle = "PCE_323"
-                            },
-                            label = { Text(stringResource(R.string.settings_trigger_source_meter)) }
-                        )
-                        FilterChip(
-                            selected = audioTriggerQuelle == "MIKROFON",
-                            onClick = {
-                                audioTriggerQuelle = "MIKROFON"
-                                settings.audioTriggerQuelle = "MIKROFON"
-                            },
-                            label = { Text(stringResource(R.string.settings_trigger_source_mic)) }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.settings_trigger_source_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Die Trigger-Quelle hing frueher in "if (recordWavAudio)" und war damit ohne
+                // WAV-Aufnahme gar nicht einstellbar - obwohl auch ein reines Pegel-Ereignis
+                // eine Quelle braucht und MeterTriggerSource weiterhin danach entscheidet.
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(stringResource(R.string.settings_trigger_source_title), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(4.dp))
+                // FlowRow statt Row: Ein Row bricht nicht um, er schneidet ab. "Automatisch
+                // (Standard)" + "Nur PCE-323" + "Nur Mikrofon" passen zusammen nicht auf die
+                // Breite eines ueblichen Telefons - der dritte Chip wurde rechts aus dem
+                // sichtbaren Bereich geschoben und galt als "fehlt".
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    FilterChip(
+                        selected = audioTriggerQuelle == "AUTO",
+                        onClick = {
+                            audioTriggerQuelle = "AUTO"
+                            settings.audioTriggerQuelle = "AUTO"
+                        },
+                        label = { Text(stringResource(R.string.settings_trigger_source_auto)) }
+                    )
+                    FilterChip(
+                        selected = audioTriggerQuelle == "PCE_323",
+                        onClick = {
+                            audioTriggerQuelle = "PCE_323"
+                            settings.audioTriggerQuelle = "PCE_323"
+                        },
+                        label = { Text(stringResource(R.string.settings_trigger_source_meter)) }
+                    )
+                    FilterChip(
+                        selected = audioTriggerQuelle == "MIKROFON",
+                        onClick = {
+                            audioTriggerQuelle = "MIKROFON"
+                            settings.audioTriggerQuelle = "MIKROFON"
+                        },
+                        label = { Text(stringResource(R.string.settings_trigger_source_mic)) }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.settings_trigger_source_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 if (isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))

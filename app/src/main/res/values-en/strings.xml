@@ -91,6 +91,8 @@
     <string name="cockpit_trigger_auto">Automatic</string>
     <string name="cockpit_trigger_meter_only">PCE-323 Only</string>
     <string name="cockpit_trigger_mic_only">Microphone Only</string>
+    <string name="cockpit_trigger_active_meter">Meter</string>
+    <string name="cockpit_trigger_active_mic">Microphone</string>
     <string name="cockpit_threshold_display">Recording Threshold: %1$.1f dB</string>
     <string name="cockpit_history_title">Sound Level History</string>
     <string name="cockpit_laeq_label">LAeq (Avg)</string>
