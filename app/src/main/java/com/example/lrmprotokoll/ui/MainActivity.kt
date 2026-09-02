@@ -222,6 +222,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onOpenDrawer = { scope.launch { drawerState.open() } },
                         onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                         onShowOnboarding = { onboardingErneutAnzeigen = true },
+                        onOpenKiErklaerung = { navController.navigate("ki-erklaerung") },
                         onNavigateToDiagnose = { navController.navigate("diagnose") },
                     )
                 }
@@ -250,6 +251,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
                     )
                 }
+                composable("ki-erklaerung") {
+                    KiErklaerungScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
+                    )
+                }
+
                 composable("diagnose") {
                     DiagnoseScreen(
                         onBack = { navController.popBackStack() },

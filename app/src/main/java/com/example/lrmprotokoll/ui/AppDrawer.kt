@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ fun AppDrawerContent(
         DrawerMenuItem("meter", stringResource(R.string.nav_meter), AppIcons.Sensors),
         DrawerMenuItem("protokoll", stringResource(R.string.nav_protocol), AppIcons.BarChart),
         DrawerMenuItem("diagnose", stringResource(R.string.nav_diagnose), AppIcons.Diagnose),
+        DrawerMenuItem("ki-erklaerung", "Lärmerkennung erklärt", Icons.Default.Info),
         DrawerMenuItem("settings", stringResource(R.string.nav_settings), Icons.Default.Settings),
         DrawerMenuItem("trash", stringResource(R.string.nav_trash), AppIcons.Trash),
     )
