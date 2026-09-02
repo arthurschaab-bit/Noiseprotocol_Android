@@ -196,6 +196,7 @@ class AppContainer(context: Context) {
             dailyFileDao = database.driveDailyFileDao(),
             noiseDao = database.noiseDao(),
             settings = settingsManager,
+            dokumentationsFotoDao = database.dokumentationsFotoDao(),
         )
     }
 
@@ -209,6 +210,15 @@ class AppContainer(context: Context) {
             measurementDao = database.measurementDao(),
             connectionEventDao = database.connectionEventDao(),
             scope = connectionSupervisorScope,
+        )
+    }
+
+    val fotoDokumentation: com.example.lrmprotokoll.foto.FotoDokumentation by lazy {
+        com.example.lrmprotokoll.foto.FotoDokumentation(
+            context = context.applicationContext,
+            dao = database.dokumentationsFotoDao(),
+            settings = settingsManager,
+            diagnostics = diagnosticsReporter,
         )
     }
 

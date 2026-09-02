@@ -315,6 +315,10 @@ class AudioRecordingService : LifecycleService() {
             _audioAufnahmeAktiv.value = true
             startMonitoring()
             settingsManager.audioMonitoringWasActive = true
+            // M11/E1: Auch ein reiner Mikrofonlauf ist ein Messvorgang und bekommt eine Session -
+            // sonst hat die Fotodokumentation nichts, woran sie haengen koennte. No-Op, wenn
+            // bereits eine Session laeuft (etwa weil das Messgeraet schon verbunden ist).
+            measurementRecorder.starteMikrofonMessung()
         }
         ensureMeterMonitoringStarted()
         ensureDriveSyncStarted()

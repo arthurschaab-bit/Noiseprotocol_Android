@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -328,6 +329,24 @@ fun NoiseProtocolApp(
     val references by dao.getAllReferences().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val reportManager = remember { ReportManager(context) }
+
+    // M11 Etappe A: Sobald ein Messvorgang eine Session eroeffnet hat, nach der Fotodokumentation
+    // fragen - erst danach, nie davor (siehe FotoDokumentationSheet). Seit E1 eroeffnet auch ein
+    // reiner Mikrofonlauf eine Session, die Aufforderung kommt also fuer beide Messarten.
+    val offeneSession by container.database.sessionDao().offeneSessionFlow()
+        .collectAsState(initial = null)
+    var fotoSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var zuletztGefragteSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv) {
+        val id = offeneSession?.id
+        if (settingsManager.fotoDokuAktiv && id != null && id != zuletztGefragteSession) {
+            zuletztGefragteSession = id
+            fotoSheetFuerSession = id
+        }
+    }
+    fotoSheetFuerSession?.let { id ->
+        FotoDokumentationSheet(sessionId = id, onFertig = { fotoSheetFuerSession = null })
+    }
     val classifier = remember { NoiseClassifier(context) }
 
     var reportTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }
