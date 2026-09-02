@@ -80,6 +80,8 @@ class MeasurementRecorder(
     fun start(device: BoundDevice) {
         if (job?.isActive == true) return
         job = scope.launch {
+            schliesseVerwaisteSessions()
+
             aktiveSessionId = sessionDao.insert(
                 SessionEntity(
                     startedAt = now.now().toEpochMilli(),
@@ -105,6 +107,48 @@ class MeasurementRecorder(
                         pufferMutex.withLock { flushOhneSperre() }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Schliesst Sessions, die kein [SessionEntity.endedAt] haben, obwohl sie nicht mehr laufen.
+     *
+     * Eine Session wird in [start] eroeffnet und in [stop] geschlossen. Stirbt der Prozess
+     * dazwischen - Systemkill, Absturz, Akku leer -, laeuft [stop] nie, und die Zeile bleibt
+     * dauerhaft ohne Endzeitpunkt. Jede Stelle, die `endedAt == null` als "laeuft gerade" liest
+     * (Protokollansicht, [com.example.lrmprotokoll.data.SessionDao.offeneSession], die
+     * Ausfallbaender-Ableitung, der Zeitraumbericht), sieht diese Leiche danach fuer immer als
+     * aktive Messung an.
+     *
+     * Als Endzeitpunkt wird der letzte tatsaechlich aufgezeichnete Messwert gesetzt - das ist der
+     * letzte Zeitpunkt, fuer den es einen Beleg gibt. Gibt es keinen Messwert, wird
+     * [SessionEntity.startedAt] selbst eingetragen: eine Session der Laenge null ist die ehrliche
+     * Aussage "begonnen, nie etwas aufgezeichnet". Eine gerundete Mindestdauer waere eine
+     * erfundene Messzeit - dieselbe Begruendung, aus der [SessionEntity.weighting] `null` bleibt,
+     * solange die Bewertung unbestaetigt ist.
+     *
+     * Laeuft in [start] und damit vor dem Anlegen der neuen Session: Sobald eine neue Messung
+     * beginnt, kann keine frueher eroeffnete mehr laufen.
+     */
+    private suspend fun schliesseVerwaisteSessions() {
+        // Kein Log auf dem Erfolgspfad: Diese Klasse wird in reinen JVM-Tests ohne Robolectric
+        // geprueft, und android.util.Log ist dort nicht verfuegbar. Wie im Rest der Datei wird
+        // deshalb nur in Fehlerpfaden geloggt, die die Tests nicht durchlaufen.
+        val offene = try {
+            sessionDao.alleOffenen()
+        } catch (e: Throwable) {
+            // Aufraeumen darf den Start einer neuen Messung nie verhindern - die Messung ist die
+            // Kernaufgabe, das Aufraeumen ist Hygiene.
+            Log.e(TAG, "Verwaiste Sessions konnten nicht gelesen werden", e)
+            return
+        }
+        for (session in offene) {
+            try {
+                val letzterMesswert = measurementDao.fuerSession(session.id).maxOfOrNull { it.timestamp }
+                sessionDao.update(session.copy(endedAt = letzterMesswert ?: session.startedAt))
+            } catch (e: Throwable) {
+                Log.e(TAG, "Verwaiste Session ${session.id} konnte nicht geschlossen werden", e)
             }
         }
     }

@@ -17,6 +17,7 @@ import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -45,6 +46,7 @@ class MeasurementRecorderTest {
         override suspend fun update(session: SessionEntity) { zeilen[session.id] = session }
         override suspend fun byId(id: Long): SessionEntity? = zeilen[id]
         override fun byIdFlow(id: Long) = throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun alleOffenen(): List<SessionEntity> = zeilen.values.filter { it.endedAt == null }.sortedBy { it.startedAt }
         override suspend fun offeneSession(): SessionEntity? = zeilen.values.firstOrNull { it.endedAt == null }
         override fun offeneSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
@@ -385,5 +387,95 @@ class MeasurementRecorderTest {
         val eintrag = measurementDao.geschrieben.single()
         assertEquals(MeasurementFlags.HOLD_MAX, eintrag.flags and MeasurementFlags.HOLD_MAX)
         assertEquals(0, eintrag.flags and MeasurementFlags.HOLD_MIN)
+    }
+
+    // --- Verwaiste Sessions (Prozesstod zwischen start() und stop()) ---
+
+    private fun TestScope.recorderMit(sessionDao: FakeSessionDao, measurementDao: FakeMeasurementDao) =
+        MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr,
+        )
+
+    private fun offeneSession(id: Long = 0, startedAt: Long) = SessionEntity(
+        id = id, startedAt = startedAt, endedAt = null,
+        deviceAddress = "AA:BB:CC:DD:EE:FF", deviceName = "PCE-323",
+        weighting = null, timeWeighting = null,
+    )
+
+    @Test
+    fun startSchliesstEineVerwaisteSessionMitDemLetztenMesswertAb() = runTest(UnconfinedTestDispatcher()) {
+        val sessionDao = FakeSessionDao()
+        val measurementDao = FakeMeasurementDao()
+        val verwaist = sessionDao.insert(offeneSession(startedAt = 1_000L))
+        measurementDao.insertAll(
+            listOf(
+                MeasurementEntity(sessionId = verwaist, timestamp = 5_000L, levelDb = 60.0, weighting = null, flags = 0),
+                MeasurementEntity(sessionId = verwaist, timestamp = 9_000L, levelDb = 61.0, weighting = null, flags = 0),
+            )
+        )
+
+        recorderMit(sessionDao, measurementDao).start(device)
+        runCurrent()
+
+        assertEquals(
+            "Endzeitpunkt muss der letzte belegte Messwert sein, nicht die aktuelle Uhrzeit",
+            9_000L,
+            sessionDao.zeilen[verwaist]?.endedAt,
+        )
+    }
+
+    @Test
+    fun verwaisteSessionOhneMesswerteBekommtIhreStartzeitAlsEnde() = runTest(UnconfinedTestDispatcher()) {
+        // Eine Session der Laenge null ist die ehrliche Aussage "begonnen, nie etwas
+        // aufgezeichnet" - eine erfundene Mindestdauer waere eine erfundene Messzeit.
+        val sessionDao = FakeSessionDao()
+        val verwaist = sessionDao.insert(offeneSession(startedAt = 7_777L))
+
+        recorderMit(sessionDao, FakeMeasurementDao()).start(device)
+        runCurrent()
+
+        assertEquals(7_777L, sessionDao.zeilen[verwaist]?.endedAt)
+    }
+
+    @Test
+    fun mehrereVerwaisteSessionsWerdenAlleGeschlossen() = runTest(UnconfinedTestDispatcher()) {
+        val sessionDao = FakeSessionDao()
+        val ids = (1..3).map { sessionDao.insert(offeneSession(startedAt = it * 100L)) }
+
+        recorderMit(sessionDao, FakeMeasurementDao()).start(device)
+        runCurrent()
+
+        ids.forEach { id ->
+            assertNotNull("Session $id muss geschlossen worden sein", sessionDao.zeilen[id]?.endedAt)
+        }
+    }
+
+    @Test
+    fun dieNeueSessionBleibtOffen() = runTest(UnconfinedTestDispatcher()) {
+        // Gegenprobe: Das Aufraeumen darf nicht die gerade eroeffnete Session mit erwischen -
+        // sonst waere jede laufende Messung sofort als beendet markiert.
+        val sessionDao = FakeSessionDao()
+        sessionDao.insert(offeneSession(startedAt = 1_000L))
+
+        val recorder = recorderMit(sessionDao, FakeMeasurementDao())
+        recorder.start(device)
+        runCurrent()
+
+        val neue = sessionDao.zeilen[recorder.laufendeSessionId]
+        assertNotNull(neue)
+        assertNull("Die gerade gestartete Session muss offen bleiben", neue!!.endedAt)
+        assertEquals(1, sessionDao.zeilen.values.count { it.endedAt == null })
+    }
+
+    @Test
+    fun bereitsGeschlosseneSessionsWerdenNichtAngefasst() = runTest(UnconfinedTestDispatcher()) {
+        val sessionDao = FakeSessionDao()
+        val geschlossen = sessionDao.insert(offeneSession(startedAt = 1_000L).copy(endedAt = 2_000L))
+
+        recorderMit(sessionDao, FakeMeasurementDao()).start(device)
+        runCurrent()
+
+        assertEquals(2_000L, sessionDao.zeilen[geschlossen]?.endedAt)
     }
 }

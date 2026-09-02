@@ -37,6 +37,15 @@ interface SessionDao {
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC LIMIT 1")
     fun letzteSessionFlow(): Flow<SessionEntity?>
 
+    /**
+     * Alle Sessions ohne [SessionEntity.endedAt]. Im Normalfall hoechstens eine (die laufende) -
+     * mehrere bedeuten, dass frueher mindestens eine Session nie geschlossen wurde, etwa weil der
+     * Prozess zwischen [com.example.lrmprotokoll.messreihe.MeasurementRecorder.start] und
+     * `stop` beendet wurde. Siehe dort, warum das aufgeraeumt werden muss.
+     */
+    @Query("SELECT * FROM sessions WHERE endedAt IS NULL ORDER BY startedAt ASC")
+    suspend fun alleOffenen(): List<SessionEntity>
+
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC")
     fun alle(): Flow<List<SessionEntity>>
 
