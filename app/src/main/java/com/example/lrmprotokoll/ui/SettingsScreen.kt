@@ -68,6 +68,8 @@ import java.util.Locale
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
+    /** Fuehrt zum In-App-Erklaerungsbildschirm der Laermerkennung. */
+    onOpenKiErklaerung: (() -> Unit)? = null,
     onShowSnackbar: ((String) -> Unit)? = null,
     onShowOnboarding: (() -> Unit)? = null
 ) {
@@ -812,6 +814,11 @@ fun SettingsScreen(
                         label = { Text("Aus") },
                         modifier = Modifier.weight(0.7f)
                     )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                TextButton(onClick = { onOpenKiErklaerung?.invoke() }) {
+                    Text("Wie die Lärmerkennung arbeitet – und wo ihre Grenzen liegen")
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
