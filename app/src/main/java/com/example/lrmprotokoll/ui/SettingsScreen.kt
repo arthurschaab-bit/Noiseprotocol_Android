@@ -71,6 +71,8 @@ fun SettingsScreen(
     /** Fuehrt zum In-App-Erklaerungsbildschirm der Laermerkennung. */
     onOpenKiErklaerung: (() -> Unit)? = null,
     onShowSnackbar: ((String) -> Unit)? = null,
+    /** Fuehrt zum Diagnose-Bildschirm. */
+    onNavigateToDiagnose: (() -> Unit)? = null,
     onShowOnboarding: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -1375,12 +1377,11 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
-                    onClick = {
-                        val intent = Intent(context, MainActivity::class.java).apply {
-                            // Über Drawer/Navigation erreichbar
-                        }
-                        onBack()
-                    },
+                    // Der Knopf hat bisher ein Intent gebaut, es nie benutzt und nur den
+                    // Bildschirm geschlossen - er tat also nicht, was auf ihm steht. Jetzt
+                    // navigiert er wirklich zur Diagnose; ohne gesetzten Rueckruf bleibt das
+                    // alte Verhalten als Rueckfall.
+                    onClick = { onNavigateToDiagnose?.invoke() ?: onBack() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))

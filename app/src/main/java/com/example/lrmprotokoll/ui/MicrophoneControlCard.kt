@@ -105,9 +105,15 @@ fun MicrophoneControlCard(
             }
 
             StatusPill(
-                text = if (audioAufnahmeAktiv) "Mikrofon AKTIV" else "Mikrofon AUS",
-                icon = if (audioAufnahmeAktiv) Icons.Default.Check else null,
-                type = if (audioAufnahmeAktiv) StatusPillType.CONNECTED else StatusPillType.IDLE
+                // Dieselbe Ehrlichkeit wie im MicrophoneStatusBadge: Ohne WAV-Aufnahme wird
+                // kein Ton gespeichert, auch wenn die Ueberwachung laeuft.
+                text = when {
+                    !settings.recordWavAudio -> "Audio AUS (DSGVO)"
+                    audioAufnahmeAktiv -> "Mikrofon AKTIV"
+                    else -> "Mikrofon AUS"
+                },
+                icon = if (settings.recordWavAudio && audioAufnahmeAktiv) Icons.Default.Check else null,
+                type = if (settings.recordWavAudio && audioAufnahmeAktiv) StatusPillType.CONNECTED else StatusPillType.IDLE
             )
         }
 

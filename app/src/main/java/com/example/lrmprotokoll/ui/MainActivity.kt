@@ -223,6 +223,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                         onShowOnboarding = { onboardingErneutAnzeigen = true },
                         onOpenKiErklaerung = { navController.navigate("ki-erklaerung") },
+                        onNavigateToDiagnose = { navController.navigate("diagnose") },
                     )
                 }
                 composable("meter") {
@@ -486,6 +487,7 @@ fun NoiseProtocolApp(
                 actions = {
                     MicrophoneStatusBadge(
                         audioMonitoringActive = dienstAktiv,
+                        recordWavAudio = settingsManager.recordWavAudio,
                         onClick = {
                             if (dienstAktiv) {
                                 val intent = Intent(context, AudioRecordingService::class.java).apply {

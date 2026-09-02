@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -36,6 +37,22 @@ class ProtokollDetailScreenInstrumentedTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+    }
+
+    /**
+     * Wartet, bis der Bildschirm fertig geladen hat.
+     *
+     * [androidx.compose.ui.test.junit4.ComposeTestRule.waitForIdle] reicht dafuer NICHT:
+     * [ProtokollDetailScreen] laedt die Session in einem `LaunchedEffect` ueber Room, und bis
+     * dahin zeigt er einen Ladeindikator. waitForIdle wartet auf die Ruhe der Compose-Pipeline,
+     * nicht auf eine Datenbankabfrage auf einem anderen Dispatcher - der Test hat also je nach
+     * Laufzeit der Abfrage mal den Ladeindikator und mal den fertigen Inhalt gesehen. Genau das
+     * hat ihn auf dem CI-Emulator sporadisch scheitern lassen.
+     */
+    private fun wartetBisAngezeigt(text: String) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
@@ -72,8 +89,6 @@ class ProtokollDetailScreenInstrumentedTest {
         composeRule.setContent {
             ProtokollDetailScreen(sessionId = sessionId, onBack = { backed = true })
         }
-        composeRule.waitForIdle()
-
         val sessionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_tab_sessions)
         val metricsTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_metrics)
         val historyTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
@@ -81,7 +96,8 @@ class ProtokollDetailScreenInstrumentedTest {
         val pdfBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_export_pdf)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
-        // 1. Titel & Kopfzeile
+        // 1. Titel & Kopfzeile - erst warten, bis die Session aus Room geladen ist.
+        wartetBisAngezeigt(sessionTitle)
         composeRule.onNodeWithText(sessionTitle, substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("PCE-323 Testgerät", substring = true).assertIsDisplayed()
 
@@ -105,11 +121,12 @@ class ProtokollDetailScreenInstrumentedTest {
         composeRule.setContent {
             ProtokollDetailScreen(sessionId = 999999999L, onBack = { backed = true })
         }
-        composeRule.waitForIdle()
-
         val notFoundText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_session_not_found)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 
+        // Auch der Fehlerzustand erscheint erst, wenn die Abfrage durch ist - bis dahin laeuft
+        // der Ladeindikator, und die Pruefung wuerde ihn statt der Meldung sehen.
+        wartetBisAngezeigt(notFoundText)
         composeRule.onNodeWithText(notFoundText).assertIsDisplayed()
         composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
