@@ -238,12 +238,23 @@ fun LiveCockpitCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         ) {
                             Text(
+                                // Bei "Automatisch" zusaetzlich anzeigen, worauf es gerade
+                                // hinauslaeuft. Die Logik in MeterTriggerSource ist korrekt
+                                // (Messgeraet bevorzugt, sonst Mikrofon) - nur konnte der Nutzer
+                                // bisher nicht erkennen, welche Quelle tatsaechlich ausloest.
                                 text = if (!settings.recordWavAudio) {
                                     "Kein Audio (DSGVO)"
                                 } else when (settings.audioTriggerQuelle) {
                                     "PCE_323" -> stringResource(R.string.cockpit_trigger_meter_only)
                                     "MIKROFON" -> stringResource(R.string.cockpit_trigger_mic_only)
-                                    else -> stringResource(R.string.cockpit_trigger_auto)
+                                    else -> {
+                                        val aktiveQuelle = if (verbindungszustand == ConnectionState.STREAMING) {
+                                            stringResource(R.string.cockpit_trigger_active_meter)
+                                        } else {
+                                            stringResource(R.string.cockpit_trigger_active_mic)
+                                        }
+                                        "${stringResource(R.string.cockpit_trigger_auto)} → $aktiveQuelle"
+                                    }
                                 },
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface,
