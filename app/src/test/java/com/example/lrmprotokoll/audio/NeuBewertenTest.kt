@@ -77,32 +77,40 @@ class NeuBewertenTest {
 
     @Test
     fun jedeGespeicherteRohdatenzeileWirdNeuBewertetUndDasLabelGesetzt() = runTest {
-        val rohdaten1 = rohdatenMit(1, listOf(NoiseClassifier.ScoredCategory("Hammer", 0.42f)))
-        val rohdaten2 = rohdatenMit(2, listOf(NoiseClassifier.ScoredCategory("Drill", 0.30f)))
+        // KI-Umbau Etappe 2: das Standard-Top-1-Label ist entfallen (Gruppen-Score/
+        // Zeitaggregation ersetzen es, siehe GruppenScoreTest/ZeitaggregationTest), der
+        // Referenzmuster-Abgleich bleibt dagegen unveraendert - darueber laesst sich hier eine
+        // echte, vom Frame-Score unabhaengige Label-Aenderung pruefen.
+        val referenz = ReferenceSound(id = 1, name = "Baustelle Hofseite", pattern = "Hammer,Drill")
+        val rohdaten1 = rohdatenMit(1, listOf(NoiseClassifier.ScoredCategory("Hammer", 0.9f), NoiseClassifier.ScoredCategory("Drill", 0.8f)))
+        val rohdaten2 = rohdatenMit(2, emptyList())
+        val konfigurationMitReferenz = AbleitungsKonfiguration(
+            referenzMuster = listOf(referenz), labelMapping = mapOf("Hammer" to "Hämmern"),
+        )
         val noiseDao = FakeNoiseDao()
 
-        val anzahl = bewerteAlleNeu(noiseDao, FakeRohdatenDao(listOf(rohdaten1, rohdaten2)), konfiguration)
+        val anzahl = bewerteAlleNeu(noiseDao, FakeRohdatenDao(listOf(rohdaten1, rohdaten2)), konfigurationMitReferenz)
 
         assertEquals(2, anzahl)
-        assertEquals("Hämmern (42%)", noiseDao.gesetzteLabels[1])
+        assertEquals("Gelernt: Baustelle Hofseite (100%)", noiseDao.gesetzteLabels[1])
         assertEquals(
-            "Drill hat kein Mapping in dieser Konfiguration - bleibt beim Originalnamen",
-            "Drill (30%)", noiseDao.gesetzteLabels[2],
+            "Ohne Referenztreffer und ohne auswertbare Frames (frameAnzahl=0) ist die Aussage " +
+                "'Unklar', nicht null (Etappe 2.7)",
+            "Unklar", noiseDao.gesetzteLabels[2],
         )
     }
 
     @Test
-    fun keineKandidatenUeberDerSchwelleSetztDasLabelAufNull() = runTest {
+    fun neuBewertungSetztImmerEinenNichtLeerenStringNieMehrNull() = runTest {
+        // KI-Umbau Etappe 2.7: "UNKLAR explizit ausgeben statt null" - ein Clip ohne
+        // Referenztreffer und ohne Baulärm-Signal bekommt eine explizite Aussage
+        // ("Kein Baulärm erkannt"), NICHT laenger `null` (das waere im Beweiskontext mit
+        // "noch nicht klassifiziert" verwechselbar).
         val rohdaten = rohdatenMit(1, listOf(NoiseClassifier.ScoredCategory("Silence", 0.9f)))
         val noiseDao = FakeNoiseDao()
 
         bewerteAlleNeu(noiseDao, FakeRohdatenDao(listOf(rohdaten)), konfiguration)
 
-        assertEquals(
-            "Ein frueher als Baulaerm erkannter Clip darf nach einer Neubewertung explizit " +
-                "auf null zurueckgesetzt werden - das ist der ganze Sinn von 'Neu bewerten'",
-            null, noiseDao.gesetzteLabels[1],
-        )
-        assertEquals(true, noiseDao.gesetzteLabels.containsKey(1L))
+        assertEquals("Kein Baulärm erkannt", noiseDao.gesetzteLabels[1])
     }
 }
