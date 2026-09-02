@@ -1,14 +1,12 @@
 package com.example.lrmprotokoll.report
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.pdf.PdfDocument
-import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
@@ -140,15 +138,7 @@ class PeriodenBerichtExport(private val context: Context) {
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
 
-    fun teilen(file: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "Teilen über…"))
-    }
+    fun teilen(file: File) = BerichtDatei.teile(context, file)
 }
 
 /**

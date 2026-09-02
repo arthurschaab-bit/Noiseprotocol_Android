@@ -1,10 +1,8 @@
 package com.example.lrmprotokoll.report
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
-import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
@@ -48,7 +46,7 @@ class MessreiheExport(private val context: Context) {
         } else {
             MessreiheCsv.ausAggregaten(aggregate)
         }
-        val file = File(context.getExternalFilesDir(null), dateiname(session, "csv"))
+        val file = File(BerichtDatei.ordner(context), dateiname(session, "csv"))
         file.writeText(inhalt, Charsets.UTF_8)
         return file
     }
@@ -102,7 +100,7 @@ class MessreiheExport(private val context: Context) {
         }
 
         dokument.finishPage(seite)
-        val file = File(context.getExternalFilesDir(null), dateiname(session, "pdf"))
+        val file = File(BerichtDatei.ordner(context), dateiname(session, "pdf"))
         FileOutputStream(file).use { dokument.writeTo(it) }
         dokument.close()
         return file
@@ -110,17 +108,5 @@ class MessreiheExport(private val context: Context) {
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
 
-    fun teilen(file: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = when (file.extension) {
-                "csv" -> "text/csv"
-                "pdf" -> "application/pdf"
-                else -> "application/octet-stream"
-            }
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "Teilen über…"))
-    }
+    fun teilen(file: File) = BerichtDatei.teile(context, file)
 }
