@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.report
 
 import android.content.Context
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.report.pdf.TagesberichtPdf
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -44,56 +45,24 @@ internal fun unbestaetigteBewertungHinweis(records: List<NoiseRecord>): String? 
 
 class ReportManager(private val context: Context) {
 
-    private fun getDateString(records: List<NoiseRecord>): String {
-        val timestamp = records.firstOrNull()?.timestamp ?: System.currentTimeMillis()
-        return SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(timestamp))
-    }
-
+    /**
+     * Tagesbericht als PDF. Frueher eine `.txt`-Datei - umgestellt im Zuge der
+     * Berichts-Konsolidierung, damit alle Berichte dasselbe Format haben und der Tagesbericht
+     * gegenueber Behoerden dieselbe Belastbarkeit hat wie der Sessionbericht.
+     *
+     * Der Inhalt entsteht in [ermittleTagesbericht] (rein, getestet), die Ausgabe in
+     * [TagesberichtPdf]. Diese Methode verklammert nur beides und bestimmt den Dateinamen.
+     */
     fun generateDailyReport(records: List<NoiseRecord>, deviceName: String? = null): File {
-        val dateStr = getDateString(records)
-        val fileName = "Tagesbericht_$dateStr.txt"
-        val file = File(BerichtDatei.ordner(context), fileName)
-        val geraet = deviceName ?: "PCE-323"
-
-        val content = StringBuilder()
-        content.append("Lärmprotokoll - Tagesbericht für $dateStr\n")
-        content.append("===========================================\n\n")
-        unbestaetigteBewertungHinweis(records)?.let { content.append(it) }
-
-        val maxDb = records.maxOfOrNull { it.calibratedDbA ?: it.dbValue } ?: 0.0
-        val quietHourCount = records.count { it.isQuietHour }
-        content.append("Gesamtzahl Ereignisse: ${records.size}\n")
-        content.append("Spitzenpegel: ${String.format(Locale.getDefault(), "%.1f", maxDb)} dB\n")
-        content.append("Ereignisse in Ruhezeiten: $quietHourCount\n\n")
-        content.append("Einzelereignisse:\n")
-        content.append("-------------------------------------------\n")
-
-        records.forEach { record ->
-            val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
-            content.append("Zeit: $time\n")
-            if (record.calibratedDbA != null) {
-                content.append("Kalibrierter Pegel: ${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} ${pegelEinheit(record.meterWeighting)} ($geraet)\n")
-                content.append("Mikrofonpegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB\n")
-            } else {
-                content.append("Pegel: ${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (Mikrofon)\n")
-            }
-            if (record.isQuietHour) {
-                content.append("Hinweis: In Ruhezeit aufgetreten\n")
-            }
-            content.append("Amplitude: ${record.amplitude.toInt()}\n")
-            content.append("Label: ${record.label ?: "Keines"}\n")
-            content.append("KI Erkannt: ${record.detectedLabel ?: "Keines"}\n")
-            content.append("-------------------------------------------\n")
-        }
-
-        file.writeText(content.toString())
-        return file
+        val daten = ermittleTagesbericht(records, deviceName)
+        val datei = File(BerichtDatei.ordner(context), "Tagesbericht_${daten.datum}.pdf")
+        return TagesberichtPdf.schreibe(daten, datei)
     }
 
     fun shareFile(file: File) = BerichtDatei.teile(context, file)
 
     fun createZipAndShare(records: List<NoiseRecord>, reportFile: File?) {
-        val dateStr = getDateString(records)
+        val dateStr = ermittleTagesbericht(records).datum
         val zipFile = File(BerichtDatei.ordner(context), "Laermprotokoll_$dateStr.zip")
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->

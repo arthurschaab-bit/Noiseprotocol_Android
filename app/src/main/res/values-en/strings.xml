@@ -405,9 +405,9 @@
     <string name="status_not_recognized">Not recognized</string>
     <string name="meter_paired_success">PCE-323 (%1$s) paired</string>
     <string name="source_mic_format">(Microphone: %1$.1f dB)</string>
-    <string name="report_dialog_desc">Do you want to share the text report or a ZIP archive including audio recordings (%1$d files)?</string>
+    <string name="report_dialog_desc">Do you want to share the PDF report or a ZIP archive including audio recordings (%1$d files)?</string>
     <string name="report_dialog_zip_button">Share ZIP with Audio</string>
-    <string name="report_dialog_text_button">Share Text Report Only</string>
+    <string name="report_dialog_text_button">Share PDF Report Only</string>
     <string name="audio_play">Play</string>
 
     <!-- Units, Badges & Prefixes -->

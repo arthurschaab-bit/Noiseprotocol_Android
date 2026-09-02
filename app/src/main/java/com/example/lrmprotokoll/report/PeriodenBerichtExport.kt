@@ -6,12 +6,13 @@ import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.pdf.PdfDocument
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.report.pdf.BerichtLayout
+import com.example.lrmprotokoll.report.pdf.BerichtSeiten
+import com.example.lrmprotokoll.report.pdf.Seitenlauf
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,112 +29,100 @@ import kotlin.math.floor
  * sind unabhaengige APIs - eine gemeinsame Zeichenroutine fuer beide gibt es nicht. Zoom/Pan und
  * der Live-Puls-Punkt des interaktiven Charts entfallen bewusst, weil ein PDF statisch ist.
  *
- * Bewusst eine einzelne Seite (wie [MessreiheExport.exportierePdf]): Ausfaelle und Ereignisse
- * werden nur bis zum unteren Seitenrand aufgelistet, der Rest als "… und N weitere" zusammengefasst,
- * statt eine unbegrenzte Mehrseiten-Paginierung zu bauen - fuer einen Wochen-/Monatsbericht mit
- * ueblicherweise wenigen Ausfaellen/markierten Ereignissen ausreichend. Unter Robolectric nicht
- * testbar (PdfDocument braucht einen echten Renderer, siehe PROMPT_M10_FUNKTIONEN.md F12) - nur am
- * Geraet pruefbar, ebenso wie [MessreiheExport.exportierePdf].
+ * Seit der Berichts-Konsolidierung mehrseitig ueber [BerichtSeiten]: Ausfaelle und Ereignisse
+ * werden vollstaendig aufgelistet statt am unteren Rand der einzigen Seite mit "… und N weitere"
+ * abzubrechen. Die Umbruchentscheidung liegt in [Seitenlauf] und ist dort unter plain JUnit
+ * geprueft; das Zeichnen selbst bleibt unter Robolectric ungetestet (PdfDocument braucht einen
+ * echten Renderer, siehe PROMPT_M10_FUNKTIONEN.md F12) und ist nur am Geraet pruefbar.
  */
 class PeriodenBerichtExport(private val context: Context) {
 
     fun exportierePdf(bericht: PeriodenBericht, titel: String): File {
-        val dokument = PdfDocument()
-        // A4 bei 72 dpi (595 x 842 pt), wie MessreiheExport.exportierePdf.
-        val seite = dokument.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
-        val canvas = seite.canvas
-
-        val titelPaint = Paint().apply { textSize = 16f; isFakeBoldText = true; isAntiAlias = true }
-        val headerPaint = Paint().apply { textSize = 13f; isFakeBoldText = true; isAntiAlias = true }
-        val textPaint = Paint().apply { textSize = 11f; isAntiAlias = true }
         val formatierer = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         val kennwerte = bericht.kennwerte
 
-        val linksrand = 40f
-        val rechtsrand = 555f
-        val unterrand = 800f
-        var y = 48f
+        val aufbau: (Seitenlauf, () -> Canvas?) -> Unit = { lauf, canvasGeber ->
+            val x = Seitenlauf.RAND_LINKS
+            val rechtsrand = Seitenlauf.SEITE_BREITE - Seitenlauf.RAND_RECHTS
+            val titelPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 16f, fett = true)
+            val kopfPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 13f, fett = true)
+            val textPaint = BerichtLayout.paint(textSize = 11f)
 
-        fun zeile(inhalt: String, paint: Paint = textPaint, abstand: Float = 16f): Boolean {
-            if (y > unterrand) return false
-            canvas.drawText(inhalt, linksrand, y, paint)
-            y += abstand
-            return true
+            fun zeile(inhalt: String, paint: Paint = textPaint, hoehe: Float = 16f) {
+                val y = lauf.platziere(hoehe)
+                canvasGeber()?.drawText(inhalt, x, y + hoehe - 4f, paint)
+            }
+
+            zeile(titel, titelPaint, 26f)
+            zeile("Zeitraum: ${formatierer.format(Date(bericht.von))} – ${formatierer.format(Date(bericht.bis))}")
+            zeile("${bericht.sessionCount} Session(en), ${kennwerte.sampleCount} Messwerte")
+            lauf.abstand(10f)
+
+            zeile("Kennwerte", kopfPaint, 22f)
+            listOfNotNull(
+                kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
+                kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
+                kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
+                kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
+                kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
+                kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
+            ).forEach { zeile(it) }
+            lauf.abstand(10f)
+
+            zeile("Pegelverlauf", kopfPaint, 22f)
+            // Das Diagramm als EIN Block reserviert - so rutscht es geschlossen auf die naechste
+            // Seite, statt am Blattrand halbiert zu werden.
+            val chartHeight = 220f
+            val chartTop = lauf.platziere(chartHeight)
+            canvasGeber()?.let { c ->
+                zeichnePegelverlaufChart(
+                    canvas = c,
+                    spalten = bericht.chartSpalten,
+                    ausfallbaender = bericht.ausfallbaender,
+                    events = bericht.events,
+                    von = bericht.von,
+                    bis = bericht.bis,
+                    laeqDb = kennwerte.leqDb,
+                    left = x,
+                    top = chartTop,
+                    right = rechtsrand,
+                    bottom = chartTop + chartHeight,
+                )
+            }
+            lauf.abstand(20f)
+
+            // Ausfaelle und Ereignisse werden jetzt VOLLSTAENDIG aufgelistet. Vorher brach die
+            // Liste am unteren Rand der einzigen Seite ab und endete mit "… und N weitere" -
+            // ausgerechnet die Ausfaelle, wegen derer man einen Zeitraumbericht zieht, waren
+            // damit ab einer gewissen Anzahl nicht mehr im Dokument.
+            zeile("Ausfälle (${bericht.ausfallbaender.size})", kopfPaint, 22f)
+            if (bericht.ausfallbaender.isEmpty()) {
+                zeile("Keine Verbindungsausfälle in diesem Zeitraum.")
+            } else {
+                bericht.ausfallbaender.forEach { band ->
+                    val ende = band.bis?.let { formatierer.format(Date(it)) } ?: "andauernd"
+                    zeile("${formatierer.format(Date(band.von))} – $ende")
+                }
+            }
+            lauf.abstand(10f)
+
+            zeile("Ereignisse (${bericht.events.size})", kopfPaint, 22f)
+            if (bericht.events.isEmpty()) {
+                zeile("Keine markierten Ereignisse in diesem Zeitraum.")
+            } else {
+                bericht.events.forEach { event ->
+                    val pegel = event.calibratedDbA ?: event.dbValue
+                    val beschriftung = event.label ?: event.detectedLabel ?: "Ereignis"
+                    zeile("${formatierer.format(Date(event.timestamp))} – $beschriftung (${formatiereDb(pegel)} dB)")
+                }
+            }
         }
 
-        zeile(titel, titelPaint, 26f)
-        zeile("Zeitraum: ${formatierer.format(Date(bericht.von))} – ${formatierer.format(Date(bericht.bis))}")
-        zeile("${bericht.sessionCount} Session(en), ${kennwerte.sampleCount} Messwerte")
-        y += 10f
-
-        zeile("Kennwerte", headerPaint, 22f)
-        listOfNotNull(
-            kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
-            kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
-            kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
-            kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
-            kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
-            kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
-        ).forEach { zeile(it) }
-        y += 10f
-
-        zeile("Pegelverlauf", headerPaint, 22f)
-        val chartTop = y
-        val chartHeight = 220f
-        zeichnePegelverlaufChart(
-            canvas = canvas,
-            spalten = bericht.chartSpalten,
-            ausfallbaender = bericht.ausfallbaender,
-            events = bericht.events,
-            von = bericht.von,
-            bis = bericht.bis,
-            laeqDb = kennwerte.leqDb,
-            left = linksrand,
-            top = chartTop,
-            right = rechtsrand,
-            bottom = chartTop + chartHeight,
-        )
-        y = chartTop + chartHeight + 20f
-
-        zeile("Ausfälle (${bericht.ausfallbaender.size})", headerPaint, 22f)
-        if (bericht.ausfallbaender.isEmpty()) {
-            zeile("Keine Verbindungsausfälle in diesem Zeitraum.")
-        } else {
-            var angezeigt = 0
-            for (band in bericht.ausfallbaender) {
-                val ende = band.bis?.let { formatierer.format(Date(it)) } ?: "andauernd"
-                if (!zeile("${formatierer.format(Date(band.von))} – $ende")) break
-                angezeigt++
-            }
-            if (angezeigt < bericht.ausfallbaender.size) {
-                zeile("… und ${bericht.ausfallbaender.size - angezeigt} weitere")
-            }
-        }
-        y += 10f
-
-        zeile("Ereignisse (${bericht.events.size})", headerPaint, 22f)
-        if (bericht.events.isEmpty()) {
-            zeile("Keine markierten Ereignisse in diesem Zeitraum.")
-        } else {
-            var angezeigt = 0
-            for (event in bericht.events) {
-                val pegel = event.calibratedDbA ?: event.dbValue
-                val beschriftung = event.label ?: event.detectedLabel ?: "Ereignis"
-                if (!zeile("${formatierer.format(Date(event.timestamp))} – $beschriftung (${formatiereDb(pegel)} dB)")) break
-                angezeigt++
-            }
-            if (angezeigt < bericht.events.size) {
-                zeile("… und ${bericht.events.size - angezeigt} weitere")
-            }
-        }
-
-        dokument.finishPage(seite)
         val dateiFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
         val dateiname = "Zeitraumbericht_${dateiFormat.format(Date(bericht.von))}-${dateiFormat.format(Date(bericht.bis))}.pdf"
-        val file = File(context.getExternalFilesDir(null), dateiname)
-        FileOutputStream(file).use { dokument.writeTo(it) }
-        dokument.close()
-        return file
+        val datei = File(BerichtDatei.ordner(context), dateiname)
+        BerichtSeiten.schreibe(datei, abschnitt = "Zeitraumbericht", fussHinweis = titel, aufbau = aufbau)
+        return datei
     }
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
