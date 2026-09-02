@@ -87,6 +87,7 @@ class DriveSyncWorkerTest {
         override suspend fun setFavorite(id: Long, isFavorite: Boolean) {}
         override suspend fun setNotes(id: Long, notes: String?) {}
         override suspend fun setDetectedLabel(id: Long, label: String?) {}
+        override suspend fun getCalibratedDbA(id: Long): Double? = null
         override fun getAllReferences(): Flow<List<ReferenceSound>> = flowOf(emptyList())
         override suspend fun insertReference(sound: ReferenceSound) {}
         override suspend fun deleteReference(id: Long) {}

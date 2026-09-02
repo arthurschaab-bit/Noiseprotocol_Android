@@ -118,6 +118,7 @@ class SoundClassifierTest {
             override suspend fun setFavorite(id: Long, isFavorite: Boolean) {}
             override suspend fun setNotes(id: Long, notes: String?) {}
             override suspend fun setDetectedLabel(id: Long, label: String?) {}
+            override suspend fun getCalibratedDbA(id: Long): Double? = null
             override fun getAllReferences() = kotlinx.coroutines.flow.flowOf(emptyList<com.example.lrmprotokoll.data.ReferenceSound>())
             override suspend fun insertReference(sound: com.example.lrmprotokoll.data.ReferenceSound) {}
             override suspend fun deleteReference(id: Long) {}

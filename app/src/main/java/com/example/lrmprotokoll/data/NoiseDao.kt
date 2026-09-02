@@ -76,6 +76,13 @@ interface NoiseDao {
     @Query("UPDATE noise_records SET detectedLabel = :label WHERE id = :id")
     suspend fun setDetectedLabel(id: Long, label: String?)
 
+    /**
+     * KI-Umbau Etappe 3.5 (Fusion): der kalibrierte PCE-323-Pegel fuer die Impuls-Regel bei
+     * "Neu bewerten" - gezielt statt den ganzen Datensatz zu lesen, analog zu [setDetectedLabel].
+     */
+    @Query("SELECT calibratedDbA FROM noise_records WHERE id = :id")
+    suspend fun getCalibratedDbA(id: Long): Double?
+
     // Reference Sounds
     @Query("SELECT * FROM reference_sounds")
     fun getAllReferences(): Flow<List<ReferenceSound>>

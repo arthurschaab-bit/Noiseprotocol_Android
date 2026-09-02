@@ -15,6 +15,12 @@ import com.example.lrmprotokoll.data.NoiseDao
  * [KlassifikationsRohdatenDao.alle] liefert nur Aufnahmen, für die überhaupt Rohdaten existieren
  * (Akzeptanzkriterium Etappe 1: "kein Absturz, kein leerer Screen" für den Altbestand).
  *
+ * KI-Umbau Etappe 3.5 ("Fusion"): holt zusätzlich den kalibrierten PCE-323-Pegel des jeweiligen
+ * [com.example.lrmprotokoll.data.NoiseRecord] und reicht ihn an [leiteLabelAb] durch - "Neu
+ * bewerten" ist damit der einzige Pfad, der die Impuls-Regel mit dem kalibrierten Pegel
+ * auswertet (das Live-Klassifizieren kennt ihn zum Zeitpunkt der Inferenz nicht zuverlässig,
+ * siehe [leiteBaulaermBefundAb]-KDoc, und fällt dort auf den relativen Ersatzwert zurück).
+ *
  * @return Anzahl der neu bewerteten Aufnahmen (mit vorhandenen Rohdaten - nicht die Anzahl
  * tatsächlicher Label-Änderungen).
  */
@@ -25,7 +31,8 @@ suspend fun bewerteAlleNeu(
 ): Int {
     val alleRohdaten = rohdatenDao.alle()
     alleRohdaten.forEach { rohdaten ->
-        val befund = leiteLabelAb(rohdaten, konfiguration)
+        val kalibrierterPegel = noiseDao.getCalibratedDbA(rohdaten.recordId)
+        val befund = leiteLabelAb(rohdaten, konfiguration, kalibrierterPegel)
         val neuesLabel = formatiereBaulaermBefund(befund, konfiguration.labelMapping)
         noiseDao.setDetectedLabel(rohdaten.recordId, neuesLabel)
     }

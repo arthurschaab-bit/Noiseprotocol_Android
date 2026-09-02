@@ -271,9 +271,27 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
     }
 }
 
+/**
+ * Migration von Schema-Version 13 auf 14: KI-Umbau Etappe 3.4 (Impulsanalyse).
+ *
+ * Fünf neue, nullable Spalten auf `klassifikations_rohdaten` (physikalische, YAMNet-unabhängige
+ * Hüllkurven-Merkmale - siehe Entity-KDoc). Rein additiv wie die Migrationen zuvor - Altaufnahmen
+ * (auch solche mit bereits vorhandenen Rohdaten aus Etappe 1/2) bleiben unverändert, die neuen
+ * Spalten sind für sie schlicht `NULL`.
+ */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `klassifikations_rohdaten` ADD COLUMN `impulsCrest` REAL")
+        db.execSQL("ALTER TABLE `klassifikations_rohdaten` ADD COLUMN `impulsKurtosis` REAL")
+        db.execSQL("ALTER TABLE `klassifikations_rohdaten` ADD COLUMN `impulsWiederholrateHz` REAL")
+        db.execSQL("ALTER TABLE `klassifikations_rohdaten` ADD COLUMN `impulsPeakSchaerfe` REAL")
+        db.execSQL("ALTER TABLE `klassifikations_rohdaten` ADD COLUMN `impulsMittlererPegel` REAL")
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-    MIGRATION_12_13,
+    MIGRATION_12_13, MIGRATION_13_14,
 )
 
 @Database(
@@ -283,7 +301,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

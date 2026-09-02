@@ -35,6 +35,12 @@ import androidx.room.TypeConverter
  * der zum Klassifizierungszeitpunkt geltenden Konfidenzschwelle (JSON-Array aus Name+Score),
  * damit [leiteLabelAb][com.example.lrmprotokoll.audio.leiteLabelAb] das bisherige Verhalten
  * exakt reproduzieren kann (Etappe 1.5: "funktional unverändert").
+ *
+ * KI-Umbau Etappe 3.4: [impulsCrest]/[impulsKurtosis]/[impulsWiederholrateHz]/
+ * [impulsPeakSchaerfe]/[impulsMittlererPegel] halten die physikalischen, YAMNet-UNABHÄNGIGEN
+ * Merkmale der Hüllkurve fest (siehe [com.example.lrmprotokoll.audio.ImpulsMerkmale]) - die
+ * "zweite Meinung" für die Fusion (Etappe 3.5). Alle fünf `null` bei Altaufnahmen (vor Etappe 3
+ * klassifiziert) - wie bei den Etappe-1-Feldern kein Absturz, keine geratenen Werte.
  */
 @Entity(
     tableName = "klassifikations_rohdaten",
@@ -59,6 +65,11 @@ data class KlassifikationsRohdaten(
     val klassenIndizes: IntArray,
     val frameScores: ByteArray,
     val topKlassen: String,
+    val impulsCrest: Float? = null,
+    val impulsKurtosis: Float? = null,
+    val impulsWiederholrateHz: Float? = null,
+    val impulsPeakSchaerfe: Float? = null,
+    val impulsMittlererPegel: Float? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -67,7 +78,9 @@ data class KlassifikationsRohdaten(
             klassifiziertAm == other.klassifiziertAm && frameAnzahl == other.frameAnzahl &&
             frameDauerMs == other.frameDauerMs && frameHopMs == other.frameHopMs &&
             klassenIndizes.contentEquals(other.klassenIndizes) && frameScores.contentEquals(other.frameScores) &&
-            topKlassen == other.topKlassen
+            topKlassen == other.topKlassen && impulsCrest == other.impulsCrest &&
+            impulsKurtosis == other.impulsKurtosis && impulsWiederholrateHz == other.impulsWiederholrateHz &&
+            impulsPeakSchaerfe == other.impulsPeakSchaerfe && impulsMittlererPegel == other.impulsMittlererPegel
     }
 
     override fun hashCode(): Int {
@@ -81,6 +94,11 @@ data class KlassifikationsRohdaten(
         result = 31 * result + klassenIndizes.contentHashCode()
         result = 31 * result + frameScores.contentHashCode()
         result = 31 * result + topKlassen.hashCode()
+        result = 31 * result + (impulsCrest?.hashCode() ?: 0)
+        result = 31 * result + (impulsKurtosis?.hashCode() ?: 0)
+        result = 31 * result + (impulsWiederholrateHz?.hashCode() ?: 0)
+        result = 31 * result + (impulsPeakSchaerfe?.hashCode() ?: 0)
+        result = 31 * result + (impulsMittlererPegel?.hashCode() ?: 0)
         return result
     }
 }
