@@ -58,6 +58,16 @@ class DriveEinrichtungOrdnerTest {
         override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> = Result.success(null)
         override suspend fun dateiAnlegen(name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean): Result<String> = Result.success("file-id")
         override suspend fun dateiAktualisieren(fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean): Result<Unit> = Result.success(Unit)
+
+        override suspend fun dateiHochladenResumable(
+            name: String,
+            ordnerId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     @Before

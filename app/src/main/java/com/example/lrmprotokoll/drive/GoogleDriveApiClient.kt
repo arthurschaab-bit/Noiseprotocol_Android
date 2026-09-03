@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.drive
 
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.UUID
 import java.util.zip.GZIPOutputStream
 import kotlin.coroutines.resumeWithException
@@ -14,10 +15,20 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.BufferedSink
+import okio.buffer
+import okio.source
 import org.json.JSONArray
 import org.json.JSONObject
 
 private const val BASIS_URL = "https://www.googleapis.com"
+
+/**
+ * Blockgroesse des resumable Uploads. Drive verlangt ein Vielfaches von 256 KiB fuer alle
+ * Bloecke ausser dem letzten; 8 MiB ist der von Google empfohlene Mittelweg zwischen
+ * Anzahl der Roundtrips und dem, was bei einem Abbruch neu uebertragen werden muss.
+ */
+private const val BLOCKGROESSE = 8L * 1024 * 1024
 private val JSON = "application/json; charset=utf-8".toMediaType()
 
 /**
@@ -216,6 +227,192 @@ class GoogleDriveApiClient(
         Unit
     }
 
+    override suspend fun dateiHochladenResumable(
+        name: String,
+        ordnerId: String,
+        datei: File,
+        mimeType: String,
+        fortsetzenAb: String?,
+        sessionGestartet: suspend (String) -> Unit,
+        fortschritt: suspend (Long, Long) -> Unit,
+    ): Result<String> = mitToken { token ->
+        val gesamt = datei.length()
+
+        var sessionUri = fortsetzenAb
+        var bestaetigt = 0L
+
+        if (sessionUri != null) {
+            when (val stand = frageServerstandAb(sessionUri, token, gesamt)) {
+                is Serverstand.Fertig -> return@mitToken stand.fileId
+                is Serverstand.Offen -> bestaetigt = stand.bestaetigt
+                // Ein Session-URI ist rund eine Woche gueltig. Ist er weg, ist der einzige
+                // sinnvolle Weg ein Neuanfang - genau EINMAL, nicht in einer Schleife.
+                Serverstand.Verfallen -> sessionUri = null
+            }
+        }
+
+        if (sessionUri == null) {
+            sessionUri = starteUploadSession(name, ordnerId, mimeType, token)
+            bestaetigt = 0L
+            // Vor dem ersten Datenblock, nicht danach: Stirbt der Prozess zwischen Sitzungsstart
+            // und erstem Block, soll der naechste Versuch diese Sitzung fortsetzen koennen.
+            sessionGestartet(sessionUri)
+        }
+
+        // Eine leere Datei hat keinen Block zu senden; Drive schliesst sie ueber die
+        // Nullbytes-Anfrage ab. Ohne diesen Zweig liefe die Schleife unten nie durch.
+        if (gesamt == 0L) {
+            val antwort = sendeBlock(sessionUri, token, datei, von = 0L, laenge = 0L, gesamt = 0L, mimeType = mimeType)
+            return@mitToken leseDateiId(antwort)
+        }
+
+        while (bestaetigt < gesamt) {
+            val laenge = minOf(BLOCKGROESSE, gesamt - bestaetigt)
+            val antwort = sendeBlock(sessionUri, token, datei, von = bestaetigt, laenge = laenge, gesamt = gesamt, mimeType = mimeType)
+            when (antwort.code) {
+                200, 201 -> {
+                    fortschritt(gesamt, gesamt)
+                    return@mitToken leseDateiId(antwort)
+                }
+                // 308 ist zwischen den Bloecken der Normalfall, kein Fehler.
+                308 -> {
+                    // Nach dem Serverstand richten, nicht nach dem, was gesendet zu sein
+                    // scheint: Ein teilweise angekommener Block wuerde sonst als vollstaendig
+                    // gelten und ein Loch in der Datei hinterlassen.
+                    val neuBestaetigt = bytesAusRange(antwort.range)
+                    if (neuBestaetigt == null || neuBestaetigt <= bestaetigt) {
+                        throw DriveApiException(
+                            "Upload kommt nicht voran (Range: ${antwort.range ?: "fehlt"})",
+                            httpCode = 308,
+                        )
+                    }
+                    bestaetigt = neuBestaetigt
+                    fortschritt(bestaetigt, gesamt)
+                }
+                else -> throw DriveApiException("Drive antwortete mit HTTP ${antwort.code}", httpCode = antwort.code)
+            }
+        }
+
+        // Alle Bytes bestaetigt, aber kein 200/201 gesehen - der Serverstand entscheidet.
+        when (val stand = frageServerstandAb(sessionUri, token, gesamt)) {
+            is Serverstand.Fertig -> stand.fileId
+            else -> throw DriveApiException("Upload endete ohne Datei-ID")
+        }
+    }
+
+    /**
+     * Ergebnis der Serverstand-Abfrage - ein leeres PUT, dessen Content-Range statt eines
+     * Bereichs nur ein Sternchen traegt und damit fragt: "Wie viel hast du wirklich?"
+     */
+    private sealed interface Serverstand {
+        data class Fertig(val fileId: String) : Serverstand
+        data class Offen(val bestaetigt: Long) : Serverstand
+        data object Verfallen : Serverstand
+    }
+
+    private suspend fun frageServerstandAb(sessionUri: String, token: String, gesamt: Long): Serverstand {
+        val request = Request.Builder()
+            .url(sessionUri)
+            .put(ByteArray(0).toRequestBody(null))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Range", "bytes */$gesamt")
+            .build()
+
+        val antwort = fuehreAusRoh(request)
+        return when (antwort.code) {
+            200, 201 -> Serverstand.Fertig(leseDateiId(antwort))
+            308 -> Serverstand.Offen(bytesAusRange(antwort.range) ?: 0L)
+            404 -> Serverstand.Verfallen
+            else -> throw DriveApiException("Drive antwortete mit HTTP ${antwort.code}", httpCode = antwort.code)
+        }
+    }
+
+    private suspend fun starteUploadSession(name: String, ordnerId: String, mimeType: String, token: String): String {
+        val metadaten = JSONObject().apply {
+            put("name", name)
+            put("parents", JSONArray().put(ordnerId))
+        }.toString().toRequestBody(JSON)
+
+        val url = "$basisUrl/upload/drive/v3/files".toHttpUrl().newBuilder()
+            .addQueryParameter("uploadType", "resumable")
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .post(metadaten)
+            .header("Authorization", "Bearer $token")
+            .header("X-Upload-Content-Type", mimeType)
+            .build()
+
+        val antwort = fuehreAusRoh(request)
+        if (antwort.code !in 200..299) {
+            throw DriveApiException("Upload-Sitzung abgelehnt (HTTP ${antwort.code})", httpCode = antwort.code)
+        }
+        return antwort.location
+            ?: throw DriveApiException("Upload-Sitzung ohne Location-Header")
+    }
+
+    private suspend fun sendeBlock(
+        sessionUri: String,
+        token: String,
+        datei: File,
+        von: Long,
+        laenge: Long,
+        gesamt: Long,
+        mimeType: String,
+    ): RohAntwort {
+        val bis = if (gesamt == 0L) 0L else von + laenge - 1
+        val range = if (gesamt == 0L) "bytes */0" else "bytes $von-$bis/$gesamt"
+
+        val request = Request.Builder()
+            .url(sessionUri)
+            .put(DateiAbschnitt(datei, von, laenge, mimeType))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Range", range)
+            .build()
+
+        return fuehreAusRoh(request)
+    }
+
+    /**
+     * Streamt genau [laenge] Bytes ab [von] aus [datei] - ohne die Datei zu lesen, bevor sie
+     * gebraucht wird. `readBytes()` waere hier genau der Fehler, den dieser ganze Weg vermeidet.
+     */
+    private class DateiAbschnitt(
+        private val datei: File,
+        private val von: Long,
+        private val laenge: Long,
+        private val mimeType: String,
+    ) : okhttp3.RequestBody() {
+        override fun contentType() = mimeType.toMediaType()
+        override fun contentLength(): Long = laenge
+        override fun writeTo(sink: BufferedSink) {
+            datei.inputStream().use { strom ->
+                var uebersprungen = 0L
+                while (uebersprungen < von) {
+                    val n = strom.skip(von - uebersprungen)
+                    // skip() darf 0 liefern, ohne dass das Dateiende erreicht ist - eine
+                    // Endlosschleife waere hier die schlimmere Antwort als ein Fehler.
+                    if (n <= 0) throw java.io.IOException("Konnte nicht bis Byte $von springen")
+                    uebersprungen += n
+                }
+                strom.source().buffer().use { quelle ->
+                    sink.write(quelle, laenge)
+                }
+            }
+        }
+    }
+
+    /** Liest die bestaetigten Bytes aus einem `Range: bytes=0-8388607`-Header. */
+    private fun bytesAusRange(range: String?): Long? {
+        val ende = range?.substringAfterLast('-')?.toLongOrNull() ?: return null
+        return ende + 1
+    }
+
+    private fun leseDateiId(antwort: RohAntwort): String =
+        runCatching { JSONObject(antwort.rumpf).getString("id") }
+            .getOrElse { throw DriveApiException("Antwort ohne Datei-ID", httpCode = antwort.code, cause = it) }
+
     private fun kodiere(inhalt: ByteArray, gzip: Boolean): Pair<ByteArray, String?> {
         if (!gzip) return inhalt to null
         val ausgabe = ByteArrayOutputStream()
@@ -256,6 +453,41 @@ class GoogleDriveApiClient(
                                 DriveApiException("Drive antwortete mit HTTP ${it.code}", httpCode = it.code)
                             )
                         }
+                    }
+                }
+            })
+        }
+
+    /**
+     * Rohe Antwort inklusive Statuscode und der beiden Header, die der resumable Upload braucht.
+     *
+     * Warum nicht [fuehreAus]: Dort ist jeder Nicht-2xx-Code eine Exception. Beim resumable
+     * Upload ist `308 Resume Incomplete` aber der **Normalfall** zwischen zwei Bloecken, und
+     * `404` auf den Session-URI ist eine Anweisung ("fang von vorn an"), kein Abbruchgrund.
+     */
+    private class RohAntwort(val code: Int, val rumpf: String, val location: String?, val range: String?)
+
+    private suspend fun fuehreAusRoh(request: Request): RohAntwort =
+        suspendCancellableCoroutine { fortsetzung ->
+            val call = client.newCall(request)
+            fortsetzung.invokeOnCancellation { runCatching { call.cancel() } }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: java.io.IOException) {
+                    fortsetzung.resumeWithException(DriveApiException("Drive nicht erreichbar", cause = e))
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        fortsetzung.resumeWith(
+                            Result.success(
+                                RohAntwort(
+                                    code = it.code,
+                                    rumpf = it.body?.string().orEmpty(),
+                                    location = it.header("Location"),
+                                    range = it.header("Range"),
+                                )
+                            )
+                        )
                     }
                 }
             })
