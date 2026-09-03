@@ -362,6 +362,44 @@ class SettingsManager(
         get() = prefs.getBoolean("foto_doku_drive_upload", true)
         set(value) = prefs.edit().putBoolean("foto_doku_drive_upload", value).apply()
 
+    // ---------------------------------------------------------------- M11: Videobeweis
+
+    /**
+     * Harte Obergrenze der Aufnahmedauer in Sekunden, Default 180 (drei Minuten).
+     *
+     * Nicht nur eine Speichergrenze: Ton und Bild werden nach Owner-Entscheidung E9 (V4) aus
+     * zwei unabhaengig getakteten Quellen zusammengefuehrt. Ueber wenige Minuten ist die Drift
+     * praktisch nicht wahrnehmbar, ueber sehr lange Aufnahmen kann sie es werden.
+     *
+     * Untergrenze 10 s, Obergrenze 900 s (15 min) - ein Wert von 0 oder ein aus einer kuenftigen
+     * Version stammender Unsinnswert wuerde sonst entweder jede Aufnahme sofort abwuergen oder
+     * die Drift- und Speichergrenze aushebeln.
+     */
+    var videoMaxDauerSekunden: Int
+        get() = prefs.getInt("video_max_dauer_sekunden", 180).coerceIn(10, 900)
+        set(value) = prefs.edit().putInt("video_max_dauer_sekunden", value.coerceIn(10, 900)).apply()
+
+    /**
+     * Aufloesungsvorwahl: "HD" (720p, Default) oder "FHD" (1080p). Fuer einen Beweisclip ist
+     * 720p ausreichend und halbiert Speicher, Uploadzeit und Mobilfunkvolumen.
+     */
+    var videoAufloesung: String
+        get() = prefs.getString("video_aufloesung", "HD") ?: "HD"
+        set(value) = prefs.edit().putString("video_aufloesung", value).apply()
+
+    /**
+     * Drive-Upload fuer Beweisvideos. Default **AUS** - bewusst anders als [driveUploadWav] und
+     * [fotoDokuDriveUpload].
+     *
+     * Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen, und zwar bewegt und mit
+     * Ton. Das ist die datenschutzsensibelste Datenart der gesamten App; sie ohne ausdrueckliche
+     * Zustimmung in eine Cloud zu schieben, waere die falsche Voreinstellung. Dazu kommt die
+     * schiere Groesse: ein einziger Clip uebersteigt das Datenvolumen eines ganzen Messtages.
+     */
+    var videoDriveUpload: Boolean
+        get() = prefs.getBoolean("video_drive_upload", false)
+        set(value) = prefs.edit().putBoolean("video_drive_upload", value).apply()
+
     // ---------------------------------------------------------------- M6: Sicherheit
 
     /**

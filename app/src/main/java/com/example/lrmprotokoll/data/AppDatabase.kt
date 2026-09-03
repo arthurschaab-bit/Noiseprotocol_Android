@@ -313,9 +313,36 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
+/**
+ * Migration 15 -> 16 (M11 Etappe B): neue Tabelle `beweisvideos`.
+ *
+ * Rein additiv wie [MIGRATION_14_15] - keine bestehende Tabelle wird angefasst. Das
+ * `CREATE TABLE` ist woertlich aus dem von Room erzeugten Schema `app/schemas/.../16.json`
+ * uebernommen; die identityHash-Pruefung ist byte-genau.
+ */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `beweisvideos` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sessionId` INTEGER NOT NULL, " +
+                "`dateiPfad` TEXT NOT NULL, " +
+                "`gestartetAm` INTEGER NOT NULL, " +
+                "`dauerMs` INTEGER NOT NULL, " +
+                "`hatTonspur` INTEGER NOT NULL, " +
+                "`groesseBytes` INTEGER NOT NULL, " +
+                "`notiz` TEXT, " +
+                "`tonGemuxt` INTEGER NOT NULL, " +
+                "`driveFileId` TEXT, " +
+                "`uploadSessionUri` TEXT, " +
+                "`hochgeladeneBytes` INTEGER NOT NULL)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
+    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
 )
 
 @Database(
@@ -324,9 +351,9 @@ val ALLE_MIGRATIONEN = arrayOf(
         LevelSampleEntity::class, DriveDailyFileEntity::class,
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
-        DokumentationsFotoEntity::class,
+        DokumentationsFotoEntity::class, BeweisVideoEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)
@@ -352,6 +379,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun klassifikationsRohdatenDao(): KlassifikationsRohdatenDao
 
     abstract fun dokumentationsFotoDao(): DokumentationsFotoDao
+
+    abstract fun beweisVideoDao(): BeweisVideoDao
 
     companion object {
         @Volatile
