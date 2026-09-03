@@ -22,6 +22,17 @@ enum class DiagnosticCode {
      */
     TRIGGER_STILLER_AUSFALL,
 
+    // Videobeweis (M11 Etappe B)
+
+    /** Die Kamera liess sich nicht oeffnen oder die Aufnahme brach ab. */
+    VIDEO_CAPTURE_FAILED,
+
+    /**
+     * Das stumme Video und der mitgeschnittene Ton liessen sich nicht zusammenfuehren. Beide
+     * Quelldateien bleiben in diesem Fall erhalten - siehe [com.example.lrmprotokoll.video.VideoMuxWorker].
+     */
+    VIDEO_MUX_FAILED,
+
     // KI & Klassifikation
     AI_MODEL_INIT_FAILED,
     AI_INFERENCE_FAILED,

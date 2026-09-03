@@ -160,6 +160,18 @@ dependencies {
     // 6) - EncryptedSharedPreferences, Schluessel im Android Keystore, Tink darunter.
     implementation(libs.androidx.security.crypto)
 
+    // M11 Etappe B: Videobeweis. Bewusster Bruch mit dem sonst minimalen Abhaengigkeitsstil -
+    // begruendet in docs/PROMPT_M11_FOTO_VIDEO.md B.2: Ueber den System-Kamera-Intent laesst
+    // sich die Tonspur nicht abschalten, und genau das ist die Voraussetzung dafuer, dass die
+    // Kamera das Mikrofon nicht anfasst und die Pegelmessung waehrend der Aufnahme durchlaeuft
+    // (Owner-Entscheidung E9/V4). Auch Maximaldauer und Aufloesung waeren ueber den Intent
+    // nicht verlaesslich steuerbar.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
+
     // Diagnose & Fehleranalyse (Konzept DIAGNOSE_OBSERVABILITY_KONZEPT.md)
     implementation(libs.sentry.android)
 

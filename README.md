@@ -34,6 +34,8 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 | **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
+| **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync) | ✅ umgesetzt — Fotos, EXIF-Drehung und PDF-Einbettung noch nicht am Gerät gesichtet |
+| **M11 Etappe B** Videobeweis (CameraX ohne Tonspur, Ton aus der laufenden Messung nachträglich eingemuxt, resumable Drive-Upload) | ⚠️ umgesetzt, **nicht am Gerät verifiziert** — Kamera, A/V-Synchronität und der echte Upload brauchen Hardware |
 
 **Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign + Mehrsprachigkeit (i18n) vollständig umgesetzt, getestet und verifiziert.**
 
@@ -227,6 +229,20 @@ Abhängigkeits-Stil des Projekts.
   closed!`, reproduzierbar auch isoliert — ein verifiziertes Robolectric-Limit, keine Aussage
   über die Korrektheit von `MessreiheExport.exportierePdf`. Nur durch `assembleDebug` verifiziert,
   Inhalt und Layout müssen am echten Gerät geprüft werden (siehe `docs/PROMPT_M7.md`).
+- **Der Videobeweis ist ohne Gerät nur zur Hälfte belegbar (M11 Etappe B).** Die Aufnahme läuft
+  über CameraX **ohne Tonspur** — kein `withAudioEnabled()` —, damit die Kamera das Mikrofon
+  nicht anfasst und die Pegelmessung während der Aufnahme durchläuft; der Ton wird aus dem
+  laufenden `AudioRecord` mitgeschnitten und danach über `MediaCodec`/`MediaMuxer` in die MP4
+  eingefügt. Unit-getestet sind die Rechenteile: die A/V-Synchronisation
+  (`VideoTonSynchronisation`), der Tonmitschnitt (`VideoTonMitschnitt`), die Speicher- und
+  Dauergrenzen (`Videospeicher`) und der resumable Drive-Upload gegen `MockWebServer`.
+  **Nicht** belegt sind Kameraverhalten, die tatsächliche Lippensynchronität des gemuxten
+  Videos und der echte Drive-Upload — `MediaCodec`, `MediaMuxer` und CameraX existieren auf der
+  JVM nicht. Über sehr lange Aufnahmen können Bild und Ton auseinanderlaufen (zwei unabhängig
+  getaktete Quellen); dagegen steht die einstellbare Maximaldauer, Default 3 Minuten.
+- **Der Video-Upload nach Google Drive ist standardmäßig AUS** — bewusst anders als WAV und
+  Fotos. Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen und ist um ein Vielfaches
+  größer als alles andere, was die App speichert.
 - **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) und M7c (Live-Dashboard,
   NavigationBar, Pegelverlauf-Chart) sind mangels Emulator in dieser Entwicklungsumgebung nicht
   visuell geprüft** — wohl aber durch echte Compose-UI-Tests unter Robolectric gegen die
@@ -391,6 +407,8 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
 | [`docs/PROMPT_M9_UX.md`](docs/PROMPT_M9_UX.md) | **UX-Review und Auftrag für M9 (offen)** — Befunde am Code mit Datei:Zeile (kein Dunkelmodus, keine String-Ressourcen, Barrierefreiheit, Navigation, leere/ladende/fehlerhafte Zustände, Berechtigungsablauf) plus Umsetzungsauftrag; der ursprünglich mitgemeldete Befund „Live-Diagramm rechnet die Session alle 5 s neu“ ist mit M9a behoben |
 | [`docs/PROMPT_M9A.md`](docs/PROMPT_M9A.md) | **Owner-Entscheidungen aus dem UX-Review (erledigt, PR #80)** — Abgleich der vier Antworten gegen den Code (Dunkelmodus, kalibrierter Wert, Test-Suite waren bereits erledigt); umgesetzt: `MeasurementDao.fuerSessionAbFlow` begrenzt den Datenpfad des Live-Cockpits auf ein gerastertes 4-Stunden-Fenster statt bei jedem Batch die volle Session zu laden, `pegelEinheit()` leitet „dBA“/„dBC“/„dB“ im Tagesbericht aus `meterWeighting` ab statt es hart anzuhängen |
 | [`docs/PROMPT_M10_FUNKTIONEN.md`](docs/PROMPT_M10_FUNKTIONEN.md) | **Funktionsvorschläge und Auftrag für M10 (offen)** — 15 Vorschläge in drei Stufen nach Migrationsbedarf, Umsetzungsauftrag für Stufe 1 (ohne Room-Migration), offene Owner-Entscheidungen |
+| [`docs/PROMPT_M11_FOTO_VIDEO.md`](docs/PROMPT_M11_FOTO_VIDEO.md) | **Auftrag für M11 (umgesetzt)** — Etappe A Fotodokumentation, Etappe B Videobeweis; enthält die Owner-Entscheidungen E1 (Fotodoku auch beim Mikrofonlauf), E4 (Video mit Ton) und E9 (V4: Aufnahme ohne Tonspur, Ton nachträglich eingemuxt) und die verbliebenen offenen Entscheidungen E2, E3, E5–E8 |
+| [`docs/PROMPT_BUGFIX_TRIGGER.md`](docs/PROMPT_BUGFIX_TRIGGER.md) | Auftrag für zwei Trigger-Fehler (erledigt) — stiller Ausfall der Auslösung, fehlende Trigger-Quelle „Mikrofon" |
 | [`docs/TESTPLAN_INSTRUMENTIERT.md`](docs/TESTPLAN_INSTRUMENTIERT.md) | Testplan für instrumentierte UI-Tests (Emulator) — Positiv-/Negativtest je Button/Funktion, verlinkt auf den Code (umgesetzt & aktiv) |
 | [`docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md`](docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md) | **Diagnose-, Fehleranalyse- und Observability-Konzept** — Architektur für Sentry, Breadcrumbs, Redaction & Support-Bundle (umgesetzt) |
 | [`docs/EXTERNE_DIENSTE_EINRICHTUNG.md`](docs/EXTERNE_DIENSTE_EINRICHTUNG.md) | Externe Dienste einrichten (Sentry, Google Drive, ntfy, Healthchecks.io) |

@@ -110,6 +110,16 @@ class DriveWavUploadAndCsvTest {
             hochgeladeneDateien[fileId] = inhalt
             return Result.success(Unit)
         }
+
+        override suspend fun dateiHochladenResumable(
+            name: String,
+            ordnerId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private lateinit var noiseDao: TestNoiseDao

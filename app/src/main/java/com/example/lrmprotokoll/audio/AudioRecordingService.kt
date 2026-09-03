@@ -79,13 +79,29 @@ class AudioRecordingService : LifecycleService() {
         private val _currentMicDb = MutableStateFlow<Double?>(null)
         val currentMicDb: StateFlow<Double?> = _currentMicDb.asStateFlow()
 
+        /**
+         * Das vom `AudioRecord` **tatsaechlich ausgehandelte** Format der laufenden Aufnahme,
+         * `null` wenn keine laeuft (M11 Etappe B).
+         *
+         * Der Videobeweis braucht genau diese Werte, um den mitgeschnittenen Ton spaeter
+         * einmultiplexen zu koennen. Die eingestellte Rate genuegt dafuer nicht: Weicht die
+         * ausgehandelte davon ab (siehe `waehleAufnahmerate()`), waere der Ton im fertigen Video
+         * in falscher Tonhoehe und falscher Laenge.
+         */
+        private val _laufendesFormat = MutableStateFlow<Aufnahmeformat?>(null)
+        val laufendesFormat: StateFlow<Aufnahmeformat?> = _laufendesFormat.asStateFlow()
+
         /** Nur fuer Compose-UI-Tests, die den Servicestart nicht real ausloesen koennen (kein
          * Mikrofon unter Robolectric) - internal statt private, damit das Testmodul zugreifen
          * kann, ohne den Setter Teil der eigentlichen Produktions-API zu machen. */
         internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
         internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) { _audioAufnahmeAktiv.value = wert }
         internal fun testSetzeCurrentMicDb(wert: Double?) { _currentMicDb.value = wert }
+        internal fun testSetzeLaufendesFormat(wert: Aufnahmeformat?) { _laufendesFormat.value = wert }
     }
+
+    /** Abtastrate und Kanalzahl einer laufenden Mikrofonaufnahme. */
+    data class Aufnahmeformat(val abtastrate: Int, val kanaele: Int)
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -123,6 +139,12 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var measurementRecorder: com.example.lrmprotokoll.messreihe.MeasurementRecorder
 
     /**
+     * Tonmitschnitt fuer ein laufendes Beweisvideo (M11 Etappe B). Die Kamera nimmt bewusst ohne
+     * Tonspur auf; der Ton kommt aus dieser Schleife und wird nachtraeglich einmultiplext.
+     */
+    private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
+
+    /**
      * Der zuletzt eingetroffene Messgeraet-Frame, solange die Verbindung tatsaechlich auf
      * STREAMING steht - sonst `null` (Plan 4.5: "sonst auf die bisherige Mikrofonberechnung
      * zurueckfallen"). Wird bewusst NICHT aus [meterTransport.lastFrameAt] plus einer eigenen
@@ -149,6 +171,7 @@ class AudioRecordingService : LifecycleService() {
         // wenn Drive-Sync eingeschaltet ist, damit ohne aktivierten Sync kein Puffer waechst,
         // den niemand ausliest.
         measurementRecorder = container.measurementRecorder
+        videoTonMitschnitt = container.videoTonMitschnitt
 
         lifecycleScope.launch {
             meterTransport.frames.collect { frame ->
@@ -529,6 +552,7 @@ class AudioRecordingService : LifecycleService() {
             aktiveAbtastrate = audioRecord.sampleRate
             aktiveKanalzahl = if (channelConfig == AudioFormat.CHANNEL_IN_MONO) 1 else 2
             aktiveAgcAktiv = deaktiviereAudioEffekteUndMeldeAgcZustand(audioRecord.audioSessionId)
+            _laufendesFormat.value = Aufnahmeformat(audioRecord.sampleRate, aktiveKanalzahl ?: 1)
 
             val buffer = ShortArray(bufferSize / 2)
             val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
@@ -554,6 +578,13 @@ class AudioRecordingService : LifecycleService() {
                         rec.writeChunk(pcmBytes, pcmLen)
                         if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
                     }
+
+                    // M11 Etappe B: Ton fuer ein laufendes Beweisvideo - eine Zeile NEBEN dem
+                    // Ereignis-Mitschnitt, nicht statt dessen. Die WAV-Aufzeichnung oben ist
+                    // ereignisgebunden und deckt einen Videozeitraum nicht ab. No-Op, solange
+                    // kein Video laeuft; ein Schreibfehler beendet nur den Mitschnitt und darf
+                    // diese Schleife nie verlassen.
+                    videoTonMitschnitt.schreibe(pcmBytes, pcmLen, System.currentTimeMillis())
 
                     val currentDb = calculateDb(buffer, readSize)
                     letzterMikrofonDb = currentDb
@@ -581,6 +612,7 @@ class AudioRecordingService : LifecycleService() {
                     )
                 }
             }
+            _laufendesFormat.value = null
             audioRecord.stop()
             audioRecord.release()
         }

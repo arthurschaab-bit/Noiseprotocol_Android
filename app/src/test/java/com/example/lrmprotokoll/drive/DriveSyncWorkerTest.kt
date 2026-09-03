@@ -114,6 +114,16 @@ class DriveSyncWorkerTest {
         override suspend fun dateiAktualisieren(
             fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
         ) = kotlin.Result.success(Unit)
+
+        override suspend fun dateiHochladenResumable(
+            name: String,
+            ordnerId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): kotlin.Result<String> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private lateinit var context: Context

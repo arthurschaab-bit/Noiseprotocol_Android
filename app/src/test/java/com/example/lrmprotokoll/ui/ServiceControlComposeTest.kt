@@ -45,6 +45,7 @@ class ServiceControlComposeTest {
                 onNavigateToMeter = {},
                 onNavigateToProtokoll = {},
                 onNavigateToDiagnose = {},
+                onNavigateToVideo = {},
             )
         }
         composeRule.onNodeWithText("Start measurement").assertExists()

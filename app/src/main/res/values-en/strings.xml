@@ -77,6 +77,7 @@
     <string name="cockpit_start_to_see_history">Start a measurement to see sound level history.</string>
     <string name="cockpit_mark_noise_event">+ Mark noise event</string>
     <string name="cockpit_end_measurement">End measurement</string>
+    <string name="cockpit_video_beweis">Record video evidence</string>
     <string name="cockpit_start_measurement">Start measurement</string>
     <string name="cockpit_quick_settings_title">Quick Settings</string>
     <string name="cockpit_auto_event_detection">Automatic Event Detection</string>

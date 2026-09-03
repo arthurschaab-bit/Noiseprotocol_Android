@@ -60,6 +60,41 @@ interface DriveApiClient {
         gzip: Boolean = false,
     ): Result<String>
 
+    /**
+     * Laedt [datei] per resumable Upload hoch (Drive v3, `uploadType=resumable`) und liefert die
+     * Datei-ID.
+     *
+     * Anders als [dateiAnlegen] wird die Datei **nie vollstaendig in den Speicher geladen**.
+     * [dateiAnlegen] nimmt ein `ByteArray`, und der Multipart-Body materialisiert es ein zweites
+     * Mal - bei einem 200-MB-Video sind das ~400 MB Spitzenspeicher und damit ein sicherer
+     * `OutOfMemoryError`, kein Randfall. Genau deshalb existiert dieser zweite Weg additiv
+     * neben dem bestehenden, statt ihn zu ersetzen: Fuer die kleinen CSV- und JSON-Dateien des
+     * taeglichen Syncs ist der einfache Weg weiterhin der richtige.
+     *
+     * [fortsetzenAb] ist ein frueher erhaltener Session-URI. Ist er gesetzt, wird zuerst der
+     * Serverstand abgefragt und ab dort weitergemacht. Antwortet der Server darauf mit `404`
+     * (ein Session-URI ist nur etwa eine Woche gueltig), beginnt der Upload **einmal** von vorn -
+     * nicht endlos wiederholt.
+     *
+     * [sessionGestartet] wird mit dem neuen Session-URI aufgerufen, **bevor** der erste
+     * Datenblock rausgeht. Ohne diesen Rueckruf koennte der Aufrufer den URI nicht persistieren,
+     * und ein Prozess-Neustart mitten im Upload finge wieder bei null an - das ist der Grund,
+     * warum die Signatur hier ueber die Skizze in `docs/PROMPT_M11_FOTO_VIDEO.md` B.6
+     * hinausgeht.
+     *
+     * [fortschritt] meldet nach jedem Block die vom **Server bestaetigten** Bytes - nicht die,
+     * die gesendet wurden.
+     */
+    suspend fun dateiHochladenResumable(
+        name: String,
+        ordnerId: String,
+        datei: java.io.File,
+        mimeType: String,
+        fortsetzenAb: String? = null,
+        sessionGestartet: suspend (sessionUri: String) -> Unit = {},
+        fortschritt: suspend (bestaetigt: Long, gesamt: Long) -> Unit = { _, _ -> },
+    ): Result<String>
+
     /** Ersetzt den Inhalt einer bestehenden Datei - aktualisiert in place (Plan 8.4.4). */
     suspend fun dateiAktualisieren(
         fileId: String,

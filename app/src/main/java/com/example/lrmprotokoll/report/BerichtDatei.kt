@@ -41,6 +41,7 @@ object BerichtDatei {
         "zip" -> "application/zip"
         "wav" -> "audio/wav"
         "jpg", "jpeg" -> "image/jpeg"
+        "mp4" -> "video/mp4"
         else -> "application/octet-stream"
     }
 
@@ -53,6 +54,25 @@ object BerichtDatei {
      * Dass es bisher nur an einer der drei Stellen stand, war eine latente Absturzquelle, keine
      * Absicht.
      */
+    /**
+     * Oeffnet [datei] in einer passenden App (M11 Etappe B: Beweisvideos abspielen). Bewusst
+     * ueber [Intent.ACTION_VIEW] statt eines eingebauten Players - fuer ein MP4 gibt es auf
+     * jedem Geraet eine Anwendung, und eine eigene Wiedergabe waere eine Abhaengigkeit ohne
+     * Gegenwert.
+     *
+     * Liefert `false`, wenn keine App den Typ oeffnen kann; der Aufrufer kann das melden,
+     * statt dass die Aktion wirkungslos verpufft.
+     */
+    fun oeffne(context: Context, datei: File): Boolean {
+        val uri = FileProvider.getUriForFile(context, "${'$'}{context.packageName}.fileprovider", datei)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeTypFuer(datei.name))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching { context.startActivity(intent) }.isSuccess
+    }
+
     fun teile(context: Context, datei: File, chooserTitel: String = "Teilen über…") {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", datei)
         val intent = Intent(Intent.ACTION_SEND).apply {

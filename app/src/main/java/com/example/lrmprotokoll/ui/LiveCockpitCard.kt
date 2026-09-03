@@ -53,6 +53,7 @@ import java.util.Locale
 const val START_MEASUREMENT_BUTTON_TAG = "start_measurement_button"
 const val END_MEASUREMENT_BUTTON_TAG = "end_measurement_button"
 const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
+const val VIDEO_BEWEIS_BUTTON_TAG = "video_beweis_button"
 
 /** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
  * Rasterung fuer [berechneDbFensterAb] - beide an einer Stelle, damit sie nicht auseinanderlaufen. */
@@ -93,6 +94,8 @@ fun LiveCockpitCard(
     onNavigateToSettings: (() -> Unit)? = null,
     onNavigateToDiagnose: (() -> Unit)? = null,
     onNavigateToMeter: (() -> Unit)? = null,
+    /** M11 Etappe B: Videobeweis - nur bei laufender Aufzeichnung sichtbar. */
+    onNavigateToVideo: (() -> Unit)? = null,
     onShowSnackbar: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -533,6 +536,26 @@ fun LiveCockpitCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                }
+
+                // Der Owner-Auftrag lautet "Videobeweis starten WAEHREND Aufzeichnung" - der
+                // Knopf steht deshalb bewusst in diesem Block, der nur bei laufendem Dienst
+                // gezeichnet wird.
+                if (onNavigateToVideo != null) {
+                    OutlinedButton(
+                        onClick = onNavigateToVideo,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag(VIDEO_BEWEIS_BUTTON_TAG)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cockpit_video_beweis),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 OutlinedButton(
