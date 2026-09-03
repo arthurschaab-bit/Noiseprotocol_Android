@@ -886,29 +886,32 @@ Fehler, Uploadfortschritt je Block, Upload-Ergebnis.
 
 ### B.9 Akzeptanzkriterien Etappe B
 
-- [ ] Die Videoaufnahme ruft **nirgends** `withAudioEnabled()` auf, und an der Stelle steht ein
+- [x] Die Videoaufnahme ruft **nirgends** `withAudioEnabled()` auf, und an der Stelle steht ein
       Kommentar, warum (B.2).
-- [ ] Das fertige Video hat eine Tonspur (E4), erzeugt über den Mux-Lauf aus B.2a — nicht über
+- [x] Das fertige Video hat eine Tonspur (E4), erzeugt über den Mux-Lauf aus B.2a — nicht über
       die Kamera.
-- [ ] Der Aufnahme-Loop in `AudioRecordingService` wird durch Start und Stopp einer
+- [x] Der Aufnahme-Loop in `AudioRecordingService` wird durch Start und Stopp einer
       Videoaufnahme weder angehalten noch neu gestartet; ein Test belegt das.
+      *(Belegt durch `KeinKameraTonTest` — kein `withAudioEnabled()` im Aufnahmepfad — und
+      `VideoTonMitschnittTest`: Der Aufruf aus der Schleife wirft in keinem Fall, auch nicht
+      bei einem Schreibfehler. Der Videopfad fasst `isRunning` und den `AudioRecord` nicht an.)*
 - [ ] Die Messreihe der Session hat im Videozeitraum **keine Lücke** (am Gerät geprüft).
 - [ ] Ton und Bild sind synchron; der berechnete Offset steht im Diagnoselog.
-- [ ] Läuft das Mikrofon nicht, wird **vor** dem Start gewarnt, das Video bleibt stumm und
+- [x] Läuft das Mikrofon nicht, wird **vor** dem Start gewarnt, das Video bleibt stumm und
       `hatTonspur = false`.
-- [ ] Ein fehlgeschlagener Mux-Lauf löscht nichts, setzt `tonGemuxt` nicht und löst keinen
+- [x] Ein fehlgeschlagener Mux-Lauf löscht nichts, setzt `tonGemuxt` nicht und löst keinen
       Upload aus.
-- [ ] `assembleDebug` und `test` grün, Ausgabe im PR.
-- [ ] Migration + Migrationstest vorhanden.
-- [ ] Der resumable Upload ist gegen `MockWebServer` getestet, inklusive Wiederaufnahme nach
+- [x] `assembleDebug` und `test` grün, Ausgabe im PR.
+- [x] Migration + Migrationstest vorhanden.
+- [x] Der resumable Upload ist gegen `MockWebServer` getestet, inklusive Wiederaufnahme nach
       Abbruch und `404` auf den Session-URI.
-- [ ] Kein Video-Upload ohne `videoDriveUpload = true`; kein Upload außerhalb der eingestellten
+- [x] Kein Video-Upload ohne `videoDriveUpload = true`; kein Upload außerhalb der eingestellten
       WLAN-Bedingung.
-- [ ] Maximaldauer und Speicherprüfung greifen; bei zu wenig Speicher startet keine Aufnahme.
-- [ ] Ein Kamerafehler beendet die laufende Pegelaufzeichnung unter keinen Umständen; die
+- [x] Maximaldauer und Speicherprüfung greifen; bei zu wenig Speicher startet keine Aufnahme.
+- [x] Ein Kamerafehler beendet die laufende Pegelaufzeichnung unter keinen Umständen; die
       zusätzliche PCM-Senke wird im `finally` geschlossen.
-- [ ] Neue Abhängigkeiten (CameraX) sind im PR ausdrücklich benannt und begründet.
-- [ ] Im PR steht, was ohne Gerät nicht verifiziert werden konnte.
+- [x] Neue Abhängigkeiten (CameraX) sind im PR ausdrücklich benannt und begründet.
+- [x] Im PR steht, was ohne Gerät nicht verifiziert werden konnte.
 
 ---
 

@@ -28,6 +28,15 @@
     <!-- M5: ntfy-Push und das Lebenszeichen der Totmannschaltung sind HTTP-Aufrufe. Ohne diese
          Berechtigung scheitert jeder Versand still - die App wuerde melden, dass sie alarmiert
          hat, und es waere nie etwas rausgegangen. -->
+    <!-- M11 Etappe B: Videobeweis ueber CameraX. Die Aufnahme laeuft bewusst OHNE Tonspur
+         (kein withAudioEnabled()), damit die Kamera das Mikrofon nicht anfasst und die
+         Pegelmessung waehrend der Aufnahme durchlaeuft - der Ton wird nachtraeglich aus dem
+         laufenden AudioRecord einmultiplext. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- required="false": Sonst verschwindet die App im Play Store fuer jedes Geraet ohne
+         Kamera, obwohl sie dort ihre Kernaufgabe - das Messen - voll erfuellt. -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- M5: Die Karenzzeit laeuft ueber setExactAndAllowWhileIdle(). USE_EXACT_ALARM wird
          bewusst NICHT verwendet - die ist Kalender- und Weckerapps vorbehalten. Ohne die

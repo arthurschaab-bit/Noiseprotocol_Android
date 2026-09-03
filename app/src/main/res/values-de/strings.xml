@@ -77,6 +77,7 @@
     <string name="cockpit_start_to_see_history">Starte eine Messung, um den Pegelverlauf zu sehen.</string>
     <string name="cockpit_mark_noise_event">+ Lärmereignis markieren</string>
     <string name="cockpit_end_measurement">Messung beenden</string>
+    <string name="cockpit_video_beweis">Videobeweis aufnehmen</string>
     <string name="cockpit_start_measurement">Messung starten</string>
     <string name="cockpit_quick_settings_title">Schnelleinstellungen</string>
     <string name="cockpit_auto_event_detection">Automatische Ereigniserkennung</string>

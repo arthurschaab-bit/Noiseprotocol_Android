@@ -195,6 +195,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onNavigateToMeter = { navigiereZuTab("meter") },
                         onNavigateToProtokoll = { navigiereZuTab("protokoll") },
                         onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                        onNavigateToVideo = { navController.navigate("video") },
                         onShowSnackbar = { msg, action, onAction ->
                             scope.launch {
                                 val result = snackbarHostState.showSnackbar(
@@ -255,6 +256,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     KiErklaerungScreen(
                         onBack = { navController.popBackStack() },
                         onOpenDrawer = { scope.launch { drawerState.open() } },
+                    )
+                }
+
+                composable("video") {
+                    VideoAufnahmeScreen(
+                        onBack = { navController.popBackStack() },
+                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     )
                 }
 
@@ -325,6 +333,7 @@ fun NoiseProtocolApp(
     onNavigateToMeter: () -> Unit,
     onNavigateToProtokoll: () -> Unit,
     onNavigateToDiagnose: () -> Unit,
+    onNavigateToVideo: () -> Unit,
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
@@ -651,6 +660,7 @@ fun NoiseProtocolApp(
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToDiagnose = onNavigateToDiagnose,
                     onNavigateToMeter = onNavigateToMeter,
+                    onNavigateToVideo = onNavigateToVideo,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
                 )
             }

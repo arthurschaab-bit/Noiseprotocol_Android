@@ -34,6 +34,8 @@ class DriveSyncCoordinator(
      * mitschleppen muessen: `null` heisst schlicht "keine Fotos hochladen".
      */
     private val dokumentationsFotoDao: com.example.lrmprotokoll.data.DokumentationsFotoDao? = null,
+    /** Wie [dokumentationsFotoDao]: `null` heisst "keine Videos hochladen" (M11 Etappe B). */
+    private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
 ) {
 
     sealed interface SyncErgebnis {
@@ -92,6 +94,7 @@ class DriveSyncCoordinator(
 
         // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
         ladeFotosHoch(ordnerId)
+        ladeVideosHoch(ordnerId)
 
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
@@ -231,6 +234,68 @@ class DriveSyncCoordinator(
             val inhalt = runCatching { datei.readBytes() }.getOrNull() ?: continue
             driveApi.dateiAnlegen(name, ordnerId, inhalt, "image/jpeg", gzip = false)
                 .onSuccess { fileId -> runCatching { dao.setzeDriveFileId(foto.id, fileId) } }
+        }
+    }
+
+    /**
+     * Laedt Beweisvideos hoch (M11 Etappe B, B.6).
+     *
+     * Drei Unterschiede zu [ladeFotosHoch], die alle Absicht sind:
+     *
+     * 1. **Eigener Schalter, Default AUS.** Ein Video kann Dritte, Kennzeichen und
+     *    Wohnungsinneres zeigen - die datenschutzsensibelste Datenart der App. Ohne
+     *    ausdrueckliche Zustimmung geht hier nichts raus.
+     * 2. **Resumable statt [DriveApiClient.dateiAnlegen].** Ein Video ist ein Vielfaches des
+     *    verfuegbaren Heaps gross; der einfache Pfad waere ein sicherer OutOfMemoryError.
+     *    WorkManager gibt einem Worker ausserdem nur rund zehn Minuten - ein grosses Video
+     *    ueberlebt das nicht in einem Durchgang, und genau dafuer wird der Fortschritt
+     *    gespeichert.
+     * 3. **Nur fertig gemuxte Videos**, siehe [com.example.lrmprotokoll.data.BeweisVideoDao.nichtHochgeladene]:
+     *    Sonst landete die stumme Zwischenfassung in Drive.
+     */
+    private suspend fun ladeVideosHoch(ordnerId: String) {
+        if (!settings.videoDriveUpload) return
+        val dao = beweisVideoDao ?: return
+
+        val offene = runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        for (video in offene) {
+            val datei = java.io.File(video.dateiPfad)
+            if (!datei.exists()) continue
+
+            // Waisen-Absicherung wie bei CSV, WAV und Fotos.
+            val vorhanden = driveApi.dateiSuchen(datei.name, ordnerId).getOrNull()
+            if (vorhanden != null) {
+                runCatching { dao.setzeDriveFileId(video.id, vorhanden.id) }
+                continue
+            }
+
+            // Der aktuelle Session-URI wird mitgefuehrt, nicht aus [video] gelesen: Der Eintrag
+            // stammt aus der Abfrage von vor dem Upload, und der Fortschritts-Rueckruf wuerde
+            // sonst den gerade gespeicherten URI mit dem alten (meist null) ueberschreiben -
+            // womit der naechste Zyklus wieder bei null anfinge.
+            var aktuellerSessionUri = video.uploadSessionUri
+
+            driveApi.dateiHochladenResumable(
+                name = datei.name,
+                ordnerId = ordnerId,
+                datei = datei,
+                mimeType = "video/mp4",
+                fortsetzenAb = video.uploadSessionUri,
+                sessionGestartet = { uri ->
+                    aktuellerSessionUri = uri
+                    runCatching { dao.setzeUploadFortschritt(video.id, uri, 0) }
+                },
+                fortschritt = { bestaetigt, _ ->
+                    runCatching { dao.setzeUploadFortschritt(video.id, aktuellerSessionUri, bestaetigt) }
+                },
+            ).onSuccess { fileId ->
+                runCatching {
+                    dao.setzeDriveFileId(video.id, fileId)
+                    // Der Session-URI hat seinen Zweck erfuellt - stehen zu lassen wuerde einen
+                    // spaeteren Lauf dazu verleiten, eine abgeschlossene Sitzung abzufragen.
+                    dao.setzeUploadFortschritt(video.id, null, datei.length())
+                }
+            }
         }
     }
 

@@ -84,6 +84,10 @@ fun SettingsScreen(
     // Ansichtsmodus (Lite vs. Pro) & Presets-Dialog
     var isProMode by remember { mutableStateOf(settings.isProMode) }
     var expFoto by remember { mutableStateOf(false) }
+    var expVideo by remember { mutableStateOf(false) }
+    var videoMaxDauer by remember { mutableStateOf(settings.videoMaxDauerSekunden.toFloat()) }
+    var videoAufloesung by remember { mutableStateOf(settings.videoAufloesung) }
+    var videoDriveUpload by remember { mutableStateOf(settings.videoDriveUpload) }
     var fotoDokuAktiv by remember { mutableStateOf(settings.fotoDokuAktiv) }
     var fotoMessaufbau by remember { mutableStateOf(settings.fotoDokuMessaufbau) }
     var fotoKalibrierung by remember { mutableStateOf(settings.fotoDokuKalibrierung) }
@@ -1341,6 +1345,75 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            SettingsSectionCard(
+                title = "Videobeweis",
+                summary = "Maximaldauer ${videoMaxDauer.toInt() / 60}:${String.format(java.util.Locale.GERMANY, "%02d", videoMaxDauer.toInt() % 60)} · " +
+                    if (videoAufloesung == "FHD") "1080p" else "720p",
+                expanded = expVideo,
+                onToggle = { expVideo = !expVideo }
+            ) {
+                Text(
+                    "Während einer laufenden Messung lässt sich im Cockpit ein Beweisvideo aufnehmen. " +
+                        "Die Kamera nimmt dabei ohne Tonspur auf, damit die Pegelmessung ungestört " +
+                        "weiterläuft – der Ton kommt aus der laufenden Messung und wird nach der " +
+                        "Aufnahme in das Video eingefügt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Maximaldauer: ${videoMaxDauer.toInt() / 60} min ${videoMaxDauer.toInt() % 60} s")
+                Slider(
+                    value = videoMaxDauer,
+                    onValueChange = { videoMaxDauer = it },
+                    onValueChangeFinished = { settings.videoMaxDauerSekunden = videoMaxDauer.toInt() },
+                    valueRange = 30f..900f,
+                    steps = 28,
+                )
+                Text(
+                    "Die Grenze schützt nicht nur den Speicher: Bild und Ton stammen aus zwei " +
+                        "unabhängig getakteten Quellen, über sehr lange Aufnahmen können sie " +
+                        "auseinanderlaufen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Auflösung", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf("HD" to "720p (empfohlen)", "FHD" to "1080p").forEach { (wert, beschriftung) ->
+                        FilterChip(
+                            selected = videoAufloesung == wert,
+                            onClick = { videoAufloesung = wert; settings.videoAufloesung = wert },
+                            label = { Text(beschriftung) },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Videos nach Google Drive hochladen")
+                    Switch(checked = videoDriveUpload, onCheckedChange = {
+                        videoDriveUpload = it
+                        settings.videoDriveUpload = it
+                    })
+                }
+                Text(
+                    "Standardmäßig aus – anders als bei Audio und Fotos. Ein Video kann Dritte, " +
+                        "Kennzeichen und Wohnungsinneres zeigen und ist dabei um ein Vielfaches " +
+                        "größer als alles andere, was die App speichert.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             SettingsSectionCard(

@@ -197,7 +197,21 @@ class AppContainer(context: Context) {
             noiseDao = database.noiseDao(),
             settings = settingsManager,
             dokumentationsFotoDao = database.dokumentationsFotoDao(),
+            beweisVideoDao = database.beweisVideoDao(),
         )
+    }
+
+    // ---------------------------------------------------------------- M11: Videobeweis
+
+    /**
+     * Nimmt den Ton fuer ein laufendes Beweisvideo mit. Liegt hier und nicht im
+     * Aufnahme-Screen, weil zwei Seiten darauf zugreifen: Der Screen startet und stoppt ihn,
+     * die Aufnahmeschleife des [com.example.lrmprotokoll.audio.AudioRecordingService] fuellt
+     * ihn. Ein Singleton im Container ist der Ort, an dem sich beide treffen, ohne dass der
+     * Service den Screen kennen muss.
+     */
+    val videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt by lazy {
+        com.example.lrmprotokoll.video.VideoTonMitschnitt()
     }
 
     // ---------------------------------------------------------------- M4: Messreihe

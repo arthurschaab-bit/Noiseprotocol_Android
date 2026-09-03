@@ -48,4 +48,11 @@ class BerichtDateiTest {
         // ERSTEN Punkt schaut statt auf den letzten, wuerde hier "01" als Endung sehen.
         assertEquals("text/plain", BerichtDatei.mimeTypFuer("Tagesbericht_01.01.2026.txt"))
     }
+
+    @Test
+    fun beweisvideosBekommenDenVideoTyp() {
+        // M11 Etappe B: Ohne diesen Eintrag fiele ein Video auf application/octet-stream zurueck
+        // und verschwaende in der Zielauswahl des Systems.
+        assertEquals("video/mp4", BerichtDatei.mimeTypFuer("video_20260903_08_00_00_ton.mp4"))
+    }
 }

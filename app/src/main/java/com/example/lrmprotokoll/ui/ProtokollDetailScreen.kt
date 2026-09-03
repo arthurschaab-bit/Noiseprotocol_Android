@@ -79,6 +79,7 @@ fun ProtokollDetailScreen(
     var geladen by remember { mutableStateOf(false) }
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showAuditDetails by remember { mutableStateOf(false) }
+    var beweisvideos by remember { mutableStateOf<List<com.example.lrmprotokoll.data.BeweisVideoEntity>>(emptyList()) }
 
     // Live-Beobachtung der Session und zugehörigen Daten
     LaunchedEffect(sessionId) {
@@ -119,6 +120,15 @@ fun ProtokollDetailScreen(
         launch {
             db.connectionEventDao().fuerSessionFlow(sessionId).collectLatest { events ->
                 ausfallbaender = leiteAusfallbaenderAb(events, session?.endedAt)
+            }
+        }
+
+        // Als Flow, nicht als Momentaufnahme: Der Mux-Lauf laeuft im Hintergrund weiter, und
+        // "Ton wird hinzugefuegt" soll von selbst zu "mit Ton" werden, ohne dass der Nutzer den
+        // Screen verlassen und neu oeffnen muss.
+        launch {
+            db.beweisVideoDao().fuerSessionFlow(sessionId).collectLatest { videos ->
+                beweisvideos = videos
             }
         }
 
@@ -383,6 +393,57 @@ fun ProtokollDetailScreen(
                                             Icons.Default.Refresh,
                                             contentDescription = stringResource(R.string.action_ai_classify_now),
                                             tint = MaterialTheme.colorScheme.secondary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4b. BEWEISVIDEOS (M11 Etappe B)
+            if (beweisvideos.isNotEmpty()) {
+                item {
+                    NoiseCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Beweisvideos (${beweisvideos.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            beweisvideos.forEach { video ->
+                                val datei = java.io.File(video.dateiPfad)
+                                val zustand = when {
+                                    // Reihenfolge zaehlt: "wird verarbeitet" ist ein
+                                    // Zwischenzustand, "ohne Ton" ein Endzustand.
+                                    !video.tonGemuxt -> "Ton wird hinzugefügt …"
+                                    video.hatTonspur -> "mit Ton"
+                                    else -> "ohne Ton (Mikrofon lief nicht)"
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = video.tonGemuxt && datei.exists()) {
+                                            if (!com.example.lrmprotokoll.report.BerichtDatei.oeffne(context, datei)) {
+                                                onShowSnackbar?.invoke("Keine App zum Abspielen gefunden")
+                                            }
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(video.gestartetAm)),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            text = "${com.example.lrmprotokoll.video.Videospeicher.formatiereDauer(video.dauerMs / 1000)} · " +
+                                                "${video.groesseBytes / (1024 * 1024)} MB · $zustand",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }

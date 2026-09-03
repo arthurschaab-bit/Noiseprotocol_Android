@@ -137,6 +137,36 @@ class DriveSyncCoordinatorTest {
         ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
+    /** M11 Etappe B: Beweisvideos - dieselbe Fake-Disziplin wie bei den anderen DAOs. */
+    private class FakeBeweisVideoDao(gespeichert: List<com.example.lrmprotokoll.data.BeweisVideoEntity> = emptyList()) :
+        com.example.lrmprotokoll.data.BeweisVideoDao {
+        val zeilen = gespeichert.associateBy { it.id }.toMutableMap()
+        override suspend fun insert(video: com.example.lrmprotokoll.data.BeweisVideoEntity): Long {
+            zeilen[video.id] = video
+            return video.id
+        }
+        override suspend fun fuerSession(sessionId: Long) = zeilen.values.filter { it.sessionId == sessionId }
+        override fun fuerSessionFlow(sessionId: Long) = flowOf(zeilen.values.filter { it.sessionId == sessionId })
+        override suspend fun byId(id: Long) = zeilen[id]
+        override suspend fun nichtHochgeladene() = zeilen.values.filter { it.driveFileId == null && it.tonGemuxt }
+        override suspend fun ungemuxte() = zeilen.values.filter { !it.tonGemuxt }
+        override suspend fun setzeDriveFileId(id: Long, fileId: String) {
+            zeilen[id] = zeilen.getValue(id).copy(driveFileId = fileId)
+        }
+        override suspend fun setzeUploadFortschritt(id: Long, sessionUri: String?, bytes: Long) {
+            zeilen[id] = zeilen.getValue(id).copy(uploadSessionUri = sessionUri, hochgeladeneBytes = bytes)
+        }
+        override suspend fun setzeAufnahmeergebnis(id: Long, dauerMs: Long, groesseBytes: Long) {
+            zeilen[id] = zeilen.getValue(id).copy(dauerMs = dauerMs, groesseBytes = groesseBytes)
+        }
+        override suspend fun setzeGemuxt(id: Long, dateiPfad: String, groesseBytes: Long, hatTonspur: Boolean) {
+            zeilen[id] = zeilen.getValue(id).copy(
+                dateiPfad = dateiPfad, groesseBytes = groesseBytes, hatTonspur = hatTonspur, tonGemuxt = true,
+            )
+        }
+        override suspend fun loesche(id: Long) { zeilen.remove(id) }
+    }
+
     private lateinit var levelSampleDao: FakeLevelSampleDao
     private lateinit var dailyFileDao: FakeDailyFileDao
     private lateinit var noiseDao: FakeNoiseDao
@@ -419,5 +449,151 @@ class DriveSyncCoordinatorTest {
         assertTrue("Ergebnis muss Erfolgreich sein", ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
         assertEquals("1 WAV-Datei synchronisiert", 1, (ergebnis as DriveSyncCoordinator.SyncErgebnis.Erfolgreich).zeilen)
         assertTrue(settings.driveSyncLastSuccessAt > 0)
+    }
+
+    // ------------------------------------------------------------------ M11 Etappe B: Videos
+
+    private fun videoEintrag(
+        id: Long = 1,
+        pfad: String,
+        tonGemuxt: Boolean = true,
+        driveFileId: String? = null,
+        uploadSessionUri: String? = null,
+    ) = com.example.lrmprotokoll.data.BeweisVideoEntity(
+        id = id, sessionId = 5, dateiPfad = pfad, gestartetAm = uhr.now().toEpochMilli(),
+        dauerMs = 30_000, hatTonspur = true, groesseBytes = 4096, tonGemuxt = tonGemuxt,
+        driveFileId = driveFileId, uploadSessionUri = uploadSessionUri,
+    )
+
+    private fun tempVideo() = java.io.File.createTempFile("beweisvideo", ".mp4").apply {
+        writeBytes(ByteArray(4096) { 7 })
+        deleteOnExit()
+    }
+
+    /** Merkt sich, womit der resumable Upload aufgerufen wurde, und spielt die Rueckrufe durch. */
+    private class ResumableClient(
+        val basis: DriveApiClient,
+        val ergebnis: Result<String> = Result.success("drive-video-1"),
+    ) : DriveApiClient by basis {
+        var aufrufe = 0
+        var letzterName: String? = null
+        var letzterMimeTyp: String? = null
+        var letztesFortsetzenAb: String? = null
+
+        override suspend fun dateiHochladenResumable(
+            name: String,
+            ordnerId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): Result<String> {
+            aufrufe++
+            letzterName = name
+            letzterMimeTyp = mimeType
+            letztesFortsetzenAb = fortsetzenAb
+            if (fortsetzenAb == null) sessionGestartet("https://drive.example/session/neu")
+            fortschritt(2048, datei.length())
+            return ergebnis
+        }
+    }
+
+    private fun koordinatorMitVideos(dao: FakeBeweisVideoDao, client: DriveApiClient) = DriveSyncCoordinator(
+        driveApi = client, levelSampleDao = levelSampleDao, dailyFileDao = dailyFileDao,
+        noiseDao = noiseDao, settings = settings, now = uhr, zone = zone, beweisVideoDao = dao,
+    )
+
+    @Test
+    fun ohneAusdrucklicheZustimmungGehtKeinVideoRaus() = runTest {
+        // videoDriveUpload ist bewusst default AUS: Ein Video kann Dritte, Kennzeichen und
+        // Wohnungsinneres zeigen - die datenschutzsensibelste Datenart der App.
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath)))
+        val client = ResumableClient(driveApi)
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals(0, client.aufrufe)
+        assertEquals(null, dao.zeilen.getValue(1L).driveFileId)
+    }
+
+    @Test
+    fun mitZustimmungWirdUeberDenResumablePfadHochgeladen() = runTest {
+        // Nicht ueber dateiAnlegen: Das waere bei einem Video ein sicherer OutOfMemoryError.
+        settings.videoDriveUpload = true
+        val video = tempVideo()
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = video.absolutePath)))
+        val client = ResumableClient(driveApi)
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals(1, client.aufrufe)
+        assertEquals("video/mp4", client.letzterMimeTyp)
+        assertEquals(video.name, client.letzterName)
+        assertEquals("drive-video-1", dao.zeilen.getValue(1L).driveFileId)
+    }
+
+    @Test
+    fun einNochNichtGemuxtesVideoBleibtLiegen() = runTest {
+        // Sonst landete die stumme Zwischenfassung in Drive.
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath, tonGemuxt = false)))
+        val client = ResumableClient(driveApi)
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals(0, client.aufrufe)
+    }
+
+    @Test
+    fun einBereitsHochgeladenesVideoWirdNichtNochEinmalGesendet() = runTest {
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath, driveFileId = "schon-da")))
+        val client = ResumableClient(driveApi)
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals(0, client.aufrufe)
+    }
+
+    @Test
+    fun einAngefangenerUploadWirdFortgesetztStattNeuBegonnen() = runTest {
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(
+            listOf(videoEintrag(pfad = tempVideo().absolutePath, uploadSessionUri = "https://drive.example/session/alt"))
+        )
+        val client = ResumableClient(driveApi)
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals("https://drive.example/session/alt", client.letztesFortsetzenAb)
+    }
+
+    @Test
+    fun derFortschrittWirdGespeichertDamitEinAbbruchFortsetzbarBleibt() = runTest {
+        // WorkManager gibt einem Worker nur rund zehn Minuten; ein grosses Video ueberlebt das
+        // nicht in einem Durchgang.
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath)))
+        val client = ResumableClient(driveApi, ergebnis = Result.failure(DriveApiException("Verbindung weg")))
+
+        koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        val zeile = dao.zeilen.getValue(1L)
+        assertEquals("https://drive.example/session/neu", zeile.uploadSessionUri)
+        assertEquals(2048L, zeile.hochgeladeneBytes)
+        assertEquals("Ohne Erfolg keine Datei-ID", null, zeile.driveFileId)
+    }
+
+    @Test
+    fun einVideoOhneDateiWirdUebersprungenStattDenZyklusZuSprengen() = runTest {
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = "/pfad/gibt/es/nicht.mp4")))
+        val client = ResumableClient(driveApi)
+
+        val ergebnis = koordinatorMitVideos(dao, client).syncEinenZyklus()
+
+        assertEquals(0, client.aufrufe)
+        assertTrue(ergebnis !is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen)
     }
 }

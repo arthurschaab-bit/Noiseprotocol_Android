@@ -89,6 +89,10 @@ interface BeweisVideoDao {
     @Query("UPDATE beweisvideos SET uploadSessionUri = :sessionUri, hochgeladeneBytes = :bytes WHERE id = :id")
     suspend fun setzeUploadFortschritt(id: Long, sessionUri: String?, bytes: Long)
 
+    /** Nach dem Stopp der Kamera: erst dann stehen Dauer und Dateigroesse fest. */
+    @Query("UPDATE beweisvideos SET dauerMs = :dauerMs, groesseBytes = :groesseBytes WHERE id = :id")
+    suspend fun setzeAufnahmeergebnis(id: Long, dauerMs: Long, groesseBytes: Long)
+
     /** Nach erfolgreichem Mux-Lauf: neue Datei, neue Groesse, Ton drin. */
     @Query(
         "UPDATE beweisvideos SET dateiPfad = :dateiPfad, groesseBytes = :groesseBytes, " +
