@@ -51,7 +51,15 @@ import com.example.lrmprotokoll.data.erzeugeNtfyTopic
 import com.example.lrmprotokoll.messreihe.RetentionVorschau
 import com.example.lrmprotokoll.messreihe.SpeicherplatzUebersicht
 import com.example.lrmprotokoll.messreihe.ermittleRetentionVorschau
+import com.example.lrmprotokoll.messreihe.AufraeumErgebnis
+import com.example.lrmprotokoll.messreihe.Speicherbelegung
+import com.example.lrmprotokoll.messreihe.Speicheraufraeumer
+import com.example.lrmprotokoll.messreihe.Speicherkategorie
+import com.example.lrmprotokoll.messreihe.Speicherposten
+import com.example.lrmprotokoll.messreihe.ermittleAufraeumVorschau
+import com.example.lrmprotokoll.messreihe.ermittleSpeicherbelegung
 import com.example.lrmprotokoll.messreihe.ermittleSpeicherplatz
+import com.example.lrmprotokoll.messreihe.raeumeSpeicherAuf
 import com.example.lrmprotokoll.messreihe.formatiereBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,6 +93,12 @@ fun SettingsScreen(
     var isProMode by remember { mutableStateOf(settings.isProMode) }
     var expFoto by remember { mutableStateOf(false) }
     var expVideo by remember { mutableStateOf(false) }
+    var expSpeicher by remember { mutableStateOf(false) }
+    var belegung by remember { mutableStateOf<Speicherbelegung?>(null) }
+    var gewaehlteKategorien by remember { mutableStateOf(setOf<Speicherkategorie>()) }
+    var gewaehlterZeitraum by remember { mutableStateOf<Int?>(90) }
+    var aufraeumVorschau by remember { mutableStateOf<Speicherposten?>(null) }
+    var raeumtAuf by remember { mutableStateOf(false) }
     var videoMaxDauer by remember { mutableStateOf(settings.videoMaxDauerSekunden.toFloat()) }
     var videoAufloesung by remember { mutableStateOf(settings.videoAufloesung) }
     var videoDriveUpload by remember { mutableStateOf(settings.videoDriveUpload) }
@@ -1345,6 +1359,178 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // Owner-Entscheidung E8: Anzeige des belegten Speichers und eine Aufraeumfunktion,
+            // mit der sich Audioaufnahmen und/oder Videos fuer einen waehlbaren Zeitraum
+            // freigeben lassen. Bewusst NICHT hinter dem Pro-Modus: Platz freizugeben ist
+            // Grundbedarf, kein Komfortmerkmal - anders als die automatische Bereinigung, die
+            // ungefragt loeschen wuerde und deshalb dort bleibt, wo sie war.
+            SettingsSectionCard(
+                title = "Speicherplatz",
+                summary = belegung?.let { "Belegt: ${formatiereBytes(it.gesamtBytes)}" } ?: "Belegung anzeigen und freigeben",
+                expanded = expSpeicher,
+                onToggle = { expSpeicher = !expSpeicher }
+            ) {
+                // Erst beim Aufklappen ermitteln - das Zaehlen ist Datei-I/O.
+                LaunchedEffect(expSpeicher) {
+                    if (expSpeicher) belegung = ermittleSpeicherbelegung(context)
+                }
+
+                val aktuell = belegung
+                if (aktuell == null) {
+                    Text("Belegung wird ermittelt …", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Speicherkategorie.entries.forEach { kategorie ->
+                        val posten = aktuell.posten(kategorie)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("${kategorie.anzeigename} (${posten.anzahl})", style = MaterialTheme.typography.bodyMedium)
+                            Text(formatiereBytes(posten.bytes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Berichte & Sonstiges (${aktuell.sonstigesAnzahl})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(formatiereBytes(aktuell.sonstigesBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Datenbank", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(formatiereBytes(aktuell.datenbankBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Auf dem Gerät noch frei", style = MaterialTheme.typography.bodyMedium)
+                        Text(formatiereBytes(aktuell.freiBytes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text("Speicher freigeben", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Löscht nur die Dateien. Die Protokolleinträge bleiben erhalten – Zeitpunkt, " +
+                            "Pegel und Klassifikation sind das eigentliche Protokoll, die Datei ist die Beilage.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Speicherkategorie.entries.forEach { kategorie ->
+                            FilterChip(
+                                selected = kategorie in gewaehlteKategorien,
+                                onClick = {
+                                    gewaehlteKategorien = if (kategorie in gewaehlteKategorien) {
+                                        gewaehlteKategorien - kategorie
+                                    } else {
+                                        gewaehlteKategorien + kategorie
+                                    }
+                                },
+                                label = { Text(kategorie.anzeigename) },
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Zeitraum", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf<Pair<Int?, String>>(
+                            90 to "älter als 90 Tage",
+                            30 to "älter als 30 Tage",
+                            7 to "älter als 7 Tage",
+                            null to "alles",
+                        ).forEach { (tage, beschriftung) ->
+                            FilterChip(
+                                selected = gewaehlterZeitraum == tage,
+                                onClick = { gewaehlterZeitraum = tage },
+                                label = { Text(beschriftung) },
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                aufraeumVorschau = ermittleAufraeumVorschau(context, gewaehlteKategorien, gewaehlterZeitraum)
+                            }
+                        },
+                        enabled = gewaehlteKategorien.isNotEmpty() && !raeumtAuf,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (raeumtAuf) "Wird freigegeben …" else "Freigeben …")
+                    }
+                    Text(
+                        "Dateien der letzten Minuten bleiben immer erhalten – während einer " +
+                            "laufenden Messung wird gerade an ihnen geschrieben.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            aufraeumVorschau?.let { vorschau ->
+                AlertDialog(
+                    onDismissRequest = { aufraeumVorschau = null },
+                    title = { Text("Speicher freigeben?") },
+                    text = {
+                        Text(
+                            if (vorschau.anzahl == 0) {
+                                "Für diese Auswahl gibt es nichts freizugeben."
+                            } else {
+                                "${vorschau.anzahl} Dateien werden gelöscht und geben " +
+                                    "${formatiereBytes(vorschau.bytes)} frei. Die zugehörigen " +
+                                    "Protokolleinträge bleiben erhalten. Das lässt sich nicht rückgängig machen."
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        if (vorschau.anzahl > 0) {
+                            TextButton(onClick = {
+                                aufraeumVorschau = null
+                                raeumtAuf = true
+                                scope.launch {
+                                    val ergebnis: AufraeumErgebnis =
+                                        raeumeSpeicherAuf(context, gewaehlteKategorien, gewaehlterZeitraum)
+                                    belegung = ermittleSpeicherbelegung(context)
+                                    raeumtAuf = false
+                                    onShowSnackbar?.invoke(
+                                        if (ergebnis.fehlgeschlagen > 0) {
+                                            "${ergebnis.geloescht} Dateien gelöscht (${formatiereBytes(ergebnis.bytes)}), " +
+                                                "${ergebnis.fehlgeschlagen} konnten nicht gelöscht werden"
+                                        } else {
+                                            "${ergebnis.geloescht} Dateien gelöscht, ${formatiereBytes(ergebnis.bytes)} freigegeben"
+                                        }
+                                    )
+                                }
+                            }) {
+                                Text("Endgültig löschen")
+                            }
+                        } else {
+                            TextButton(onClick = { aufraeumVorschau = null }) { Text("OK") }
+                        }
+                    },
+                    dismissButton = if (vorschau.anzahl > 0) {
+                        { TextButton(onClick = { aufraeumVorschau = null }) { Text(stringResource(R.string.action_cancel)) } }
+                    } else {
+                        null
+                    },
+                )
             }
 
             SettingsSectionCard(

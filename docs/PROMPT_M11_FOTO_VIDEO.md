@@ -776,9 +776,10 @@ als alles, was die App bisher schreibt.
 - **Freien Speicher vor dem Start prüfen** (`StatFs` auf `getExternalFilesDir`). Unter 500 MB
   frei: Aufnahme nicht starten, klare Meldung. Ein mitten im Beweis abbrechendes Video ist
   schlimmer als eines, das gar nicht erst beginnt.
-- **Aufbewahrung:** Videos gehören in den bestehenden `RetentionCoordinator`-Gedanken (Plan
-  13.2: 90 Tage). Ob Videos derselben Frist unterliegen oder einer kürzeren, ist **E8** — sie
-  sind das mit Abstand größte Datenvolumen der App.
+- **Aufbewahrung:** **Mit E8 entschieden — keine automatische Frist für Videos.** Der
+  `RetentionCoordinator` wird für sie nicht erweitert; stattdessen gibt es in den Einstellungen
+  eine Speicheranzeige und eine manuelle Aufräumfunktion (Abschnitt 4a). Ein Beweisvideo, das
+  nach 30 Tagen von selbst verschwindet, ist genau dann weg, wenn ein Verfahren anläuft.
 
 ### B.6 Drive-Upload — hier ist echte Arbeit nötig
 
@@ -930,13 +931,13 @@ nicht — frag den Owner."
 | **E5** | Drive-Ablage: alles weiter **flach** in einen Ordner (F-7) oder **Unterordner** `fotos/` und `videos/`? | Unterordner. Bei mehreren Fotos je Messung wird der flache Ordner sonst schnell unbrauchbar. Kostet nur einen zusätzlichen `ordnerAnlegen`-Aufruf plus eine gecachte Ordner-ID. |
 | **E6** | **GPS-Koordinaten** im Foto-EXIF behalten? | Nein, entfernen. Sichtbar in den Einstellungen anbieten, falls der Owner sie im Beweismittel haben will — aber nie als stiller Default. |
 | **E7** | Sollen Fotos auch im **Zeitraumbericht** (`PeriodenBerichtExport`) erscheinen? | In Etappe A nicht. Über viele Sessions hinweg wird das Dokument unbrauchbar groß. Später als eigene Anlage denkbar. |
-| **E8** | **Aufbewahrungsfrist für Videos** — dieselben 90 Tage wie für Messwerte (Plan 13.2), oder kürzer? | Kürzer, Vorschlag 30 Tage mit Einstellung. Videos sind das größte Datenvolumen der App; wer eines dauerhaft braucht, kann es als Favorit markieren. |
+| ~~**E8**~~ | **Aufbewahrungsfrist für Videos** — dieselben 90 Tage wie für Messwerte (Plan 13.2), oder kürzer? | **ENTSCHIEDEN (Owner): weder noch — keine automatische Frist, stattdessen eine Speicheranzeige mit manueller Aufräumfunktion.** Siehe Abschnitt 4a. |
 
 ---
 
 ## 4a · Getroffene Entscheidungen des Owners — verbindlich
 
-Drei der neun Punkte aus Abschnitt 4 sind entschieden. **Sie sind keine Empfehlung mehr,
+Vier der neun Punkte aus Abschnitt 4 sind entschieden. **Sie sind keine Empfehlung mehr,
 sondern Vorgabe.** Beide ziehen Arbeit nach sich, die sonst nicht angefallen wäre; das steht
 hier, damit niemand sie beim Schätzen übersieht.
 
@@ -1042,6 +1043,30 @@ es werden. Die harte Maximaldauer aus B.5 ist damit nicht nur eine Speichergrenz
 `audioTriggerQuelle = "MIKROFON"` und verbundenem PCE-323 war nur für V2 relevant (wo die Lücke
 im Mikrofonbetrieb die Messung selbst gekostet hätte). Mit V4 entsteht in keiner der beiden
 Konstellationen eine Lücke.
+
+### E8 (entschieden) · Keine automatische Frist — Anzeige und manuelles Aufräumen
+
+**Der Owner hat eine dritte Möglichkeit gewählt:** Videos (und Audioaufnahmen) verfallen nicht
+von selbst. Stattdessen zeigen die Einstellungen, **wie viel Platz wovon belegt ist**, und
+erlauben ein gezieltes Freigeben — nach Dateiart (Audio, Videos, Fotos) und nach Zeitraum
+(älter als 7/30/90 Tage, oder alles).
+
+**Warum das besser ist als eine Frist:** Ein Beweisvideo ist genau dann wertvoll, wenn ein
+Verfahren anläuft — und das kann Monate nach der Aufnahme sein. Eine automatische Löschung
+träfe dann zuverlässig das, was man gerade braucht. Umgekehrt weiß nur der Nutzer, welcher
+Zeitraum bereits ausgewertet ist.
+
+**Nicht optional bei der Umsetzung:**
+
+1. **Vorschau vor dem Löschen**, aus derselben Rechnung wie die Ausführung. Zwei getrennte
+   Rechnungen bedeuten, dass die App etwas anderes löscht, als sie angekündigt hat.
+2. **Die Protokolleinträge bleiben.** Gelöscht wird die Datei, nicht die Messreihe: Zeitpunkt,
+   Pegel und Klassifikation sind das Protokoll, die Datei ist die Beilage.
+3. **Eine Schonfrist für frische Dateien.** Während einer laufenden Messung schreibt der Dienst
+   gerade an einer Ereignis-WAV, und ein laufender Mux-Lauf hält MP4 und PCM offen. "Alles
+   löschen" darf die Aufnahme nicht zerstören, die gerade entsteht.
+4. **Berichte und Exporte sind nicht löschbar** — sie sind das Ergebnis der Arbeit, nicht ihr
+   Rohmaterial. In der Anzeige erscheinen sie unter "Sonstiges", damit die Summe aufgeht.
 
 ---
 

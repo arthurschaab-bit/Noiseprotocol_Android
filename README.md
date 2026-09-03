@@ -35,6 +35,7 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 | **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
 | **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync) | ✅ umgesetzt — Fotos, EXIF-Drehung und PDF-Einbettung noch nicht am Gerät gesichtet |
+| **E8** Speicheranzeige & manuelles Aufräumen (nach Dateiart und Zeitraum, statt automatischer Frist für Videos) | ✅ umgesetzt |
 | **M11 Etappe B** Videobeweis (CameraX ohne Tonspur, Ton aus der laufenden Messung nachträglich eingemuxt, resumable Drive-Upload) | ⚠️ umgesetzt, **nicht am Gerät verifiziert** — Kamera, A/V-Synchronität und der echte Upload brauchen Hardware |
 
 **Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign + Mehrsprachigkeit (i18n) vollständig umgesetzt, getestet und verifiziert.**
@@ -240,6 +241,12 @@ Abhängigkeits-Stil des Projekts.
   Videos und der echte Drive-Upload — `MediaCodec`, `MediaMuxer` und CameraX existieren auf der
   JVM nicht. Über sehr lange Aufnahmen können Bild und Ton auseinanderlaufen (zwei unabhängig
   getaktete Quellen); dagegen steht die einstellbare Maximaldauer, Default 3 Minuten.
+- **Videos und Audioaufnahmen verfallen nicht automatisch** (Owner-Entscheidung E8). Statt einer
+  Frist zeigen die Einstellungen unter „Speicherplatz", wie viel Platz Audio, Videos, Fotos,
+  Berichte und Datenbank belegen, und geben ihn auf Wunsch gezielt frei — nach Dateiart und
+  Zeitraum. Gelöscht werden dabei nur die Dateien, nicht die Protokolleinträge; Dateien der
+  letzten fünf Minuten bleiben immer erhalten, weil während einer laufenden Messung gerade an
+  ihnen geschrieben wird.
 - **Der Video-Upload nach Google Drive ist standardmäßig AUS** — bewusst anders als WAV und
   Fotos. Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen und ist um ein Vielfaches
   größer als alles andere, was die App speichert.
