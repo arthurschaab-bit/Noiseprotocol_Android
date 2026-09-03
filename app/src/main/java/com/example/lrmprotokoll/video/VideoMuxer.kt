@@ -240,7 +240,16 @@ class VideoMuxer {
             info.offset = 0
             info.size = groesse
             info.presentationTimeUs = quelle.sampleTime
-            info.flags = quelle.sampleFlags
+            // Die Flags des Extractors und die des Muxers sind zwei verschiedene Wertebereiche -
+            // sie einfach zu uebernehmen, waere ein Zufallstreffer (Android Lint: WrongConstant).
+            // Fuer den Muxer zaehlt genau eine Aussage: ob dieses Sample ein Keyframe ist.
+            // SAMPLE_FLAG_ENCRYPTED und SAMPLE_FLAG_PARTIAL_FRAME haben hier keine Entsprechung
+            // und kommen bei einer selbst aufgenommenen MP4 auch nicht vor.
+            info.flags = if (quelle.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+                MediaCodec.BUFFER_FLAG_KEY_FRAME
+            } else {
+                0
+            }
             muxer.writeSampleData(zielSpur, puffer, info)
             quelle.advance()
         }
