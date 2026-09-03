@@ -55,6 +55,7 @@ class MeasurementRecorder(
     private val now: InstantSource = InstantSource.System,
     private val flushInterval: Duration = Duration.ofSeconds(5),
     private val flushBatchSize: Int = 50,
+    private val mikrofonIntervall: Duration = Duration.ofSeconds(1),
 ) {
 
     private val pufferMutex = Mutex()
@@ -62,9 +63,20 @@ class MeasurementRecorder(
 
     private var job: Job? = null
 
+    /**
+     * Der Flush-Job einer Mikrofon-Session. Bewusst NICHT [job]: [start] bricht bei
+     * `job?.isActive == true` ab, ein laufender Mikrofon-Flush wuerde also verhindern, dass die
+     * Messgeraet-Session ueberhaupt startet, sobald sich das PCE-323 verbindet.
+     */
+    private var mikrofonJob: Job? = null
+
+    /** Zeitpunkt des zuletzt uebernommenen Mikrofon-Pegels - Grundlage der Ausduennung. */
+    @Volatile private var letzterMikrofonWertMs: Long = 0
+
     @Volatile private var aktiveSessionId: Long? = null
 
-    /** Ob die laufende Session ein reiner Mikrofonlauf ist (kein Messgeraet, keine Messwerte). */
+    /** Ob die laufende Session ein reiner Mikrofonlauf ist - kein Messgeraet, Messwerte nur ueber
+     * [mikrofonPegel]. */
     @Volatile private var aktiveSessionIstMikrofon = false
     private var warJemalsVerbunden = false
     private var zuletztImAusfall = false
@@ -141,12 +153,14 @@ class MeasurementRecorder(
      * `null` - beim Mikrofon ist nichts davon bekannt.
      *
      * Es wird KEIN Frame-Collector gestartet: Das Mikrofon liefert keine [MeterFrame]s. Die
-     * Session bleibt deshalb ohne [com.example.lrmprotokoll.data.MeasurementEntity]-Zeilen; jede
-     * auswertende Stelle muss das aushalten.
+     * Messwerte kommen stattdessen ueber [mikrofonPegel] von aussen herein; gestartet wird hier
+     * nur der periodische Flush, damit sie waehrend der laufenden Messung sichtbar werden und
+     * nicht erst beim Sitzungsende im Puffer stehen.
      */
     fun starteMikrofonMessung() {
         if (job?.isActive == true || aktiveSessionId != null) return
-        scope.launch {
+        letzterMikrofonWertMs = 0
+        mikrofonJob = scope.launch {
             schliesseVerwaisteSessions()
             aktiveSessionId = sessionDao.insert(
                 SessionEntity(
@@ -159,6 +173,60 @@ class MeasurementRecorder(
                 )
             )
             aktiveSessionIstMikrofon = true
+            while (isActive) {
+                delay(flushInterval.toMillis())
+                pufferMutex.withLock { flushOhneSperre() }
+            }
+        }
+    }
+
+    /**
+     * Nimmt einen Mikrofon-Pegel in die laufende Mikrofon-Session auf.
+     *
+     * Ohne diesen Weg hatte eine Mikrofon-Session ueberhaupt keine
+     * [com.example.lrmprotokoll.data.MeasurementEntity]-Zeilen. Da sie als juengste Session jede
+     * frueher aufgezeichnete verdeckt, blieb der Pegelverlauf auf der Startseite bei einem
+     * Mikrofonlauf dauerhaft auf dem Platzhalter "Erfasse Live-Messdaten" stehen - die Messung
+     * lief, war aber nirgends zu sehen.
+     *
+     * [MeasurementEntity.weighting], `timeWeighting` und `range` bleiben `null`: Das Mikrofon ist
+     * unkalibriert (README "Bekannte Einschraenkungen"), es gibt keine bestaetigte Bewertung, und
+     * ein eingetragenes "A" waere hier eine gespeicherte Tatsachenbehauptung. Der Unterschied zur
+     * Messgeraet-Messung bleibt damit in den Daten selbst sichtbar - zusaetzlich zu
+     * [MIKROFON_GERAETENAME] in der Session.
+     *
+     * [MeasurementEntity.flags] bleibt 0: HOLD_MAX/HOLD_MIN/LARGE_JUMP sind Geraeteeigenschaften
+     * des PCE-323, das Mikrofon kennt nichts davon.
+     *
+     * Der Aufrufer liefert Werte in der Kadenz des Audiopuffers - je nach Puffergroesse etliche
+     * pro Sekunde. Gespeichert wird hoechstens einer je [mikrofonIntervall], sonst waere die
+     * Messreihe eines Nachtlaufs um ein Vielfaches groesser als die eines Messgeraetelaufs, ohne
+     * einen einzigen zusaetzlichen Erkenntnisgewinn.
+     *
+     * No-Op, solange keine Mikrofon-Session laeuft - insbesondere waehrend einer
+     * Messgeraet-Session: Deren kalibrierte Messreihe darf keine unkalibrierten Werte enthalten.
+     */
+    fun mikrofonPegel(dbWert: Double) {
+        if (!aktiveSessionIstMikrofon) return
+        val sessionId = aktiveSessionId ?: return
+        val jetzt = now.now().toEpochMilli()
+        if (jetzt - letzterMikrofonWertMs < mikrofonIntervall.toMillis()) return
+        letzterMikrofonWertMs = jetzt
+
+        val eintrag = MeasurementEntity(
+            sessionId = sessionId,
+            timestamp = jetzt,
+            levelDb = dbWert,
+            weighting = null,
+            flags = 0,
+            timeWeighting = null,
+            range = null,
+        )
+        scope.launch {
+            pufferMutex.withLock {
+                puffer += eintrag
+                if (puffer.size >= flushBatchSize) flushOhneSperre()
+            }
         }
     }
 
@@ -168,6 +236,11 @@ class MeasurementRecorder(
         val id = aktiveSessionId ?: return
         aktiveSessionIstMikrofon = false
         aktiveSessionId = null
+        // Erst den Puffer wegschreiben, dann den Flush-Job beenden - sonst gehen die letzten
+        // Sekunden der Mikrofonmessung verloren.
+        pufferMutex.withLock { flushOhneSperre() }
+        mikrofonJob?.cancel()
+        mikrofonJob = null
         runCatching {
             sessionDao.byId(id)?.let { sessionDao.update(it.copy(endedAt = now.now().toEpochMilli())) }
         }.onFailure { Log.w(TAG, "Mikrofon-Session $id konnte nicht geschlossen werden", it) }
@@ -225,10 +298,13 @@ class MeasurementRecorder(
         aktiveSessionIstMikrofon = false
         if (sessionId == null) return
 
-        // Eine Mikrofon-Session hat keinen Puffer und keinen Frame-Kontext - nur den
-        // Endzeitpunkt.
+        // Eine Mikrofon-Session hat keinen Frame-Kontext (weighting/timeWeighting/range bleiben
+        // null) - aber sehr wohl einen Puffer, seit [mikrofonPegel] existiert.
         if (warMikrofon) {
+            mikrofonJob?.cancel()
+            mikrofonJob = null
             scope.launch {
+                pufferMutex.withLock { flushOhneSperre() }
                 runCatching {
                     sessionDao.byId(sessionId)?.let {
                         sessionDao.update(it.copy(endedAt = now.now().toEpochMilli()))
