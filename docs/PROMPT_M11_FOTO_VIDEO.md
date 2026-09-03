@@ -16,11 +16,13 @@ Risiko haben:**
 - **Etappe A — Fotodokumentation.** Vollständig spezifizierbar, hardwarearm, baut auf
   vorhandener Infrastruktur (Room-Migration, PDF-Bericht, Drive-Upload) auf. **Kann sofort
   gebaut werden.**
-- **Etappe B — Videobeweis.** Hat zwei harte Vorbedingungen, die *vor* der Umsetzung geklärt
-  werden müssen: ein möglicher Mikrofon-Konflikt mit dem laufenden Foreground Service (nur auf
-  einem echten Gerät messbar) und ein Drive-Upload-Pfad, der große Dateien überhaupt verträgt —
-  der heutige verträgt sie nicht. **Etappe B startet erst, wenn Abschnitt B.1 abgearbeitet und
-  Entscheidung E4 gefallen ist.**
+- **Etappe B — Videobeweis.** Hatte ursprünglich zwei harte Vorbedingungen: einen möglichen
+  Mikrofon-Konflikt mit dem laufenden Foreground Service (nur auf einem echten Gerät messbar)
+  und einen Drive-Upload-Pfad, der große Dateien überhaupt verträgt — der heutige verträgt sie
+  nicht. **Die erste ist mit Entscheidung E9 weggefallen:** Das Video wird ohne Tonspur
+  aufgenommen und der Ton nachträglich einmultiplext (B.2a), es gibt also keinen zweiten
+  Mikrofon-Zugriff und nichts zu messen. **Es bleibt der Upload-Pfad (B.6) — der ist echte
+  Arbeit und keine Formsache.** Etappe B kann damit begonnen werden.
 
 Etappe A und Etappe B sind **zwei getrennte PRs**, nicht einer.
 
@@ -49,8 +51,8 @@ Etappe A und Etappe B sind **zwei getrennte PRs**, nicht einer.
 4. **Offene Entscheidungen (Abschnitt 4) entscheidest du nicht selbst.** Du fragst den Owner.
    Wo dieses Dokument eine Empfehlung ausspricht, ist das eine Empfehlung, kein Beschluss.
    **Ausnahme: Abschnitt 4a.** Dort stehen die Punkte, die der Owner bereits entschieden hat
-   (E1 und E4) — die sind Vorgabe. **Lies Abschnitt 4a, bevor du mit Etappe A oder B
-   anfängst**, er ändert an beiden Etappen etwas Wesentliches.
+   (E1, E4 und E9) — die sind Vorgabe. **Lies Abschnitt 4a, bevor du mit Etappe A oder B
+   anfängst**, er ändert an beiden Etappen etwas Wesentliches; E9 baut Etappe B sogar um.
 
 ---
 
@@ -93,13 +95,13 @@ tragbar. **Für ein Video ist es das nicht** — ein 3-minütiges 1080p-Video is
 Für Fotos (herunterskaliertes JPEG, Zielgröße < 1 MB) ist der bestehende Pfad dagegen
 **unverändert benutzbar** — Etappe A braucht hier nichts anzufassen.
 
-### F-4 · Der Mikrofon-Konflikt ist das zentrale Risiko von Etappe B
+### F-4 · Der Mikrofon-Konflikt — mit E9 umgangen, nicht mehr das zentrale Risiko
 
 `AudioRecordingService` läuft als Foreground Service mit
 `android:foregroundServiceType="microphone|connectedDevice"` und hält über `AudioRecord` das
 Mikrofon. Eine Videoaufnahme **mit Tonspur** greift auf dieselbe Ressource zu. Was Android in
 diesem Fall tut, hängt von Version, Hersteller und Audio-Policy ab und ist **nicht aus dem Code
-ableitbar — es muss gemessen werden.** Siehe B.1.
+ableitbar.**
 
 Wichtige Differenzierung, die die Sache entschärfen kann: Bei
 `settings.audioTriggerQuelle == "PCE_323"` (bzw. `"AUTO"` mit verbundenem Messgerät) kommt der
@@ -107,6 +109,13 @@ maßgebliche, kalibrierte Pegel vom PCE-323 über BLE, **nicht** vom Mikrofon
 (`messreihe/MeterTriggerSource.kt:52`). In dieser Konstellation wiegt ein Mikrofon-Verlust
 deutlich weniger als bei `"MIKROFON"`. Das ist ein Argument für eine differenzierte Behandlung,
 kein Freibrief — auch im Messgerät-Betrieb schneidet der Service weiter Audio mit.
+
+> **Nachtrag (Owner-Entscheidung E9, Abschnitt 4a): Dieser Konflikt wird umgangen, nicht
+> gelöst.** Die Videoaufnahme greift gar nicht mehr aufs Mikrofon zu — CameraX nimmt **ohne
+> Tonspur** auf, der Ton kommt aus dem ohnehin laufenden `AudioRecord` und wird nach dem Stopp
+> einmultiplext (B.2a). Damit gibt es keine zweite Mikrofon-Nutzung, keine Messlücke und
+> nichts zu messen. F-4 bleibt hier als Beschreibung der Ausgangslage stehen, ist aber für die
+> Umsetzung nicht mehr das zentrale Risiko.
 
 ### F-5 · Es gibt zwei Kandidaten für „Starten eines Messvorgangs" — welcher gemeint ist, ist offen
 
@@ -524,48 +533,58 @@ Reine JVM-/Robolectric-Tests, handgeschriebene Fakes (F-10):
 
 ## 3 · Etappe B — Videobeweis
 
-> **Etappe B beginnt nicht mit Code.** Sie beginnt mit B.1. Wer B.1 überspringt, baut mit hoher
-> Wahrscheinlichkeit eine Funktion, die die Kernaufgabe der App — die lückenlose
-> Pegelaufzeichnung — im Betrieb sabotiert.
+> **Der Aufbau dieser Etappe hat sich mit Owner-Entscheidung E9 geändert.** Früher begann sie
+> mit einer Gerätemessung (B.1), weil unklar war, ob Videoaufnahme und Pegelmessung sich das
+> Mikrofon teilen können. Diese Frage stellt sich nicht mehr: Das Video wird **ohne Tonspur**
+> aufgenommen und der Ton nachträglich aus dem laufenden `AudioRecord` einmultiplext (B.2a).
+> **B.1 entfällt damit als Vorbedingung** — lies trotzdem B.1, dort steht, was statt der
+> Messung nachzuweisen ist.
+>
+> Was unverändert gilt: Die lückenlose Pegelaufzeichnung ist die Kernaufgabe. Jede Zeile dieser
+> Etappe hat sich daran zu messen.
 
 ### B.0 Ziel
 
 Während einer laufenden Aufzeichnung startet der Nutzer per Knopfdruck eine Videoaufnahme als
 Beweismittel. Das Video wird der Session zugeordnet und nach Drive hochgeladen.
 
-**E4 ist entschieden: mit Tonspur** (Abschnitt 4a). V1 entfällt, die Kamera-Frage aus B.2 ist
-damit zugunsten von CameraX beantwortet, und B.1 entscheidet nur noch zwischen V2 und V3.
+**E4 ist entschieden: mit Tonspur** (Abschnitt 4a). **E9 legt fest, wie der Ton dorthin
+kommt: V4** — Video ohne Tonspur aufnehmen, den Ton aus dem laufenden `AudioRecord` mitschreiben
+und nach dem Stopp einmultiplexen. V1, V2 und V3 entfallen alle; die Kamera-Frage aus B.2 ist
+zugunsten von CameraX beantwortet.
 
-### B.1 Vorbedingung — Gerätemessung des Mikrofon-Konflikts
+### B.1 (entfällt) — was statt der Gerätemessung nachzuweisen ist
 
-`AudioRecordingService` hält das Mikrofon (F-4). Was passiert, wenn parallel eine Videoaufnahme
-mit Tonspur startet, ist von der Audio-Policy des Geräts abhängig und **nicht aus dem Code
-ableitbar**. Mögliche Ausgänge, alle real: Video bekommt Stille · Mikrofon-Monitoring wird still
-stumm (Pegel fällt auf ~0, ohne Fehler) · `AudioRecord` liefert Fehler · beides funktioniert.
+**Diese Messung ist mit E9 hinfällig.** Sie sollte klären, ob eine Videoaufnahme *mit* Tonspur
+neben dem laufenden `AudioRecord` koexistieren kann. Da das Video keine Tonspur mehr aufnimmt,
+öffnet die Kamera das Mikrofon nicht, und es gibt keinen Konflikt zu messen.
 
-**Bau eine minimale Messung — noch keine Funktion:**
+Die Varianten V1–V3 sind damit alle vom Tisch. Sie bleiben nur hier stehen, damit
+nachvollziehbar ist, was abgewogen wurde:
 
-1. Einen Debug-Knopf (oder ein instrumentierter Test) startet bei laufendem
-   `AudioRecordingService` eine 20-Sekunden-Videoaufnahme mit Tonspur.
-2. Protokolliere über den `DiagnosticsReporter` mit: den Mikrofonpegel je Sekunde vor, während
-   und nach der Videoaufnahme; ob `AudioRecord.getRecordingState()` sich ändert; ob ein
-   `AudioRecord`-Fehler auftritt; ob die Videodatei eine hörbare Tonspur enthält.
-3. Wiederhole für **beide** Konstellationen: `audioTriggerQuelle = "MIKROFON"` und
-   `= "PCE_323"` mit verbundenem Messgerät.
-4. **Schreib das Ergebnis in den PR und in `docs/CHECKLISTE_GERAETETEST.md`.** Mit Gerätemodell
-   und Android-Version — das Ergebnis ist geräteabhängig und in einem Jahr sonst wertlos.
-
-**Erst danach** entscheidet sich (mit dem Owner, **E4**), welche Variante gebaut wird:
-
-| Variante | Beschreibung | Kosten |
+| Variante | Beschreibung | Status |
 |---|---|---|
-| ~~**V1**~~ | ~~Video **ohne** Tonspur~~ | **Vom Owner verworfen (E4).** Nur noch hier aufgeführt, damit nachvollziehbar bleibt, was abgewogen wurde. |
-| **V2** | Mikrofon-Monitoring für die Dauer der Videoaufnahme pausieren, Video **mit** Ton | Ehrlich und einfach zu erklären. Preis: eine bewusste, sichtbare **Lücke in der Messreihe** — die muss dann auch als Lücke protokolliert werden, wie die Ausfallbänder in `ConnectionEventEntity`. Bei verbundenem PCE-323 entsteht **keine** Pegel-Lücke (F-4), nur eine Lücke in der WAV-Erfassung. |
-| **V3** | Beides parallel, weil B.1 gezeigt hat, dass es auf den Zielgeräten funktioniert | Das Beste — **nur wenn gemessen.** Niemals als Annahme. |
+| ~~**V1**~~ | Video ohne Tonspur, fertig | Verworfen (E4): Ein Beweisvideo ohne Ton ist deutlich weniger wert. |
+| ~~**V2**~~ | Mikrofon-Monitoring für die Dauer der Videoaufnahme pausieren, Video mit Ton | Verworfen (E9): kauft den Ton mit einer Lücke in der Messreihe — ausgerechnet im lautesten Moment. |
+| ~~**V3**~~ | Beides parallel, falls die Geräte es hergeben | Verworfen (E9): wäre der Idealfall gewesen, hängt aber an Audio-Policy, Hersteller und Android-Version. V4 braucht die Zusage nicht. |
+| **V4** | **Video ohne Tonspur + parallel mitgeschriebener PCM-Ton + Muxen nach dem Stopp** | **Zu bauen.** Kein zweiter Mikrofon-Zugriff, keine Messlücke, kein Geräterisiko. |
 
-**Der Owner hat entschieden: mit Ton** (Abschnitt 4a). Es bleiben V2 und V3, und B.1 entscheidet
-zwischen ihnen: V3, wenn der Parallelbetrieb auf mindestens zwei Geräten nachweislich
-konfliktfrei läuft — sonst V2 mit den drei Pflichtauflagen aus Abschnitt 4a.
+**Was du stattdessen nachweisen musst — und zwar im PR, nicht als Annahme:**
+
+1. **Die Kamera öffnet das Mikrofon nicht.** In CameraX ist Audio opt-in: Nur ein Aufruf von
+   `PendingRecording.withAudioEnabled()` schaltet die Tonspur ein. Ohne diesen Aufruf verlangt
+   die Aufnahme nicht einmal `RECORD_AUDIO`. **Lass den Aufruf weg und schreibe an die Stelle
+   einen Kommentar, warum** — ein späterer Beitrag, der ihn „vergessen" wieder ergänzt, holt
+   den Mikrofon-Konflikt zurück.
+2. **Die Pegelmessung läuft während der Videoaufnahme durch.** Nachweisbar ohne Kamera: ein
+   Test, der belegt, dass der Aufnahme-Loop in `AudioRecordingService` beim Start und Stopp
+   einer Videoaufnahme weder angehalten noch neu gestartet wird. Zusätzlich am Gerät: die
+   Messreihe der Session darf im Videozeitraum keine Lücke haben.
+3. **Ton und Bild passen zusammen** (B.2a, Punkt „Synchronisation").
+
+Ein Gerätetest bleibt trotzdem sinnvoll — aber als normale Abnahme am Ende, nicht als
+Vorbedingung am Anfang. Trag das Ergebnis mit Gerätemodell und Android-Version in
+`docs/CHECKLISTE_GERAETETEST.md` ein.
 
 ### B.2 Kamera-Anbindung
 
@@ -584,11 +603,104 @@ Hier ist die Abwägung anders als bei den Fotos.
   Vorschau-Screen und — auf Android 14+ — ein Foreground Service vom Typ `camera`, wenn die
   Aufnahme weiterlaufen soll, während die App im Hintergrund ist.
 
-**Entschieden: CameraX.** Mit der Owner-Entscheidung „mit Ton" (E4) ist die System-Kamera keine
-tragfähige Option mehr — ohne Kontrolle über Tonspur und Maximaldauer wäre weder die
-Speicherobergrenze aus B.5 noch das Pausier-/Wiederanlauf-Verhalten aus B.8 zuverlässig
-umsetzbar. Das ist ein bewusster Bruch mit dem minimalen Abhängigkeitsstil des Projekts —
-**benenne ihn im PR ausdrücklich**, statt ihn nebenbei einzuführen.
+**Entschieden: CameraX.** Mit den Owner-Entscheidungen „mit Ton" (E4) und V4 (E9) ist die
+System-Kamera keine tragfähige Option mehr: Sie nimmt immer mit Ton auf — genau das, was V4
+verhindern muss —, und lässt weder Maximaldauer noch Auflösung zuverlässig steuern. Das ist ein
+bewusster Bruch mit dem minimalen Abhängigkeitsstil des Projekts — **benenne ihn im PR
+ausdrücklich**, statt ihn nebenbei einzuführen.
+
+**Konkret für V4:**
+
+```kotlin
+// KEIN withAudioEnabled(): Die Kamera darf das Mikrofon nicht anfassen. Der Ton kommt aus
+// dem laufenden AudioRecord des AudioRecordingService und wird nach dem Stopp einmultiplext
+// (B.2a). Wer diesen Aufruf ergaenzt, holt den Mikrofon-Konflikt aus F-4 zurueck und reisst
+// waehrend der Videoaufnahme ein Loch in die Pegelmessung.
+val aufnahme = videoCapture.output
+    .prepareRecording(context, FileOutputOptions.Builder(stummeDatei).build())
+    .start(ContextCompat.getMainExecutor(context)) { ereignis -> /* ... */ }
+```
+
+Ohne `withAudioEnabled()` verlangt die Aufnahme nicht einmal `RECORD_AUDIO` — die App hat das
+Recht zwar ohnehin, aber die Aufnahme benutzt es nicht.
+
+### B.2a Tonspur nachträglich einmuxen — der Kern von V4
+
+Das ist der Abschnitt, der V4 von V1 unterscheidet, und der einzige wirklich neue Baustein
+dieser Etappe. Drei Schritte, alle offline nach dem Stopp der Aufnahme.
+
+#### Schritt 1 · Ton mitschreiben, während das Video läuft
+
+**Wichtig, sonst baust du auf einer falschen Annahme:** Es gibt **keine durchlaufende
+WAV-Aufzeichnung**, aus der man den Videozeitraum ausschneiden könnte.
+`AudioRecordingService.activeWavRecorder` ist nur während einer *Ereignisaufnahme* gesetzt
+(`audio/AudioRecordingService.kt:911` und `starteWavAufnahme`), also für
+`settings.recordDurationSeconds` je Trigger. Ein Video von drei Minuten würde davon höchstens
+Bruchstücke abbekommen.
+
+Der Ton für das Video braucht deshalb eine **eigene Senke** in derselben Schleife:
+
+- Ein zweiter, paralleler Schreiber neben `activeWavRecorder`, aktiv genau für die Dauer der
+  Videoaufnahme. `ActiveWavRecorder` ist die passende Vorlage — dieselbe `writeChunk`-Mechanik,
+  dieselben `writeWavHeader`/`updateWavHeader`-Helfer.
+- Er hängt sich an dieselbe Stelle wie der bestehende Schreiber
+  (`activeWavRecorder?.let { rec -> rec.writeChunk(pcmBytes, pcmLen) }`) — **eine Zeile daneben,
+  nicht statt dessen.** Ereignis-WAVs müssen unverändert weiterlaufen.
+- Format ist damit automatisch das der laufenden Messung: 16 Bit PCM, Mono,
+  `audioRecord.sampleRate`. **Lies die Rate vom `AudioRecord`, nicht aus den Einstellungen** —
+  die ausgehandelte Rate kann abweichen (`aktiveAbtastrate`, siehe `waehleAufnahmerate()`).
+  Eine falsch angenommene Rate ergibt einen Ton in falscher Tonhöhe und falscher Länge.
+- Merke dir den Wandzeituhr-Zeitstempel des ersten geschriebenen Blocks. Den brauchst du in
+  Schritt 3.
+
+#### Schritt 2 · PCM nach AAC encodieren
+
+`MediaMuxer` nimmt **keine** Rohdaten — es schreibt nur bereits encodierte Samples. Der PCM-Puffer
+muss also durch einen `MediaCodec`-AAC-Encoder:
+
+- `MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, abtastrate, 1)`, Profil
+  `AACObjectLC`, Bitrate 128 kbit/s (für Sprache und Baulärm mehr als ausreichend).
+- Blockweise füttern, nie die ganze Datei in den Speicher — dieselbe Disziplin wie beim
+  resumable Upload in B.6. Drei Minuten Mono-PCM bei 44,1 kHz sind ~16 MB; das ginge noch, aber
+  bei einer erhöhten Maximaldauer nicht mehr.
+- Presentation-Timestamps fortlaufend aus der Sample-Position berechnen
+  (`positionInSamples * 1_000_000L / abtastrate`), nicht aus `System.nanoTime()`. Sonst
+  wandert der Ton mit jeder Verzögerung im Encoder.
+
+#### Schritt 3 · Videospur und Tonspur zu einer MP4 zusammenführen
+
+- `MediaExtractor` auf die stumme MP4, die Videospur auswählen, Sample für Sample mit
+  `readSampleData` lesen.
+- `MediaMuxer` auf die Zieldatei, zwei Spuren anlegen (Videoformat unverändert aus dem
+  Extractor übernehmen, Audioformat aus dem Encoder-Output), Samples mit
+  `writeSampleData` schreiben.
+- **Synchronisation:** `offsetUs = (videoStartMs − tonStartMs) * 1000`. Ist der Offset positiv,
+  begann der Ton früher — dann die ersten `offsetUs` des Tons überspringen. Ist er negativ,
+  begann der Ton später — dann vorne Stille (Null-Samples) einfügen, statt den Ton
+  vorzuziehen. **Rate nicht.** Ein Beweisvideo, in dem der Knall eine Sekunde neben dem Bild
+  liegt, ist als Beweis wertlos.
+- Nach Erfolg die stumme Zwischendatei und die PCM-Datei löschen. Bei Fehler **behalte beide**
+  und schreib einen Diagnoseeintrag: Ein stummes Video plus separate Tondatei ist immer noch
+  ein Beweismittel, ein gelöschtes Zwischenergebnis ist keines.
+
+#### Wo das läuft
+
+Nicht auf dem Main-Thread und nicht im UI-Lebenszyklus. Ein `CoroutineWorker` (WorkManager ist
+schon Abhängigkeit) ist der passende Ort: Er überlebt das Verlassen des Screens, kann bei
+Prozess-Tod erneut laufen, und der bestehende Upload kann als Folgeschritt daran hängen. Solange
+das Muxen nicht durch ist, gilt das Video als **nicht hochladbar** — sonst landet die stumme
+Fassung in Drive.
+
+#### Ehrliche Grenzen — schreib sie in den PR
+
+- **Uhren-Drift.** Kamera- und Audio-Pfad takten unabhängig. Über 30–180 Sekunden ist die
+  Abweichung praktisch nicht wahrnehmbar; über zehn Minuten kann sie es werden. Das ist ein
+  weiteres Argument für die harte Maximaldauer aus B.5 — sie ist hier nicht nur eine
+  Speichergrenze.
+- **Kein Ton, wenn das Mikrofon nicht läuft.** Ist die Überwachung ohne Mikrofon aktiv (reiner
+  PCE-323-Betrieb ohne Audioaufnahme), gibt es nichts zu muxen. Dann bleibt das Video stumm und
+  `hatTonspur = false` — mit sichtbarem Hinweis **vor** dem Start, nicht als Überraschung
+  hinterher. Genau dafür existiert das Feld (B.4).
 
 ### B.3 Manifest und Foreground Service
 
@@ -630,6 +742,9 @@ data class BeweisVideoEntity(
     val hatTonspur: Boolean,
     val groesseBytes: Long,
     val notiz: String?,
+    /** Solange false, ist nur die stumme Fassung fertig - siehe B.2a. Ein Video ohne
+     * abgeschlossenen Mux-Lauf wird NICHT hochgeladen. */
+    val tonGemuxt: Boolean = false,
     val driveFileId: String? = null,
     /** Fortschritt einer unterbrochenen resumable-Übertragung, siehe B.6. */
     val uploadSessionUri: String? = null,
@@ -639,7 +754,12 @@ data class BeweisVideoEntity(
 
 `hatTonspur` ist kein Beiwerk: Wenn das Video später als Beleg dient, muss aus dem Datensatz
 hervorgehen, ob Stille im Video „es war leise" oder „es wurde bewusst ohne Ton aufgezeichnet"
-bedeutet. Das ist der Unterschied zwischen einem Beweis und einem Missverständnis.
+bedeutet. Das ist der Unterschied zwischen einem Beweis und einem Missverständnis. Mit V4 kommt
+der zweite Fall real vor — nämlich immer dann, wenn das Mikrofon nicht mitlief (B.2a).
+
+`tonGemuxt` trennt „stumme Zwischenfassung" von „fertig": Zwischen dem Stopp der Aufnahme und
+dem Ende des Mux-Laufs existiert die Datei bereits, ist aber noch nicht das, was hochgeladen
+oder abgespielt werden soll.
 
 Migration und Migrationstest wie in A.1 — **auf der zum Zeitpunkt der Umsetzung aktuellen
 DB-Version aufsetzen** (F-9), nicht auf der in Etappe A verwendeten.
@@ -734,11 +854,13 @@ zu einem Neustart, nicht zu einer Endlosschleife.
   Aufzeichnung** — der Owner-Auftrag lautet „während Aufzeichnung".
 - Vorschau-Screen mit Aufnahmeknopf, laufender Dauer, Restdauer bis zum Maximum und
   Stopp-Knopf.
-- Bei V2 **muss** vor dem Start eine Bestätigung kommen: „Die Pegelmessung pausiert für die
-  Dauer der Videoaufnahme." Das ist eine Lücke im Beweismittel — sie darf nicht stillschweigend
-  entstehen; zusätzlich wird sie protokolliert (Abschnitt 4a, Punkt 2).
-- Bei V3 (Parallelbetrieb) entfällt diese Bestätigung — dann aber im PR belegen, dass die
-  Messung während der Videoaufnahme nachweislich weiterlief, statt es anzunehmen.
+- **Keine Pausier-Warnung** — mit V4 pausiert nichts. Beleg im PR, dass die Messung während der
+  Videoaufnahme durchläuft (B.1, Punkt 2), statt es anzunehmen.
+- **Läuft das Mikrofon nicht**, muss der Hinweis „Dieses Video wird ohne Ton aufgezeichnet"
+  **vor** dem Start kommen (B.2a). Nach der Aufnahme ist es zu spät.
+- Nach dem Stopp einen sichtbaren Zustand „Ton wird hinzugefügt…", bis der Mux-Lauf durch ist
+  (`tonGemuxt`). Ein Video, das kurz stumm ist und dann plötzlich Ton hat, wirkt sonst wie ein
+  Fehler.
 - Videos im Session-Detail auflisten, Abspielen über einen `ACTION_VIEW`-Intent mit
   FileProvider-Uri (kein eingebauter Player — dafür gibt es keinen Grund und keine
   Abhängigkeit).
@@ -748,19 +870,34 @@ zu einem Neustart, nicht zu einer Endlosschleife.
 Dieselbe Garantie wie in A.9, mit einem Zusatz, der hier schwerer wiegt: **Ein Kamerafehler darf
 den `AudioRecordingService` nicht mitreißen.** Wenn die Kamera nicht öffnet, die Aufnahme
 abbricht oder der Speicher volläuft, endet das in einer Meldung und einem Diagnoseeintrag — die
-Pegelmessung läuft weiter. Bei V2 heißt das ausdrücklich: **Das Mikrofon-Monitoring muss auch
-dann wieder anlaufen, wenn die Videoaufnahme mit einem Fehler endet** — nicht nur im
-Erfolgsfall. Bau den Wiederanlauf in ein `finally`, nicht hinter den Erfolgspfad.
+Pegelmessung läuft weiter. Mit V4 gibt es nichts wieder anzuwerfen — die Messung wurde nie
+angehalten. Genau deshalb gilt hier die schärfere Fassung: **Der Videopfad darf den
+Aufnahme-Loop unter keinen Umständen anhalten, auch nicht kurz, auch nicht im Fehlerfall.**
+Die zusätzliche PCM-Senke aus B.2a wird in einem `finally` geschlossen; ein Fehler beim
+Schließen darf die Schleife nicht verlassen.
 
-Breadcrumbs (Kategorie `"Videobeweis"`): Start (mit Auflösung, Tonspur ja/nein, freier
-Speicher), Stopp (mit Dauer und Dateigröße), Fehler, Uploadfortschritt je Block, Upload-Ergebnis.
+Der Mux-Lauf (B.2a) ist ebenfalls fehlertolerant: Schlägt er fehl, bleiben stumme MP4 **und**
+PCM-Datei erhalten, `tonGemuxt` bleibt `false`, es gibt einen Diagnoseeintrag und eine Meldung.
+Kein automatischer Upload der stummen Fassung.
+
+Breadcrumbs (Kategorie `"Videobeweis"`): Start (mit Auflösung, Mikrofon läuft ja/nein, freier
+Speicher), Stopp (mit Dauer und Dateigröße), Mux-Start/-Ende (mit Offset in ms und Ergebnis),
+Fehler, Uploadfortschritt je Block, Upload-Ergebnis.
 
 ### B.9 Akzeptanzkriterien Etappe B
 
-- [ ] **B.1 ist durchgeführt und das Ergebnis dokumentiert** — mit Gerät, Android-Version und
-      gemessenen Werten, nicht mit Vermutungen.
-- [ ] Das Video hat eine Tonspur (E4, entschieden); die gebaute Variante ist V2 oder V3, je
-      nach B.1-Ergebnis, und die Wahl ist mit den gemessenen Werten begründet.
+- [ ] Die Videoaufnahme ruft **nirgends** `withAudioEnabled()` auf, und an der Stelle steht ein
+      Kommentar, warum (B.2).
+- [ ] Das fertige Video hat eine Tonspur (E4), erzeugt über den Mux-Lauf aus B.2a — nicht über
+      die Kamera.
+- [ ] Der Aufnahme-Loop in `AudioRecordingService` wird durch Start und Stopp einer
+      Videoaufnahme weder angehalten noch neu gestartet; ein Test belegt das.
+- [ ] Die Messreihe der Session hat im Videozeitraum **keine Lücke** (am Gerät geprüft).
+- [ ] Ton und Bild sind synchron; der berechnete Offset steht im Diagnoselog.
+- [ ] Läuft das Mikrofon nicht, wird **vor** dem Start gewarnt, das Video bleibt stumm und
+      `hatTonspur = false`.
+- [ ] Ein fehlgeschlagener Mux-Lauf löscht nichts, setzt `tonGemuxt` nicht und löst keinen
+      Upload aus.
 - [ ] `assembleDebug` und `test` grün, Ausgabe im PR.
 - [ ] Migration + Migrationstest vorhanden.
 - [ ] Der resumable Upload ist gegen `MockWebServer` getestet, inklusive Wiederaufnahme nach
@@ -768,9 +905,8 @@ Speicher), Stopp (mit Dauer und Dateigröße), Fehler, Uploadfortschritt je Bloc
 - [ ] Kein Video-Upload ohne `videoDriveUpload = true`; kein Upload außerhalb der eingestellten
       WLAN-Bedingung.
 - [ ] Maximaldauer und Speicherprüfung greifen; bei zu wenig Speicher startet keine Aufnahme.
-- [ ] Bei V2: Die Messlücke ist im UI angekündigt **und** in der Datenbank protokolliert.
-- [ ] Ein Kamerafehler beendet die laufende Pegelaufzeichnung unter keinen Umständen —
-      Wiederanlauf im `finally`, nicht im Erfolgspfad.
+- [ ] Ein Kamerafehler beendet die laufende Pegelaufzeichnung unter keinen Umständen; die
+      zusätzliche PCM-Senke wird im `finally` geschlossen.
 - [ ] Neue Abhängigkeiten (CameraX) sind im PR ausdrücklich benannt und begründet.
 - [ ] Im PR steht, was ohne Gerät nicht verifiziert werden konnte.
 
@@ -786,7 +922,8 @@ nicht — frag den Owner."
 | ~~**E1**~~ | Woran hängt die Fotodokumentation: nur an der Messgerät-Session oder auch am reinen Mikrofonlauf? | **ENTSCHIEDEN (Owner): auch mit Mikrofonlauf.** Siehe Abschnitt 4a — das zieht eine Vorarbeit nach sich. |
 | **E2** | Soll `PFLICHT` die Messung tatsächlich **blockieren**, bis fotografiert wurde? | Nein. Eine Nebenfunktion darf die Kernfunktion nicht verhindern. `PFLICHT` = Dialog erscheint + Auslassung wird protokolliert. |
 | **E3** | Foto über die **System-Kamera** (`ACTION_IMAGE_CAPTURE`, keine Abhängigkeit) oder **In-App-Kamera** (CameraX, Zeitstempel-Overlay möglich)? | System-Kamera. Der Zeitstempel steht bereits in der Datenbank und im Bericht; ein eingebranntes Overlay ist nicht mehr wert und kostet erheblich mehr. |
-| ~~**E4**~~ | Video **mit oder ohne Tonspur** — V1, V2 oder V3? | **ENTSCHIEDEN (Owner): mit Ton.** V1 entfällt. B.1 entscheidet nur noch V2 gegen V3 — siehe Abschnitt 4a. |
+| ~~**E4**~~ | Video **mit oder ohne Tonspur** — V1, V2 oder V3? | **ENTSCHIEDEN (Owner): mit Ton.** V1 entfällt — siehe Abschnitt 4a. |
+| ~~**E9**~~ | **Wie** kommt der Ton ins Video, ohne die Messung zu unterbrechen? | **ENTSCHIEDEN (Owner): V4** — Video ohne Tonspur, Ton aus dem laufenden `AudioRecord`, Muxen nach dem Stopp. V2 und V3 entfallen, B.1 entfällt — siehe Abschnitt 4a. |
 | **E5** | Drive-Ablage: alles weiter **flach** in einen Ordner (F-7) oder **Unterordner** `fotos/` und `videos/`? | Unterordner. Bei mehreren Fotos je Messung wird der flache Ordner sonst schnell unbrauchbar. Kostet nur einen zusätzlichen `ordnerAnlegen`-Aufruf plus eine gecachte Ordner-ID. |
 | **E6** | **GPS-Koordinaten** im Foto-EXIF behalten? | Nein, entfernen. Sichtbar in den Einstellungen anbieten, falls der Owner sie im Beweismittel haben will — aber nie als stiller Default. |
 | **E7** | Sollen Fotos auch im **Zeitraumbericht** (`PeriodenBerichtExport`) erscheinen? | In Etappe A nicht. Über viele Sessions hinweg wird das Dokument unbrauchbar groß. Später als eigene Anlage denkbar. |
@@ -796,7 +933,7 @@ nicht — frag den Owner."
 
 ## 4a · Getroffene Entscheidungen des Owners — verbindlich
 
-Zwei der acht Punkte aus Abschnitt 4 sind entschieden. **Sie sind keine Empfehlung mehr,
+Drei der neun Punkte aus Abschnitt 4 sind entschieden. **Sie sind keine Empfehlung mehr,
 sondern Vorgabe.** Beide ziehen Arbeit nach sich, die sonst nicht angefallen wäre; das steht
 hier, damit niemand sie beim Schätzen übersieht.
 
@@ -849,38 +986,59 @@ Messvorgang hat dann eine Session.
 
 ### E4 (entschieden) · Videobeweis wird **mit Tonspur** aufgenommen
 
-**V1 (ohne Ton) entfällt.** Damit ist auch die Kamera-Frage entschieden: Über den
-System-Kamera-Intent lässt sich die Tonspur nicht steuern, aber ohne Steuerung auch keine
-verlässliche Maximaldauer setzen (B.2) — es bleibt **CameraX** (`camera-core`,
-`camera-camera2`, `camera-lifecycle`, `camera-video`) mit `CAMERA`-Berechtigung. Der Bruch mit
-dem minimalen Abhängigkeitsstil des Projekts ist damit vom Owner gedeckt; **benenne ihn im PR
-trotzdem ausdrücklich.**
+**V1 (ohne Ton) entfällt.** Ein Beweisvideo ohne Ton ist als Beleg deutlich weniger wert — bei
+Lärm ist der Ton der eigentliche Gegenstand.
 
-**B.1 bleibt trotzdem Pflicht** — die Entscheidung „mit Ton" beantwortet das *Ziel*, nicht den
-*Mechanismus*. Die Messung entscheidet jetzt nur noch zwischen zwei Wegen:
+Damit ist auch die Kamera-Frage entschieden: Über den System-Kamera-Intent lässt sich die
+Tonspur nicht steuern, aber ohne Steuerung auch keine verlässliche Maximaldauer setzen (B.2) —
+es bleibt **CameraX** (`camera-core`, `camera-camera2`, `camera-lifecycle`, `camera-video`) mit
+`CAMERA`-Berechtigung. Der Bruch mit dem minimalen Abhängigkeitsstil des Projekts ist damit vom
+Owner gedeckt; **benenne ihn im PR trotzdem ausdrücklich.**
 
-- **V3 (Parallelbetrieb)**, falls die Messung zeigt, dass Videoaufnahme mit Ton und laufender
-  `AudioRecord` auf den Zielgeräten koexistieren: der gewünschte Zustand, keine Messlücke.
-- **V2 (Monitoring pausieren)**, falls nicht: Das Mikrofon-Monitoring pausiert für die Dauer
-  der Videoaufnahme.
+### E9 (entschieden) · V4 — Ton nicht von der Kamera, sondern nachträglich einmuxen
 
-**Wenn es V2 wird, sind die folgenden drei Punkte nicht optional:**
+**Der Owner hat den Mechanismus vorgegeben:** Die Kamera nimmt **ohne Tonspur** auf, der Ton
+kommt aus dem ohnehin laufenden `AudioRecord`, und beides wird nach dem Stopp zu einer Datei
+zusammengeführt (B.2a).
 
-1. Vor dem Start eine Bestätigung: „Die Pegelmessung pausiert für die Dauer der
-   Videoaufnahme." Eine Lücke im Beweismittel darf nicht stillschweigend entstehen.
-2. Die Lücke wird **protokolliert**, nicht nur angezeigt — als `ConnectionEventEntity` der
-   laufenden Session, damit sie in den Ausfallbändern des Berichts auftaucht wie jeder andere
-   Ausfall. Eine Messreihe, in der Lücken einfach fehlen, ist forensisch wertlos; genau dafür
-   existiert die Tabelle bereits.
-3. Der Wiederanlauf des Monitorings gehört in ein `finally` — auch eine mit Fehler beendete
-   Videoaufnahme muss die Messung zurückbringen (B.8).
+**Warum das die anderen Varianten schlägt:**
 
-**Wichtige Differenzierung aus F-4, die du beim Messen offenlegen musst:** Bei verbundenem
-PCE-323 kommt der maßgebliche kalibrierte Pegel über BLE, nicht vom Mikrofon. Dort kostet V2
-**keine** Pegel-Lücke, sondern nur eine Lücke in der WAV-Erfassung. Bei
-`audioTriggerQuelle = "MIKROFON"` kostet V2 dagegen die Messung selbst. Miss beide
-Konstellationen und benenne sie im Ergebnis getrennt — es ist gut möglich, dass V2 im
-Messgerät-Betrieb völlig unproblematisch und im Mikrofonbetrieb inakzeptabel ist.
+- **Es gibt keinen zweiten Mikrofon-Zugriff.** In CameraX ist Audio opt-in
+  (`withAudioEnabled()`); wird der Aufruf weggelassen, fasst die Kamera das Mikrofon nicht an.
+  Der Konflikt aus F-4 entsteht gar nicht erst.
+- **Die Messung läuft durch.** V2 hätte den Ton mit einer Lücke in der Messreihe bezahlt —
+  ausgerechnet in dem Moment, in dem der Nutzer filmt, also im lautesten. Für ein Beweismittel
+  ist das die teuerste denkbare Lücke.
+- **Kein Geräterisiko.** V3 hätte darauf gewettet, dass Audio-Policy, Hersteller und
+  Android-Version den Parallelbetrieb erlauben — auf jedem Gerät neu. V4 braucht diese Zusage
+  nicht.
+- **Der Ton wird besser.** Das Mikrofon läuft bereits mit `UNPROCESSED` und abgeschalteten
+  AEC/NS/AGC (KI-Umbau Etappe 1.2). Genau diese Rohsignal-Eigenschaften, die für die
+  Klassifikation gebraucht werden, machen auch den Beweisclip aussagekräftiger als eine von der
+  Kamera-App normalisierte Tonspur.
+
+**Damit entfällt B.1 als Vorbedingung.** Etappe B kann ohne vorherige Gerätemessung begonnen
+werden. Was stattdessen nachzuweisen ist, steht in B.1.
+
+**Nicht optional:**
+
+1. `withAudioEnabled()` wird **nirgends** aufgerufen, und an der Stelle steht ein Kommentar,
+   warum. Ohne diesen Kommentar ergänzt ihn der nächste Beitrag als vermeintlichen Bugfix.
+2. Der Ton für das Video braucht eine **eigene** PCM-Senke im Aufnahme-Loop. Die bestehende
+   WAV-Aufzeichnung ist ereignisgebunden und deckt einen Videozeitraum nicht ab (B.2a,
+   Schritt 1).
+3. Vor dem Start wird gewarnt, wenn das Mikrofon nicht läuft — dann bleibt das Video stumm.
+4. Ein fehlgeschlagener Mux-Lauf löscht keine Zwischendateien und löst keinen Upload aus.
+
+**Was der Owner dabei in Kauf nimmt** (im PR erneut benennen, nicht verschweigen): Ton und Bild
+werden über zwei unabhängige Uhren zusammengeführt. Über die vorgesehene Maximaldauer von
+wenigen Minuten ist die Drift praktisch nicht wahrnehmbar, über sehr lange Aufnahmen kann sie
+es werden. Die harte Maximaldauer aus B.5 ist damit nicht nur eine Speichergrenze.
+
+**Wichtige Differenzierung aus F-4, die dadurch entfällt:** Die Unterscheidung zwischen
+`audioTriggerQuelle = "MIKROFON"` und verbundenem PCE-323 war nur für V2 relevant (wo die Lücke
+im Mikrofonbetrieb die Messung selbst gekostet hätte). Mit V4 entsteht in keiner der beiden
+Konstellationen eine Lücke.
 
 ---
 
@@ -888,6 +1046,8 @@ Messgerät-Betrieb völlig unproblematisch und im Mikrofonbetrieb inakzeptabel i
 
 - Automatische Videoaufnahme bei Schwellenüberschreitung (siehe B.3 — technisch ab Android 14
   eingeschränkt und nicht beauftragt).
+- Nachträgliches Einmuxen von Ton in **bereits vorhandene** Videos oder in Ereignis-WAVs. B.2a
+  gilt für Videos, die dieser Auftrag selbst aufnimmt.
 - Live-Stream oder Fernzugriff auf die Kamera.
 - Gesichts- oder Kennzeichenunkenntlichmachung.
 - Fotos oder Videos in Alarm-Benachrichtigungen (ntfy).
@@ -914,7 +1074,7 @@ Für **jede** der beiden Etappen einzeln, gemäß `AGENTS.md` §7:
 5. Kurze Rückmeldung an den Owner: erledigt / nicht erledigt / aufgefallen.
 
 **Und die Regel, die über allem steht:** Was du nicht ausgeführt hast, behauptest du nicht.
-Kamera-Intents, EXIF-Verhalten, der Mikrofon-Konflikt und der echte Drive-Upload sind in einer
-Sandbox ohne Gerät und ohne Google-Konto **nicht** verifizierbar. Schreib genau das in den PR —
+Kamera-Intents, EXIF-Verhalten, die A/V-Synchronität des gemuxten Videos und der echte
+Drive-Upload sind in einer Sandbox ohne Gerät und ohne Google-Konto **nicht** verifizierbar. Schreib genau das in den PR —
 das ist keine Schwäche des Ergebnisses, sondern die Voraussetzung dafür, dass der Owner weiß,
 was er auf dem Gerät noch nachprüfen muss.
