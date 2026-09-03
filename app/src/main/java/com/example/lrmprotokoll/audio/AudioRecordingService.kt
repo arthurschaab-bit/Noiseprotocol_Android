@@ -567,6 +567,13 @@ class AudioRecordingService : LifecycleService() {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
 
+                    // Messreihe der laufenden Mikrofon-Session (M11/E1): No-Op, solange keine
+                    // Mikrofon-Session laeuft - also insbesondere waehrend einer
+                    // Messgeraet-Session, deren kalibrierte Werte nicht mit unkalibrierten
+                    // Mikrofonwerten vermischt werden duerfen. Die Ausduennung auf einen Wert je
+                    // Sekunde macht der Recorder selbst, nicht diese Schleife.
+                    measurementRecorder.mikrofonPegel(currentDb)
+
                     pruefeSchwellenwertUndTrigger(
                         meterFrame = letzterMeterFrame,
                         mikrofonDb = currentDb,

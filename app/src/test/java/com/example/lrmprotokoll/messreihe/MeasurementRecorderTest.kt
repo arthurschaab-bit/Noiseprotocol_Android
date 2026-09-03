@@ -478,4 +478,146 @@ class MeasurementRecorderTest {
 
         assertEquals(2_000L, sessionDao.zeilen[geschlossen]?.endedAt)
     }
+
+    // ------------------------------------------------------------------
+    // Mikrofon-Session (M11/E1) - eine Messung ohne Messgeraet
+    // ------------------------------------------------------------------
+
+    @Test
+    fun mikrofonMessungLegtEineSessionOhneGeraeteadresseAn() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        val session = sessionDao.zeilen.values.single()
+        assertEquals("", session.deviceAddress)
+        assertEquals(MIKROFON_GERAETENAME, session.deviceName)
+        assertNull("Ohne Messgeraet gibt es keine bestaetigte Bewertung", session.weighting)
+        assertNull("Laeuft noch", session.endedAt)
+    }
+
+    @Test
+    fun mikrofonPegelWirdAlsMesswertDerLaufendenSessionGeschrieben() = runTest(UnconfinedTestDispatcher()) {
+        // Der Kern des Fehlers, den dieser Test absichert: Ohne Messwerte war die
+        // Mikrofon-Session als juengste Session zwar die, die der Pegelverlauf auf der Startseite
+        // anzeigt - nur hatte sie nichts anzuzeigen.
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        recorder.mikrofonPegel(58.0)
+        runCurrent()
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        val messwert = measurementDao.geschrieben.single()
+        assertEquals(recorder.laufendeSessionId, messwert.sessionId)
+        assertEquals(58.0, messwert.levelDb, 0.001)
+    }
+
+    @Test
+    fun mikrofonMesswertBleibtOhneBewertungsangabe() = runTest(UnconfinedTestDispatcher()) {
+        // Das Mikrofon ist unkalibriert - ein eingetragenes "A" waere eine gespeicherte
+        // Tatsachenbehauptung, die es nicht gibt (MeasurementEntity-KDoc).
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        recorder.mikrofonPegel(58.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        val messwert = measurementDao.geschrieben.single()
+        assertNull(messwert.weighting)
+        assertNull(messwert.timeWeighting)
+        assertNull(messwert.range)
+        assertEquals("Hold/LargeJump sind Geraeteeigenschaften des PCE-323", 0, messwert.flags)
+    }
+
+    @Test
+    fun mikrofonPegelWirdAufEinenWertJeSekundeAusgeduennt() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        // Kadenz des Audiopuffers: viele Werte, ohne dass die Uhr weiterlaeuft.
+        repeat(50) { recorder.mikrofonPegel(50.0 + it) }
+        runCurrent()
+        uhr.vor(Duration.ofSeconds(1))
+        repeat(50) { recorder.mikrofonPegel(70.0) }
+        runCurrent()
+
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        assertEquals(2, measurementDao.geschrieben.size)
+        assertEquals(50.0, measurementDao.geschrieben[0].levelDb, 0.001)
+        assertEquals(70.0, measurementDao.geschrieben[1].levelDb, 0.001)
+    }
+
+    @Test
+    fun mikrofonPegelOhneLaufendeSessionWirdVerworfen() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.mikrofonPegel(58.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        assertTrue(measurementDao.geschrieben.isEmpty())
+    }
+
+    @Test
+    fun mikrofonPegelLandetNichtInEinerMessgeraetSession() = runTest(UnconfinedTestDispatcher()) {
+        // Die kalibrierte Messreihe des Messgeraets darf keine unkalibrierten Mikrofonwerte
+        // enthalten - sonst waere nicht mehr unterscheidbar, welcher Wert woher stammt.
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.start(device)
+        runCurrent()
+
+        recorder.mikrofonPegel(58.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+
+        assertTrue(measurementDao.geschrieben.isEmpty())
+    }
+
+    @Test
+    fun messgeraetSessionBeendetDieLaufendeMikrofonSession() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+        val mikrofonSessionId = recorder.laufendeSessionId
+        recorder.mikrofonPegel(58.0)
+        runCurrent()
+
+        uhr.vor(Duration.ofSeconds(30))
+        recorder.start(device)
+        runCurrent()
+
+        assertNotNull(
+            "Die Mikrofon-Session muss beim Quellenwechsel geschlossen werden",
+            sessionDao.zeilen[mikrofonSessionId]?.endedAt,
+        )
+        assertEquals(
+            "Der gepufferte Mikrofonwert darf beim Quellenwechsel nicht verlorengehen",
+            listOf(mikrofonSessionId),
+            measurementDao.geschrieben.map { it.sessionId },
+        )
+        assertEquals(2, sessionDao.zeilen.size)
+    }
+
+    @Test
+    fun stopSchreibtDenRestDerMikrofonMessungWeg() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+        val sessionId = recorder.laufendeSessionId
+        recorder.mikrofonPegel(58.0)
+        runCurrent()
+
+        recorder.stop()
+        runCurrent()
+
+        assertEquals(1, measurementDao.geschrieben.size)
+        assertNotNull(sessionDao.zeilen[sessionId]?.endedAt)
+    }
 }
