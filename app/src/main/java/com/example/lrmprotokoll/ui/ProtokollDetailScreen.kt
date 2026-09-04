@@ -418,16 +418,21 @@ fun ProtokollDetailScreen(
                             beweisvideos.forEach { video ->
                                 val datei = java.io.File(video.dateiPfad)
                                 val zustand = when {
-                                    // Reihenfolge zaehlt: "wird verarbeitet" ist ein
-                                    // Zwischenzustand, "ohne Ton" ein Endzustand.
+                                    // Reihenfolge zaehlt: Der Fehlerfall ist ein Endzustand und
+                                    // muss VOR dem Zwischenzustand stehen - sonst zeigte die
+                                    // Zeile "Ton wird hinzugefügt …" unbegrenzt weiter, obwohl
+                                    // nichts mehr passiert.
+                                    video.muxFehlgeschlagen -> "ohne Ton (Zusammenführen fehlgeschlagen)"
                                     !video.tonGemuxt -> "Ton wird hinzugefügt …"
                                     video.hatTonspur -> "mit Ton"
                                     else -> "ohne Ton (Mikrofon lief nicht)"
                                 }
+                                // Auch die stumme Fassung ist ein Beleg und bleibt abspielbar.
+                                val abspielbar = (video.tonGemuxt || video.muxFehlgeschlagen) && datei.exists()
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable(enabled = video.tonGemuxt && datei.exists()) {
+                                        .clickable(enabled = abspielbar) {
                                             if (!com.example.lrmprotokoll.report.BerichtDatei.oeffne(context, datei)) {
                                                 onShowSnackbar?.invoke("Keine App zum Abspielen gefunden")
                                             }

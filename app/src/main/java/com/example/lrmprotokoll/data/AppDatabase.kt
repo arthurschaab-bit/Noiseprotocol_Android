@@ -340,9 +340,22 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
     }
 }
 
+/**
+ * Migration 16 -> 17: neue Spalte `muxFehlgeschlagen` in `beweisvideos`.
+ *
+ * Ohne sie kannte die Oberflaeche keinen Endzustand fuer einen gescheiterten Mux-Lauf und zeigte
+ * "Ton wird hinzugefuegt ..." unbegrenzt weiter. `NOT NULL DEFAULT 0` - bestehende Zeilen sind
+ * per Definition nicht gescheitert.
+ */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `beweisvideos` ADD COLUMN `muxFehlgeschlagen` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
+    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
 )
 
 @Database(
@@ -353,7 +366,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
         DokumentationsFotoEntity::class, BeweisVideoEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

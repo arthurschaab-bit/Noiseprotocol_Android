@@ -149,7 +149,10 @@ class DriveSyncCoordinatorTest {
         override fun fuerSessionFlow(sessionId: Long) = flowOf(zeilen.values.filter { it.sessionId == sessionId })
         override suspend fun byId(id: Long) = zeilen[id]
         override suspend fun nichtHochgeladene() = zeilen.values.filter { it.driveFileId == null && it.tonGemuxt }
-        override suspend fun ungemuxte() = zeilen.values.filter { !it.tonGemuxt }
+        override suspend fun ungemuxte() = zeilen.values.filter { !it.tonGemuxt && !it.muxFehlgeschlagen }
+        override suspend fun setzeMuxFehlgeschlagen(id: Long) {
+            zeilen[id] = zeilen.getValue(id).copy(muxFehlgeschlagen = true)
+        }
         override suspend fun setzeDriveFileId(id: Long, fileId: String) {
             zeilen[id] = zeilen.getValue(id).copy(driveFileId = fileId)
         }
@@ -161,7 +164,8 @@ class DriveSyncCoordinatorTest {
         }
         override suspend fun setzeGemuxt(id: Long, dateiPfad: String, groesseBytes: Long, hatTonspur: Boolean) {
             zeilen[id] = zeilen.getValue(id).copy(
-                dateiPfad = dateiPfad, groesseBytes = groesseBytes, hatTonspur = hatTonspur, tonGemuxt = true,
+                dateiPfad = dateiPfad, groesseBytes = groesseBytes, hatTonspur = hatTonspur,
+                tonGemuxt = true, muxFehlgeschlagen = false,
             )
         }
         override suspend fun loesche(id: Long) { zeilen.remove(id) }
