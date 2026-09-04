@@ -44,6 +44,13 @@ data class BeweisVideoEntity(
      * Bei [hatTonspur] `false` gibt es nichts zu muxen; dort wird das Feld sofort `true`.
      */
     val tonGemuxt: Boolean = false,
+    /**
+     * Der Mux-Lauf ist endgueltig gescheitert. Ohne dieses Feld gab es keinen Endzustand: Die
+     * Oberflaeche zeigte "Ton wird hinzugefuegt ..." unbegrenzt weiter, obwohl nichts mehr
+     * passierte. Die stumme Datei bleibt erhalten und abspielbar - sie ist auch ohne Ton ein
+     * Beleg.
+     */
+    val muxFehlgeschlagen: Boolean = false,
     /** Drive-Datei-ID, sobald hochgeladen - `null` heisst "noch nicht hochgeladen". */
     val driveFileId: String? = null,
     /**
@@ -80,8 +87,12 @@ interface BeweisVideoDao {
     suspend fun nichtHochgeladene(): List<BeweisVideoEntity>
 
     /** Videos, deren Mux-Lauf noch aussteht - fuer die Wiederaufnahme nach Prozess-Tod. */
-    @Query("SELECT * FROM beweisvideos WHERE tonGemuxt = 0 ORDER BY gestartetAm")
+    @Query("SELECT * FROM beweisvideos WHERE tonGemuxt = 0 AND muxFehlgeschlagen = 0 ORDER BY gestartetAm")
     suspend fun ungemuxte(): List<BeweisVideoEntity>
+
+    /** Endzustand nach einem gescheiterten Mux-Lauf - die stumme Datei bleibt, wie sie ist. */
+    @Query("UPDATE beweisvideos SET muxFehlgeschlagen = 1 WHERE id = :id")
+    suspend fun setzeMuxFehlgeschlagen(id: Long)
 
     @Query("UPDATE beweisvideos SET driveFileId = :fileId WHERE id = :id")
     suspend fun setzeDriveFileId(id: Long, fileId: String)
@@ -96,7 +107,7 @@ interface BeweisVideoDao {
     /** Nach erfolgreichem Mux-Lauf: neue Datei, neue Groesse, Ton drin. */
     @Query(
         "UPDATE beweisvideos SET dateiPfad = :dateiPfad, groesseBytes = :groesseBytes, " +
-            "hatTonspur = :hatTonspur, tonGemuxt = 1 WHERE id = :id"
+            "hatTonspur = :hatTonspur, tonGemuxt = 1, muxFehlgeschlagen = 0 WHERE id = :id"
     )
     suspend fun setzeGemuxt(id: Long, dateiPfad: String, groesseBytes: Long, hatTonspur: Boolean)
 

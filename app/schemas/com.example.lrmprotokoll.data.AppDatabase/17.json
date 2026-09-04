@@ -1,0 +1,817 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 17,
+    "identityHash": "6444f8d6852694410e05dd9086be1e68",
+    "entities": [
+      {
+        "tableName": "noise_records",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `amplitude` REAL NOT NULL, `dbValue` REAL NOT NULL, `filePath` TEXT NOT NULL, `label` TEXT, `detectedLabel` TEXT, `calibratedDbA` REAL, `meterWeighting` TEXT, `meterConnected` INTEGER NOT NULL, `isQuietHour` INTEGER NOT NULL, `deletedAt` INTEGER, `favorite` INTEGER NOT NULL, `notes` TEXT, `aufnahmeQuelle` INTEGER, `abtastrate` INTEGER, `kanalzahl` INTEGER, `agcAktiv` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amplitude",
+            "columnName": "amplitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dbValue",
+            "columnName": "dbValue",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filePath",
+            "columnName": "filePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "detectedLabel",
+            "columnName": "detectedLabel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "calibratedDbA",
+            "columnName": "calibratedDbA",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "meterWeighting",
+            "columnName": "meterWeighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "meterConnected",
+            "columnName": "meterConnected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isQuietHour",
+            "columnName": "isQuietHour",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "favorite",
+            "columnName": "favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aufnahmeQuelle",
+            "columnName": "aufnahmeQuelle",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "abtastrate",
+            "columnName": "abtastrate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "kanalzahl",
+            "columnName": "kanalzahl",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "agcAktiv",
+            "columnName": "agcAktiv",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "reference_sounds",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pattern",
+            "columnName": "pattern",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "alerts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER, `outageSince` INTEGER NOT NULL, `raisedAt` INTEGER, `resolvedAt` INTEGER, `reason` TEXT NOT NULL, `recipients` TEXT NOT NULL, `deliveryState` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `escalations` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "outageSince",
+            "columnName": "outageSince",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "raisedAt",
+            "columnName": "raisedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resolvedAt",
+            "columnName": "resolvedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipients",
+            "columnName": "recipients",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryState",
+            "columnName": "deliveryState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "escalations",
+            "columnName": "escalations",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "level_samples",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `at` INTEGER NOT NULL, `levelDb` REAL NOT NULL, `source` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "at",
+            "columnName": "at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelDb",
+            "columnName": "levelDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_daily_files",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `fileId` TEXT, `lastSyncedAt` INTEGER NOT NULL, `lastRowCount` INTEGER NOT NULL, `state` TEXT NOT NULL, PRIMARY KEY(`date`))",
+        "fields": [
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "fileId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastRowCount",
+            "columnName": "lastRowCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "date"
+          ]
+        }
+      },
+      {
+        "tableName": "sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `deviceAddress` TEXT NOT NULL, `deviceName` TEXT NOT NULL, `weighting` TEXT, `timeWeighting` TEXT, `range` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deviceAddress",
+            "columnName": "deviceAddress",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceName",
+            "columnName": "deviceName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weighting",
+            "columnName": "weighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "timeWeighting",
+            "columnName": "timeWeighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "range",
+            "columnName": "range",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "measurements",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, `levelDb` REAL NOT NULL, `weighting` TEXT, `flags` INTEGER NOT NULL, `timeWeighting` TEXT, `range` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelDb",
+            "columnName": "levelDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weighting",
+            "columnName": "weighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "flags",
+            "columnName": "flags",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeWeighting",
+            "columnName": "timeWeighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "range",
+            "columnName": "range",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "connection_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `at` INTEGER NOT NULL, `type` TEXT NOT NULL, `reason` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "at",
+            "columnName": "at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "minute_aggregates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `minuteStart` INTEGER NOT NULL, `leqDb` REAL NOT NULL, `maxDb` REAL NOT NULL, `minDb` REAL NOT NULL, `sampleCount` INTEGER NOT NULL, `weighting` TEXT, `timeWeighting` TEXT, `range` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minuteStart",
+            "columnName": "minuteStart",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "leqDb",
+            "columnName": "leqDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxDb",
+            "columnName": "maxDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minDb",
+            "columnName": "minDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleCount",
+            "columnName": "sampleCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weighting",
+            "columnName": "weighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "timeWeighting",
+            "columnName": "timeWeighting",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "range",
+            "columnName": "range",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "diagnostic_log_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `message` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "message",
+            "columnName": "message",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "klassifikations_rohdaten",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `recordId` INTEGER NOT NULL, `modellVersion` TEXT NOT NULL, `klassifiziertAm` INTEGER NOT NULL, `frameAnzahl` INTEGER NOT NULL, `frameDauerMs` INTEGER NOT NULL, `frameHopMs` INTEGER NOT NULL, `klassenIndizes` TEXT NOT NULL, `frameScores` BLOB NOT NULL, `topKlassen` TEXT NOT NULL, `impulsCrest` REAL, `impulsKurtosis` REAL, `impulsWiederholrateHz` REAL, `impulsPeakSchaerfe` REAL, `impulsMittlererPegel` REAL, FOREIGN KEY(`recordId`) REFERENCES `noise_records`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordId",
+            "columnName": "recordId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modellVersion",
+            "columnName": "modellVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "klassifiziertAm",
+            "columnName": "klassifiziertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameAnzahl",
+            "columnName": "frameAnzahl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameDauerMs",
+            "columnName": "frameDauerMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameHopMs",
+            "columnName": "frameHopMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "klassenIndizes",
+            "columnName": "klassenIndizes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameScores",
+            "columnName": "frameScores",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "topKlassen",
+            "columnName": "topKlassen",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "impulsCrest",
+            "columnName": "impulsCrest",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "impulsKurtosis",
+            "columnName": "impulsKurtosis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "impulsWiederholrateHz",
+            "columnName": "impulsWiederholrateHz",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "impulsPeakSchaerfe",
+            "columnName": "impulsPeakSchaerfe",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "impulsMittlererPegel",
+            "columnName": "impulsMittlererPegel",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_klassifikations_rohdaten_recordId",
+            "unique": false,
+            "columnNames": [
+              "recordId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_klassifikations_rohdaten_recordId` ON `${TABLE_NAME}` (`recordId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "noise_records",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recordId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "dokumentationsfotos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `kategorie` TEXT NOT NULL, `dateiPfad` TEXT NOT NULL, `aufgenommenAm` INTEGER NOT NULL, `notiz` TEXT, `driveFileId` TEXT, `pruefsumme` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kategorie",
+            "columnName": "kategorie",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateiPfad",
+            "columnName": "dateiPfad",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aufgenommenAm",
+            "columnName": "aufgenommenAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "driveFileId",
+            "columnName": "driveFileId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pruefsumme",
+            "columnName": "pruefsumme",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "beweisvideos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `dateiPfad` TEXT NOT NULL, `gestartetAm` INTEGER NOT NULL, `dauerMs` INTEGER NOT NULL, `hatTonspur` INTEGER NOT NULL, `groesseBytes` INTEGER NOT NULL, `notiz` TEXT, `tonGemuxt` INTEGER NOT NULL, `muxFehlgeschlagen` INTEGER NOT NULL, `driveFileId` TEXT, `uploadSessionUri` TEXT, `hochgeladeneBytes` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateiPfad",
+            "columnName": "dateiPfad",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gestartetAm",
+            "columnName": "gestartetAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dauerMs",
+            "columnName": "dauerMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hatTonspur",
+            "columnName": "hatTonspur",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groesseBytes",
+            "columnName": "groesseBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tonGemuxt",
+            "columnName": "tonGemuxt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "muxFehlgeschlagen",
+            "columnName": "muxFehlgeschlagen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "driveFileId",
+            "columnName": "driveFileId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "uploadSessionUri",
+            "columnName": "uploadSessionUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hochgeladeneBytes",
+            "columnName": "hochgeladeneBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6444f8d6852694410e05dd9086be1e68')"
+    ]
+  }
+}

@@ -31,7 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,7 +74,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-const val VIDEO_AUFNAHME_START_TAG = "video_aufnahme_start"
 const val VIDEO_AUFNAHME_STOP_TAG = "video_aufnahme_stop"
 
 /**
@@ -126,8 +124,9 @@ fun VideoAufnahmeScreen(
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var aufnahme by remember { mutableStateOf<Recording?>(null) }
     var laeuft by remember { mutableStateOf(false) }
-    var wirdVerarbeitet by remember { mutableStateOf(false) }
     var sekunden by remember { mutableLongStateOf(0L) }
+    /** Verhindert, dass die automatisch startende Aufnahme nach dem Stopp erneut anlaeuft. */
+    var abgeschlossen by remember { mutableStateOf(false) }
 
     val vorschau = remember { PreviewView(context) }
 
@@ -162,9 +161,50 @@ fun VideoAufnahmeScreen(
             }, ContextCompat.getMainExecutor(context))
         }
         onDispose {
+            // Beides, und in dieser Reihenfolge: stop() beendet nur die Aufnahme, die Kamera
+            // bliebe an den Lebenszyklus gebunden und liefe sichtbar weiter. Am Geraet sah das
+            // so aus, als habe "Aufnahme beenden" nichts bewirkt.
             runCatching { aufnahme?.stop() }
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
+            videoCapture = null
         }
+    }
+
+    /**
+     * Die Aufnahme startet von selbst, sobald die Kamera bereit ist.
+     *
+     * Der Owner-Auftrag ist eindeutig: Wer im Cockpit "Videobeweis" drueckt, will filmen - ein
+     * zweiter Knopf auf dem naechsten Screen kostet nur die Sekunden, in denen das Geraeusch
+     * noch da war. [abgeschlossen] verhindert, dass nach dem Stopp sofort eine zweite Aufnahme
+     * anlaeuft.
+     */
+    LaunchedEffect(videoCapture, kameraErlaubt) {
+        if (!kameraErlaubt || videoCapture == null || laeuft || abgeschlossen) return@LaunchedEffect
+        starteAufnahme(
+            context = context,
+            container = container,
+            videoCapture = videoCapture,
+            mikrofonFormat = mikrofonFormat,
+            scope = scope,
+            onGestartet = { neueAufnahme ->
+                aufnahme = neueAufnahme
+                sekunden = 0
+                laeuft = true
+            },
+            onBeendet = {
+                laeuft = false
+                aufnahme = null
+                // Zurueck ins Cockpit: Die Kamera wird dabei ueber onDispose freigegeben, und
+                // der Mux-Lauf laeuft im Hintergrund weiter. Sein Fortschritt steht im
+                // Session-Detail, nicht in einer Anzeige, die niemand mehr beobachtet.
+                onBack()
+            },
+            onShowSnackbar = onShowSnackbar,
+        )
+        // Konnte die Aufnahme nicht starten (kein Speicher, keine laufende Messung), meldet
+        // starteAufnahme das bereits - dann bleibt der Screen stehen, ohne es erneut zu
+        // versuchen.
+        abgeschlossen = true
     }
 
     // Laufzeituhr und harte Maximaldauer.
@@ -252,61 +292,33 @@ fun VideoAufnahmeScreen(
                     )
                 }
 
-                if (wirdVerarbeitet) {
+                if (!laeuft && !abgeschlossen) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp))
                         Text(
-                            text = "  Ton wird hinzugefügt …",
+                            text = "  Kamera wird vorbereitet …",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
 
-                if (!laeuft) {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                starteAufnahme(
-                                    context = context,
-                                    container = container,
-                                    videoCapture = videoCapture,
-                                    mikrofonFormat = mikrofonFormat,
-                                    scope = scope,
-                                    onGestartet = { neueAufnahme ->
-                                        aufnahme = neueAufnahme
-                                        sekunden = 0
-                                        laeuft = true
-                                    },
-                                    onBeendet = { verarbeitet ->
-                                        laeuft = false
-                                        aufnahme = null
-                                        wirdVerarbeitet = verarbeitet
-                                    },
-                                    onShowSnackbar = onShowSnackbar,
-                                )
-                            }
-                        },
-                        enabled = kameraErlaubt && videoCapture != null && !wirdVerarbeitet,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp)
-                            .testTag(VIDEO_AUFNAHME_START_TAG),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Text("  Aufnahme starten")
-                    }
-                } else {
-                    Button(
-                        onClick = { aufnahme?.stop() },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp)
-                            .testTag(VIDEO_AUFNAHME_STOP_TAG),
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null)
-                        Text("  Aufnahme beenden")
-                    }
+                Button(
+                    onClick = {
+                        // stop() liefert das Finalize-Ereignis; der Rest (Datenbank, Mux-Lauf)
+                        // haengt daran. Der Screen schliesst sich danach von selbst - das gibt
+                        // die Kamera frei und beantwortet "Aufnahme beenden" sichtbar.
+                        abgeschlossen = true
+                        aufnahme?.stop()
+                    },
+                    enabled = laeuft,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .testTag(VIDEO_AUFNAHME_STOP_TAG),
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = null)
+                    Text("  Aufnahme beenden")
                 }
             }
         }
@@ -325,7 +337,7 @@ private suspend fun starteAufnahme(
     mikrofonFormat: AudioRecordingService.Aufnahmeformat?,
     scope: kotlinx.coroutines.CoroutineScope,
     onGestartet: (Recording) -> Unit,
-    onBeendet: (Boolean) -> Unit,
+    onBeendet: () -> Unit,
     onShowSnackbar: (String) -> Unit,
 ) {
     val capture = videoCapture ?: return
@@ -429,7 +441,7 @@ private suspend fun beendeAufnahme(
     gestartetAm: Long,
     fehlerhaft: Boolean,
     onShowSnackbar: (String) -> Unit,
-    onFertig: (Boolean) -> Unit,
+    onFertig: () -> Unit,
 ) {
     val diagnose = container.diagnosticsReporter
     val dao = container.database.beweisVideoDao()
@@ -449,7 +461,7 @@ private suspend fun beendeAufnahme(
         withContext(Dispatchers.IO) { dao.loesche(videoId) }
         runCatching { videoDatei.delete() }
         runCatching { pcmDatei.delete() }
-        onFertig(false)
+        onFertig()
         return
     }
 
@@ -464,7 +476,7 @@ private suspend fun beendeAufnahme(
     if (ton == null) {
         // Kein Ton mitgeschnitten - das Video ist so, wie es ist, fertig.
         onShowSnackbar("Video ohne Ton gespeichert")
-        onFertig(false)
+        onFertig()
         return
     }
 
@@ -477,5 +489,6 @@ private suspend fun beendeAufnahme(
         abtastrate = ton.abtastrate,
         kanaele = ton.kanaele,
     )
-    onFertig(true)
+    onShowSnackbar("Video gespeichert – der Ton wird im Hintergrund hinzugefügt")
+    onFertig()
 }

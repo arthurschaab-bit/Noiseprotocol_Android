@@ -70,6 +70,7 @@ class VideoMuxWorker @JvmOverloads constructor(
                 severity = DiagnosticSeverity.ERROR,
                 details = mapOf("videoId" to videoId.toString(), "grund" to "Quelldatei fehlt"),
             )
+            runCatching { dao.setzeMuxFehlgeschlagen(videoId) }
             return Result.failure()
         }
 
@@ -112,6 +113,9 @@ class VideoMuxWorker @JvmOverloads constructor(
                 // Halbfertige Zieldatei wegraeumen - stumme MP4 und PCM bleiben ausdruecklich
                 // liegen, damit der Beleg nicht verlorengeht.
                 runCatching { ziel.delete() }
+                // Endzustand setzen: Ohne ihn zeigte die Oberflaeche "Ton wird hinzugefuegt ..."
+                // unbegrenzt weiter, obwohl nichts mehr passiert.
+                runCatching { dao.setzeMuxFehlgeschlagen(videoId) }
                 Result.failure()
             },
         )
