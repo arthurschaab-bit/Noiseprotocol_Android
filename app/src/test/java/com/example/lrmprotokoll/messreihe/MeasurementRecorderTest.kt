@@ -100,18 +100,57 @@ class MeasurementRecorderTest {
     )
 
     @Test
-    fun startLegtEineSessionAnBevorDieBeobachtungBeginnt() = runTest(UnconfinedTestDispatcher()) {
+    fun eineVerbindungDieNieZustandeKommtErzeugtKeineSession() = runTest(UnconfinedTestDispatcher()) {
+        // Der Kern des am Geraet gemeldeten Fehlers: Ist das gepinnte Messgeraet nicht in
+        // Reichweite, laeuft der Supervisor in eine Reconnect-Schleife. Frueher fuellte sich das
+        // Protokoll dabei mit Sitzungen "PCE-323" ohne einen einzigen Messwert.
         val recorder = MeasurementRecorder(
             zustaende, frames, sessionDao, measurementDao, connectionEventDao,
             scope = backgroundScope, now = uhr, flushInterval = Duration.ofSeconds(5),
         )
         recorder.start(device)
+        zustaende.value = ConnectionState.CONNECTING
+        zustaende.value = ConnectionState.DISCONNECTED
+        zustaende.value = ConnectionState.RECONNECTING
+        zustaende.value = ConnectionState.FAILED
+        runCurrent()
+
+        assertTrue("Ohne einen einzigen Datenpunkt gibt es keinen Messvorgang", sessionDao.zeilen.isEmpty())
+        assertTrue("Und auch keine Verbindungsereignisse ohne Session", connectionEventDao.geschrieben.isEmpty())
+    }
+
+    @Test
+    fun derErsteFliessendeDatenstromEroeffnetDieSession() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, flushInterval = Duration.ofSeconds(5),
+        )
+        recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
+        runCurrent()
 
         assertEquals(1, sessionDao.zeilen.size)
         val session = sessionDao.zeilen.values.single()
         assertEquals("AA:BB:CC:DD:EE:FF", session.deviceAddress)
         assertNull("Noch nicht beendet", session.endedAt)
         assertNull("Weighting unbestaetigt -> nicht gespeichert", session.weighting)
+    }
+
+    @Test
+    fun einReconnectEroeffnetKeineZweiteSession() = runTest(UnconfinedTestDispatcher()) {
+        // Eine Ausfallperiode innerhalb einer Messung ist ein Ereignis, kein neuer Messvorgang.
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr,
+        )
+        recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
+        zustaende.value = ConnectionState.DISCONNECTED
+        zustaende.value = ConnectionState.RECONNECTING
+        zustaende.value = ConnectionState.STREAMING
+        runCurrent()
+
+        assertEquals(1, sessionDao.zeilen.size)
     }
 
     @Test
@@ -343,11 +382,15 @@ class MeasurementRecorderTest {
             scope = backgroundScope, now = uhr,
         )
         recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
+        runCurrent()
         recorder.stop()
         runCurrent()
 
         uhr.vor(Duration.ofMinutes(1))
+        zustaende.value = ConnectionState.IDLE
         recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
         runCurrent()
 
         assertEquals(2, sessionDao.zeilen.size)
@@ -362,6 +405,7 @@ class MeasurementRecorderTest {
             scope = backgroundScope, now = uhr,
         )
         recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
         recorder.start(device)
         runCurrent()
 
@@ -460,6 +504,7 @@ class MeasurementRecorderTest {
 
         val recorder = recorderMit(sessionDao, FakeMeasurementDao())
         recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
         runCurrent()
 
         val neue = sessionDao.zeilen[recorder.laufendeSessionId]
@@ -591,6 +636,7 @@ class MeasurementRecorderTest {
 
         uhr.vor(Duration.ofSeconds(30))
         recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
         runCurrent()
 
         assertNotNull(
@@ -619,5 +665,57 @@ class MeasurementRecorderTest {
 
         assertEquals(1, measurementDao.geschrieben.size)
         assertNotNull(sessionDao.zeilen[sessionId]?.endedAt)
+    }
+
+    @Test
+    fun mikrofonUndMessgeraetLaufenNiemalsAlsZweiOffeneSessionen() = runTest(UnconfinedTestDispatcher()) {
+        // Der am Geraet gemeldete Fehler: Im Protokoll standen zwei parallele Aufzeichnungen -
+        // "PCE-323" und "Smartphone-Mikrofon" -, und die Mikrofon-Zeile galt dauerhaft als
+        // laufend. Der AudioRecordingService ruft beide Starts unmittelbar nacheinander auf.
+        val recorder = recorderMit(sessionDao, measurementDao)
+
+        recorder.starteMikrofonMessung()
+        recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
+        runCurrent()
+
+        assertEquals(
+            "Es darf immer nur EINE Session offen sein",
+            1,
+            sessionDao.zeilen.values.count { it.endedAt == null },
+        )
+        val offene = sessionDao.zeilen.values.single { it.endedAt == null }
+        assertEquals("Und zwar die des Messgeraets", "AA:BB:CC:DD:EE:FF", offene.deviceAddress)
+    }
+
+    @Test
+    fun einMikrofonlaufOhneErreichbaresMessgeraetBleibtEineEinzigeSession() = runTest(UnconfinedTestDispatcher()) {
+        // Die haeufigere Haelfte desselben Fehlers: Das gepinnte Geraet antwortet nie.
+        val recorder = recorderMit(sessionDao, measurementDao)
+
+        recorder.starteMikrofonMessung()
+        recorder.start(device)
+        zustaende.value = ConnectionState.CONNECTING
+        zustaende.value = ConnectionState.RECONNECTING
+        zustaende.value = ConnectionState.FAILED
+        runCurrent()
+
+        assertEquals(1, sessionDao.zeilen.size)
+        assertEquals(MIKROFON_GERAETENAME, sessionDao.zeilen.values.single().deviceName)
+    }
+
+    @Test
+    fun einAusfallDesMessgeraetsErscheintNichtInDerMikrofonSession() = runTest(UnconfinedTestDispatcher()) {
+        // Eine Mikrofon-Session hat kein Geraet - ein Verbindungsereignis dort waere die
+        // Behauptung, es haette eines gegeben.
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        recorder.start(device)
+        runCurrent()
+
+        zustaende.value = ConnectionState.DISCONNECTED
+        runCurrent()
+
+        assertTrue(connectionEventDao.geschrieben.isEmpty())
     }
 }

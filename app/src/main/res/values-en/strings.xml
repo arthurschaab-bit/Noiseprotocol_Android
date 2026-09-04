@@ -96,6 +96,10 @@
     <string name="cockpit_trigger_active_mic">Microphone</string>
     <string name="cockpit_threshold_display">Recording Threshold: %1$.1f dB</string>
     <string name="cockpit_history_title">Sound Level History</string>
+    <string name="cockpit_history_title_mic">Microphone Level History</string>
+    <string name="cockpit_mic_uncalibrated">Uncalibrated microphone – no LAeq. The values show the trend, not the sound pressure level.</string>
+    <string name="cockpit_leq_label_mic">Average</string>
+    <string name="cockpit_lmax_label_mic">Maximum</string>
     <string name="cockpit_laeq_label">LAeq (Avg)</string>
     <string name="cockpit_lmax_label">LMax (Peak)</string>
     <string name="cockpit_quick_event">Quick Event (Manual)</string>

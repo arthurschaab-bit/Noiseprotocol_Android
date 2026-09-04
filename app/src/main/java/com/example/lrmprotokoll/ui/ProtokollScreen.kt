@@ -386,8 +386,11 @@ private fun ModernSessionCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 MetricColumn(label = stringResource(R.string.protocol_metric_duration), value = durationStr)
-                MetricColumn(label = "LAeq", value = laeqStr)
-                MetricColumn(label = "LMax", value = lmaxStr)
+                // Ein reiner Mikrofonlauf hat kein LAeq - dieselbe Rechnung, aber ohne
+                // A-Bewertung und ohne Kalibrierung.
+                val ohneMessgeraet = session.deviceAddress.isBlank()
+                MetricColumn(label = if (ohneMessgeraet) "Mittelwert" else "LAeq", value = laeqStr)
+                MetricColumn(label = if (ohneMessgeraet) "Höchstwert" else "LMax", value = lmaxStr)
                 MetricColumn(label = stringResource(R.string.protocol_metric_events), value = eventCount.toString())
             }
 

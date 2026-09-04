@@ -61,6 +61,21 @@ class MeasurementRecorder(
     private val pufferMutex = Mutex()
     private val puffer = mutableListOf<MeasurementEntity>()
 
+    /**
+     * Serialisiert alles, was Sessions eroeffnet oder schliesst.
+     *
+     * Ohne diese Sperre konnten zwei Sessions gleichzeitig offen bleiben: [starteMikrofonMessung]
+     * und [start] werden im [com.example.lrmprotokoll.audio.AudioRecordingService] unmittelbar
+     * nacheinander aufgerufen. Setzte die Mikrofon-Coroutine ihr [aktiveSessionIstMikrofon] erst
+     * nach dem Datenbank-Insert, fand [beendeMikrofonSession] noch `false` vor und liess die
+     * Mikrofon-Session fuer immer offen - im Protokoll standen danach zwei parallele
+     * Aufzeichnungen, von denen eine dauerhaft als "laeuft noch" galt.
+     */
+    private val sessionMutex = Mutex()
+
+    /** Das ueberwachte Geraet, solange [start] laeuft - fuer die spaet eroeffnete Session. */
+    @Volatile private var ueberwachtesGeraet: BoundDevice? = null
+
     private var job: Job? = null
 
     /**
@@ -92,33 +107,29 @@ class MeasurementRecorder(
     val laufendeSessionId: Long? get() = aktiveSessionId
 
     /**
-     * Eroeffnet eine neue Session fuer [device] und beginnt aufzuzeichnen. Ein zweiter Aufruf,
-     * waehrend bereits eine Session laeuft, ist ein No-Op.
+     * Beginnt, [device] zu beobachten. Ein zweiter Aufruf, waehrend die Beobachtung laeuft, ist
+     * ein No-Op.
      *
-     * Die Session wird bewusst VOR dem Start der Beobachtung angelegt (nicht parallel dazu) -
-     * sonst koennten sehr fruehe Frames oder Zustandswechsel eintreffen, bevor
-     * [aktiveSessionId] gesetzt ist, und wuerden mangels Ziel-Session verworfen.
+     * **Die Session entsteht hier noch nicht.** Sie wird erst eroeffnet, wenn das Geraet
+     * tatsaechlich Daten liefert (erster Zustand [ConnectionState.STREAMING], siehe
+     * [eroeffneMessgeraetSession]).
+     *
+     * Das war frueher anders - die Session galt als "Klammer um *wie lange wurde ueberwacht*"
+     * und entstand sofort. Am Geraet zeigte sich, warum das falsch ist: Ist das gepinnte
+     * Messgeraet gar nicht in Reichweite, laeuft der Supervisor in eine Reconnect-Schleife, und
+     * das Protokoll fuellte sich mit Sitzungen "PCE-323", in denen nie ein Messwert stand. Ein
+     * Protokolleintrag, der ein Geraet nennt, das nie geantwortet hat, ist als Beleg schlimmer
+     * als kein Eintrag.
+     *
+     * Zustands- und Frame-Beobachtung starten trotzdem sofort: Sonst koennte der erste,
+     * entscheidende Frame verlorengehen.
      */
     fun start(device: BoundDevice) {
         if (job?.isActive == true) return
+        ueberwachtesGeraet = device
         job = scope.launch {
-            // Laeuft gerade ein reiner Mikrofonlauf, endet er hier: Die Messquelle wechselt vom
-            // Mikrofon auf das kalibrierte Geraet, und das sind zwei verschiedene Messvorgaenge.
-            // Beide in eine Session zu werfen wuerde einen Teil der Werte mit der falschen
-            // Quelle ausweisen.
-            beendeMikrofonSession()
             schliesseVerwaisteSessions()
 
-            aktiveSessionId = sessionDao.insert(
-                SessionEntity(
-                    startedAt = now.now().toEpochMilli(),
-                    endedAt = null,
-                    deviceAddress = device.address,
-                    deviceName = device.name,
-                    weighting = null,
-                    timeWeighting = null,
-                )
-            )
             warJemalsVerbunden = false
             zuletztImAusfall = false
             letzteBewertung = null
@@ -158,21 +169,26 @@ class MeasurementRecorder(
      * nicht erst beim Sitzungsende im Puffer stehen.
      */
     fun starteMikrofonMessung() {
-        if (job?.isActive == true || aktiveSessionId != null) return
+        if (mikrofonJob?.isActive == true || aktiveSessionId != null) return
         letzterMikrofonWertMs = 0
         mikrofonJob = scope.launch {
-            schliesseVerwaisteSessions()
-            aktiveSessionId = sessionDao.insert(
-                SessionEntity(
-                    startedAt = now.now().toEpochMilli(),
-                    endedAt = null,
-                    deviceAddress = "",
-                    deviceName = MIKROFON_GERAETENAME,
-                    weighting = null,
-                    timeWeighting = null,
+            // Unter der Sperre und in EINEM Schritt: Erst danach darf eine Messgeraet-Session
+            // eroeffnet werden, sonst bleiben beide offen (siehe [sessionMutex]).
+            sessionMutex.withLock {
+                if (aktiveSessionId != null) return@launch
+                schliesseVerwaisteSessions()
+                aktiveSessionId = sessionDao.insert(
+                    SessionEntity(
+                        startedAt = now.now().toEpochMilli(),
+                        endedAt = null,
+                        deviceAddress = "",
+                        deviceName = MIKROFON_GERAETENAME,
+                        weighting = null,
+                        timeWeighting = null,
+                    )
                 )
-            )
-            aktiveSessionIstMikrofon = true
+                aktiveSessionIstMikrofon = true
+            }
             while (isActive) {
                 delay(flushInterval.toMillis())
                 pufferMutex.withLock { flushOhneSperre() }
@@ -230,7 +246,42 @@ class MeasurementRecorder(
         }
     }
 
-    /** Schliesst eine laufende Mikrofon-Session, falls es eine gibt. */
+    /**
+     * Eroeffnet die Session fuer das Messgeraet - beim ersten Mal, wenn tatsaechlich Daten
+     * fliessen. Jeder weitere Aufruf innerhalb derselben Ueberwachung ist ein No-Op: Ein
+     * Reconnect ist kein neuer Messvorgang, er erzeugt ein [ConnectionEventEntity].
+     */
+    private suspend fun eroeffneMessgeraetSession() {
+        val geraet = ueberwachtesGeraet ?: return
+        sessionMutex.withLock {
+            if (aktiveSessionId != null && !aktiveSessionIstMikrofon) return
+
+            // Laeuft gerade ein reiner Mikrofonlauf, endet er hier: Die Messquelle wechselt vom
+            // Mikrofon auf das kalibrierte Geraet, und das sind zwei verschiedene Messvorgaenge.
+            // Beide in eine Session zu werfen wuerde einen Teil der Werte mit der falschen
+            // Quelle ausweisen.
+            beendeMikrofonSession()
+            schliesseVerwaisteSessions()
+
+            aktiveSessionId = sessionDao.insert(
+                SessionEntity(
+                    startedAt = now.now().toEpochMilli(),
+                    endedAt = null,
+                    deviceAddress = geraet.address,
+                    deviceName = geraet.name,
+                    weighting = null,
+                    timeWeighting = null,
+                )
+            )
+        }
+    }
+
+    /**
+     * Schliesst eine laufende Mikrofon-Session, falls es eine gibt.
+     *
+     * Erwartet, dass der Aufrufer [sessionMutex] haelt - sie eroeffnet und schliesst Sessions
+     * und darf mit [starteMikrofonMessung] nicht verschraenken.
+     */
     private suspend fun beendeMikrofonSession() {
         if (!aktiveSessionIstMikrofon) return
         val id = aktiveSessionId ?: return
@@ -292,6 +343,7 @@ class MeasurementRecorder(
     fun stop() {
         job?.cancel()
         job = null
+        ueberwachtesGeraet = null
         val sessionId = aktiveSessionId
         val warMikrofon = aktiveSessionIstMikrofon
         aktiveSessionId = null
@@ -329,7 +381,10 @@ class MeasurementRecorder(
     }
 
     private suspend fun onFrame(frame: MeterFrame) {
+        // Wie in [onState]: Ein eintreffender Frame IST der Beleg, dass das Geraet liefert.
+        eroeffneMessgeraetSession()
         val sessionId = aktiveSessionId ?: return
+        if (aktiveSessionIstMikrofon) return
         // null, solange die jeweilige Annahme unbestaetigt ist - siehe MeasurementEntity-KDoc.
         val bewertung = frame.weighting?.takeIf { frame.modeAssumptionConfirmed }?.name
         val zeitbewertung = frame.timeWeighting?.takeIf { frame.modeAssumptionConfirmed }?.name
@@ -370,7 +425,16 @@ class MeasurementRecorder(
     }
 
     private suspend fun onState(zustand: ConnectionState) {
+        // Erst wenn Daten fliessen, entsteht die Messgeraet-Session. Vorher gibt es nichts zu
+        // protokollieren: Ausfaelle einer Verbindung, die nie zustande kam, gehoeren zu keinem
+        // Messvorgang.
+        if (zustand == ConnectionState.STREAMING) eroeffneMessgeraetSession()
+
         val sessionId = aktiveSessionId ?: return
+        // Waehrend eines reinen Mikrofonlaufs sind Zustaende des Messgeraets fuer die Messreihe
+        // gegenstandslos - sie wuerden sonst als Verbindungsereignisse der Mikrofon-Session
+        // erscheinen, die gar kein Geraet hat.
+        if (aktiveSessionIstMikrofon) return
 
         when {
             zustand == ConnectionState.STREAMING -> {
