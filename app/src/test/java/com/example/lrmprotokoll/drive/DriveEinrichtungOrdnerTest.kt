@@ -28,7 +28,7 @@ class DriveEinrichtungOrdnerTest {
         var createdFolders = mutableListOf<String>()
         var renamedFolders = mutableListOf<Pair<String, String>>()
 
-        override suspend fun ordnerAnlegen(name: String): Result<String> {
+        override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> {
             createdFolders.add(name)
             val id = "id-$name"
             val datei = DriveDatei(id, name)
@@ -36,7 +36,7 @@ class DriveEinrichtungOrdnerTest {
             return Result.success(id)
         }
 
-        override suspend fun ordnerSuchen(name: String): Result<DriveDatei?> {
+        override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> {
             val found = existingFolders.find { it.name == name }
             return Result.success(found)
         }

@@ -89,8 +89,8 @@ class DriveWavUploadAndCsvTest {
 
     private class TestDriveApiClient : DriveApiClient {
         val hochgeladeneDateien = mutableMapOf<String, ByteArray>()
-        override suspend fun ordnerAnlegen(name: String): Result<String> = Result.success("folder-id")
-        override suspend fun ordnerSuchen(name: String): Result<DriveDatei?> = Result.success(DriveDatei("folder-id", name))
+        override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> = Result.success("folder-id")
+        override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> = Result.success(DriveDatei("folder-id", name))
         override suspend fun ordnerAuflisten(): Result<List<DriveDatei>> = Result.success(emptyList())
         override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String): Result<Unit> = Result.success(Unit)
         override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> =

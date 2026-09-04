@@ -35,6 +35,7 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 | **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
 | **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync) | ✅ umgesetzt — Fotos, EXIF-Drehung und PDF-Einbettung noch nicht am Gerät gesichtet |
+| **Drive-Ablagestruktur & Upload-Übersicht** (Tagesordner je Dateiart, Seite mit hochgeladen/läuft/offen/fehlgeschlagen) | ✅ umgesetzt — Ordneranlage nicht gegen echtes Drive geprüft |
 | **E8** Speicheranzeige & manuelles Aufräumen (nach Dateiart und Zeitraum, statt automatischer Frist für Videos) | ✅ umgesetzt |
 | **M11 Etappe B** Videobeweis (CameraX ohne Tonspur, Ton aus der laufenden Messung nachträglich eingemuxt, resumable Drive-Upload) | ⚠️ umgesetzt, **nicht am Gerät verifiziert** — Kamera, A/V-Synchronität und der echte Upload brauchen Hardware |
 
@@ -241,6 +242,11 @@ Abhängigkeits-Stil des Projekts.
   Videos und der echte Drive-Upload — `MediaCodec`, `MediaMuxer` und CameraX existieren auf der
   JVM nicht. Über sehr lange Aufnahmen können Bild und Ton auseinanderlaufen (zwei unabhängig
   getaktete Quellen); dagegen steht die einstellbare Maximaldauer, Default 3 Minuten.
+- **Die Drive-Ablage ist nach Tag und Dateiart gegliedert:** `<gewählter Ordner>/JJJJMMTT/WAV`,
+  `.../Schallmessung`, `.../Fotos`, `.../Videos`, `.../Bericht`. Maßgeblich ist das Datum der
+  **Aufnahme**, nicht das des Uploads — sonst hinge die Ablage davon ab, wann zufällig WLAN da
+  war. Der Unterordner `Bericht` entsteht erst, wenn Berichte hochgeladen werden; **das tut die
+  App bisher nicht**, Berichte werden nur geteilt.
 - **Videos und Audioaufnahmen verfallen nicht automatisch** (Owner-Entscheidung E8). Statt einer
   Frist zeigen die Einstellungen unter „Speicherplatz", wie viel Platz Audio, Videos, Fotos,
   Berichte und Datenbank belegen, und geben ihn auf Wunsch gezielt frei — nach Dateiart und

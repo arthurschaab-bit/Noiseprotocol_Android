@@ -102,8 +102,8 @@ class DriveSyncCoordinatorTest {
         var ordnerUmbenennenErgebnis: Result<Unit> = Result.success(Unit)
         var dateienInOrdnerAuflistenErgebnis: Result<Set<String>> = Result.success(emptySet())
 
-        override suspend fun ordnerAnlegen(name: String) = ordnerAnlegenErgebnis
-        override suspend fun ordnerSuchen(name: String) = ordnerSuchenErgebnis
+        override suspend fun ordnerAnlegen(name: String, elternId: String?) = ordnerAnlegenErgebnis
+        override suspend fun ordnerSuchen(name: String, elternId: String?) = ordnerSuchenErgebnis
         override suspend fun ordnerAuflisten() = ordnerAuflistenErgebnis
         override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String) = ordnerUmbenennenErgebnis
         override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> = dateienInOrdnerAuflistenErgebnis
@@ -147,6 +147,7 @@ class DriveSyncCoordinatorTest {
         }
         override suspend fun fuerSession(sessionId: Long) = zeilen.values.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = flowOf(zeilen.values.filter { it.sessionId == sessionId })
+        override fun neuesteFlow(grenze: Int) = flowOf(zeilen.values.sortedByDescending { it.gestartetAm }.take(grenze))
         override suspend fun byId(id: Long) = zeilen[id]
         override suspend fun nichtHochgeladene() = zeilen.values.filter { it.driveFileId == null && it.tonGemuxt }
         override suspend fun ungemuxte() = zeilen.values.filter { !it.tonGemuxt && !it.muxFehlgeschlagen }

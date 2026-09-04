@@ -78,6 +78,7 @@ fun SettingsScreen(
     onOpenDrawer: (() -> Unit)? = null,
     /** Fuehrt zum In-App-Erklaerungsbildschirm der Laermerkennung. */
     onOpenKiErklaerung: (() -> Unit)? = null,
+    onOpenDriveUploads: (() -> Unit)? = null,
     onShowSnackbar: ((String) -> Unit)? = null,
     /** Fuehrt zum Diagnose-Bildschirm. */
     onNavigateToDiagnose: (() -> Unit)? = null,
@@ -1092,6 +1093,14 @@ fun SettingsScreen(
                 expanded = expDrive,
                 onToggle = { expDrive = !expDrive }
             ) {
+                // Owner-Wunsch: eine Seite, die zeigt, was hochgeladen wurde und was gerade
+                // laeuft. Die Statuskarte darunter nennt nur den letzten Lauf als Ganzes.
+                if (onOpenDriveUploads != null) {
+                    TextButton(onClick = onOpenDriveUploads, modifier = Modifier.fillMaxWidth()) {
+                        Text("Upload-Übersicht öffnen")
+                    }
+                }
+
                 DriveStatusCard(
                     googleAccountEmail = googleAccountEmail,
                     googleAccountName = googleAccountName,

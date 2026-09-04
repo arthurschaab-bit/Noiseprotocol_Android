@@ -38,6 +38,12 @@ class DriveSyncCoordinator(
     private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
 ) {
 
+    /**
+     * Loest die Tagesablage `<gewaehlter Ordner>/JJJJMMTT/<Kategorie>` auf (Owner-Vorgabe).
+     * Gehoert dem Koordinator, damit sein Zwischenspeicher einen ganzen Zyklus ueberdauert.
+     */
+    private val ordnerbaum = DriveOrdnerbaum(driveApi)
+
     sealed interface SyncErgebnis {
         data object SyncAusgeschaltet : SyncErgebnis
         data object KeinOrdnerEingerichtet : SyncErgebnis
@@ -101,14 +107,18 @@ class DriveSyncCoordinator(
             if (wavRecords.isNotEmpty()) {
                 val stundenZips = WavHourlyZipper.packeStundenZips(wavRecords, jetzt, zone)
                 if (stundenZips.isNotEmpty()) {
-                    val existierendeNamen = driveApi.dateienInOrdnerAuflisten(ordnerId).getOrElse { emptySet() }
+                    // Die WAV-Pakete gehoeren in den Tagesordner des Messtages, nicht in den des
+                    // Uploads - deshalb der Datumsschluessel und nicht "heute".
+                    val wavOrdner = ordnerbaum.ordnerFuer(ordnerId, datumSchluessel, DriveKategorie.WAV)
+                        .getOrElse { ordnerId }
+                    val existierendeNamen = driveApi.dateienInOrdnerAuflisten(wavOrdner).getOrElse { emptySet() }
                     for (zipPackage in stundenZips) {
                         val dateiName = zipPackage.zipFileName
                         // Wenn die Datei noch nicht auf Drive existiert -> Neu anlegen
                         if (!existierendeNamen.contains(dateiName)) {
                             val uploadResult = driveApi.dateiAnlegen(
                                 name = dateiName,
-                                ordnerId = ordnerId,
+                                ordnerId = wavOrdner,
                                 inhalt = zipPackage.zipBytes,
                                 mimeType = "application/zip",
                                 gzip = false,
@@ -128,7 +138,7 @@ class DriveSyncCoordinator(
                             }
                         } else if (!zipPackage.isClosedHour) {
                             // Laufende Stunde existiert bereits, hat aber eventuell neue WAVs erhalten -> Aktualisieren
-                            val suchenResult = driveApi.dateiSuchen(dateiName, ordnerId)
+                            val suchenResult = driveApi.dateiSuchen(dateiName, wavOrdner)
                             val existierendeDatei = suchenResult.getOrNull()
                             if (existierendeDatei != null) {
                                 val updateResult = driveApi.dateiAktualisieren(
@@ -174,7 +184,9 @@ class DriveSyncCoordinator(
         val dateiName = "laermprotokoll_$datumSchluessel.csv"
         val inhalt = DriveCsv.schreibe(zeilen, zone).toByteArray(Charsets.UTF_8)
 
-        val ergebnis = schreibeDatei(registry?.fileId, dateiName, ordnerId, inhalt)
+        val messOrdner = ordnerbaum.ordnerFuer(ordnerId, datumSchluessel, DriveKategorie.SCHALLMESSUNG)
+            .getOrElse { ordnerId }
+        val ergebnis = schreibeDatei(registry?.fileId, dateiName, messOrdner, inhalt)
 
         return ergebnis.fold(
             onSuccess = { fileId ->
@@ -223,16 +235,23 @@ class DriveSyncCoordinator(
             if (!datei.exists()) continue
 
             val name = datei.name
+            // Tagesordner nach dem AUFNAHMEdatum des Fotos, nicht nach dem Upload-Zeitpunkt.
+            val ziel = ordnerbaum.ordnerFuer(
+                ordnerId,
+                DriveAblage.tagesordner(foto.aufgenommenAm, zone),
+                DriveKategorie.FOTOS,
+            ).getOrElse { continue }
+
             // Waisen-Absicherung wie bei CSV und WAV: Ein vorheriger, halb fehlgeschlagener
             // Versuch koennte die Datei bereits angelegt haben.
-            val vorhanden = driveApi.dateiSuchen(name, ordnerId).getOrNull()
+            val vorhanden = driveApi.dateiSuchen(name, ziel).getOrNull()
             if (vorhanden != null) {
                 runCatching { dao.setzeDriveFileId(foto.id, vorhanden.id) }
                 continue
             }
 
             val inhalt = runCatching { datei.readBytes() }.getOrNull() ?: continue
-            driveApi.dateiAnlegen(name, ordnerId, inhalt, "image/jpeg", gzip = false)
+            driveApi.dateiAnlegen(name, ziel, inhalt, "image/jpeg", gzip = false)
                 .onSuccess { fileId -> runCatching { dao.setzeDriveFileId(foto.id, fileId) } }
         }
     }
@@ -262,8 +281,14 @@ class DriveSyncCoordinator(
             val datei = java.io.File(video.dateiPfad)
             if (!datei.exists()) continue
 
+            val ziel = ordnerbaum.ordnerFuer(
+                ordnerId,
+                DriveAblage.tagesordner(video.gestartetAm, zone),
+                DriveKategorie.VIDEOS,
+            ).getOrElse { continue }
+
             // Waisen-Absicherung wie bei CSV, WAV und Fotos.
-            val vorhanden = driveApi.dateiSuchen(datei.name, ordnerId).getOrNull()
+            val vorhanden = driveApi.dateiSuchen(datei.name, ziel).getOrNull()
             if (vorhanden != null) {
                 runCatching { dao.setzeDriveFileId(video.id, vorhanden.id) }
                 continue
@@ -277,7 +302,7 @@ class DriveSyncCoordinator(
 
             driveApi.dateiHochladenResumable(
                 name = datei.name,
-                ordnerId = ordnerId,
+                ordnerId = ziel,
                 datei = datei,
                 mimeType = "video/mp4",
                 fortsetzenAb = video.uploadSessionUri,

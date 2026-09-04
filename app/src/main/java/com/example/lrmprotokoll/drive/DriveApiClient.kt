@@ -21,13 +21,21 @@ data class DriveDatei(val id: String, val name: String)
  */
 interface DriveApiClient {
 
-    /** Legt einen Ordner an und liefert dessen `id`. */
-    suspend fun ordnerAnlegen(name: String): Result<String>
+    /**
+     * Legt einen Ordner an und liefert dessen `id`.
+     *
+     * [elternId] `null` legt ihn auf oberster Ebene an - das ist der Fall bei der Einrichtung.
+     * Fuer die Unterordner der Tagesablage (siehe [DriveAblage]) wird der Elternordner
+     * mitgegeben, sonst landeten sie alle nebeneinander in "Meine Ablage".
+     */
+    suspend fun ordnerAnlegen(name: String, elternId: String? = null): Result<String>
 
     /**
-     * Sucht einen Ordner mit [name]. Liefert `null`, wenn kein nicht-gelöschter Ordner mit diesem Namen existiert.
+     * Sucht einen Ordner mit [name]. Liefert `null`, wenn kein nicht-gelöschter Ordner mit diesem
+     * Namen existiert. [elternId] grenzt die Suche auf einen Elternordner ein - ohne das faende
+     * die Suche nach "Fotos" jeden gleichnamigen Ordner im ganzen Laufwerk.
      */
-    suspend fun ordnerSuchen(name: String): Result<DriveDatei?>
+    suspend fun ordnerSuchen(name: String, elternId: String? = null): Result<DriveDatei?>
 
     /**
      * Listet alle für die App erreichbaren Ordner auf Google Drive auf.
