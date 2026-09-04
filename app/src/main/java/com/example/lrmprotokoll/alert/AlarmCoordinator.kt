@@ -70,6 +70,19 @@ class AlarmCoordinator(
      */
     private var ueberwachungLief = false
 
+    /**
+     * Ob in dieser Ueberwachungsperiode ueberhaupt schon einmal Daten flossen.
+     *
+     * Ohne diese Bedingung alarmierte die App auch dann, wenn nie eine Verbindung bestand: Ist
+     * das gepinnte Messgeraet gar nicht in Reichweite, laeuft der Supervisor sofort in
+     * DISCONNECTED/RECONNECTING/FAILED, und nach der Karenzzeit meldete die App "Verbindung
+     * verloren" - fuer eine Verbindung, die es nie gab. Das ist zweierlei falsch: Die Aussage
+     * stimmt nicht, und der Alarm ist als Totmannschaltung gedacht, also als Schutz einer
+     * LAUFENDEN Messung. Ein Geraet, das gar nicht erst antwortet, ist ein Einrichtungsproblem
+     * und gehoert in die Statusanzeige, nicht in einen nachts ausgeloesten Alarm.
+     */
+    private var jeVerbunden = false
+
     fun start() {
         if (job?.isActive == true) return
         job = scope.launch {
@@ -82,6 +95,7 @@ class AlarmCoordinator(
         job?.cancel()
         job = null
         ueberwachungLief = false
+        jeVerbunden = false
         scheduler.cancel()
     }
 
@@ -111,11 +125,14 @@ class AlarmCoordinator(
 
     private suspend fun onState(zustand: ConnectionState) {
         if (zustand != ConnectionState.IDLE) ueberwachungLief = true
+        if (zustand == ConnectionState.STREAMING) jeVerbunden = true
 
         when {
             zustand == ConnectionState.IDLE -> if (ueberwachungLief) beendeUeberwachung()
             zustand == ConnectionState.STREAMING -> onVerbindungZurueck()
-            istAusfall(zustand) -> onAusfall(zustand)
+            // Erst ab der ersten stehenden Verbindung kann eine verlorengehen (siehe
+            // [jeVerbunden]).
+            istAusfall(zustand) -> if (jeVerbunden) onAusfall(zustand)
             // SCANNING, CONNECTING, DISCOVERING, SUBSCRIBING: Uebergaenge. Sie beenden einen
             // laufenden Ausfall NICHT - erst ein tatsaechlich fliessender Datenstrom tut das.
             // Waehrend eines Reconnects durchlaeuft der Supervisor genau diese Zustaende, und
@@ -183,6 +200,7 @@ class AlarmCoordinator(
 
     /** Die Ueberwachung wurde beendet - ein offener Ausfall wird still geschlossen, ohne Alarm. */
     private suspend fun beendeUeberwachung() {
+        jeVerbunden = false
         scheduler.cancel()
         val offen = dao.offenerAusfall() ?: return
         dao.update(offen.copy(resolvedAt = now.now().toEpochMilli()))
@@ -253,6 +271,13 @@ class AlarmCoordinator(
     private suspend fun wiederaufnehmen() = mutex.withLock {
         val offen = dao.offenerAusfall() ?: return@withLock
         val jetzt = now.now()
+
+        // Ein offener Ausfall in der Datenbank IST der Beleg, dass frueher einmal eine
+        // Verbindung bestand - anders waere er nie angelegt worden. [jeVerbunden] lebt nur im
+        // Speicher und ist nach einem Prozess-Tod zurueckgesetzt; ohne diese Zeile wuerde die
+        // Praezisierung der Ursache (z.B. RECONNECTING -> FAILED) nach einem Neustart
+        // stillschweigend ausbleiben.
+        jeVerbunden = true
 
         // Nach einem Neustart muss die Verbindung erst wieder aufgebaut werden. Sofort zu
         // alarmieren, nur weil die urspruengliche Karenzzeit inzwischen abgelaufen ist, wuerde

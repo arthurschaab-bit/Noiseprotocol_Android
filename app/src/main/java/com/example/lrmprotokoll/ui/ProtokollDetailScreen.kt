@@ -238,12 +238,14 @@ fun ProtokollDetailScreen(
                     ) {
                         SummaryMetricItem(stringResource(R.string.stat_duration), dauerText, modifier = Modifier.weight(1f))
                         SummaryMetricItem(
-                            "📈 LAeq",
+                            // Ohne Messgeraet gibt es kein LAeq - keine A-Bewertung, keine
+                            // Kalibrierung. Derselbe Rechenweg, aber ehrlich beschriftet.
+                            if (session?.deviceAddress?.isBlank() == true) "📈 Mittelwert" else "📈 LAeq",
                             kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
                             modifier = Modifier.weight(1f)
                         )
                         SummaryMetricItem(
-                            "⚡ LMax",
+                            if (session?.deviceAddress?.isBlank() == true) "⚡ Höchstwert" else "⚡ LMax",
                             kennwerte?.maxDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
                             modifier = Modifier.weight(1f)
                         )

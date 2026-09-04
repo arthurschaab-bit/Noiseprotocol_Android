@@ -96,6 +96,10 @@
     <string name="cockpit_trigger_active_mic">Mikrofon</string>
     <string name="cockpit_threshold_display">Aufnahme-Schwelle: %1$.1f dB</string>
     <string name="cockpit_history_title">Schallpegel-Verlauf</string>
+    <string name="cockpit_history_title_mic">Mikrofonpegel-Verlauf</string>
+    <string name="cockpit_mic_uncalibrated">Unkalibriertes Mikrofon – kein LAeq. Die Werte zeigen den Verlauf, nicht den Schalldruckpegel.</string>
+    <string name="cockpit_leq_label_mic">Mittelwert</string>
+    <string name="cockpit_lmax_label_mic">Höchstwert</string>
     <string name="cockpit_laeq_label">LAeq (Avg)</string>
     <string name="cockpit_lmax_label">LMax (Peak)</string>
     <string name="cockpit_quick_event">Schnell-Ereignis (Manuell)</string>

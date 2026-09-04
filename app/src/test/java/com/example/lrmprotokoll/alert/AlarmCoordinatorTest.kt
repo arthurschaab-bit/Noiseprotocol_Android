@@ -93,6 +93,9 @@ class AlarmCoordinatorTest {
     fun ausfallUeberDieKarenzzeitHinausAlarmiertUeberAlleKanaele() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         val beginn = uhr.now()
         zustaende.value = ConnectionState.DISCONNECTED
@@ -112,6 +115,9 @@ class AlarmCoordinatorTest {
     fun zehnKurzeAussetzerLoesenKeinenEinzigenAlarmAus() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         repeat(10) {
             zustaende.value = ConnectionState.DISCONNECTED
@@ -132,6 +138,9 @@ class AlarmCoordinatorTest {
     fun zwischenzustaendeEinesReconnectsBeendenDenAusfallNicht() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         val beginn = uhr.now()
         zustaende.value = ConnectionState.DISCONNECTED
@@ -155,6 +164,9 @@ class AlarmCoordinatorTest {
         lokal.wirftAb(RuntimeException("SMS-Stack kaputt"))
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -174,6 +186,9 @@ class AlarmCoordinatorTest {
         ntfy.scheitertAb(true)
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -188,6 +203,9 @@ class AlarmCoordinatorTest {
         lokal.isAvailable = false
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -202,6 +220,9 @@ class AlarmCoordinatorTest {
     fun zweiterAusfallImCooldownAlarmiertNichtSondernWirdVerschoben() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         // Erster Ausfall mit Alarm.
         zustaende.value = ConnectionState.DISCONNECTED
@@ -231,6 +252,9 @@ class AlarmCoordinatorTest {
     fun nachAblaufDesCooldownsWirdDerVerschobeneAlarmNachgeholt() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -254,6 +278,9 @@ class AlarmCoordinatorTest {
     fun eskalationWiederholtDreimalUndHoertDannAuf() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -285,6 +312,9 @@ class AlarmCoordinatorTest {
     fun rueckkehrDerVerbindungBeendetDieEskalation() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -309,6 +339,9 @@ class AlarmCoordinatorTest {
             config = AlarmConfig(entwarnungUeber = setOf(ChannelId.NTFY)),
         )
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -331,6 +364,9 @@ class AlarmCoordinatorTest {
     fun ohneVorherigenAlarmGibtEsAuchKeineEntwarnung() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         uhr.vor(Duration.ofSeconds(10))
@@ -348,6 +384,9 @@ class AlarmCoordinatorTest {
     fun abgeschalteterAdapterWirdAlsSolcherGemeldetUndNichtAlsGeraeteausfall() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         adapter.value = false
         zustaende.value = ConnectionState.DISCONNECTED
@@ -361,6 +400,9 @@ class AlarmCoordinatorTest {
     fun ausErschoepftenVersuchenWirdDiePraezisereUrsache() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         zustaende.value = ConnectionState.RECONNECTING
@@ -386,6 +428,8 @@ class AlarmCoordinatorTest {
 
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Hier bewusst KEIN STREAMING: Der offene Ausfall in der Datenbank belegt bereits, dass
+        // frueher eine Verbindung bestand - der Koordinator liest das beim Wiederaufnehmen.
 
         assertEquals(
             "Die Karenzzeit war laengst abgelaufen, aber der Verbindungsaufbau bekommt eine Nachfrist",
@@ -415,6 +459,9 @@ class AlarmCoordinatorTest {
 
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         // Das Geraet ist beim Wiederanlauf in Reichweite - genau dafuer ist die Nachfrist da.
         zustaende.value = ConnectionState.STREAMING
@@ -440,6 +487,9 @@ class AlarmCoordinatorTest {
 
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         weckeZurGeplantenZeit(koordinator)
@@ -457,6 +507,9 @@ class AlarmCoordinatorTest {
     fun beendeteUeberwachungSchliesstDenAusfallStill() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         zustaende.value = ConnectionState.DISCONNECTED
         zustaende.value = ConnectionState.IDLE
@@ -470,6 +523,9 @@ class AlarmCoordinatorTest {
     fun testnachrichtLaeuftAnDerAlarmlogikVorbei() = runTest(UnconfinedTestDispatcher()) {
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         val ergebnis = koordinator.sendeTest(ChannelId.NTFY)
 
@@ -484,10 +540,63 @@ class AlarmCoordinatorTest {
         lokal.isAvailable = false
         val koordinator = baue(scope = backgroundScope)
         koordinator.start()
+        // Ein Ausfall setzt eine bestandene Verbindung voraus - ohne sie alarmiert der
+        // Koordinator seit dem Geraetebericht bewusst nicht (siehe jeVerbunden).
+        zustaende.value = ConnectionState.STREAMING
 
         val ergebnis = koordinator.sendeTest(ChannelId.LOCAL_NOTIFICATION)
 
         assertTrue("Der Nutzer muss erfahren, dass der Kanal nicht einsatzbereit ist", ergebnis.isFailure)
         assertEquals(0, lokal.versuche)
+    }
+
+    // ------------------------------------------------------------------ Nie verbunden gewesen
+
+    @Test
+    fun ohneJeBestandeneVerbindungGibtEsKeinenAusfall() = runTest(UnconfinedTestDispatcher()) {
+        // Am Geraet gemeldet: Der Alarm ging los, obwohl nie eine Verbindung bestand. Ist das
+        // gepinnte Messgeraet nicht in Reichweite, laeuft der Supervisor sofort in
+        // DISCONNECTED/RECONNECTING/FAILED. "Verbindung verloren" waere dann schlicht unwahr,
+        // und die Totmannschaltung schuetzt eine laufende Messung - keine, die nie begann.
+        val koordinator = baue(scope = backgroundScope)
+        koordinator.start()
+
+        zustaende.value = ConnectionState.CONNECTING
+        zustaende.value = ConnectionState.DISCONNECTED
+        zustaende.value = ConnectionState.RECONNECTING
+        zustaende.value = ConnectionState.FAILED
+
+        assertTrue("Kein Ausfall angelegt", dao.inhalt.isEmpty())
+        assertNull("Und keine Karenzzeit gestartet", scheduler.geplant)
+    }
+
+    @Test
+    fun nachDerErstenVerbindungAlarmiertDerAusfallWieBisher() = runTest(UnconfinedTestDispatcher()) {
+        // Die Gegenprobe: Sobald einmal Daten flossen, gilt der Ausfall wieder als Ausfall.
+        val koordinator = baue(scope = backgroundScope)
+        koordinator.start()
+
+        zustaende.value = ConnectionState.DISCONNECTED
+        assertTrue("Vor der ersten Verbindung passiert nichts", dao.inhalt.isEmpty())
+
+        zustaende.value = ConnectionState.STREAMING
+        zustaende.value = ConnectionState.DISCONNECTED
+
+        assertEquals(1, dao.inhalt.size)
+        assertEquals(uhr.now().plus(karenz), scheduler.geplant)
+    }
+
+    @Test
+    fun einNeuerUeberwachungslaufVergisstDieFruehereVerbindung() = runTest(UnconfinedTestDispatcher()) {
+        // Sonst wuerde ein spaeterer Lauf ohne Geraet weiter alarmieren, nur weil in einem
+        // frueheren einmal eine Verbindung stand.
+        val koordinator = baue(scope = backgroundScope)
+        koordinator.start()
+        zustaende.value = ConnectionState.STREAMING
+        zustaende.value = ConnectionState.IDLE
+
+        zustaende.value = ConnectionState.DISCONNECTED
+
+        assertTrue(dao.inhalt.isEmpty())
     }
 }

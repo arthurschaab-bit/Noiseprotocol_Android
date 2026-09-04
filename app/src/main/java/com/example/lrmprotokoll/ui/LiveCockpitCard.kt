@@ -183,6 +183,13 @@ fun LiveCockpitCard(
         }
     }
 
+    /**
+     * Ob die angezeigte Messung ein reiner Mikrofonlauf ist. Massgeblich ist die Session, nicht
+     * der Live-Zustand: Der Verlauf zeigt die aufgezeichneten Werte, und die stammen von der
+     * Quelle, mit der die Session begonnen hat.
+     */
+    val istMikrofonMessung = letzteSession?.deviceAddress?.isBlank() == true
+
     val liveLevel = letzterFrame?.level
     val isCalibrated = verbindungszustand == ConnectionState.STREAMING && liveLevel != null
     val weightingText = letzterFrame?.weighting?.let { "dB(${it.name})" } ?: if (isCalibrated) "dB(A)" else "dB"
@@ -394,7 +401,11 @@ fun LiveCockpitCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.cockpit_history_title),
+                        text = if (istMikrofonMessung) {
+                            stringResource(R.string.cockpit_history_title_mic)
+                        } else {
+                            stringResource(R.string.cockpit_history_title)
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -426,7 +437,14 @@ fun LiveCockpitCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${stringResource(R.string.cockpit_laeq_label)}: ",
+                                // Ohne kalibriertes Messgeraet ist es kein LAeq - eine
+                                // A-Bewertung findet nirgends statt. "Mittelwert" ist die
+                                // ehrliche Beschriftung fuer denselben Rechenweg.
+                                text = if (istMikrofonMessung) {
+                                    "${stringResource(R.string.cockpit_leq_label_mic)}: "
+                                } else {
+                                    "${stringResource(R.string.cockpit_laeq_label)}: "
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -449,7 +467,11 @@ fun LiveCockpitCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${stringResource(R.string.cockpit_lmax_label)}: ",
+                                text = if (istMikrofonMessung) {
+                                    "${stringResource(R.string.cockpit_lmax_label_mic)}: "
+                                } else {
+                                    "${stringResource(R.string.cockpit_lmax_label)}: "
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -484,6 +506,17 @@ fun LiveCockpitCard(
                         } else {
                             emptyList()
                         }
+                    }
+
+                    if (istMikrofonMessung) {
+                        // Der Verlauf ist nuetzlich, aber er ist kein Schallpegel. Das gehoert
+                        // an die Grafik, nicht in eine Fussnote weit darunter.
+                        Text(
+                            text = stringResource(R.string.cockpit_mic_uncalibrated),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
                     }
 
                     PegelverlaufChart(
