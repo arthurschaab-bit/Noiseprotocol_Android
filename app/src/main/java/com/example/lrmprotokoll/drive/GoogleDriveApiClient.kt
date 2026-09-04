@@ -46,10 +46,11 @@ class GoogleDriveApiClient(
     private val basisUrl: String = BASIS_URL,
 ) : DriveApiClient {
 
-    override suspend fun ordnerAnlegen(name: String): Result<String> = mitToken { token ->
+    override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> = mitToken { token ->
         val body = JSONObject().apply {
             put("name", name)
             put("mimeType", "application/vnd.google-apps.folder")
+            if (elternId != null) put("parents", JSONArray().put(elternId))
         }.toString().toRequestBody(JSON)
 
         val request = Request.Builder()
@@ -62,8 +63,9 @@ class GoogleDriveApiClient(
         JSONObject(antwort).getString("id")
     }
 
-    override suspend fun ordnerSuchen(name: String): Result<DriveDatei?> = mitToken { token ->
-        val query = "name = '${escapeFuerDriveQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> = mitToken { token ->
+        val elternTeil = if (elternId != null) " and '${escapeFuerDriveQuery(elternId)}' in parents" else ""
+        val query = "name = '${escapeFuerDriveQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false$elternTeil"
         val url = "$basisUrl/drive/v3/files".toHttpUrl().newBuilder()
             .addQueryParameter("q", query)
             .addQueryParameter("fields", "files(id,name)")

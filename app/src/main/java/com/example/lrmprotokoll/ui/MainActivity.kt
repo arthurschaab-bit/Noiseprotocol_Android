@@ -224,6 +224,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                         onShowOnboarding = { onboardingErneutAnzeigen = true },
                         onOpenKiErklaerung = { navController.navigate("ki-erklaerung") },
+                        onOpenDriveUploads = { navController.navigate("drive-uploads") },
                         onNavigateToDiagnose = { navController.navigate("diagnose") },
                     )
                 }
@@ -263,6 +264,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     VideoAufnahmeScreen(
                         onBack = { navController.popBackStack() },
                         onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    )
+                }
+
+                composable("drive-uploads") {
+                    DriveUploadScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
                     )
                 }
 

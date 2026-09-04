@@ -78,6 +78,10 @@ interface BeweisVideoDao {
     @Query("SELECT * FROM beweisvideos WHERE id = :id")
     suspend fun byId(id: Long): BeweisVideoEntity?
 
+    /** Fuer die Upload-Uebersicht: alle Videos, neueste zuerst. */
+    @Query("SELECT * FROM beweisvideos ORDER BY gestartetAm DESC LIMIT :grenze")
+    fun neuesteFlow(grenze: Int = 100): Flow<List<BeweisVideoEntity>>
+
     /**
      * Fuer den Drive-Sync: alles, was noch keine [BeweisVideoEntity.driveFileId] hat **und**
      * fertig gemuxt ist. Die zweite Bedingung ist der Grund, warum diese Abfrage nicht wie

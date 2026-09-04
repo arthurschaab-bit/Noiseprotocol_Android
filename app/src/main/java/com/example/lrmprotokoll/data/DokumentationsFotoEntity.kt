@@ -73,6 +73,10 @@ interface DokumentationsFotoDao {
     @Query("SELECT COUNT(*) FROM dokumentationsfotos WHERE sessionId = :sessionId AND kategorie = :kategorie")
     suspend fun anzahlFuerKategorie(sessionId: Long, kategorie: String): Int
 
+    /** Fuer die Upload-Uebersicht: alle Fotos, neueste zuerst. */
+    @Query("SELECT * FROM dokumentationsfotos ORDER BY aufgenommenAm DESC LIMIT :grenze")
+    fun neuesteFlow(grenze: Int = 100): Flow<List<DokumentationsFotoEntity>>
+
     /** Fuer den Drive-Sync: alles, was noch keine [DokumentationsFotoEntity.driveFileId] hat. */
     @Query("SELECT * FROM dokumentationsfotos WHERE driveFileId IS NULL ORDER BY aufgenommenAm")
     suspend fun nichtHochgeladene(): List<DokumentationsFotoEntity>

@@ -98,8 +98,8 @@ class DriveSyncWorkerTest {
         var dateiAnlegenErgebnis: kotlin.Result<String> = kotlin.Result.success("neue-datei-id")
         var anlegenAufrufe = 0
 
-        override suspend fun ordnerAnlegen(name: String) = kotlin.Result.success("ordner-id")
-        override suspend fun ordnerSuchen(name: String) = kotlin.Result.success<DriveDatei?>(null)
+        override suspend fun ordnerAnlegen(name: String, elternId: String?) = kotlin.Result.success("ordner-id")
+        override suspend fun ordnerSuchen(name: String, elternId: String?) = kotlin.Result.success<DriveDatei?>(null)
         override suspend fun ordnerAuflisten() = kotlin.Result.success(emptyList<DriveDatei>())
         override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String) = kotlin.Result.success(Unit)
         override suspend fun dateienInOrdnerAuflisten(ordnerId: String): kotlin.Result<Set<String>> =
