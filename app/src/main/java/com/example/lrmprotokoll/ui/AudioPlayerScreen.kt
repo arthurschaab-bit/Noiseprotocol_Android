@@ -25,7 +25,12 @@ private const val TAG = "AudioPlayerScreen"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
+fun AudioPlayerScreen(
+    filePath: String,
+    onBack: () -> Unit,
+    /** Test-Hook: wird unmittelbar nach MediaPlayer.release() beim Verlassen der Composition aufgerufen. */
+    onPlayerReleasedForTest: (() -> Unit)? = null,
+) {
     val file = File(filePath)
     val amplitudes = remember(filePath) { loadAmplitudes(file) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -48,6 +53,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
         }
         onDispose {
             mediaPlayer.release()
+            onPlayerReleasedForTest?.invoke()
         }
     }
 
@@ -93,7 +99,6 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Wellenform-Anzeige
             WaveformDisplay(
                 amplitudes = amplitudes,
                 progress = currentProgress,
@@ -154,7 +159,6 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
             )
         }
 
-        // Progress Line
         drawLine(
             color = indicatorColor,
             start = Offset(progress * width, 0f),
@@ -164,14 +168,6 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
     }
 }
 
-/**
- * Uebersetzt einen beim Vorbereiten der Wiedergabe aufgetretenen Fehler in eine fuer den Nutzer
- * verstaendliche Meldung, statt die App abstuerzen zu lassen (Testplan-Befund
- * docs/TESTPLAN_INSTRUMENTIERT.md: eine geloeschte oder beschaedigte Datei liess
- * `mediaPlayer.setDataSource()`/`.prepare()` unbehandelt werfen). Reine Funktion ohne
- * Android-/Compose-Abhaengigkeit, per JVM-Test pruefbar - analog zu `scanFehlermeldung()` in
- * MeterScreen.kt.
- */
 internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) {
     is java.io.IOException -> "Wiedergabe fehlgeschlagen: Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?"
     else -> "Wiedergabe fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
@@ -179,17 +175,16 @@ internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) 
 
 fun loadAmplitudes(file: File): List<Float> {
     if (!file.exists()) return emptyList()
-    
+
     val bytes = file.readBytes()
     if (bytes.size < 44) return emptyList()
-    
-    // Einfache PCM-Extraktion (16-bit Mono angenommen)
+
     val pcmData = bytes.sliceArray(44 until bytes.size)
     val shortBuffer = ByteBuffer.wrap(pcmData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-    
+
     val result = mutableListOf<Float>()
-    val step = maxOf(1, shortBuffer.limit() / 100) // 100 Punkte für die Anzeige
-    
+    val step = maxOf(1, shortBuffer.limit() / 100)
+
     for (i in 0 until shortBuffer.limit() step step) {
         var max = 0
         for (j in 0 until step) {
