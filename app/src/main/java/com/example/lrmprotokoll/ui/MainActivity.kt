@@ -481,7 +481,7 @@ fun NoiseProtocolApp(
 
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // 1. TopAppBar als Listeneintrag (integriert, kein Nested Scroll Konflikt)
