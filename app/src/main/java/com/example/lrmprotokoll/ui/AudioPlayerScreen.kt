@@ -99,6 +99,7 @@ fun AudioPlayerScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // Wellenform-Anzeige
             WaveformDisplay(
                 amplitudes = amplitudes,
                 progress = currentProgress,
@@ -159,6 +160,7 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
             )
         }
 
+        // Progress Line
         drawLine(
             color = indicatorColor,
             start = Offset(progress * width, 0f),
@@ -168,6 +170,14 @@ fun WaveformDisplay(amplitudes: List<Float>, progress: Float, modifier: Modifier
     }
 }
 
+/**
+ * Uebersetzt einen beim Vorbereiten der Wiedergabe aufgetretenen Fehler in eine fuer den Nutzer
+ * verstaendliche Meldung, statt die App abstuerzen zu lassen (Testplan-Befund
+ * docs/TESTPLAN_INSTRUMENTIERT.md: eine geloeschte oder beschaedigte Datei liess
+ * `mediaPlayer.setDataSource()`/`.prepare()` unbehandelt werfen). Reine Funktion ohne
+ * Android-/Compose-Abhaengigkeit, per JVM-Test pruefbar - analog zu `scanFehlermeldung()` in
+ * MeterScreen.kt.
+ */
 internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) {
     is java.io.IOException -> "Wiedergabe fehlgeschlagen: Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?"
     else -> "Wiedergabe fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
@@ -179,11 +189,12 @@ fun loadAmplitudes(file: File): List<Float> {
     val bytes = file.readBytes()
     if (bytes.size < 44) return emptyList()
 
+    // Einfache PCM-Extraktion (16-bit Mono angenommen)
     val pcmData = bytes.sliceArray(44 until bytes.size)
     val shortBuffer = ByteBuffer.wrap(pcmData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
 
     val result = mutableListOf<Float>()
-    val step = maxOf(1, shortBuffer.limit() / 100)
+    val step = maxOf(1, shortBuffer.limit() / 100) // 100 Punkte für die Anzeige
 
     for (i in 0 until shortBuffer.limit() step step) {
         var max = 0
