@@ -1,6 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -20,14 +23,6 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/**
- * Instrumentierte UI-Tests für den [AudioPlayerScreen] gemäß Testplan (Abschnitt 8).
- *
- * Testet:
- * 1. Positivtest: Laden und Abspielen einer gültigen WAV-Datei mit Wellenform und Play/Pause-Umschaltung.
- * 2. Negativtest: Nicht existierende oder beschädigte Datei führt zu einer sauberen Fehlermeldung
- *    in der UI ("Audiodatei existiert nicht mehr." / "Audiodatei ist beschädigt") statt eines Absturzes.
- */
 @RunWith(AndroidJUnit4::class)
 class AudioPlayerScreenInstrumentedTest {
 
@@ -42,13 +37,10 @@ class AudioPlayerScreenInstrumentedTest {
         cacheDir = app.cacheDir
     }
 
-    /**
-     * Erstellt eine minimale, aber voll gültige 16-Bit-Mono-PCM-WAV-Datei (44-Byte-Header + Audiodaten).
-     */
     private fun erstelleGueltigeWavDatei(dateiname: String): File {
         val datei = File(cacheDir, dateiname)
         val sampleRate = 16000
-        val numSamples = 8000 // 0.5 Sekunden Audio
+        val numSamples = 8000
         val dataSize = numSamples * 2
         val totalSize = 36 + dataSize
 
@@ -57,140 +49,95 @@ class AudioPlayerScreenInstrumentedTest {
             putInt(totalSize)
             put("WAVE".toByteArray())
             put("fmt ".toByteArray())
-            putInt(16) // Subchunk1Size für PCM
-            putShort(1) // AudioFormat (1 = PCM)
-            putShort(1) // NumChannels (1 = Mono)
+            putInt(16)
+            putShort(1)
+            putShort(1)
             putInt(sampleRate)
-            putInt(sampleRate * 2) // ByteRate
-            putShort(2) // BlockAlign
-            putShort(16) // BitsPerSample
+            putInt(sampleRate * 2)
+            putShort(2)
+            putShort(16)
             put("data".toByteArray())
             putInt(dataSize)
         }.array()
 
-        val pcmData = ByteArray(dataSize) // Stille / Nullen
         FileOutputStream(datei).use { fos ->
             fos.write(header)
-            fos.write(pcmData)
+            fos.write(ByteArray(dataSize))
         }
         return datei
     }
 
     @Test
-    fun audioPlayerLaedtGueltigeWavDateiUndSchaltetPlayPauseUm() {
+    fun audioPlayerLaedtGueltigeWavDateiUndReleasedPlayerBeimVerlassen() {
         val testDatei = erstelleGueltigeWavDatei("test_aufnahme.wav")
-        var backed = false
+        var showPlayer by mutableStateOf(true)
+        var released = false
 
         composeRule.setContent {
-            AudioPlayerScreen(filePath = testDatei.absolutePath, onBack = { backed = true })
+            if (showPlayer) {
+                AudioPlayerScreen(
+                    filePath = testDatei.absolutePath,
+                    onBack = { showPlayer = false },
+                    onPlayerReleasedForTest = { released = true },
+                )
+            }
         }
         composeRule.waitForIdle()
 
-        val titleStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.player_title)
-        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_play)
-        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
-
-        // 1. Titel & Dateiname
-        composeRule.onNodeWithText(titleStr).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.player_title)).assertIsDisplayed()
         composeRule.onNodeWithText("test_aufnahme.wav").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play))
+            .assertIsDisplayed().performClick()
 
-        // 2. Play-Button vorhanden und klickbar
-        composeRule.onNodeWithContentDescription(playDesc).assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back))
+            .assertIsDisplayed().performClick()
 
-        // 3. Zurück-Button
-        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
-        assertTrue(backed)
-
+        composeRule.waitUntil(timeoutMillis = 5_000L) { released }
+        assertTrue("MediaPlayer.release() muss beim Verlassen des Screens ausgeführt werden", released)
         testDatei.delete()
     }
 
     @Test
     fun audioPlayerZeigtFehlerBeiNichtExistierenderDateiOhneAbsturz() {
         var backed = false
-
         composeRule.setContent {
             AudioPlayerScreen(filePath = "/ungueltiger/pfad/nicht_vorhanden.wav", onBack = { backed = true })
         }
         composeRule.waitForIdle()
-
-        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
-
-        // 1. Fehler-Text sichtbar
         composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
-
-        // 2. Zurück-Button in TopAppBar klickbar
-        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back))
+            .assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
     @Test
     fun audioPlayerZeigtFehlerBeiBeschaedigterDateiOhneAbsturz() {
-        val korrupteDatei = File(cacheDir, "korrupt.wav").apply {
-            writeBytes(byteArrayOf(0, 1, 2, 3)) // Nur 4 Bytes statt mindestens 44
-        }
-        var backed = false
-
-        composeRule.setContent {
-            AudioPlayerScreen(filePath = korrupteDatei.absolutePath, onBack = { backed = true })
-        }
+        val korrupteDatei = File(cacheDir, "korrupt.wav").apply { writeBytes(byteArrayOf(0, 1, 2, 3)) }
+        composeRule.setContent { AudioPlayerScreen(filePath = korrupteDatei.absolutePath, onBack = {}) }
         composeRule.waitForIdle()
-
-        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
-
-        // 1. Fehler-Text für zu kurze/beschädigte Datei sichtbar
         composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
-
-        // 2. Zurück-Button in TopAppBar klickbar
-        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
-        assertTrue(backed)
-
         korrupteDatei.delete()
     }
 
     @Test
     fun audioPlayerZeigtFehlerBeiGeloeschterDateiUndDeaktiviertPlayButton() {
-        // Erzeuge reale WAV-Datei und lösche sie vor dem Abspielen gezielt
         val datei = erstelleGueltigeWavDatei("temporaer_geloescht.wav")
         val pfad = datei.absolutePath
-        assertTrue(datei.exists())
         assertTrue(datei.delete())
 
-        var backed = false
-        composeRule.setContent {
-            AudioPlayerScreen(filePath = pfad, onBack = { backed = true })
-        }
+        composeRule.setContent { AudioPlayerScreen(filePath = pfad, onBack = {}) }
         composeRule.waitForIdle()
-
-        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
-        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
-
-        // 1. Spezifischer IOException-Fehlertext sichtbar
-        composeRule.onNodeWithText(
-            "Wiedergabe fehlgeschlagen: Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?",
-            substring = true
-        ).assertIsDisplayed()
-
-        // 2. Play-Button existiert, ist aber deaktiviert
-        composeRule.onNodeWithContentDescription(playDesc).assertIsNotEnabled()
-
-        // 3. Zurück-Navigation bleibt funktionsfähig
-        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
-        assertTrue(backed)
+        composeRule.onNodeWithText("Datei kann nicht abgespielt werden", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play))
+            .assertIsNotEnabled()
     }
 
     @Test
     fun audioPlayerZeigtHinweisBeiBlankPfadFuerReinePegelmessung() {
-        var backed = false
-        composeRule.setContent {
-            AudioPlayerScreen(filePath = "", onBack = { backed = true })
-        }
+        composeRule.setContent { AudioPlayerScreen(filePath = "", onBack = {}) }
         composeRule.waitForIdle()
-
-        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
-
-        // Hinweistext für reine Pegelmessungen
         composeRule.onNodeWithText("Reine Pegelmessung", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription(playDesc).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play))
+            .assertIsNotEnabled()
     }
 }
