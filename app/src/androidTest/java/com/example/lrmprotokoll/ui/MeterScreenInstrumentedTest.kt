@@ -3,20 +3,29 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.Weighting
+import com.example.lrmprotokoll.meter.ble.BleDevice
+import com.example.lrmprotokoll.meter.ble.BleScannerTestOverrides
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -26,9 +35,9 @@ import org.junit.runner.RunWith
 /**
  * Instrumentierte UI-Tests für den [MeterScreen] gemäß Testplan.
  *
- * Prüft den Scan-Button, Fehlerbehandlung bei Scan-Drosselung (Scan-Crash-Regression),
- * den Geräte-Pinning-Warndialog bei Namenskonflikten ("Trotzdem koppeln" / "Abbrechen"),
- * sowie die Scrollbarkeit der Geräteliste bis [GERAETE_LISTE_ENDE_TAG].
+ * Der Scanpfad ist vollständig deterministisch: kein Test hängt von Bluetooth-Hardware oder vom
+ * Zustand des API-34-ATD ab. Fehler werden über denselben Flow wie `BleScanner.onScanFailed`
+ * eingespeist; Gerätefunde werden als [BleDevice] emittiert.
  */
 @RunWith(AndroidJUnit4::class)
 class MeterScreenInstrumentedTest {
@@ -36,95 +45,141 @@ class MeterScreenInstrumentedTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var app: LaermprotokollApp
+
     @Before
     fun setUp() {
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app = ApplicationProvider.getApplicationContext()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+            automation.grantRuntimePermission(composeRule.activity.packageName, android.Manifest.permission.BLUETOOTH_SCAN)
+            automation.grantRuntimePermission(composeRule.activity.packageName, android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+    }
+
+    @After
+    fun tearDown() {
+        BleScannerTestOverrides.reset()
+        app.resetContainer()
     }
 
     @Test
     fun meterScreenZeigtTitelUndScanButtonUndKopfbereich() {
         var backed = false
-        composeRule.setContent {
-            MeterScreen(onBack = { backed = true })
-        }
+        composeRule.setContent { MeterScreen(onBack = { backed = true }) }
         composeRule.waitForIdle()
 
-        val meterTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_meter)
-        val scanBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.meter_scan_button)
-        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
-
-        // 1. Titel "Messgerät" in TopAppBar sichtbar
-        composeRule.onNodeWithText(meterTitle).assertIsDisplayed()
-
-        // 2. Scan-Button vorhanden und klickbar
+        composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_meter)).assertIsDisplayed()
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText(scanBtn).assertIsDisplayed()
-
-        // 3. Zurück-Button klickbar
-        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back))
+            .assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
     @Test
-    fun scanFehlermeldungWirdBeiScanDrosselungOhneAbsturzFormatiert() {
-        val exScanTooFrequently = IllegalStateException("Scan failed with error 6")
-        val msg = scanFehlermeldung(exScanTooFrequently)
-        assertTrue(msg.contains("Scan fehlgeschlagen"))
-        assertTrue(msg.contains("error 6"))
+    fun scanFehlerAusScannerFlowWirdSichtbarUndSchnellesMehrfachTippenCrashtNicht() {
+        BleScannerTestOverrides.scanProvider = {
+            flow {
+                throw IllegalStateException("BLE-Scan fehlgeschlagen, errorCode=6")
+            }
+        }
 
-        val exBluetoothOff = IllegalStateException("Bluetooth is disabled")
-        val msgOff = scanFehlermeldung(exBluetoothOff)
-        assertTrue(msgOff.contains("Scan fehlgeschlagen"))
-        assertTrue(msgOff.contains("Bluetooth is disabled"))
+        composeRule.setContent { MeterScreen(onBack = {}) }
+        composeRule.waitForIdle()
 
-        val exGeneric = RuntimeException("Unbekannter Fehler")
-        val msgGeneric = scanFehlermeldung(exGeneric)
-        assertTrue(msgGeneric.contains("Scan fehlgeschlagen"))
-        assertTrue(msgGeneric.contains("Unbekannter Fehler"))
+        // Der erste Tap startet den echten UI-Scanpfad. Weitere schnelle Taps dürfen weder einen
+        // zweiten parallelen Scan starten noch einen Assertion-/App-Crash auslösen.
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        repeat(3) {
+            runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick() }
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            composeRule.onAllNodesWithText("errorCode=6", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("errorCode=6", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
     }
 
     @Test
-    fun scanButtonMehrfachSchnellKlickenCrashtNichtUndZeigtFehlerBeiFehlendemBluetooth() {
-        val context = composeRule.activity
-        // Berechtigungen auf API 31+ vorsorglich erteilen, damit direkt der Scan-Pfad angesteuert wird
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val uiAutomation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
-            uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.BLUETOOTH_SCAN)
-            uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.BLUETOOTH_CONNECT)
+    fun gleicherNameAndereMacZeigtWarnungUndAbbrechenBelaesstPinning() {
+        val settings = app.container.settingsManager
+        settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
+        settings.meterDeviceName = "PCE-323 Test"
+        BleScannerTestOverrides.scanProvider = {
+            flowOf(BleDevice("BB:BB:BB:BB:BB:BB", "PCE-323 Test", -42))
         }
 
-        composeRule.setContent {
-            MeterScreen(onBack = {})
+        composeRule.setContent { MeterScreen(onBack = {}) }
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.waitUntil(5_000L) {
+            runCatching {
+                composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").fetchSemanticsNode()
+            }.isSuccess
         }
-        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").performClick()
+        composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertIsDisplayed().performClick()
 
-        // Schnelles, wiederholtes Antippen des Scan-Buttons (Regression für Scan-Crash)
-        repeat(4) {
-            try {
-                composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
-            } catch (_: AssertionError) {
-                // Button ist während des laufenden Scans richtigerweise disabled
+        assertEquals("AA:AA:AA:AA:AA:AA", settings.meterDeviceAddress)
+        composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertDoesNotExist()
+    }
+
+    @Test
+    fun gleicherNameAndereMacKannExplizitBestaetigtWerden() {
+        val settings = app.container.settingsManager
+        settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
+        settings.meterDeviceName = "PCE-323 Test"
+        BleScannerTestOverrides.scanProvider = {
+            flowOf(BleDevice("CC:CC:CC:CC:CC:CC", "PCE-323 Test", -41))
+        }
+
+        composeRule.setContent { MeterScreen(onBack = {}) }
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.waitUntil(5_000L) {
+            runCatching {
+                composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").fetchSemanticsNode()
+            }.isSuccess
+        }
+        composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").performClick()
+        composeRule.onNodeWithTag("dialog_spoofing_confirm").assertIsDisplayed().performClick()
+
+        composeRule.waitUntil(5_000L) { settings.meterDeviceAddress == "CC:CC:CC:CC:CC:CC" }
+        assertEquals("CC:CC:CC:CC:CC:CC", settings.meterDeviceAddress)
+    }
+
+    @Test
+    fun langeGeraetelisteIstMitEchterWischgesteBisZumEndeErreichbar() {
+        BleScannerTestOverrides.scanProvider = {
+            flow {
+                repeat(18) { index ->
+                    emit(
+                        BleDevice(
+                            address = "AA:BB:CC:DD:EE:${index.toString().padStart(2, '0')}",
+                            name = "Testgerät ${index.toString().padStart(2, '0')}",
+                            rssi = -30 - index,
+                        )
+                    )
+                }
             }
         }
-        composeRule.waitForIdle()
 
-        // Auf dem Emulator ohne echtes aktives Bluetooth wird scanFehler gesetzt statt abzustürzen
-        composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("Scan fehlgeschlagen", substring = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty() ||
-            composeRule.onAllNodesWithText("Standortdienste", substring = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty() ||
-            composeRule.onAllNodesWithTag(SCAN_BUTTON_TAG)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+        composeRule.setContent { MeterScreen(onBack = {}) }
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.waitUntil(5_000L) {
+            runCatching { composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNode() }.isSuccess
         }
+
+        repeat(8) {
+            if (runCatching { composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed() }.isSuccess) return@repeat
+            composeRule.onRoot().performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
+        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
     }
 
     @Test
     fun meterScreenSpiegeltLivePegelUndBestaetigteBewertungVonFakeTransport() {
-        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val fakeTransport = FakeMeterTransport()
         val customContainer = AppContainer(app, meterTransportOverride = fakeTransport)
         app.setCustomContainer(customContainer)
@@ -137,30 +192,19 @@ class MeterScreenInstrumentedTest {
         }
 
         kotlinx.coroutines.runBlocking {
-            fakeTransport.emitFrame(
-                level = 68.5,
-                weighting = Weighting.A,
-                modeAssumptionConfirmed = true
-            )
+            fakeTransport.emitFrame(level = 68.5, weighting = Weighting.A, modeAssumptionConfirmed = true)
         }
 
         try {
-            composeRule.setContent {
-                MeterScreen(onBack = {})
-            }
+            composeRule.setContent { MeterScreen(onBack = {}) }
             composeRule.waitForIdle()
-
-            val confirmedText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.meter_confirmed_on_device)
-
-            // 1. Pegelwert und Frequenzbewertung dB(A) wird angezeigt
             composeRule.onNodeWithText("68", substring = true).assertIsDisplayed()
             composeRule.onNodeWithText("dB(A)", substring = true).assertIsDisplayed()
-
-            // 2. Bestätigt am Gerät Hinweis sichtbar
-            composeRule.onNodeWithText(confirmedText).assertIsDisplayed()
+            composeRule.onNodeWithText(
+                composeRule.activity.getString(com.example.lrmprotokoll.R.string.meter_confirmed_on_device)
+            ).assertIsDisplayed()
         } finally {
             customContainer.connectionSupervisor.stop()
-            app.resetContainer()
         }
     }
 }
