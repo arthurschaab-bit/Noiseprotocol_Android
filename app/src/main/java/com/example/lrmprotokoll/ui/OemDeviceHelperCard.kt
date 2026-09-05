@@ -143,6 +143,7 @@ fun OemDeviceHelperCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // Hardware Vibration Information
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Hardware-Vibration: " + (if (hasVibrator) "Vorhanden" else "Nicht vorhanden (Akustischer Alarmton wird forciert)"),
@@ -151,6 +152,7 @@ fun OemDeviceHelperCard(
                 )
             }
 
+            // Notification Permission
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Benachrichtigungen: " + (if (hasNotificationPermission) "Erlaubt" else "Blockiert"),
@@ -159,6 +161,7 @@ fun OemDeviceHelperCard(
                 )
             }
 
+            // Exact Alarms
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Exakte Alarme: " + (if (canExactAlarm) "Erlaubt" else "Eingeschränkt"),
@@ -167,6 +170,7 @@ fun OemDeviceHelperCard(
                 )
             }
 
+            // Battery Optimization
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Akku-Optimierung: " + (if (!isBatteryOptimized) "Ausgenommen (Keine Einschränkungen)" else "Eingeschränkt (kann Alarme verzögern)"),
@@ -240,6 +244,9 @@ fun OemDeviceHelperCard(
                                 }
                                 context.startActivity(intent)
                             } catch (_: ActivityNotFoundException) {
+                                // Package/Activity variiert zwischen ROM-Versionen und ist nicht
+                                // garantiert vorhanden - Fallback auf die App-Detailseite, kein
+                                // Absturz (PROMPT_M8.md Aufgabe 2).
                                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                     data = Uri.parse("package:${context.packageName}")
                                 }
