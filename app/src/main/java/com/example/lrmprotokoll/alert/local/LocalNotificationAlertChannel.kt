@@ -103,14 +103,20 @@ class LocalNotificationAlertChannel(
         }
     }
 
-    override suspend fun send(alert: Alert): Result<Unit> {
-        if (!isAvailable) {
-            return Result.failure(
-                SecurityException("POST_NOTIFICATIONS ist nicht erteilt; lokale Benachrichtigung wird nicht gesendet.")
-            )
-        }
+    override suspend fun send(alert: Alert): Result<Unit> = runCatching {
+        val alarmSoundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            ?: Uri.EMPTY
 
-        return runCatching {
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        // POST_NOTIFICATIONS steuert nur die sichtbare Notification. Ton/Vibration und das
+        // Stoppen eines laufenden Alarms sind davon unabhängig und müssen auch dann funktionieren,
+        // wenn die Berechtigung fehlt (z.B. Test-Alarm auf einem Tablet ohne Vibrationsmotor).
+        if (isAvailable) {
             val manager = context.getSystemService(NotificationManager::class.java)
                 ?: error("NotificationManager nicht verfügbar")
 
@@ -119,15 +125,6 @@ class LocalNotificationAlertChannel(
                 manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V1)
                 manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V2)
             } catch (_: Exception) {}
-
-            val alarmSoundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                ?: Uri.EMPTY
-
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
 
             manager.createNotificationChannel(
                 NotificationChannel(
@@ -170,16 +167,16 @@ class LocalNotificationAlertChannel(
 
             // Feste ID: Die Entwarnung ersetzt die stehende Alarmmeldung
             manager.notify(ALARM_NOTIFICATION_ID, meldung)
+        }
 
-            // Akustischer Ton & Hardware-Vibration für Tablets & OEM Geräte
-            when (alert.kind) {
-                AlertKind.RAISED, AlertKind.ESCALATED, AlertKind.TEST -> {
-                    spieleAlarmTon(alarmSoundUri, audioAttributes)
-                    triggereHardwareVibration(audioAttributes)
-                }
-                AlertKind.RESOLVED -> {
-                    stoppeAlarmTon()
-                }
+        // Akustischer Ton & Hardware-Vibration für Tablets & OEM Geräte
+        when (alert.kind) {
+            AlertKind.RAISED, AlertKind.ESCALATED, AlertKind.TEST -> {
+                spieleAlarmTon(alarmSoundUri, audioAttributes)
+                triggereHardwareVibration(audioAttributes)
+            }
+            AlertKind.RESOLVED -> {
+                stoppeAlarmTon()
             }
         }
     }
