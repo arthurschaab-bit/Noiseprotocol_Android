@@ -2,13 +2,14 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -168,15 +169,26 @@ class MeterScreenInstrumentedTest {
 
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+
+        // Erst auf ein tatsächlich komponiertes Listenelement warten. Das Endelement einer
+        // LazyColumn existiert semantisch bewusst erst, nachdem dorthin gescrollt wurde.
         composeRule.waitUntil(5_000L) {
-            runCatching { composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNode() }.isSuccess
+            composeRule.onAllNodesWithTag("card_ble_device_AA:BB:CC:DD:EE:00")
+                .fetchSemanticsNodes().isNotEmpty()
         }
 
-        repeat(8) {
-            if (runCatching { composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed() }.isSuccess) return@repeat
-            composeRule.onRoot().performTouchInput { swipeUp() }
+        // MeterScreen besitzt den äußeren verticalScroll und die innere LazyColumn. Der zweite
+        // Scroll-Semantics-Knoten ist die Geräteliste. Darauf echte Touch-Wischgesten ausführen.
+        val scrollables = composeRule.onAllNodes(hasScrollAction())
+        assertTrue("MeterScreen muss äußeren Scrollcontainer und Geräteliste enthalten", scrollables.fetchSemanticsNodes().size >= 2)
+        val deviceList = scrollables[1]
+
+        for (attempt in 0 until 12) {
+            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) break
+            deviceList.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
+
         composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
     }
 
