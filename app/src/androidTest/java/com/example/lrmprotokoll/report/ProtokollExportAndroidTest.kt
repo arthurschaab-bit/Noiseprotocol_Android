@@ -61,6 +61,7 @@ class ProtokollExportAndroidTest {
 
     @After
     fun tearDown() {
+        runCatching { composeRule.waitForIdle() }
         Intents.release()
     }
 
@@ -159,6 +160,11 @@ class ProtokollExportAndroidTest {
         val pdfHeader = String(pdfBytes.copyOfRange(0, 4), Charsets.US_ASCII)
         assertEquals("%PDF", pdfHeader)
 
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            Intents.getIntents().size >= 2
+        }
+        intended(hasAction(Intent.ACTION_CHOOSER), Intents.times(2))
+
         // Bereinigung
         expectedCsvFile.delete()
         expectedPdfFile.delete()
@@ -201,7 +207,7 @@ class ProtokollExportAndroidTest {
 
         wartetBisAngezeigt(sessionTitle)
 
-        // 1. PDF-Export bei Session ohne Messwerte führt nicht zum Absturz
+        // 1. PDF-Export bei Session ohne Messwerte führt nicht zum Absturz (Guard kennwerte ?: return greift)
         composeRule.onNodeWithText(pdfBtn).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
@@ -215,6 +221,11 @@ class ProtokollExportAndroidTest {
         assertTrue("CSV-Datei wird auch bei leerer Messreihe sicher erzeugt", expectedCsvFile.exists())
         val csvText = expectedCsvFile.readText(Charsets.UTF_8)
         assertTrue("CSV muss Kopfzeile enthalten", csvText.contains("Zeit;Pegel_dB"))
+
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            Intents.getIntents().isNotEmpty()
+        }
+        intended(hasAction(Intent.ACTION_CHOOSER), Intents.times(1))
 
         expectedCsvFile.delete()
         expectedPdfFile.delete()
