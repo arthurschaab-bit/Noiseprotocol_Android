@@ -10,7 +10,12 @@ Android app that documents noise events: records an audio clip with pre-roll whe
 threshold is exceeded, classifies the sound with YAMNet (TFLite), and stores everything as a
 searchable log in Room. **Current initiative:** connect an external sound level meter
 **PCE-323 via Bluetooth LE** to replace the uncalibrated microphone level with calibrated dBA
-values. Later: alerting on connection loss (SMS + push), Google Drive sync.
+values.
+
+**State as of 04.09.2026:** the Bluetooth work (M1–M8), alerting on connection loss, the Google
+Drive sync, the AI rebuild and M11 (photo documentation and video evidence) are all implemented
+and merged. What remains is device verification — see `docs/CHECKLISTE_GERAETETEST.md`, part F,
+for the list of things that are built but have never been seen on hardware.
 
 ## 2. Where the truth lives — read in this order
 
@@ -19,6 +24,9 @@ values. Later: alerting on connection loss (SMS + push), Google Drive sync.
    Sections 0 (inventory, findings B-1..B-11), 2 (device protocol), 4 (target architecture),
    11 (test strategy), 12 (milestones), 13 (open decisions).
 3. `docs/PROMPT_UMSETZUNG.md`, `docs/PROMPT_M1.md` — concrete task briefs per milestone.
+   The most recent ones are `docs/PROMPT_M11_FOTO_VIDEO.md` (photos and video evidence,
+   including the binding owner decisions E1, E4, E8 and E9) and
+   `docs/PROMPT_BUGFIX_TRIGGER.md`.
 4. `docs/PROMPT_REVIEW.md` — the review checklist a separate reviewer session runs.
 
 The plan is decided. Your job is to execute it, not to redesign it. If your task
@@ -29,10 +37,13 @@ Docs are in German. Keep them in German. Code identifiers are English, UI string
 
 ## 3. Stack
 
-Kotlin 2.2 · Jetpack Compose · Room 2.8 (KSP, exported schemas in `app/schemas/`) ·
-Navigation-Compose · TFLite Task Audio (to be replaced, see B-11) · Robolectric for JVM tests.
+Kotlin 2.2 · Jetpack Compose · Room 2.8, **schema version 17** (KSP, exported schemas in
+`app/schemas/`) · Navigation-Compose · MediaPipe Tasks Audio for YAMNet (replaced TFLite Task
+Audio, see B-11) · CameraX for the video evidence (M11 B) · Robolectric for JVM tests.
+**Hand-written fakes only** — no Mockito, no MockK anywhere in this repository.
 AGP 9.2 · Gradle 9.4 · Java toolchain 21, `jvmTarget` 17 · compileSdk/targetSdk 36 ·
-minSdk 29 (→ 31 in M1). Single Gradle module `app`, package `com.example.lrmprotokoll`.
+minSdk 29 (the planned bump to 31 did **not** happen — the code still targets 29). Single Gradle
+module `app`, package `com.example.lrmprotokoll`.
 No DI framework — a manual `AppContainer` (plan 4.2). No Hilt.
 
 ## 4. Build & test commands

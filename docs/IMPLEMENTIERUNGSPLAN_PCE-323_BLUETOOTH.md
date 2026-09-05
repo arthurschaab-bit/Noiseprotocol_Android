@@ -121,7 +121,7 @@ für BLE-Scans, keine `maxSdkVersion`-Altlasten, nur noch `BLUETOOTH_SCAN` +
 |----|-------------|
 | N-1 | **Robuste Verbindung**: übersteht Funklöcher, Bluetooth-Aus/Ein, Doze, Prozess-Tod, Reboot |
 | N-2 | **Sichere Verbindung**: Bindung an genau ein bekanntes Gerät, Verschlüsselung wo unterstützt, Plausibilisierung der Nutzdaten gegen Spoofing |
-| N-3 | Keine Fehlalarme: Alarm erst nach **60 s Karenzzeit** und mehreren fehlgeschlagenen Reconnects |
+| N-3 | Keine Fehlalarme: Alarm erst nach **60 s Karenzzeit** und mehreren fehlgeschlagenen Reconnects — **und erst, nachdem einmal Daten geflossen sind** (Nachtrag Gerätetest 04.09.2026: ohne diese Bedingung alarmierte die App auch für eine Verbindung, die nie zustande kam) |
 | N-4 | Keine Alarmstürme: Cooldown, Deduplizierung, Zustandsspeicherung über Prozessgrenzen hinweg |
 | N-5 | Alarmzustellung nachweisbar: `sentIntent`/`deliveryIntent`, Retry, Persistenz der Alarm-Queue |
 | N-6 | Messdaten und Rufnummern verschlüsselt at rest |
@@ -850,6 +850,20 @@ sofort den Play-tauglichen Pfad absichert; SMS parallel dazu für den Offline-Fa
 
 `ConnectionEventEntity` ist bewusst eine eigene Tabelle: Das Ausfallprotokoll gehört in den Export,
 sonst ist eine Messreihe mit Lücken forensisch wertlos.
+
+> **Stand der Umsetzung (04.09.2026).** Das Schema oben ist die Planskizze aus M4; der Code ist
+> seither gewachsen. Verbindlich ist immer das exportierte Room-Schema unter `app/schemas/` —
+> aktuell **Version 17**. Dazugekommen sind unter anderem `MinuteAggregateEntity` (Retention),
+> `LevelSampleEntity` und `DriveDailyFileEntity` (M7b), `KlassifikationsRohdaten` (KI-Umbau),
+> `DokumentationsFotoEntity` (M11 A) und `BeweisVideoEntity` (M11 B). `weighting`,
+> `timeWeighting` und `range` sind entgegen der Skizze **nullable** — sie bleiben `null`, solange
+> die Annahme unbestätigt ist.
+>
+> **Eine Regel aus diesem Abschnitt wurde nach dem Gerätetest verworfen:** Eine Session galt als
+> Klammer um „wie lange wurde überwacht" und entstand beim Start der Überwachung. Sie entsteht
+> jetzt erst mit dem **ersten fließenden Datenstrom**. Grund: Ist das gepinnte Gerät nicht in
+> Reichweite, füllte sich das Protokoll mit Sitzungen „PCE-323" ohne einen einzigen Messwert.
+> Siehe `SessionEntity`-KDoc und README, Abschnitt „Regeln, die man kennen muss".
 
 ### 8.2 Schreibstrategie
 
