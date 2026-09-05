@@ -2,15 +2,14 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -146,19 +145,29 @@ class MeterScreenInstrumentedTest {
             composeRule.onAllNodesWithTag("card_ble_device_AA:BB:CC:DD:EE:00").fetchSemanticsNodes().isNotEmpty()
         }
 
-        // Wischen auf dem sichtbaren Root simuliert die tatsächliche Nutzergeste und vermeidet
-        // eine fragile Auswahl irgendeines internen hasScrollAction()-Semantics-Knotens.
-        for (attempt in 0 until 20) {
-            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) break
-            composeRule.onRoot().performTouchInput { swipeUp() }
+        // MeterScreen besitzt hier genau den scrollbaren LazyColumn-Inhalt. Die Geste muss auf
+        // diesem Semantics-Knoten landen; ein Swipe auf dem Compose-Root wird nicht zuverlässig
+        // an LazyColumn weitergereicht. Wir wischen so lange real nach oben, bis die letzte
+        // Gerätekarte tatsächlich sichtbar ist. Zusätzliche Swipes am Listenende wären No-Ops.
+        val scrollables = composeRule.onAllNodes(hasScrollAction())
+        assertTrue("MeterScreen muss einen scrollbaren Gerätebereich enthalten", scrollables.fetchSemanticsNodes().isNotEmpty())
+        val deviceList = scrollables[0]
+
+        var endeSichtbar = false
+        for (attempt in 0 until 30) {
+            if (runCatching {
+                    composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
+                }.isSuccess
+            ) {
+                endeSichtbar = true
+                break
+            }
+            deviceList.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
 
-        // Sobald das letzte Lazy-Item komponiert ist, darf Compose es bei Bedarf noch vollständig
-        // in den Viewport bringen; geprüft wird anschließend echte Sichtbarkeit, nicht nur Existenz.
-        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG)
-            .performScrollTo()
-            .assertIsDisplayed()
+        assertTrue("Das Ende der langen Geräteliste muss durch echte Wischgesten erreichbar sein", endeSichtbar)
+        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
     }
 
     @Test
