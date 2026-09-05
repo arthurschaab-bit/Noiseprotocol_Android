@@ -43,7 +43,7 @@ class LocalNotificationAlertChannelTest {
     fun sendErzeugtEineNotificationAufDemRichtigenKanalMitTitelUndText() = runTest {
         context = ApplicationProvider.getApplicationContext()
         manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context)
+        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
 
         val ergebnis = channel.send(alarm(message = "Verbindung seit 09:00 unterbrochen"))
 
@@ -66,7 +66,7 @@ class LocalNotificationAlertChannelTest {
     fun derAlarmkanalWirdMitHoherWichtigkeitAngelegt() = runTest {
         context = ApplicationProvider.getApplicationContext()
         manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context)
+        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
 
         channel.send(alarm())
 
@@ -81,7 +81,7 @@ class LocalNotificationAlertChannelTest {
     fun resolvedBekommtEinenEigenenTitelUndText() = runTest {
         context = ApplicationProvider.getApplicationContext()
         manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context)
+        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
 
         channel.send(alarm(kind = AlertKind.RESOLVED, message = "Der Ausfall bestand seit 09:00."))
 
@@ -96,7 +96,7 @@ class LocalNotificationAlertChannelTest {
     fun wiederholterVersandErsetztDieVorherigeMeldungStattSichDanebenZuStapeln() = runTest {
         context = ApplicationProvider.getApplicationContext()
         manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context)
+        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
 
         channel.send(alarm(kind = AlertKind.RAISED, message = "Erster Alarm"))
         channel.send(alarm(kind = AlertKind.RESOLVED, message = "Entwarnung"))
