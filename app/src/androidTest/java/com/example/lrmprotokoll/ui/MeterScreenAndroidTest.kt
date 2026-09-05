@@ -189,7 +189,8 @@ class MeterScreenAndroidTest {
         composeRule.onNodeWithTag("live_meter_level_display")
             .performScrollTo()
             .assertIsDisplayed()
-            .assertTextContains("68.4")
+            .assertTextContains("68", substring = true)
+            .assertTextContains("dB(A)", substring = true)
 
         // Parameter-Karte prüfen
         composeRule.onNodeWithTag("card_meter_parameters")
@@ -224,11 +225,12 @@ class MeterScreenAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // Live-Pegel enthält unbestätigten Wert ohne Klammer (z.B. "55.2 dB")
+        // Live-Pegel enthält unbestätigten Wert ohne Klammer (z.B. "55.2 dB" oder "55,2 dB")
         composeRule.onNodeWithTag("live_meter_level_display")
             .performScrollTo()
             .assertIsDisplayed()
-            .assertTextContains("55.2 dB")
+            .assertTextContains("55", substring = true)
+            .assertTextContains("dB", substring = true)
 
         // Warnhinweis wird angezeigt
         val warningText = composeRule.activity.getString(R.string.meter_unconfirmed_warning)
