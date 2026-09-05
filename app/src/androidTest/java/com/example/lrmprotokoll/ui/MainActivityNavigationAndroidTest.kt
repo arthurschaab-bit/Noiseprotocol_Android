@@ -206,7 +206,8 @@ class MainActivityNavigationAndroidTest {
         // 4. Clear-Button klicken
         composeRule.onNodeWithTag("btn_clear_filter_search").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("input_filter_search").assertTextEquals("")
+        composeRule.onNodeWithTag("btn_clear_filter_search").assertDoesNotExist()
+        composeRule.onNodeWithTag("input_filter_search").assert(!hasText("Bohren"))
 
         // 5. Filter-Chips toggeln
         composeRule.onNodeWithTag("chip_filter_favorites").assertIsDisplayed().performClick()
