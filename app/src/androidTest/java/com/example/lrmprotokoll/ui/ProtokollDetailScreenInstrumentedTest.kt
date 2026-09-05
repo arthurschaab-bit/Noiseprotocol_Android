@@ -50,7 +50,7 @@ class ProtokollDetailScreenInstrumentedTest {
      * hat ihn auf dem CI-Emulator sporadisch scheitern lassen.
      */
     private fun wartetBisAngezeigt(text: String) {
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
