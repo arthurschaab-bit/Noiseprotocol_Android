@@ -45,6 +45,11 @@ class MeterScreenAndroidTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val uiAutomation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            uiAutomation.grantRuntimePermission(app.packageName, android.Manifest.permission.BLUETOOTH_SCAN)
+            uiAutomation.grantRuntimePermission(app.packageName, android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
         fakeTransport = FakeMeterTransport()
         container = AppContainer(app, fakeTransport)
         app.setCustomContainer(container)
@@ -61,15 +66,13 @@ class MeterScreenAndroidTest {
     }
 
     @Test
-    fun topAppBarNavigiertZurueckOderOeffnetDrawer() {
+    fun topAppBarOeffnetDrawerWennKonfiguriert() {
         var drawerOpened = false
-        var backClicked = false
 
-        // 1. Mit Drawer-Callback
         composeRule.setContent {
             LaermprotokollTheme {
                 MeterScreen(
-                    onBack = { backClicked = true },
+                    onBack = {},
                     onOpenDrawer = { drawerOpened = true }
                 )
             }
@@ -78,8 +81,12 @@ class MeterScreenAndroidTest {
 
         composeRule.onNodeWithTag("btn_navigation_drawer").assertIsDisplayed().performClick()
         assertTrue("Drawer-Callback sollte aufgerufen worden sein", drawerOpened)
+    }
 
-        // 2. Ohne Drawer-Callback -> Zurück-Pfeil
+    @Test
+    fun topAppBarNavigiertZurueckOhneDrawer() {
+        var backClicked = false
+
         composeRule.setContent {
             LaermprotokollTheme {
                 MeterScreen(
@@ -160,6 +167,7 @@ class MeterScreenAndroidTest {
 
         runBlocking {
             fakeTransport.connect(BoundDevice(testAddress, testName))
+            fakeTransport.simulateStall(true)
             fakeTransport.emitFrame(
                 level = 68.4,
                 weighting = Weighting.A,
@@ -198,6 +206,7 @@ class MeterScreenAndroidTest {
 
         runBlocking {
             fakeTransport.connect(BoundDevice(testAddress, testName))
+            fakeTransport.simulateStall(true)
             fakeTransport.emitFrame(
                 level = 55.2,
                 weighting = Weighting.A,
