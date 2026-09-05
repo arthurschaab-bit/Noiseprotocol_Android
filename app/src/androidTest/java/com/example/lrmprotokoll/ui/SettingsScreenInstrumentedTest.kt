@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
@@ -30,6 +32,7 @@ import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -44,9 +47,11 @@ class SettingsScreenInstrumentedTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var app: LaermprotokollApp
+
     @Before
     fun setUp() {
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app = ApplicationProvider.getApplicationContext()
     }
 
     @Test
@@ -78,6 +83,95 @@ class SettingsScreenInstrumentedTest {
         val secAi = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_ai_title)
         composeRule.onAllNodesWithText(secAi, substring = true).onFirst().performScrollTo().performClick()
         composeRule.onAllNodesWithText(secAi, substring = true).onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun schwellenSliderPersistiertMinimumUndMaximum() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldThreshold = settingsManager.dbThreshold
+        try {
+            settingsManager.isProMode = true
+            settingsManager.dbThreshold = 65f
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performClick()
+
+            val slider = composeRule.onNodeWithTag("slider_db_threshold").performScrollTo().assertIsDisplayed()
+            slider.performTouchInput { swipe(start = center, end = centerLeft, durationMillis = 500L) }
+            composeRule.waitForIdle()
+            assertEquals(30f, settingsManager.dbThreshold, 0.6f)
+
+            slider.performTouchInput { swipe(start = centerLeft, end = centerRight, durationMillis = 500L) }
+            composeRule.waitForIdle()
+            assertEquals(100f, settingsManager.dbThreshold, 0.6f)
+        } finally {
+            settingsManager.dbThreshold = oldThreshold
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    @Test
+    fun ntfyErzeugtBeimErstenAktivierenAutomatischEinTopicUndZeigtEsAn() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        val oldNtfyActive = settingsManager.ntfyAktiv
+        val oldTopic = settingsManager.ntfyTopic
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.ntfyAktiv = false
+            settingsManager.ntfyTopic = ""
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithTag("switch_ntfy_enabled").performScrollTo().assertIsDisplayed().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) { settingsManager.ntfyTopic.isNotBlank() }
+            val generatedTopic = settingsManager.ntfyTopic
+            composeRule.onNodeWithTag("input_ntfy_topic").performScrollTo().assertTextContains(generatedTopic)
+        } finally {
+            settingsManager.ntfyTopic = oldTopic
+            settingsManager.ntfyAktiv = oldNtfyActive
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    @Test
+    fun ntfyBelaesstVorhandenesTopicBeimAktivierenUnveraendert() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        val oldNtfyActive = settingsManager.ntfyAktiv
+        val oldTopic = settingsManager.ntfyTopic
+        val existingTopic = "bestehendes-test-topic"
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.ntfyAktiv = false
+            settingsManager.ntfyTopic = existingTopic
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithTag("switch_ntfy_enabled").performScrollTo().assertIsDisplayed().performClick()
+
+            composeRule.waitForIdle()
+            assertEquals(existingTopic, settingsManager.ntfyTopic)
+            composeRule.onNodeWithTag("input_ntfy_topic").performScrollTo().assertTextContains(existingTopic)
+        } finally {
+            settingsManager.ntfyTopic = oldTopic
+            settingsManager.ntfyAktiv = oldNtfyActive
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
     }
 
     @Test
@@ -122,7 +216,7 @@ class SettingsScreenInstrumentedTest {
             val channel = LocalNotificationAlertChannel(context, context.container.settingsManager)
             assertFalse("Kanal muss ohne POST_NOTIFICATIONS als nicht verfügbar gelten", channel.isAvailable)
 
-            val result = runBlocking {
+            runBlocking {
                 channel.send(
                     Alert(
                         alertId = 0,
@@ -133,9 +227,7 @@ class SettingsScreenInstrumentedTest {
                     )
                 )
             }
-            // Die Plattform darf den Versand ablehnen; entscheidend ist, dass die App keinen
-            // ungefangenen SecurityException-Crash erzeugt.
-            assertTrue(result.isFailure || result.isSuccess)
+            // Wenn send() zurückkehrt, wurde kein SecurityException-Crash bis in den Test propagiert.
         } finally {
             automation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
             LocalNotificationAlertChannel.stoppeAlarmTon(context)
