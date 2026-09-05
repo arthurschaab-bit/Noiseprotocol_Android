@@ -1,9 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -121,7 +121,10 @@ class MeterScreenInstrumentedTest {
         composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertIsDisplayed().performClick()
 
         assertEquals("AA:AA:AA:AA:AA:AA", settings.meterDeviceAddress)
-        composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertDoesNotExist()
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            composeRule.onAllNodesWithTag("dialog_spoofing_dismiss").fetchSemanticsNodes().isEmpty()
+        }
+        assertTrue(composeRule.onAllNodesWithTag("dialog_spoofing_dismiss").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
