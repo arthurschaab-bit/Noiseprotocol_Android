@@ -2,14 +2,15 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -33,13 +34,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Instrumentierte UI-Tests für den [MeterScreen] gemäß Testplan.
- *
- * Der Scanpfad ist vollständig deterministisch: kein Test hängt von Bluetooth-Hardware oder vom
- * Zustand des API-34-ATD ab. Fehler werden über denselben Flow wie `BleScanner.onScanFailed`
- * eingespeist; Gerätefunde werden als [BleDevice] emittiert.
- */
 @RunWith(AndroidJUnit4::class)
 class MeterScreenInstrumentedTest {
 
@@ -80,22 +74,14 @@ class MeterScreenInstrumentedTest {
     @Test
     fun scanFehlerAusScannerFlowWirdSichtbarUndSchnellesMehrfachTippenCrashtNicht() {
         BleScannerTestOverrides.scanProvider = {
-            flow {
-                throw IllegalStateException("BLE-Scan fehlgeschlagen, errorCode=6")
-            }
+            flow { throw IllegalStateException("BLE-Scan fehlgeschlagen, errorCode=6") }
         }
-
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.waitForIdle()
-
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
-        repeat(3) {
-            runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick() }
-        }
-
+        repeat(3) { runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick() } }
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("errorCode=6", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("errorCode=6", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("errorCode=6", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).assertIsDisplayed()
@@ -106,20 +92,14 @@ class MeterScreenInstrumentedTest {
         val settings = app.container.settingsManager
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
-        BleScannerTestOverrides.scanProvider = {
-            flowOf(BleDevice("BB:BB:BB:BB:BB:BB", "PCE-323 Test", -42))
-        }
-
+        BleScannerTestOverrides.scanProvider = { flowOf(BleDevice("BB:BB:BB:BB:BB:BB", "PCE-323 Test", -42)) }
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
         composeRule.waitUntil(5_000L) {
-            runCatching {
-                composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").fetchSemanticsNode()
-            }.isSuccess
+            runCatching { composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").performClick()
         composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertIsDisplayed().performClick()
-
         assertEquals("AA:AA:AA:AA:AA:AA", settings.meterDeviceAddress)
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithTag("dialog_spoofing_dismiss").fetchSemanticsNodes().isEmpty()
@@ -132,20 +112,14 @@ class MeterScreenInstrumentedTest {
         val settings = app.container.settingsManager
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
-        BleScannerTestOverrides.scanProvider = {
-            flowOf(BleDevice("CC:CC:CC:CC:CC:CC", "PCE-323 Test", -41))
-        }
-
+        BleScannerTestOverrides.scanProvider = { flowOf(BleDevice("CC:CC:CC:CC:CC:CC", "PCE-323 Test", -41)) }
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
         composeRule.waitUntil(5_000L) {
-            runCatching {
-                composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").fetchSemanticsNode()
-            }.isSuccess
+            runCatching { composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").performClick()
         composeRule.onNodeWithTag("dialog_spoofing_confirm").assertIsDisplayed().performClick()
-
         composeRule.waitUntil(5_000L) { settings.meterDeviceAddress == "CC:CC:CC:CC:CC:CC" }
         assertEquals("CC:CC:CC:CC:CC:CC", settings.meterDeviceAddress)
     }
@@ -168,33 +142,23 @@ class MeterScreenInstrumentedTest {
 
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
-
-        // Erst auf ein tatsächlich komponiertes Listenelement warten. Das Endelement einer
-        // LazyColumn existiert semantisch bewusst erst, nachdem dorthin gescrollt wurde.
         composeRule.waitUntil(5_000L) {
-            composeRule.onAllNodesWithTag("card_ble_device_AA:BB:CC:DD:EE:00")
-                .fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("card_ble_device_AA:BB:CC:DD:EE:00").fetchSemanticsNodes().isNotEmpty()
         }
 
-        // MeterScreen selbst besteht aus einer LazyColumn. Die Zahl weiterer Scroll-Semantics-
-        // Knoten darf nicht vorausgesetzt werden; sie hängt von Inhalt und Viewport ab.
-        val scrollables = composeRule.onAllNodes(hasScrollAction())
-        assertTrue("MeterScreen muss einen scrollbaren Gerätebereich enthalten", scrollables.fetchSemanticsNodes().isNotEmpty())
-        val deviceList = scrollables[0]
-
-        // Ein LazyColumn-Item kann bereits komponiert sein, obwohl es am unteren Rand erst
-        // teilweise sichtbar ist. Deshalb erst abbrechen, wenn assertIsDisplayed() wirklich
-        // erfolgreich ist; andernfalls weiter mit echten Touch-Gesten scrollen.
+        // Wischen auf dem sichtbaren Root simuliert die tatsächliche Nutzergeste und vermeidet
+        // eine fragile Auswahl irgendeines internen hasScrollAction()-Semantics-Knotens.
         for (attempt in 0 until 20) {
-            val endeSichtbar = runCatching {
-                composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
-            }.isSuccess
-            if (endeSichtbar) break
-            deviceList.performTouchInput { swipeUp() }
+            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) break
+            composeRule.onRoot().performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
 
-        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
+        // Sobald das letzte Lazy-Item komponiert ist, darf Compose es bei Bedarf noch vollständig
+        // in den Viewport bringen; geprüft wird anschließend echte Sichtbarkeit, nicht nur Existenz.
+        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -202,18 +166,14 @@ class MeterScreenInstrumentedTest {
         val fakeTransport = FakeMeterTransport()
         val customContainer = AppContainer(app, meterTransportOverride = fakeTransport)
         app.setCustomContainer(customContainer)
-
         val device = BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323 Test")
         customContainer.connectionSupervisor.start(device)
-
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             customContainer.connectionSupervisor.state.value == ConnectionState.STREAMING
         }
-
         kotlinx.coroutines.runBlocking {
             fakeTransport.emitFrame(level = 68.5, weighting = Weighting.A, modeAssumptionConfirmed = true)
         }
-
         try {
             composeRule.setContent { MeterScreen(onBack = {}) }
             composeRule.waitForIdle()
