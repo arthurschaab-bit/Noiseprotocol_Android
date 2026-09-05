@@ -176,11 +176,11 @@ class MeterScreenInstrumentedTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        // MeterScreen besitzt den äußeren verticalScroll und die innere LazyColumn. Der zweite
-        // Scroll-Semantics-Knoten ist die Geräteliste. Darauf echte Touch-Wischgesten ausführen.
+        // MeterScreen selbst besteht aus einer LazyColumn. Die Zahl weiterer Scroll-Semantics-
+        // Knoten darf nicht vorausgesetzt werden; sie hängt von Inhalt und Viewport ab.
         val scrollables = composeRule.onAllNodes(hasScrollAction())
-        assertTrue("MeterScreen muss äußeren Scrollcontainer und Geräteliste enthalten", scrollables.fetchSemanticsNodes().size >= 2)
-        val deviceList = scrollables[1]
+        assertTrue("MeterScreen muss einen scrollbaren Gerätebereich enthalten", scrollables.fetchSemanticsNodes().isNotEmpty())
+        val deviceList = scrollables[0]
 
         for (attempt in 0 until 12) {
             if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) break
