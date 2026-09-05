@@ -53,11 +53,12 @@ jobs:
         continue-on-error: true
         run: ./gradlew ktlintCheck --no-daemon --stacktrace
 
+      # testDebugUnitTest bleibt explizit sichtbar, weil der instrumentierte Testplan dieses Gate
+      # fordert. `test` laeuft zusaetzlich und behaelt damit auch Release-Unit-Tests als Pflichtgate.
       # --continue, damit ein fehlgeschlagener Test die uebrigen nicht abschneidet: Sonst zeigt
-      # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu
-      # sehen.
+      # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu sehen.
       - name: Unit & Robolectric Tests
-        run: ./gradlew test --no-daemon --stacktrace --continue
+        run: ./gradlew testDebugUnitTest test --no-daemon --stacktrace --continue
 
       # Ohne diesen Schritt steht das Ergebnis nur im hochgeladenen Artefakt - man muss es
       # herunterladen und entpacken, um zu erfahren, welcher Test warum gescheitert ist. Hier

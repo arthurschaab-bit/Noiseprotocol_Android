@@ -27,6 +27,7 @@ import java.time.Duration
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterTransport
+import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleMeterTransport
 import com.example.lrmprotokoll.meter.ble.BluetoothAdapterStateObserver
 import com.example.lrmprotokoll.meter.ble.Pce323Profile
@@ -34,6 +35,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Schlanker manueller Ersatz fuer ein DI-Framework (Plan Abschnitt 4.2): haelt die
@@ -43,6 +45,7 @@ import kotlinx.coroutines.SupervisorJob
 class AppContainer(
     context: Context,
     meterTransportOverride: MeterTransport? = null,
+    internal val bleScanProviderOverride: (() -> Flow<BleDevice>)? = null,
 ) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }

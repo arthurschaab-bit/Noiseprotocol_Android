@@ -25,7 +25,12 @@ private const val TAG = "AudioPlayerScreen"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
+fun AudioPlayerScreen(
+    filePath: String,
+    onBack: () -> Unit,
+    /** Test-Hook: wird unmittelbar nach MediaPlayer.release() beim Verlassen der Composition aufgerufen. */
+    onPlayerReleasedForTest: (() -> Unit)? = null,
+) {
     val file = File(filePath)
     val amplitudes = remember(filePath) { loadAmplitudes(file) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -48,6 +53,7 @@ fun AudioPlayerScreen(filePath: String, onBack: () -> Unit) {
         }
         onDispose {
             mediaPlayer.release()
+            onPlayerReleasedForTest?.invoke()
         }
     }
 
@@ -179,17 +185,17 @@ internal fun wiedergabeFehlermeldung(fehler: Throwable): String = when (fehler) 
 
 fun loadAmplitudes(file: File): List<Float> {
     if (!file.exists()) return emptyList()
-    
+
     val bytes = file.readBytes()
     if (bytes.size < 44) return emptyList()
-    
+
     // Einfache PCM-Extraktion (16-bit Mono angenommen)
     val pcmData = bytes.sliceArray(44 until bytes.size)
     val shortBuffer = ByteBuffer.wrap(pcmData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-    
+
     val result = mutableListOf<Float>()
     val step = maxOf(1, shortBuffer.limit() / 100) // 100 Punkte für die Anzeige
-    
+
     for (i in 0 until shortBuffer.limit() step step) {
         var max = 0
         for (j in 0 until step) {

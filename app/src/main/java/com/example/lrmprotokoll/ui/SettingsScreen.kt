@@ -499,7 +499,8 @@ fun SettingsScreen(
                     value = dbThreshold,
                     onValueChange = { dbThreshold = it },
                     onValueChangeFinished = { settings.dbThreshold = dbThreshold },
-                    valueRange = 30f..100f
+                    valueRange = 30f..100f,
+                    modifier = Modifier.testTag("slider_db_threshold"),
                 )
 
                 Row(
@@ -700,9 +701,11 @@ fun SettingsScreen(
                                     ntfyAktiv = it
                                     settings.ntfyAktiv = it
                                     if (it && ntfyTopic.isBlank()) {
+                                        ntfyTopic = erzeugeNtfyTopic()
                                         settings.ntfyTopic = ntfyTopic
                                     }
                                 },
+                                modifier = Modifier.testTag("switch_ntfy_enabled"),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(stringResource(R.string.settings_alerting_ntfy))

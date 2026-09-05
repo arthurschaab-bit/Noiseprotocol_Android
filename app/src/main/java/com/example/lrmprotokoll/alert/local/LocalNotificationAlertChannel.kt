@@ -57,16 +57,22 @@ internal fun alarmVibrationsmuster(mindestdauerMillis: Long = 60_000L): LongArra
  * - Spielt bei Alarmen einen akustischen Alarmton mit USAGE_ALARM (auch bei stummem Gerät / Tablets ohne Motor).
  * - Prüft Hardware-Vibrationsmotor (`hasVibrator`) und triggert direkte Hardware-Vibration.
  * - Setzt den NotificationChannel mit explizitem Alarm-Sound und IMPORTANCE_HIGH.
+ *
+ * [notificationPermissionOverride] ist ausschließlich ein deterministischer Test-Hook. `null`
+ * bedeutet Produktionsverhalten mit der echten Runtime-Berechtigung. Dadurch müssen
+ * Instrumentierungstests die eigene POST_NOTIFICATIONS-Berechtigung nicht widerrufen – Android
+ * beendet bei einem solchen Widerruf den gesamten App-/Testprozess.
  */
 class LocalNotificationAlertChannel(
     private val context: Context,
     private val settings: SettingsManager? = null,
+    private val notificationPermissionOverride: Boolean? = null,
 ) : AlertChannel {
 
     override val id: ChannelId = ChannelId.LOCAL_NOTIFICATION
 
     override val isAvailable: Boolean
-        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        get() = notificationPermissionOverride ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
         } else {
@@ -98,15 +104,6 @@ class LocalNotificationAlertChannel(
     }
 
     override suspend fun send(alert: Alert): Result<Unit> = runCatching {
-        val manager = context.getSystemService(NotificationManager::class.java)
-            ?: error("NotificationManager nicht verfügbar")
-
-        // Alte Kanäle aufräumen
-        try {
-            manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V1)
-            manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V2)
-        } catch (_: Exception) {}
-
         val alarmSoundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             ?: Uri.EMPTY
@@ -116,47 +113,61 @@ class LocalNotificationAlertChannel(
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
-        manager.createNotificationChannel(
-            NotificationChannel(
-                ALARM_NOTIFICATION_CHANNEL_ID,
-                "Verbindungsalarm",
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = "Meldet mit Alarmton und Vibration, wenn die Verbindung zum Messgerät abreißt."
-                if (alarmSoundUri != Uri.EMPTY) {
-                    setSound(alarmSoundUri, audioAttributes)
+        // POST_NOTIFICATIONS steuert nur die sichtbare Notification. Ton/Vibration und das
+        // Stoppen eines laufenden Alarms sind davon unabhängig und müssen auch dann funktionieren,
+        // wenn die Berechtigung fehlt (z.B. Test-Alarm auf einem Tablet ohne Vibrationsmotor).
+        if (isAvailable) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+                ?: error("NotificationManager nicht verfügbar")
+
+            // Alte Kanäle aufräumen
+            try {
+                manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V1)
+                manager.deleteNotificationChannel(ALARM_NOTIFICATION_CHANNEL_ID_V2)
+            } catch (_: Exception) {}
+
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    ALARM_NOTIFICATION_CHANNEL_ID,
+                    "Verbindungsalarm",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Meldet mit Alarmton und Vibration, wenn die Verbindung zum Messgerät abreißt."
+                    if (alarmSoundUri != Uri.EMPTY) {
+                        setSound(alarmSoundUri, audioAttributes)
+                    }
+                    enableVibration(true)
+                    vibrationPattern = alarmVibrationsmuster()
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
-                enableVibration(true)
-                vibrationPattern = alarmVibrationsmuster()
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            )
+
+            val stopIntent = Intent(context, AlarmDismissReceiver::class.java).apply {
+                action = ACTION_STOP_ALARM
             }
-        )
+            val stopPendingIntent = PendingIntent.getBroadcast(
+                context,
+                ALARM_NOTIFICATION_ID,
+                stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val stopIntent = Intent(context, AlarmDismissReceiver::class.java).apply {
-            action = ACTION_STOP_ALARM
+            val meldung = NotificationCompat.Builder(context, ALARM_NOTIFICATION_CHANNEL_ID)
+                .setContentTitle(AlertMessages.titel(alert.kind))
+                .setContentText(alert.message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(alert.message))
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setDeleteIntent(stopPendingIntent)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Alarm stoppen", stopPendingIntent)
+                .setAutoCancel(true)
+                .build()
+
+            // Feste ID: Die Entwarnung ersetzt die stehende Alarmmeldung
+            manager.notify(ALARM_NOTIFICATION_ID, meldung)
         }
-        val stopPendingIntent = PendingIntent.getBroadcast(
-            context,
-            ALARM_NOTIFICATION_ID,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val meldung = NotificationCompat.Builder(context, ALARM_NOTIFICATION_CHANNEL_ID)
-            .setContentTitle(AlertMessages.titel(alert.kind))
-            .setContentText(alert.message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(alert.message))
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDeleteIntent(stopPendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Alarm stoppen", stopPendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        // Feste ID: Die Entwarnung ersetzt die stehende Alarmmeldung
-        manager.notify(ALARM_NOTIFICATION_ID, meldung)
 
         // Akustischer Ton & Hardware-Vibration für Tablets & OEM Geräte
         when (alert.kind) {

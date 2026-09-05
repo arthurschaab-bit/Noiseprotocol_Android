@@ -6,6 +6,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import com.example.lrmprotokoll.LaermprotokollApp
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -26,8 +27,18 @@ data class BleDevice(
  */
 class BleScanner(private val context: Context) {
 
+    fun scan(): Flow<BleDevice> {
+        // Instrumentierte Tests ersetzen den Scan nur ueber ihren eigenen AppContainer. Dadurch
+        // gibt es keinen prozessweiten veränderlichen Hook, der nach einem abgebrochenen Test in
+        // eine andere Testklasse hineinlecken kann. Der normale AppContainer hat kein Override.
+        val containerOverride = (context.applicationContext as? LaermprotokollApp)
+            ?.container
+            ?.bleScanProviderOverride
+        return containerOverride?.invoke() ?: realScan()
+    }
+
     @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_SCAN vor jedem Zugriff
-    fun scan(): Flow<BleDevice> = callbackFlow {
+    private fun realScan(): Flow<BleDevice> = callbackFlow {
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null) {
             close(IllegalStateException("Kein Bluetooth-Adapter verfügbar."))
