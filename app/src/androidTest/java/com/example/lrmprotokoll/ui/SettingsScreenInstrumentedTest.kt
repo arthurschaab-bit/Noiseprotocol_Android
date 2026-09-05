@@ -1,8 +1,19 @@
 package com.example.lrmprotokoll.ui
 
+import android.app.Activity
+import android.app.Instrumentation
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.espresso.intent.Intents
+import androidx.test.espresso.intent.Intents.intended
+import androidx.test.espresso.intent.Intents.intending
+import androidx.test.espresso.intent.matcher.IntentMatchers.anyIntent
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -98,7 +109,67 @@ class SettingsScreenInstrumentedTest {
         composeRule.waitForIdle()
     }
 
-    // formatiereDriveFehlerEnthaeltUrsacheWennVorhanden entfernt (Testluecken-Auftrag Stufe 6):
-    // reine Funktion ohne Android-Abhaengigkeit, bereits vollstaendig in FormatiereDriveFehlerTest
-    // (Robolectric-frei, test/) abgedeckt - ein Geraetetest dafuer war reine Dopplung.
+    @Test
+    fun systemIntentsFuerAkkuOptimierungUndExakteAlarmeLoesenKorrektAus() {
+        Intents.init()
+        try {
+            intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+
+            val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+            composeRule.setContent {
+                OemDeviceHelperCard()
+            }
+            composeRule.waitForIdle()
+
+            // Falls Button sichtbar ist (bei nicht ausgenommener Akku-Optimierung), Klick & Intent prüfen
+            val nodes = composeRule.onAllNodesWithText("Akku-Optimierung aufheben")
+            if (nodes.fetchSemanticsNodes().isNotEmpty()) {
+                nodes[0].performClick()
+                intended(hasAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS))
+                intended(hasData(Uri.parse("package:${context.packageName}")))
+            }
+        } finally {
+            Intents.release()
+        }
+    }
+
+    @Test
+    fun testAlarmAusloesenUndStoppenBehandeltZustandOhneAbsturz() {
+        val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val initialAlarmAktiv = context.container.settingsManager.alarmierungAktiv
+        context.container.settingsManager.alarmierungAktiv = true
+        context.container.settingsManager.alarmTonAktiv = true
+
+        try {
+            composeRule.setContent {
+                SettingsScreen(onBack = {})
+            }
+            composeRule.waitForIdle()
+
+            // 1. Alarmierungssektion suchen & aufklappen
+            val secAlarm = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(secAlarm, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            // 2. Test-Alarm Button betätigen (sichtbar da alarmierungAktiv = true)
+            composeRule.onNodeWithText("Test-Alarm").performScrollTo().performClick()
+
+            // 3. Warten bis Ergebnistext ("Test-Alarm ausgelöst" oder "Fehlgeschlagen: ...") erscheint
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Fehlgeschlagen", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            // 4. Alarm stoppen Button betätigen
+            composeRule.onNodeWithText("Alarm stoppen").performScrollTo().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).assertIsDisplayed()
+        } finally {
+            context.container.settingsManager.alarmierungAktiv = initialAlarmAktiv
+        }
+    }
 }

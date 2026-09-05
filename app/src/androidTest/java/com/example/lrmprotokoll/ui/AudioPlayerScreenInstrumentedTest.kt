@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -145,5 +146,51 @@ class AudioPlayerScreenInstrumentedTest {
         assertTrue(backed)
 
         korrupteDatei.delete()
+    }
+
+    @Test
+    fun audioPlayerZeigtFehlerBeiGeloeschterDateiUndDeaktiviertPlayButton() {
+        // Erzeuge reale WAV-Datei und lösche sie vor dem Abspielen gezielt
+        val datei = erstelleGueltigeWavDatei("temporaer_geloescht.wav")
+        val pfad = datei.absolutePath
+        assertTrue(datei.exists())
+        assertTrue(datei.delete())
+
+        var backed = false
+        composeRule.setContent {
+            AudioPlayerScreen(filePath = pfad, onBack = { backed = true })
+        }
+        composeRule.waitForIdle()
+
+        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
+        val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
+        // 1. Spezifischer IOException-Fehlertext sichtbar
+        composeRule.onNodeWithText(
+            "Wiedergabe fehlgeschlagen: Datei kann nicht abgespielt werden - wurde sie inzwischen gelöscht oder ist sie beschädigt?",
+            substring = true
+        ).assertIsDisplayed()
+
+        // 2. Play-Button existiert, ist aber deaktiviert
+        composeRule.onNodeWithContentDescription(playDesc).assertIsNotEnabled()
+
+        // 3. Zurück-Navigation bleibt funktionsfähig
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
+        assertTrue(backed)
+    }
+
+    @Test
+    fun audioPlayerZeigtHinweisBeiBlankPfadFuerReinePegelmessung() {
+        var backed = false
+        composeRule.setContent {
+            AudioPlayerScreen(filePath = "", onBack = { backed = true })
+        }
+        composeRule.waitForIdle()
+
+        val playDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.audio_play)
+
+        // Hinweistext für reine Pegelmessungen
+        composeRule.onNodeWithText("Reine Pegelmessung", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(playDesc).assertIsNotEnabled()
     }
 }
