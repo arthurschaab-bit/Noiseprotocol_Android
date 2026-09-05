@@ -29,12 +29,14 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M7c** UI-Harmonisierung & Entkopplung (Startseite, 4 Tabs, stabile Sortierung) | ✅ abgeschlossen (PR #53) |
 | **M8** Härtung — Release-Build (R8/Minify) & Herstellerhinweis (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung) | ✅ hardwarefreier Teil abgeschlossen — Chaos-Checkliste/24h-Dauerlauf brauchen ein Gerät, siehe Gerätetest-Zeile unten |
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
-| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 394 JVM Tests, 34 Emulator Tests) | ✅ vollständig grün & aktiv |
+| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 784 JVM-/Robolectric-Tests, 34 Emulator-Tests) | ✅ vollständig grün & aktiv |
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 | **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
 | **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync) | ✅ umgesetzt — Fotos, EXIF-Drehung und PDF-Einbettung noch nicht am Gerät gesichtet |
+| **Befunde aus dem Gerätetest 04.09.2026** (9 Punkte: Fehlalarm ohne Verbindung, Phantom- und Doppel-Sessions, Videoablauf, Mux-Endzustand, Drive-Ablage, Upload-Übersicht, ehrliche Mikrofon-Benennung) | ✅ umgesetzt (PRs #108–#110) — Kamera-, Drive- und Protokollverhalten am Gerät noch nachzuprüfen |
+| **Trigger-Härtung** (stiller Ausfall der Auslösung wird erkannt, Trigger-Quelle „Mikrofon" wählbar, verwaiste Sessions werden geschlossen) | ✅ umgesetzt (PRs #99, #100) |
 | **Drive-Ablagestruktur & Upload-Übersicht** (Tagesordner je Dateiart, Seite mit hochgeladen/läuft/offen/fehlgeschlagen) | ✅ umgesetzt — Ordneranlage nicht gegen echtes Drive geprüft |
 | **E8** Speicheranzeige & manuelles Aufräumen (nach Dateiart und Zeitraum, statt automatischer Frist für Videos) | ✅ umgesetzt |
 | **M11 Etappe B** Videobeweis (CameraX ohne Tonspur, Ton aus der laufenden Messung nachträglich eingemuxt, resumable Drive-Upload) | ⚠️ umgesetzt, **nicht am Gerät verifiziert** — Kamera, A/V-Synchronität und der echte Upload brauchen Hardware |
@@ -207,6 +209,21 @@ Abhängigkeits-Stil des Projekts.
 
 ---
 
+## Regeln, die man kennen muss
+
+Drei Verhaltensweisen sind bewusst so und keine Fehler — sie sind das Ergebnis des Gerätetests
+vom 04.09.2026:
+
+- **Ohne je bestandene Verbindung gibt es keinen Alarm.** Ist das gepinnte Messgerät nicht in
+  Reichweite, meldet die App das im Status, aber sie alarmiert nicht. „Verbindung verloren" wäre
+  für eine Verbindung, die es nie gab, schlicht unwahr, und die Totmannschaltung schützt eine
+  *laufende* Messung — keine, die nie begann.
+- **Ohne je gelieferte Daten gibt es keine Messgerät-Session.** Das Protokoll bleibt in diesem
+  Fall leer statt sich mit Einträgen „PCE-323" zu füllen, in denen kein einziger Messwert steht.
+  Läuft das Mikrofon mit, erscheint stattdessen genau eine Session „Smartphone-Mikrofon".
+- **Es ist immer höchstens eine Session offen.** Wechselt die Quelle vom Mikrofon auf das
+  Messgerät, wird die Mikrofon-Session geschlossen.
+
 ## Bekannte Einschränkungen
 
 - **Der Mikrofon-Pegelwert ist unkalibriert.** `20·log10(rms/32767) + 100` ist dBFS plus
@@ -231,6 +248,11 @@ Abhängigkeits-Stil des Projekts.
   closed!`, reproduzierbar auch isoliert — ein verifiziertes Robolectric-Limit, keine Aussage
   über die Korrektheit von `MessreiheExport.exportierePdf`. Nur durch `assembleDebug` verifiziert,
   Inhalt und Layout müssen am echten Gerät geprüft werden (siehe `docs/PROMPT_M7.md`).
+- **Die Ursache der Reconnect-Schleife ist offen.** In den Diagnosedaten des Gerätetests steht
+  25 × „Kein Frame innerhalb von 5000 ms nach Verbindungsaufbau – Versuch verworfen": Die
+  BLE-Verbindung kommt zustande, aber es fließen keine Frames. Die App verhält sich dabei
+  inzwischen korrekt (kein Alarm, kein Protokolleintrag), **die Ursache selbst ist nicht
+  untersucht** — dafür braucht es einen Lauf mit eingeschaltetem Gerät in Reichweite.
 - **Der Videobeweis ist ohne Gerät nur zur Hälfte belegbar (M11 Etappe B).** Die Aufnahme läuft
   über CameraX **ohne Tonspur** — kein `withAudioEnabled()` —, damit die Kamera das Mikrofon
   nicht anfasst und die Pegelmessung während der Aufnahme durchläuft; der Ton wird aus dem

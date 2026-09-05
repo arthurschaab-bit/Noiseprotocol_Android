@@ -1070,6 +1070,23 @@ Zeitraum bereits ausgewertet ist.
 
 ---
 
+## 4b · Nachtrag aus dem Gerätetest 04.09.2026
+
+Etappe B lief am Gerät, und dabei kamen drei Befunde heraus, die inzwischen behoben sind (PR
+#109). Sie stehen hier, weil sie den in B.7 beschriebenen Ablauf ändern:
+
+| Befund | Ursache | Jetzt |
+|---|---|---|
+| Nach „Aufnahme beenden" lief die Kamera weiter | `Recording.stop()` beendet nur die Aufnahme; die Kamera blieb an den Lebenszyklus gebunden | Der Bildschirm schließt sich nach dem Stopp, `onDispose` ruft zusätzlich `unbindAll()` |
+| Der Aufnahme-Bildschirm brauchte einen zweiten Knopf | So spezifiziert (B.7) | **Die Aufnahme startet von selbst**, sobald die Kamera bereit ist. Wer „Videobeweis" drückt, will filmen |
+| „Ton wird hinzugefügt …" lief endlos | Kein Endzustand für einen gescheiterten Mux-Lauf, und der Fortschritt stand in einem Bildschirmzustand, den nichts zurücksetzte | Neue Spalte `beweisvideos.muxFehlgeschlagen` (Migration 16 → 17). Der Bildschirm zeigt den Fortschritt gar nicht mehr; der Zustand steht im Session-Detail und ist terminal |
+
+Ebenfalls aus diesem Test, außerhalb von M11: Die Drive-Ablage ist jetzt nach Tag und Dateiart
+gegliedert (`<Ordner>/JJJJMMTT/<Kategorie>`, PR #110) — Videos landen also unter
+`.../JJJJMMTT/Videos`, Fotos unter `.../JJJJMMTT/Fotos`, jeweils nach **Aufnahmedatum**.
+
+---
+
 ## 5 · Ausdrücklich **nicht** Teil dieses Auftrags
 
 - Automatische Videoaufnahme bei Schwellenüberschreitung (siehe B.3 — technisch ab Android 14

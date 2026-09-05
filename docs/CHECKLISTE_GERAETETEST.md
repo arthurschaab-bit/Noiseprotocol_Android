@@ -150,6 +150,74 @@ ausgeschaltetem Bluetooth wären genau der Fehler, den die Adapter-Beobachtung v
 
 ---
 
+## Teil F — Offen nach dem Gerätetest 04.09.2026
+
+Alles hier ist **umgesetzt, aber nicht am Gerät gesehen**. In der Entwicklungsumgebung gibt es
+weder Kamera noch Emulator noch Google-Konto; belegt ist jeweils nur der Code-Pfad.
+
+### F1 — Videobeweis (M11 Etappe B, PRs #106 und #109)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Im Cockpit „Videobeweis aufnehmen" drücken | Die Aufnahme läuft **sofort** an, ohne zweiten Knopf | |
+| „Aufnahme beenden" drücken | Aufnahme stoppt, Bildschirm schließt sich, **Kameravorschau ist aus** | |
+| Danach ins Session-Detail | Zustand wechselt von „Ton wird hinzugefügt …" zu „mit Ton" — und bleibt nicht dort hängen | |
+| Video abspielen | Bild und Ton sind synchron; kein Versatz zwischen Geräusch und Bild | |
+| Messreihe im Videozeitraum | **Keine Lücke** — die Pegelmessung lief durch | |
+| Video ohne laufendes Mikrofon aufnehmen | Warnung **vor** dem Start; Video bleibt stumm, Zustand „ohne Ton (Mikrofon lief nicht)" | |
+| Freien Speicher unter 500 MB bringen | Aufnahme startet gar nicht erst, mit klarer Meldung | |
+| Maximaldauer abwarten (Standard 3 min) | Aufnahme stoppt automatisch, Meldung erscheint | |
+
+Der berechnete A/V-Versatz steht im Diagnoselog unter der Kategorie `Videobeweis` — bei einem
+hörbaren Versatz bitte diese Zeile mitschicken.
+
+### F2 — Fotodokumentation (M11 Etappe A, PR #101)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Foto beim Messstart aufnehmen | Erscheint im Session-Detail und im Session-PDF | |
+| Hochkant und quer fotografieren | Beide erscheinen im PDF **richtig gedreht** (EXIF) | |
+| Foto verweigern / abbrechen | Die Messung läuft ungestört weiter | |
+
+### F3 — Google Drive (PR #110)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach einem Sync in Drive nachsehen | Struktur `<gewählter Ordner>/JJJJMMTT/WAV`, `.../Schallmessung`, `.../Fotos`, `.../Videos` | |
+| Zwei Sync-Zyklen abwarten | Die Ordner entstehen **einmal**, nicht mehrfach mit gleichem Namen | |
+| Video von gestern heute hochladen | Landet im Tagesordner von **gestern** (Aufnahmedatum, nicht Uploaddatum) | |
+| Einstellungen → Drive → „Upload-Übersicht öffnen" | Zeigt hochgeladen / läuft / offen / fehlgeschlagen je Datei | |
+| Großes Video hochladen | Fortschritt in Prozent, Übertragung überlebt einen Abbruch (WLAN aus/an) | |
+
+**Bekannt und beabsichtigt:** Der Unterordner `Bericht` entsteht nicht — die App lädt Berichte
+bisher nicht nach Drive, sie teilt sie nur.
+
+### F4 — Protokoll und Alarm ohne erreichbares Messgerät (PR #108)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Messung mit gepinntem, **ausgeschaltetem** PCE-323 starten | **Kein** Alarm, auch nicht nach Ablauf der Karenzzeit | |
+| Danach ins Protokoll | **Keine** Sitzung „PCE-323"; bei laufendem Mikrofon genau **eine** Sitzung „Smartphone-Mikrofon" | |
+| Messung beenden | Die Mikrofon-Sitzung wird als beendet angezeigt, nicht dauerhaft als „aktiv" | |
+| Gerät während der Messung einschalten | Mikrofon-Sitzung wird geschlossen, eine neue Sitzung „PCE-323" beginnt | |
+| Dann Gerät ausschalten | **Jetzt** greift der Alarm wie gewohnt (die Verbindung bestand ja) | |
+
+### F5 — Ungeklärt: Verbindung steht, aber keine Frames
+
+Im Diagnoselog des Tests vom 04.09.2026 steht 25 × „Kein Frame innerhalb von 5000 ms nach
+Verbindungsaufbau – Versuch verworfen". Die BLE-Verbindung kommt also zustande, aber es fließen
+keine Daten. **Ursache unbekannt.** Für die Analyse gebraucht: ein Support-Bundle aus einem Lauf,
+bei dem das PCE-323 eingeschaltet und in Reichweite ist, zusammen mit der Angabe, ob das Display
+des Geräts dabei Messwerte zeigt.
+
+### F6 — Neue Bildschirme, die noch nie ein Display gesehen haben
+
+Aufnahme-Bildschirm für Videos, Upload-Übersicht, Speicherplatz-Abschnitt in den Einstellungen,
+Bildschirm „Wie die Lärmerkennung arbeitet". Alle sind kompiliert und lint-sauber, ihre Logik ist
+getestet — die Optik ist ungeprüft.
+
+---
+
 ## Was zurückgemeldet werden sollte
 
 1. Die ausgefüllte Tabelle, auch mit den Zeilen, die nicht wie erwartet liefen

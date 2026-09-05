@@ -40,10 +40,11 @@ const val MIKROFON_GERAETENAME = "Smartphone-Mikrofon"
  * Implementierungsdetails ausserhalb der DAOs - und ist damit wie [com.example.lrmprotokoll.alert.AlarmCoordinator]
  * vollstaendig gegen Fakes testbar.
  *
- * Eine Session beginnt mit [start] und endet mit [stop] - NICHT erst beim ersten erfolgreichen
- * Frame. Reconnects *innerhalb* dieser Zeit erzeugen keine neue Session, sondern
- * [ConnectionEventEntity]-Zeilen: Eine Session ist die Klammer um "wie lange wurde ueberwacht",
- * nicht "wie lange stand die Verbindung" - siehe [SessionEntity]-KDoc.
+ * Eine Messgeraet-Session beginnt mit dem **ersten fliessenden Datenstrom** - nicht schon mit
+ * [start] - und endet mit [stop]. Reconnects *innerhalb* dieser Zeit erzeugen keine neue
+ * Session, sondern [ConnectionEventEntity]-Zeilen. Die frueher hier stehende Regel ("Klammer um
+ * wie lange wurde ueberwacht") wurde nach dem Geraetetest vom 04.09.2026 verworfen; die
+ * Begruendung steht im KDoc von [SessionEntity] und bei [start].
  */
 class MeasurementRecorder(
     private val states: Flow<ConnectionState>,
@@ -154,9 +155,10 @@ class MeasurementRecorder(
      *
      * Bis M11/E1 erzeugte nur die Messgeraet-Verbindung eine [SessionEntity]; ein Mikrofonlauf
      * lief voellig ohne. Damit hatte er keine Klammer, an der Fotodokumentation, Sessionbericht
-     * oder Protokollansicht haetten haengen koennen. Der KDoc von [SessionEntity] definiert eine
-     * Session ausdruecklich als "die Klammer um *wie lange wurde ueberwacht*" - ein Mikrofonlauf
-     * ist genau so eine Klammer.
+     * oder Protokollansicht haetten haengen koennen - obwohl er ein vollwertiger Messvorgang ist.
+     *
+     * Anders als bei der Messgeraet-Session entsteht sie sofort beim Start: Das Mikrofon liefert
+     * ab der ersten Sekunde, es gibt keinen Verbindungsaufbau, der scheitern koennte.
      *
      * [SessionEntity.deviceAddress] bleibt leer statt eine Pseudo-Adresse zu erfinden: Es gibt
      * keine BLE-Adresse, und ein erfundener Wert waere eine gespeicherte Tatsachenbehauptung.

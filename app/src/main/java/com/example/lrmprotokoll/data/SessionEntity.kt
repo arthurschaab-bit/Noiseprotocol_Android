@@ -4,11 +4,25 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Eine zusammenhängende Überwachungsperiode mit dem Messgerät (Plan Abschnitt 8.1) - beginnt,
- * wenn [com.example.lrmprotokoll.meter.ConnectionSupervisor.start] aufgerufen wird, endet mit
- * [com.example.lrmprotokoll.meter.ConnectionSupervisor.stop]. Reconnects *innerhalb* dieser Zeit
- * erzeugen keine neue Session, sondern [ConnectionEventEntity]-Zeilen - eine Session ist die
- * Klammer um "wie lange wurde überwacht", nicht "wie lange stand die Verbindung".
+ * Ein zusammenhängender Messvorgang (Plan Abschnitt 8.1).
+ *
+ * **Wann eine Session entsteht** - das hat sich nach dem Gerätetest vom 04.09.2026 geändert:
+ *
+ * - **Mit Messgerät:** beim ersten tatsächlich fließenden Datenstrom, nicht schon beim Start der
+ *   Überwachung. Vorher galt die Session als "Klammer um *wie lange wurde überwacht*"; am Gerät
+ *   zeigte sich, dass das falsch ist. Ist das gepinnte Gerät nicht in Reichweite, läuft der
+ *   Supervisor in eine Reconnect-Schleife, und das Protokoll füllte sich mit Sitzungen "PCE-323",
+ *   in denen nie ein Messwert stand. Ein Protokolleintrag, der ein Gerät nennt, das nie
+ *   geantwortet hat, ist als Beleg schlimmer als kein Eintrag.
+ * - **Ohne Messgerät:** beim Start der Mikrofonüberwachung (M11/E1), erkennbar an leerem
+ *   [deviceAddress] und [deviceName] = "Smartphone-Mikrofon".
+ *
+ * Sie endet mit [com.example.lrmprotokoll.messreihe.MeasurementRecorder.stop]. Reconnects
+ * *innerhalb* dieser Zeit erzeugen keine neue Session, sondern [ConnectionEventEntity]-Zeilen.
+ *
+ * **Es ist immer höchstens EINE Session offen.** Wechselt die Quelle vom Mikrofon auf das
+ * Messgerät, wird die Mikrofon-Session geschlossen - beides gleichzeitig offen zu haben, wäre
+ * die Behauptung zweier paralleler Messvorgänge.
  *
  * [weighting], [timeWeighting] und [range] sind nullable und bleiben `null`, solange
  * [com.example.lrmprotokoll.meter.MeterFrame.modeAssumptionConfirmed] `false` ist - siehe
