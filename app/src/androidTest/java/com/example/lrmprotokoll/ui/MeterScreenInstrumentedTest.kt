@@ -26,6 +26,7 @@ import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BleDevice
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -66,10 +67,15 @@ class MeterScreenInstrumentedTest {
 
     @After
     fun tearDown() {
-        app.stopService(Intent(app, AudioRecordingService::class.java))
-        runBlocking {
-            withTimeout(5_000L) {
-                AudioRecordingService.laeuft.first { !it }
+        // Nur einen tatsächlich gestarteten Foreground Service stoppen. Ein stopService() direkt
+        // nach startForegroundService(), aber bevor onStartCommand/startForeground gelaufen ist,
+        // erzeugt auf Android 14 selbst einen ForegroundServiceDidNotStartInTimeException.
+        if (AudioRecordingService.laeuft.value) {
+            app.stopService(Intent(app, AudioRecordingService::class.java))
+            runBlocking {
+                withTimeout(5_000L) {
+                    AudioRecordingService.laeuft.first { !it }
+                }
             }
         }
 
@@ -157,10 +163,17 @@ class MeterScreenInstrumentedTest {
         composeRule.onNodeWithTag("dialog_spoofing_confirm").assertIsDisplayed().performClick()
         composeRule.waitUntil(5_000L) { settings.meterDeviceAddress == "CC:CC:CC:CC:CC:CC" }
         assertEquals("CC:CC:CC:CC:CC:CC", settings.meterDeviceAddress)
+
+        // pinne() startet in Produktion absichtlich den Foreground Service. Vor dem Cleanup muss
+        // dieser Start vollständig durch onStartCommand/startForeground gelaufen sein; sonst kann
+        // ein zu früher Test-Cleanup selbst den Android-14-FGS-Timeout auslösen.
+        composeRule.waitUntil(timeoutMillis = 5_000L) { AudioRecordingService.laeuft.value }
+        assertTrue("Das bestätigte Pinning muss den Verbindungsdienst starten", AudioRecordingService.laeuft.value)
     }
 
     @Test
     fun langeGeraetelisteReagiertAufEchteWischgesteUndEndeIstErreichbar() {
+        val fakeScanVollstaendig = AtomicBoolean(false)
         installScanProvider {
             flow {
                 repeat(18) { index ->
@@ -172,11 +185,14 @@ class MeterScreenInstrumentedTest {
                         )
                     )
                 }
+                fakeScanVollstaendig.set(true)
             }
         }
 
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.waitUntil(5_000L) { fakeScanVollstaendig.get() }
+        composeRule.waitForIdle()
         composeRule.waitUntil(5_000L) {
             composeRule.onAllNodesWithText("Testgerät 00").fetchSemanticsNodes().isNotEmpty()
         }
@@ -196,8 +212,8 @@ class MeterScreenInstrumentedTest {
         }.isFailure
         assertTrue("Eine echte Wischgeste muss die Geräteliste sichtbar bewegen", erstesGeraetNichtMehrSichtbar)
 
-        // Das Listenende wird über seinen semantischen Test-Tag gesucht statt über einen fragilen
-        // numerischen LazyColumn-Index. Zusätzliche feste Items ändern diesen Test damit nicht.
+        // Erst nach Abschluss des Fake-Scans ist lastIndex stabil. Dann kann Compose den Tag der
+        // letzten Gerätekarte zuverlässig über die LazyList-Semantik finden, ohne numerischen Index.
         deviceList.performScrollToNode(hasTestTag(GERAETE_LISTE_ENDE_TAG))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
