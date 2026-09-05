@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
@@ -100,11 +102,11 @@ class SettingsScreenInstrumentedTest {
             composeRule.onNodeWithText(sectionTitle, substring = true).performClick()
 
             val slider = composeRule.onNodeWithTag("slider_db_threshold").performScrollTo().assertIsDisplayed()
-            slider.performTouchInput { swipe(start = center, end = centerLeft, durationMillis = 500L) }
+            slider.performTouchInput { swipeLeft() }
             composeRule.waitForIdle()
             assertEquals(30f, settingsManager.dbThreshold, 0.6f)
 
-            slider.performTouchInput { swipe(start = centerLeft, end = centerRight, durationMillis = 500L) }
+            slider.performTouchInput { swipeRight() }
             composeRule.waitForIdle()
             assertEquals(100f, settingsManager.dbThreshold, 0.6f)
         } finally {
