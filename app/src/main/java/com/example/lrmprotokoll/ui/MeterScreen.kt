@@ -493,8 +493,7 @@ fun MeterScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
-                        .testTag("card_ble_device_${device.address}")
-                        .let { if (index == sortierteGefundeneGeraete.lastIndex) it.testTag(GERAETE_LISTE_ENDE_TAG) else it },
+                        .testTag("card_ble_device_${device.address}"),
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(device.name ?: "(ohne Namen)", style = MaterialTheme.typography.bodyLarge)
@@ -521,13 +520,20 @@ fun MeterScreen(
                         }
                     }
                 }
+                if (index == sortierteGefundeneGeraete.lastIndex) {
+                    Spacer(
+                        modifier = Modifier
+                            .height(1.dp)
+                            .testTag(GERAETE_LISTE_ENDE_TAG)
+                    )
+                }
             }
         }
     }
 }
 
-/** Fuer den Compose-Regressionstest (M7c Aufgabe 4): markiert die letzte Zeile der
- * Geraeteliste, damit ein Test pruefen kann, dass sie per Scroll erreichbar ist. */
+/** Fuer den Compose-Regressionstest (M7c Aufgabe 4): markiert das Ende der
+ * Geraeteliste, damit ein Test pruefen kann, dass die letzte Zeile per Scroll erreichbar ist. */
 const val GERAETE_LISTE_ENDE_TAG = "meter_geraete_liste_ende"
 
 /** Fuer denselben Regressionstest: markiert den Scan-Button am Ende des festen Kopfbereichs,
