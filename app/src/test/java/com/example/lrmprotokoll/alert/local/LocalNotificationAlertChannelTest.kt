@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.alert.local
 
+import android.Manifest
+import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
@@ -9,8 +11,11 @@ import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,8 +36,24 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class LocalNotificationAlertChannelTest {
 
+    private lateinit var app: Application
     private lateinit var context: Context
     private lateinit var manager: NotificationManager
+
+    @Before
+    fun setUp() {
+        app = ApplicationProvider.getApplicationContext()
+        context = app
+        manager = context.getSystemService(NotificationManager::class.java)
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        manager.cancelAll()
+    }
+
+    @After
+    fun tearDown() {
+        LocalNotificationAlertChannel.stoppeAlarmTon(context)
+        manager.cancelAll()
+    }
 
     private fun alarm(kind: AlertKind = AlertKind.RAISED, message: String = "Testnachricht") = Alert(
         alertId = 1L, kind = kind, reason = AlertReason.STALE,
@@ -40,10 +61,35 @@ class LocalNotificationAlertChannelTest {
     )
 
     @Test
+    fun isAvailableSpiegeltDieEchtePostNotificationsBerechtigung() {
+        val channel = LocalNotificationAlertChannel(context)
+        assertTrue(channel.isAvailable)
+
+        shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        assertFalse(channel.isAvailable)
+
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        assertTrue(channel.isAvailable)
+    }
+
+    @Test
+    fun sendOhnePostNotificationsUnterdruecktNurDieNotificationUndBleibtErfolgreich() = runTest {
+        shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        val channel = LocalNotificationAlertChannel(context)
+
+        assertFalse(channel.isAvailable)
+        val ergebnis = channel.send(alarm(kind = AlertKind.RESOLVED, message = "Entwarnung ohne Notification-Recht"))
+
+        assertTrue("Fehlende POST_NOTIFICATIONS-Berechtigung darf send() nicht als Ganzes abbrechen", ergebnis.isSuccess)
+        assertTrue(
+            "Ohne POST_NOTIFICATIONS darf keine Notification beim NotificationManager landen",
+            shadowOf(manager).activeNotifications.isEmpty(),
+        )
+    }
+
+    @Test
     fun sendErzeugtEineNotificationAufDemRichtigenKanalMitTitelUndText() = runTest {
-        context = ApplicationProvider.getApplicationContext()
-        manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
+        val channel = LocalNotificationAlertChannel(context)
 
         val ergebnis = channel.send(alarm(message = "Verbindung seit 09:00 unterbrochen"))
 
@@ -64,9 +110,7 @@ class LocalNotificationAlertChannelTest {
 
     @Test
     fun derAlarmkanalWirdMitHoherWichtigkeitAngelegt() = runTest {
-        context = ApplicationProvider.getApplicationContext()
-        manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
+        val channel = LocalNotificationAlertChannel(context)
 
         channel.send(alarm())
 
@@ -79,9 +123,7 @@ class LocalNotificationAlertChannelTest {
 
     @Test
     fun resolvedBekommtEinenEigenenTitelUndText() = runTest {
-        context = ApplicationProvider.getApplicationContext()
-        manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
+        val channel = LocalNotificationAlertChannel(context)
 
         channel.send(alarm(kind = AlertKind.RESOLVED, message = "Der Ausfall bestand seit 09:00."))
 
@@ -94,9 +136,7 @@ class LocalNotificationAlertChannelTest {
 
     @Test
     fun wiederholterVersandErsetztDieVorherigeMeldungStattSichDanebenZuStapeln() = runTest {
-        context = ApplicationProvider.getApplicationContext()
-        manager = context.getSystemService(NotificationManager::class.java)
-        val channel = LocalNotificationAlertChannel(context, notificationPermissionOverride = true)
+        val channel = LocalNotificationAlertChannel(context)
 
         channel.send(alarm(kind = AlertKind.RAISED, message = "Erster Alarm"))
         channel.send(alarm(kind = AlertKind.RESOLVED, message = "Entwarnung"))
