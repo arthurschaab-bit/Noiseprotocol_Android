@@ -174,7 +174,7 @@ class MainActivityNavigationAndroidTest {
         composeRule.waitForIdle()
 
         // 3. Filter-Panel ist nun sichtbar
-        composeRule.onNodeWithTag("input_filter_search").assertIsDisplayed()
+        composeRule.onNodeWithTag("input_filter_search").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -186,28 +186,28 @@ class MainActivityNavigationAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Filter-Panel per Header aufklappen
-        composeRule.onNodeWithTag("panel_filter_header").assertIsDisplayed().performClick()
+        // 1. Filter-Panel per Header aufklappen (in LazyColumn scrollen)
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("input_filter_search").assertIsDisplayed()
+        composeRule.onNodeWithTag("input_filter_search").performScrollTo().assertIsDisplayed()
 
         // 2. Suchtext eingeben
         composeRule.onNodeWithTag("input_filter_search").performTextInput("Bohren")
         composeRule.waitForIdle()
 
         // 3. Clear-Button klicken
-        composeRule.onNodeWithTag("btn_clear_filter_search").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("btn_clear_filter_search").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("input_filter_search").assertTextEquals("")
 
         // 4. Filter-Chips toggeln
-        composeRule.onNodeWithTag("chip_filter_favorites").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("chip_filter_favorites").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("chip_filter_quiet_hours").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("chip_filter_quiet_hours").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
         // 5. Reset-Chip im Header klicken
-        composeRule.onNodeWithTag("chip_filter_reset").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("chip_filter_reset").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
 
@@ -234,11 +234,11 @@ class MainActivityNavigationAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // 1. Dauermessungs-Card ist sichtbar
-        composeRule.onNodeWithTag("card_continuous_session").assertIsDisplayed()
+        // 1. Dauermessungs-Card ist sichtbar (in LazyColumn scrollen)
+        composeRule.onNodeWithTag("card_continuous_session").performScrollTo().assertIsDisplayed()
 
         // 2. Klick auf "Im Protokoll ansehen"
-        composeRule.onNodeWithTag("btn_session_view_protocol").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("btn_session_view_protocol").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
         // 3. Protokoll-Tab ist aktiv
