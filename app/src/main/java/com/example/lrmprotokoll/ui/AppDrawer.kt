@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,7 +40,7 @@ fun AppDrawerContent(
     )
 
     ModalDrawerSheet(
-        modifier = Modifier.width(280.dp)
+        modifier = Modifier.width(280.dp).testTag("app_drawer_sheet")
     ) {
         Column(
             modifier = Modifier
@@ -75,6 +76,7 @@ fun AppDrawerContent(
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 4.dp)
                     .heightIn(min = 48.dp)
+                    .testTag("drawer_item_${item.route}")
             )
         }
     }
