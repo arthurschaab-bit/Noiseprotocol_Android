@@ -1,9 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
@@ -15,6 +15,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.audio.AudioRecordingService
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -36,6 +38,14 @@ class ServiceControlInstrumentedTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        // Der Service-Status ist ein Companion-StateFlow und überlebt einzelne Testmethoden.
+        // Für diesen expliziten Idle-Test daher den bereits vorhandenen Test-Setter verwenden.
+        AudioRecordingService.testSetzeLaeuft(false)
+    }
+
+    @After
+    fun tearDown() {
+        AudioRecordingService.testSetzeLaeuft(false)
     }
 
     @Test
@@ -51,7 +61,7 @@ class ServiceControlInstrumentedTest {
         }
         val readyText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_ready_to_measure)
 
-        // Der Bereit-Status liegt im Kopfbereich und muss initial sichtbar sein.
+        // Der Bereit-Status liegt im Kopfbereich und muss im erzwungenen Idle-Zustand sichtbar sein.
         composeRule.onNodeWithText(readyText).assertIsDisplayed()
 
         // In der realen Startseite liegt die Karte in einem scrollbaren Screen. Der Standalone-Test
