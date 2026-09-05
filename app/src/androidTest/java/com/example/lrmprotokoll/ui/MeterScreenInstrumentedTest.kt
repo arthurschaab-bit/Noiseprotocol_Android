@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -87,8 +88,6 @@ class MeterScreenInstrumentedTest {
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.waitForIdle()
 
-        // Der erste Tap startet den echten UI-Scanpfad. Weitere schnelle Taps dürfen weder einen
-        // zweiten parallelen Scan starten noch einen Assertion-/App-Crash auslösen.
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
         repeat(3) {
             runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick() }
