@@ -18,6 +18,22 @@ data class BleDevice(
 )
 
 /**
+ * Instrumentierungs-Hook fuer den BLE-Scan.
+ *
+ * Der Produktionspfad bleibt unveraendert, solange [scanProvider] null ist. Instrumentierte Tests
+ * koennen damit Scan-Ergebnisse und `onScanFailed`-Fehler deterministisch einspeisen, ohne den
+ * Bluetooth-Adapter des ATD-Emulators oder reale Hardware anzusprechen.
+ */
+internal object BleScannerTestOverrides {
+    @Volatile
+    var scanProvider: (() -> Flow<BleDevice>)? = null
+
+    fun reset() {
+        scanProvider = null
+    }
+}
+
+/**
  * BLE-Scan fuer die Kopplung (Plan Abschnitt 6, Geraete-Pinning). Filtert bewusst NICHT nach
  * dem Custom-Service 0000fff0: Ob der Service im Advertisement steht, ist unbekannt
  * (docs/PROTOKOLL_PCE-323.md) - ein Service-Filter, der deshalb nichts findet, ist schlimmer
@@ -26,8 +42,10 @@ data class BleDevice(
  */
 class BleScanner(private val context: Context) {
 
+    fun scan(): Flow<BleDevice> = BleScannerTestOverrides.scanProvider?.invoke() ?: realScan()
+
     @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_SCAN vor jedem Zugriff
-    fun scan(): Flow<BleDevice> = callbackFlow {
+    private fun realScan(): Flow<BleDevice> = callbackFlow {
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null) {
             close(IllegalStateException("Kein Bluetooth-Adapter verfügbar."))
