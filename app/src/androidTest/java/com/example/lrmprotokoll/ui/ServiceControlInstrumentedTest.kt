@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -36,11 +37,10 @@ class ServiceControlInstrumentedTest {
         composeRule.setContent {
             LiveCockpitCard()
         }
-        val startBtn = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_start_measurement)
         val readyText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_ready_to_measure)
 
-        // Starten-Button und Bereit-Status im Ruhezustand vorhanden
-        composeRule.onNodeWithText(startBtn).assertExists().assertIsEnabled()
+        // Interaktionen über stabilen Tag statt lokalisierter Button-Beschriftung.
+        composeRule.onNodeWithTag(START_MEASUREMENT_BUTTON_TAG).assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithText(readyText).assertIsDisplayed()
     }
 }
