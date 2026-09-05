@@ -28,14 +28,24 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 const val OEM_HELPER_CARD_TAG = "oem_helper_card"
+const val OEM_BATTERY_OPTIMIZATION_BUTTON_TAG = "oem_battery_optimization_button"
+const val OEM_EXACT_ALARM_BUTTON_TAG = "oem_exact_alarm_button"
+const val OEM_NOTIFICATION_SETTINGS_BUTTON_TAG = "oem_notification_settings_button"
 
 /**
  * Erkennt OEM-Besonderheiten (z.B. Xiaomi Pad 6 / HyperOS / MIUI, Tablets ohne Vibrationsmotor)
  * und bietet direkte One-Tap-Lösungen für Berechtigungen, Akku-Ausnahmen und Autostart.
+ *
+ * Die drei Override-Parameter sind reine Test-Hooks. In Produktion sind sie null und der reale
+ * Systemzustand wird unverändert verwendet. Instrumentierte Tests können damit die normalerweise
+ * geräteabhängige Sichtbarkeit der System-Intent-Buttons deterministisch erzwingen.
  */
 @Composable
 fun OemDeviceHelperCard(
     modifier: Modifier = Modifier,
+    notificationPermissionOverride: Boolean? = null,
+    exactAlarmPermissionOverride: Boolean? = null,
+    batteryOptimizedOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val manufacturer = Build.MANUFACTURER
@@ -57,24 +67,27 @@ fun OemDeviceHelperCard(
         v?.hasVibrator() == true
     }
 
-    val hasNotificationPermission = remember {
+    val realNotificationPermission = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
         } else true
     }
+    val hasNotificationPermission = notificationPermissionOverride ?: realNotificationPermission
 
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
-    val canExactAlarm = remember {
+    val realCanExactAlarm = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager?.canScheduleExactAlarms() == true
         } else true
     }
+    val canExactAlarm = exactAlarmPermissionOverride ?: realCanExactAlarm
 
     val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
-    val isBatteryOptimized = remember {
+    val realBatteryOptimized = remember {
         powerManager?.isIgnoringBatteryOptimizations(context.packageName) != true
     }
+    val isBatteryOptimized = batteryOptimizedOverride ?: realBatteryOptimized
 
     val hasIssues = !hasNotificationPermission || !canExactAlarm || isBatteryOptimized ||
         (!hasVibrator && isXiaomi) || oemHinweis != null
@@ -130,7 +143,6 @@ fun OemDeviceHelperCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Hardware Vibration Information
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Hardware-Vibration: " + (if (hasVibrator) "Vorhanden" else "Nicht vorhanden (Akustischer Alarmton wird forciert)"),
@@ -139,7 +151,6 @@ fun OemDeviceHelperCard(
                 )
             }
 
-            // Notification Permission
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Benachrichtigungen: " + (if (hasNotificationPermission) "Erlaubt" else "Blockiert"),
@@ -148,7 +159,6 @@ fun OemDeviceHelperCard(
                 )
             }
 
-            // Exact Alarms
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Exakte Alarme: " + (if (canExactAlarm) "Erlaubt" else "Eingeschränkt"),
@@ -157,7 +167,6 @@ fun OemDeviceHelperCard(
                 )
             }
 
-            // Battery Optimization
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
                     text = "• Akku-Optimierung: " + (if (!isBatteryOptimized) "Ausgenommen (Keine Einschränkungen)" else "Eingeschränkt (kann Alarme verzögern)"),
@@ -186,6 +195,7 @@ fun OemDeviceHelperCard(
                             context.startActivity(intent)
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            .testTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG)
                     ) {
                         Text("Benachrichtigungen erlauben")
                     }
@@ -200,6 +210,7 @@ fun OemDeviceHelperCard(
                             context.startActivity(intent)
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            .testTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG)
                     ) {
                         Text("Akku-Optimierung aufheben")
                     }
@@ -214,6 +225,7 @@ fun OemDeviceHelperCard(
                             context.startActivity(intent)
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            .testTag(OEM_EXACT_ALARM_BUTTON_TAG)
                     ) {
                         Text("Exakte Alarme freischalten")
                     }
@@ -228,9 +240,6 @@ fun OemDeviceHelperCard(
                                 }
                                 context.startActivity(intent)
                             } catch (_: ActivityNotFoundException) {
-                                // Package/Activity variiert zwischen ROM-Versionen und ist nicht
-                                // garantiert vorhanden - Fallback auf die App-Detailseite, kein
-                                // Absturz (PROMPT_M8.md Aufgabe 2).
                                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                     data = Uri.parse("package:${context.packageName}")
                                 }
