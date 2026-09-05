@@ -20,41 +20,39 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('app/src/main/java/com/example/lrmprotokoll/ui/SettingsScreen.kt')
           s = p.read_text()
 
-          old = '''                    onValueChangeFinished = { settings.dbThreshold = dbThreshold },
-                    valueRange = 30f..100f
-                )'''
-          new = '''                    onValueChangeFinished = { settings.dbThreshold = dbThreshold },
-                    valueRange = 30f..100f,
-                    modifier = Modifier.testTag("slider_db_threshold"),
-                )'''
-          if old not in s:
-              raise SystemExit('db slider target block not found')
-          s = s.replace(old, new, 1)
+          s, n_slider = re.subn(
+              r'(onValueChangeFinished\s*=\s*\{\s*settings\.dbThreshold\s*=\s*dbThreshold\s*\},\s*\n\s*valueRange\s*=\s*30f\.\.100f)(\s*\n\s*\))',
+              r'\1,\n                    modifier = Modifier.testTag("slider_db_threshold"),\2',
+              s,
+              count=1,
+          )
+          if n_slider != 1:
+              raise SystemExit(f'db slider patch count={n_slider}')
 
-          old = '''                                onCheckedChange = {
-                                    ntfyAktiv = it
-                                    settings.ntfyAktiv = it
-                                    if (it && ntfyTopic.isBlank()) {
-                                        settings.ntfyTopic = ntfyTopic
-                                    }
-                                },
-                            )'''
-          new = '''                                onCheckedChange = {
-                                    ntfyAktiv = it
-                                    settings.ntfyAktiv = it
-                                    if (it && ntfyTopic.isBlank()) {
-                                        ntfyTopic = erzeugeNtfyTopic()
-                                        settings.ntfyTopic = ntfyTopic
-                                    }
-                                },
-                                modifier = Modifier.testTag("switch_ntfy_enabled"),
-                            )'''
-          if old not in s:
-              raise SystemExit('ntfy switch target block not found')
-          s = s.replace(old, new, 1)
+          s, n_topic = re.subn(
+              r'if\s*\(it\s*&&\s*ntfyTopic\.isBlank\(\)\)\s*\{\s*settings\.ntfyTopic\s*=\s*ntfyTopic\s*\}',
+              'if (it && ntfyTopic.isBlank()) {\n                                        ntfyTopic = erzeugeNtfyTopic()\n                                        settings.ntfyTopic = ntfyTopic\n                                    }',
+              s,
+              count=1,
+          )
+          if n_topic != 1:
+              raise SystemExit(f'ntfy topic patch count={n_topic}')
+
+          s, n_switch = re.subn(
+              r'(Switch\(\s*\n\s*checked\s*=\s*ntfyAktiv,\s*\n\s*onCheckedChange\s*=\s*\{.*?\n\s*\},)(\s*\n\s*\))',
+              r'\1\n                                modifier = Modifier.testTag("switch_ntfy_enabled"),\2',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n_switch != 1:
+              raise SystemExit(f'ntfy switch patch count={n_switch}')
+
           p.write_text(s)
           PY
           git config user.name github-actions[bot]
