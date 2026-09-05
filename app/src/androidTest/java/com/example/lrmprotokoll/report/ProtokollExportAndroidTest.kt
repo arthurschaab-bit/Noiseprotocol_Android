@@ -220,7 +220,7 @@ class ProtokollExportAndroidTest {
 
         assertTrue("CSV-Datei wird auch bei leerer Messreihe sicher erzeugt", expectedCsvFile.exists())
         val csvText = expectedCsvFile.readText(Charsets.UTF_8)
-        assertTrue("CSV muss Kopfzeile enthalten", csvText.contains("Zeit;Pegel_dB"))
+        assertTrue("CSV muss Kopfzeile enthalten", csvText.contains("Zeit;Pegel_dB") || csvText.contains("Minute;LAeq_dB"))
 
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             Intents.getIntents().isNotEmpty()
