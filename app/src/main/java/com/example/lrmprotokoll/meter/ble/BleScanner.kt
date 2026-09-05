@@ -24,7 +24,7 @@ data class BleDevice(
  * koennen damit Scan-Ergebnisse und `onScanFailed`-Fehler deterministisch einspeisen, ohne den
  * Bluetooth-Adapter des ATD-Emulators oder reale Hardware anzusprechen.
  */
-internal object BleScannerTestOverrides {
+object BleScannerTestOverrides {
     @Volatile
     var scanProvider: (() -> Flow<BleDevice>)? = null
 
