@@ -1,0 +1,64 @@
+name: One-shot settings patch helper
+
+on:
+  push:
+    branches: [fix/instrumented-test-gaps]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/instrumented-test-gaps
+          fetch-depth: 0
+      - name: Patch SettingsScreen
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/example/lrmprotokoll/ui/SettingsScreen.kt')
+          s = p.read_text()
+
+          old = '''                    onValueChangeFinished = { settings.dbThreshold = dbThreshold },
+                    valueRange = 30f..100f
+                )'''
+          new = '''                    onValueChangeFinished = { settings.dbThreshold = dbThreshold },
+                    valueRange = 30f..100f,
+                    modifier = Modifier.testTag("slider_db_threshold"),
+                )'''
+          if old not in s:
+              raise SystemExit('db slider target block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''                                onCheckedChange = {
+                                    ntfyAktiv = it
+                                    settings.ntfyAktiv = it
+                                    if (it && ntfyTopic.isBlank()) {
+                                        settings.ntfyTopic = ntfyTopic
+                                    }
+                                },
+                            )'''
+          new = '''                                onCheckedChange = {
+                                    ntfyAktiv = it
+                                    settings.ntfyAktiv = it
+                                    if (it && ntfyTopic.isBlank()) {
+                                        ntfyTopic = erzeugeNtfyTopic()
+                                        settings.ntfyTopic = ntfyTopic
+                                    }
+                                },
+                                modifier = Modifier.testTag("switch_ntfy_enabled"),
+                            )'''
+          if old not in s:
+              raise SystemExit('ntfy switch target block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/com/example/lrmprotokoll/ui/SettingsScreen.kt
+          git commit -m "fix(settings): restore ntfy topic generation and add stable tags"
+          git push origin HEAD:fix/instrumented-test-gaps
