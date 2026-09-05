@@ -27,7 +27,6 @@ import androidx.test.espresso.intent.matcher.IntentMatchers.anyIntent
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.Alert
 import com.example.lrmprotokoll.alert.AlertKind
@@ -211,28 +210,27 @@ class SettingsScreenInstrumentedTest {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
 
         val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        automation.revokeRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+        val channel = LocalNotificationAlertChannel(
+            context = context,
+            settings = context.container.settingsManager,
+            notificationPermissionOverride = false,
+        )
 
-        try {
-            val channel = LocalNotificationAlertChannel(context, context.container.settingsManager)
-            assertFalse("Kanal muss ohne POST_NOTIFICATIONS als nicht verfügbar gelten", channel.isAvailable)
+        assertFalse("Kanal muss ohne POST_NOTIFICATIONS als nicht verfügbar gelten", channel.isAvailable)
 
-            runBlocking {
-                channel.send(
-                    Alert(
-                        alertId = 0,
-                        kind = AlertKind.TEST,
-                        reason = AlertReason.DISCONNECTED,
-                        since = Instant.now(),
-                        message = "Test-Meldung ohne Benachrichtigungsberechtigung",
-                    )
+        val result = runBlocking {
+            channel.send(
+                Alert(
+                    alertId = 0,
+                    kind = AlertKind.TEST,
+                    reason = AlertReason.DISCONNECTED,
+                    since = Instant.now(),
+                    message = "Test-Meldung ohne Benachrichtigungsberechtigung",
                 )
-            }
-            // Wenn send() zurückkehrt, wurde kein SecurityException-Crash bis in den Test propagiert.
-        } finally {
-            automation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
-            LocalNotificationAlertChannel.stoppeAlarmTon(context)
+            )
         }
+
+        assertTrue("Fehlende Benachrichtigungsberechtigung muss sauber als Result.failure enden", result.isFailure)
+        LocalNotificationAlertChannel.stoppeAlarmTon(context)
     }
 }
