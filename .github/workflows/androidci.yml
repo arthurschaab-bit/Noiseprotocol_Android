@@ -5,7 +5,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-  # Manuell ausloesbar, damit ein Lauf nicht erst einen Commit braucht.
   workflow_dispatch:
 
 concurrency:
@@ -42,34 +41,20 @@ jobs:
       - name: Run Android Lint
         run: ./gradlew lintDebug --no-daemon --stacktrace
 
-      # Testluecken-Auftrag Stufe 1: eigener Kotlin-Stil-Linter neben Android Lint (der prueft
-      # Android-spezifische Dinge wie Ressourcen/API-Level, nicht Formatierung/Stil). Bestand hat
-      # aktuell mehrere tausend Verstoesse (nie zuvor gegen ktlint gelaufen) - ein Vollformat-Pass
-      # ist eine eigene, bewusst zu treffende Entscheidung, keine Nebenwirkung dieses Auftrags.
-      # continue-on-error haelt den Schritt deshalb sichtbar (roter Status auf der Actions-Seite,
-      # Report als Artefakt), blockiert aber den Job nicht.
       - name: Run ktlint
         id: ktlint
         continue-on-error: true
         run: ./gradlew ktlintCheck --no-daemon --stacktrace
 
-      # --continue, damit ein fehlgeschlagener Test die uebrigen nicht abschneidet: Sonst zeigt
-      # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu
-      # sehen.
-      - name: Unit & Robolectric Tests
-        run: ./gradlew test --no-daemon --stacktrace --continue
+      # Explizit der im instrumentierten Testplan/Review geforderte Debug-Task. --continue sorgt
+      # dafür, dass bei mehreren Fehlern der Bericht nicht am ersten Test abbricht.
+      - name: Unit & Robolectric Tests (Debug)
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace --continue
 
-      # Ohne diesen Schritt steht das Ergebnis nur im hochgeladenen Artefakt - man muss es
-      # herunterladen und entpacken, um zu erfahren, welcher Test warum gescheitert ist. Hier
-      # landet es direkt auf der Zusammenfassungsseite des Laufs.
       - name: Testbericht in die Zusammenfassung schreiben
         if: always()
         run: python3 .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY"
 
-      # Testluecken-Auftrag Stufe 1: Line-Coverage messen, damit die weiteren Stufen gegen eine
-      # echte Zahl arbeiten statt zu schaetzen. continue-on-error: schlaegt schon
-      # testDebugUnitTest fehl, soll das nicht als zweiter, redundanter roter Schritt erscheinen -
-      # der Testbericht oben zeigt die eigentliche Ursache bereits.
       - name: Coverage-Report erzeugen
         if: always()
         continue-on-error: true
@@ -115,8 +100,6 @@ jobs:
             app/build/reports/kover/htmlDebug/
           retention-days: 7
 
-      # Erlaubt, eine PR-Fassung auf dem Telefon zu installieren, ohne sie selbst zu bauen:
-      # Artefakt herunterladen, entpacken, `adb install -r app-debug.apk`.
       - name: Debug-APK bereitstellen
         if: always()
         uses: actions/upload-artifact@v4
