@@ -33,6 +33,7 @@ import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import kotlinx.coroutines.runBlocking
+import org.hamcrest.Matchers.allOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -183,6 +184,7 @@ class SettingsScreenInstrumentedTest {
         try {
             intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
             val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+            val packageUri = Uri.parse("package:${context.packageName}")
 
             composeRule.setContent {
                 OemDeviceHelperCard(
@@ -194,12 +196,20 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitForIdle()
 
             composeRule.onNodeWithTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG).assertIsDisplayed().performClick()
-            intended(hasAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS))
-            intended(hasData(Uri.parse("package:${context.packageName}")))
+            intended(
+                allOf(
+                    hasAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS),
+                    hasData(packageUri),
+                )
+            )
 
             composeRule.onNodeWithTag(OEM_EXACT_ALARM_BUTTON_TAG).assertIsDisplayed().performClick()
-            intended(hasAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
-            intended(hasData(Uri.parse("package:${context.packageName}")))
+            intended(
+                allOf(
+                    hasAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM),
+                    hasData(packageUri),
+                )
+            )
         } finally {
             Intents.release()
         }
