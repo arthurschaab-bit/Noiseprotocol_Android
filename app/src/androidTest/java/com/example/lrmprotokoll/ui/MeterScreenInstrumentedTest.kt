@@ -211,19 +211,26 @@ class MeterScreenInstrumentedTest {
         }.isFailure
         assertTrue("Eine echte Wischgeste muss die Geräteliste sichtbar bewegen", erstesGeraetNichtMehrSichtbar)
 
-        // LazyColumn komponiert nur sichtbare/nahe Items. Deshalb mit echten Gesten weiterscrollen,
-        // bis die explizit markierte letzte Gerätekarte Teil des Semantics-Baums ist. Erst dann
-        // sorgt performScrollTo() dafür, dass die Karte vollständig im Viewport liegt.
+        // Die sichtbare letzte Gerätekarte ist das eigentliche Nutzerkriterium. Der 1-dp-Endmarker
+        // dient nur als stabile Semantics-Grenze und kann am unteren Viewport-Rand vollständig
+        // geclippt sein, obwohl das Listenende erreicht wurde. Deshalb mit echten Gesten bis zur
+        // letzten Karte scrollen, diese vollständig sichtbar machen und den Endmarker nur auf
+        // Komposition prüfen.
+        val letzteKarteTag = "card_ble_device_AA:BB:CC:DD:EE:17"
         repeat(24) {
-            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) {
+            if (composeRule.onAllNodesWithTag(letzteKarteTag).fetchSemanticsNodes().isNotEmpty()) {
                 return@repeat
             }
             deviceList.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
-        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG)
+        composeRule.onNodeWithTag(letzteKarteTag)
             .performScrollTo()
             .assertIsDisplayed()
+        assertTrue(
+            "Am sichtbaren Listenende muss auch der Endmarker komponiert sein",
+            composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty(),
+        )
     }
 
     @Test
