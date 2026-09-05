@@ -224,13 +224,19 @@ fun MeterScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    pinne(device)
-                    verdaechtigesGeraet = null
-                }) { Text("Trotzdem koppeln") }
+                TextButton(
+                    onClick = {
+                        pinne(device)
+                        verdaechtigesGeraet = null
+                    },
+                    modifier = Modifier.testTag("dialog_spoofing_confirm")
+                ) { Text("Trotzdem koppeln") }
             },
             dismissButton = {
-                TextButton(onClick = { verdaechtigesGeraet = null }) { Text("Abbrechen") }
+                TextButton(
+                    onClick = { verdaechtigesGeraet = null },
+                    modifier = Modifier.testTag("dialog_spoofing_dismiss")
+                ) { Text("Abbrechen") }
             },
         )
     }
@@ -321,9 +327,11 @@ fun MeterScreen(
                         style = MaterialTheme.typography.displayLarge,
                         // liveRegion (PROMPT_M9_UX.md Aufgabe 4): der Pegel aendert sich rund
                         // alle 515 ms, ohne dass ein Screenreader das ohne Fokus mitbekaeme.
-                        modifier = Modifier.semantics(mergeDescendants = true) {
-                            liveRegion = LiveRegionMode.Polite
-                        }
+                        modifier = Modifier
+                            .testTag("live_meter_level_display")
+                            .semantics(mergeDescendants = true) {
+                                liveRegion = LiveRegionMode.Polite
+                            }
                     )
                     if (confirmedWeighting == null) {
                         Text(
@@ -334,7 +342,10 @@ fun MeterScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.testTag("card_meter_parameters")
+                    ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 if (frame.modeAssumptionConfirmed) {
@@ -374,7 +385,8 @@ fun MeterScreen(
                             } else {
                                 permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                             }
-                        }
+                        },
+                        modifier = Modifier.testTag("btn_meter_connect")
                     ) {
                         Text(stringResource(R.string.meter_action_connect))
                     }
@@ -481,6 +493,7 @@ fun MeterScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
+                        .testTag("card_ble_device_${device.address}")
                         .let { if (index == sortierteGefundeneGeraete.lastIndex) it.testTag(GERAETE_LISTE_ENDE_TAG) else it },
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
