@@ -368,7 +368,7 @@ fun SettingsScreen(
                             contentColor = if (!isProMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(40.dp),
+                        modifier = Modifier.testTag("btn_settings_mode_lite").weight(1f).height(40.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Icon(AppIcons.Sparkle, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -386,7 +386,7 @@ fun SettingsScreen(
                             contentColor = if (isProMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(40.dp),
+                        modifier = Modifier.testTag("btn_settings_mode_pro").weight(1f).height(40.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -714,14 +714,14 @@ fun SettingsScreen(
                                 value = ntfyServer,
                                 onValueChange = { ntfyServer = it; settings.ntfyServer = it },
                                 label = { Text(stringResource(R.string.settings_alerting_ntfy_server)) },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.testTag("input_ntfy_server").fillMaxWidth(),
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = ntfyTopic,
                                 onValueChange = { ntfyTopic = it; settings.ntfyTopic = it },
                                 label = { Text(stringResource(R.string.settings_alerting_ntfy_topic)) },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.testTag("input_ntfy_topic").fillMaxWidth(),
                             )
                         }
 
@@ -1650,7 +1650,7 @@ fun SettingsScreen(
                     // navigiert er wirklich zur Diagnose; ohne gesetzten Rueckruf bleibt das
                     // alte Verhalten als Rueckfall.
                     onClick = { onNavigateToDiagnose?.invoke() ?: onBack() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.testTag("btn_open_diagnose").fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
