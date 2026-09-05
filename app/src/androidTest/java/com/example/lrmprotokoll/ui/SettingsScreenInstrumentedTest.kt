@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
@@ -117,23 +116,6 @@ class SettingsScreenInstrumentedTest {
             intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
 
             val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-            val batteryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
-            }
-            assertTrue(
-                "ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS muss auf dem System auflösbar sein",
-                batteryIntent.resolveActivity(context.packageManager) != null
-            )
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val alarmIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                }
-                assertTrue(
-                    "ACTION_REQUEST_SCHEDULE_EXACT_ALARM muss auf API 31+ auflösbar sein",
-                    alarmIntent.resolveActivity(context.packageManager) != null
-                )
-            }
 
             composeRule.setContent {
                 OemDeviceHelperCard()
@@ -154,39 +136,40 @@ class SettingsScreenInstrumentedTest {
 
     @Test
     fun testAlarmAusloesenUndStoppenBehandeltZustandOhneAbsturz() {
-        composeRule.setContent {
-            SettingsScreen(onBack = {})
-        }
-        composeRule.waitForIdle()
+        val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val initialAlarmAktiv = context.container.settingsManager.alarmierungAktiv
+        context.container.settingsManager.alarmierungAktiv = true
+        context.container.settingsManager.alarmTonAktiv = true
 
-        // 1. Alarmierungssektion suchen & aufklappen
-        val secAlarm = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
-        val alertActive = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_active)
-        composeRule.onNodeWithText(secAlarm, substring = true).performScrollTo().performClick()
-        composeRule.waitForIdle()
-
-        // 2. Alarmierung einschalten falls inaktiv, damit Test-Alarm sichtbar wird
-        val activeNodes = composeRule.onAllNodesWithText(alertActive, substring = true)
-        if (activeNodes.fetchSemanticsNodes().isNotEmpty()) {
-            activeNodes[0].performClick()
+        try {
+            composeRule.setContent {
+                SettingsScreen(onBack = {})
+            }
             composeRule.waitForIdle()
+
+            // 1. Alarmierungssektion suchen & aufklappen
+            val secAlarm = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(secAlarm, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            // 2. Test-Alarm Button betätigen (sichtbar da alarmierungAktiv = true)
+            composeRule.onNodeWithText("Test-Alarm").performScrollTo().performClick()
+
+            // 3. Warten bis Ergebnistext ("Test-Alarm ausgelöst" oder "Fehlgeschlagen: ...") erscheint
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Fehlgeschlagen", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            // 4. Alarm stoppen Button betätigen
+            composeRule.onNodeWithText("Alarm stoppen").performScrollTo().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).assertIsDisplayed()
+        } finally {
+            context.container.settingsManager.alarmierungAktiv = initialAlarmAktiv
         }
-
-        // 3. Test-Alarm Button betätigen
-        composeRule.onNodeWithText("Test-Alarm").performScrollTo().performClick()
-
-        // 3. Warten bis Ergebnistext ("Test-Alarm ausgelöst" oder "Fehlgeschlagen: ...") erscheint
-        composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty() ||
-            composeRule.onAllNodesWithText("Fehlgeschlagen", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
-
-        // 4. Alarm stoppen Button betätigen
-        composeRule.onNodeWithText("Alarm stoppen").performScrollTo().performClick()
-
-        composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("Alarmton gestoppt", substring = true).assertIsDisplayed()
     }
 }

@@ -13,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.Weighting
@@ -125,10 +126,17 @@ class MeterScreenInstrumentedTest {
     fun meterScreenSpiegeltLivePegelUndBestaetigteBewertungVonFakeTransport() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val fakeTransport = FakeMeterTransport()
-        app.setCustomContainer(AppContainer(app, meterTransportOverride = fakeTransport))
+        val customContainer = AppContainer(app, meterTransportOverride = fakeTransport)
+        app.setCustomContainer(customContainer)
+
+        val device = BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323 Test")
+        customContainer.connectionSupervisor.start(device)
+
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            customContainer.connectionSupervisor.state.value == ConnectionState.STREAMING
+        }
 
         kotlinx.coroutines.runBlocking {
-            fakeTransport.setState(ConnectionState.STREAMING)
             fakeTransport.emitFrame(
                 level = 68.5,
                 weighting = Weighting.A,
@@ -151,6 +159,7 @@ class MeterScreenInstrumentedTest {
             // 2. Bestätigt am Gerät Hinweis sichtbar
             composeRule.onNodeWithText(confirmedText).assertIsDisplayed()
         } finally {
+            customContainer.connectionSupervisor.stop()
             app.resetContainer()
         }
     }

@@ -30,7 +30,7 @@ class FakeMeterTransport(
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     override val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
-    private val _frames = MutableSharedFlow<MeterFrame>(extraBufferCapacity = 64)
+    private val _frames = MutableSharedFlow<MeterFrame>(replay = 1, extraBufferCapacity = 64)
     override val frames: SharedFlow<MeterFrame> = _frames.asSharedFlow()
 
     private val _lastFrameAt = MutableStateFlow<Instant?>(null)

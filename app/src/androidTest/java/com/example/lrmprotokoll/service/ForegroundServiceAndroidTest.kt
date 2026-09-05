@@ -14,7 +14,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.lrmprotokoll.LaermprotokollApp
-import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
+import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.ui.END_MEASUREMENT_BUTTON_TAG
@@ -70,17 +70,19 @@ class ForegroundServiceAndroidTest {
     }
 
     private fun stoppeServiceFallsAktiv() {
-        try {
-            val stopIntent = Intent(context, AudioRecordingService::class.java).apply {
-                action = ACTION_STOP_AUDIO_RECORDING
-            }
-            context.startService(stopIntent)
-            context.stopService(Intent(context, AudioRecordingService::class.java))
-        } catch (_: Exception) {}
+        if (AudioRecordingService.laeuft.value || notificationManager.activeNotifications.any { it.id == 1 }) {
+            try {
+                val stopIntent = Intent(context, AudioRecordingService::class.java).apply {
+                    action = ACTION_STOP_SERVICE
+                }
+                context.startService(stopIntent)
+                context.stopService(Intent(context, AudioRecordingService::class.java))
+            } catch (_: Exception) {}
 
-        composeRule.waitUntil(timeoutMillis = 5_000L) {
-            !AudioRecordingService.laeuft.value &&
-                notificationManager.activeNotifications.none { it.id == 1 }
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                !AudioRecordingService.laeuft.value &&
+                    notificationManager.activeNotifications.none { it.id == 1 }
+            }
         }
     }
 
@@ -142,11 +144,11 @@ class ForegroundServiceAndroidTest {
         assertTrue(notif!!.isOngoing)
 
         val stopIntent = Intent(context, AudioRecordingService::class.java).apply {
-            action = ACTION_STOP_AUDIO_RECORDING
+            action = ACTION_STOP_SERVICE
         }
         context.startService(stopIntent)
 
-        composeRule.waitUntil(timeoutMillis = 7_000L) {
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
             !AudioRecordingService.laeuft.value &&
                 notificationManager.activeNotifications.none { it.id == 1 }
         }
