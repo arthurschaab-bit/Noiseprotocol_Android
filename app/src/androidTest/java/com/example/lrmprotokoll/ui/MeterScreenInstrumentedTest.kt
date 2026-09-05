@@ -182,8 +182,14 @@ class MeterScreenInstrumentedTest {
         assertTrue("MeterScreen muss einen scrollbaren Gerätebereich enthalten", scrollables.fetchSemanticsNodes().isNotEmpty())
         val deviceList = scrollables[0]
 
-        for (attempt in 0 until 12) {
-            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) break
+        // Ein LazyColumn-Item kann bereits komponiert sein, obwohl es am unteren Rand erst
+        // teilweise sichtbar ist. Deshalb erst abbrechen, wenn assertIsDisplayed() wirklich
+        // erfolgreich ist; andernfalls weiter mit echten Touch-Gesten scrollen.
+        for (attempt in 0 until 20) {
+            val endeSichtbar = runCatching {
+                composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
+            }.isSuccess
+            if (endeSichtbar) break
             deviceList.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
