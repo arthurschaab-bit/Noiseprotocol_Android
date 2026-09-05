@@ -207,25 +207,26 @@ class ProtokollExportAndroidTest {
 
         wartetBisAngezeigt(sessionTitle)
 
-        // 1. PDF-Export bei Session ohne Messwerte führt nicht zum Absturz (Guard kennwerte ?: return greift)
+        // 1. PDF-Export bei Session ohne Messwerte erzeugt Bericht und löst Teilen aus
         composeRule.onNodeWithText(pdfBtn).assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
 
-        // 2. CSV-Export bei leerer Messreihe: Erzeugt leere CSV mit Kopfzeile ohne Absturz
+        // 2. CSV-Export bei leerer Messreihe: Erzeugt leere CSV mit Kopfzeile und löst Teilen aus
         composeRule.onNodeWithText(csvBtn).assertIsDisplayed().performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            expectedCsvFile.exists()
+            expectedCsvFile.exists() && expectedPdfFile.exists()
         }
 
         assertTrue("CSV-Datei wird auch bei leerer Messreihe sicher erzeugt", expectedCsvFile.exists())
         val csvText = expectedCsvFile.readText(Charsets.UTF_8)
         assertTrue("CSV muss Kopfzeile enthalten", csvText.contains("Zeit;Pegel_dB") || csvText.contains("Minute;LAeq_dB"))
 
+        assertTrue("PDF-Datei wird auch bei leerer Messreihe sicher erzeugt", expectedPdfFile.exists())
+
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            Intents.getIntents().isNotEmpty()
+            Intents.getIntents().size >= 2
         }
-        intended(hasAction(Intent.ACTION_CHOOSER), Intents.times(1))
+        intended(hasAction(Intent.ACTION_CHOOSER), Intents.times(2))
 
         expectedCsvFile.delete()
         expectedPdfFile.delete()
