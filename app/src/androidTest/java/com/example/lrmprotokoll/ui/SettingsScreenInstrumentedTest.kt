@@ -32,16 +32,18 @@ import com.example.lrmprotokoll.alert.Alert
 import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
+import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.allOf
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
 
 @RunWith(AndroidJUnit4::class)
 class SettingsScreenInstrumentedTest {
@@ -54,6 +56,11 @@ class SettingsScreenInstrumentedTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
+    }
+
+    @After
+    fun tearDown() {
+        LocalNotificationAlertChannel.stoppeAlarmTon(app)
     }
 
     @Test
@@ -178,7 +185,7 @@ class SettingsScreenInstrumentedTest {
 
     @Test
     fun systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        assumeTrue("Exakte Alarme gibt es erst ab Android 12", Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
 
         Intents.init()
         try {
@@ -216,8 +223,45 @@ class SettingsScreenInstrumentedTest {
     }
 
     @Test
+    fun testAlarmAusloesenUndStoppenBehandeltZustandOhneAbsturz() {
+        val settingsManager = app.container.settingsManager
+        val initialAlarmAktiv = settingsManager.alarmierungAktiv
+        val initialAlarmTonAktiv = settingsManager.alarmTonAktiv
+        settingsManager.alarmierungAktiv = true
+        settingsManager.alarmTonAktiv = true
+
+        try {
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            val secAlarm = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(secAlarm, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Test-Alarm").performScrollTo().assertIsDisplayed().performClick()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Test-Alarm ausgelöst", substring = true).assertIsDisplayed()
+
+            composeRule.onNodeWithText("Alarm stoppen").performScrollTo().assertIsDisplayed().performClick()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).assertIsDisplayed()
+        } finally {
+            settingsManager.alarmTonAktiv = initialAlarmTonAktiv
+            settingsManager.alarmierungAktiv = initialAlarmAktiv
+            LocalNotificationAlertChannel.stoppeAlarmTon(app)
+        }
+    }
+
+    @Test
     fun lokaleTestMeldungOhnePostNotificationsCrashtNicht() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        assumeTrue(
+            "POST_NOTIFICATIONS existiert erst ab Android 13",
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+        )
 
         val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val channel = LocalNotificationAlertChannel(
@@ -240,7 +284,10 @@ class SettingsScreenInstrumentedTest {
             )
         }
 
-        assertTrue("Fehlende Benachrichtigungsberechtigung muss sauber als Result.failure enden", result.isFailure)
+        assertTrue(
+            "Fehlende Benachrichtigungsberechtigung darf Ton/Vibration des lokalen Alarmwegs nicht abbrechen",
+            result.isSuccess,
+        )
         LocalNotificationAlertChannel.stoppeAlarmTon(context)
     }
 }
