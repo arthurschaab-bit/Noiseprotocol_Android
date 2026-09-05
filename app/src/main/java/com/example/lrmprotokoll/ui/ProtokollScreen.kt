@@ -100,19 +100,19 @@ fun ProtokollScreen(
                             Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
                         }
                     } else {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("btn_protokoll_back")) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                         }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { zeigeZeitraumDialog = true }) {
+                    IconButton(onClick = { zeigeZeitraumDialog = true }, modifier = Modifier.testTag("btn_period_report")) {
                         Icon(
                             imageVector = Icons.Default.DateRange,
                             contentDescription = stringResource(R.string.period_report_action),
                         )
                     }
-                    IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }) {
+                    IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }, modifier = Modifier.testTag("btn_filter_events")) {
                         Icon(
                             imageVector = AppIcons.FilterList,
                             contentDescription = "Filter",
@@ -131,7 +131,7 @@ fun ProtokollScreen(
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.protocol_new_measurement), fontWeight = FontWeight.Bold) },
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 8.dp).testTag("fab_new_measurement")
                 )
             }
         }
@@ -150,7 +150,7 @@ fun ProtokollScreen(
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.testTag("btn_search_clear")) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete))
                         }
                     }
@@ -253,11 +253,11 @@ fun ProtokollScreen(
                         TextButton(onClick = {
                             val bis = System.currentTimeMillis()
                             erstelleUndTeileZeitraumbericht(bis - 7L * 24 * 60 * 60 * 1000, bis)
-                        }) { Text(stringResource(R.string.period_report_preset_7_days)) }
+                        }, modifier = Modifier.testTag("btn_period_preset_7d")) { Text(stringResource(R.string.period_report_preset_7_days)) }
                         TextButton(onClick = {
                             val bis = System.currentTimeMillis()
                             erstelleUndTeileZeitraumbericht(bis - 30L * 24 * 60 * 60 * 1000, bis)
-                        }) { Text(stringResource(R.string.period_report_preset_30_days)) }
+                        }, modifier = Modifier.testTag("btn_period_preset_30d")) { Text(stringResource(R.string.period_report_preset_30_days)) }
                         TextButton(onClick = {
                             val bis = System.currentTimeMillis()
                             val von = Calendar.getInstance().apply {
@@ -268,12 +268,12 @@ fun ProtokollScreen(
                                 set(Calendar.MILLISECOND, 0)
                             }.timeInMillis
                             erstelleUndTeileZeitraumbericht(von, bis)
-                        }) { Text(stringResource(R.string.period_report_preset_this_month)) }
+                        }, modifier = Modifier.testTag("btn_period_preset_month")) { Text(stringResource(R.string.period_report_preset_this_month)) }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { zeigeZeitraumDialog = false }, enabled = !zeitraumWirdErstellt) {
+                TextButton(onClick = { zeigeZeitraumDialog = false }, enabled = !zeitraumWirdErstellt, modifier = Modifier.testTag("btn_period_dialog_cancel")) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
@@ -335,6 +335,7 @@ private fun ModernSessionCard(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+            .testTag("card_session_${session.id}")
             .clickable { onClick() }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
