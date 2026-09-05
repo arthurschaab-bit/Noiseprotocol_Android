@@ -4,7 +4,6 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -12,7 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -212,11 +211,19 @@ class MeterScreenInstrumentedTest {
         }.isFailure
         assertTrue("Eine echte Wischgeste muss die Geräteliste sichtbar bewegen", erstesGeraetNichtMehrSichtbar)
 
-        // Erst nach Abschluss des Fake-Scans ist lastIndex stabil. Dann kann Compose den Tag der
-        // letzten Gerätekarte zuverlässig über die LazyList-Semantik finden, ohne numerischen Index.
-        deviceList.performScrollToNode(hasTestTag(GERAETE_LISTE_ENDE_TAG))
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
+        // LazyColumn komponiert nur sichtbare/nahe Items. Deshalb mit echten Gesten weiterscrollen,
+        // bis die explizit markierte letzte Gerätekarte Teil des Semantics-Baums ist. Erst dann
+        // sorgt performScrollTo() dafür, dass die Karte vollständig im Viewport liegt.
+        repeat(24) {
+            if (composeRule.onAllNodesWithTag(GERAETE_LISTE_ENDE_TAG).fetchSemanticsNodes().isNotEmpty()) {
+                return@repeat
+            }
+            deviceList.performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
+        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
