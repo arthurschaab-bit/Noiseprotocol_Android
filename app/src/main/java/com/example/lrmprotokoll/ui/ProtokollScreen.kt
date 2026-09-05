@@ -96,7 +96,7 @@ fun ProtokollScreen(
                 },
                 navigationIcon = {
                     if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp)) {
+                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")) {
                             Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
                         }
                     } else {

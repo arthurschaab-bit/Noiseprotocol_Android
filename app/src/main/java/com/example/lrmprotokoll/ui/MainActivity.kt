@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -304,27 +305,27 @@ fun AppNavigationBar(
     onNavigateToDiagnose: (() -> Unit)? = null,
     onNavigateToMeter: (() -> Unit)? = null,
 ) {
-    NavigationBar {
+    NavigationBar(modifier = Modifier.testTag("bottom_nav_bar")) {
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "main"),
             onClick = onNavigateToStart,
             icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.nav_start)) },
             label = { Text(stringResource(R.string.nav_start)) },
-            modifier = Modifier.heightIn(min = 48.dp)
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_main")
         )
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "protokoll"),
             onClick = onNavigateToProtokoll,
             icon = { Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.nav_protocol)) },
             label = { Text(stringResource(R.string.nav_protocol)) },
-            modifier = Modifier.heightIn(min = 48.dp)
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_protokoll")
         )
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "settings"),
             onClick = onNavigateToSettings,
             icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.nav_settings)) },
             label = { Text(stringResource(R.string.nav_settings)) },
-            modifier = Modifier.heightIn(min = 48.dp)
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_settings")
         )
     }
 }
@@ -480,7 +481,7 @@ fun NoiseProtocolApp(
 
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // 1. TopAppBar als Listeneintrag (integriert, kein Nested Scroll Konflikt)
@@ -496,7 +497,7 @@ fun NoiseProtocolApp(
                 navigationIcon = {
                     IconButton(
                         onClick = onOpenDrawer,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")
                     ) {
                         Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
                     }
@@ -527,20 +528,20 @@ fun NoiseProtocolApp(
                                 }
                             }
                         },
-                        modifier = Modifier.padding(end = 6.dp)
+                        modifier = Modifier.padding(end = 6.dp).testTag("badge_microphone_status")
                     )
 
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
                         onClick = { showPairingDialog = true },
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status")
                     )
 
                     Box {
                         IconButton(
                             onClick = { showOverflowMenu = true },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(48.dp).testTag("btn_overflow_menu")
                         ) {
                             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_options))
                         }
@@ -625,7 +626,8 @@ fun NoiseProtocolApp(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("banner_problem_monitoring"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Row(
@@ -653,7 +655,10 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
-                        TextButton(onClick = onNavigateToDiagnose) {
+                        TextButton(
+                            onClick = onNavigateToDiagnose,
+                            modifier = Modifier.testTag("btn_problem_check")
+                        ) {
                             Text(stringResource(R.string.action_check), color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                         }
                     }
@@ -681,7 +686,9 @@ fun NoiseProtocolApp(
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_continuous_session"),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
@@ -704,7 +711,10 @@ fun NoiseProtocolApp(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-                                TextButton(onClick = onNavigateToProtokoll) {
+                                TextButton(
+                                    onClick = onNavigateToProtokoll,
+                                    modifier = Modifier.testTag("btn_session_view_protocol")
+                                ) {
                                     Text(stringResource(R.string.session_view_in_protocol))
                                 }
                             }
@@ -736,6 +746,7 @@ fun NoiseProtocolApp(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .testTag("panel_filter_header")
                                 .clickable { showFilterPanel = !showFilterPanel }
                         ) {
                             Icon(
@@ -750,7 +761,8 @@ fun NoiseProtocolApp(
                                     selected = true,
                                     onClick = { updateFilter(RecordFilterState()) },
                                     label = { Text(stringResource(R.string.filter_active_reset)) },
-                                    trailingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    trailingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    modifier = Modifier.testTag("chip_filter_reset")
                                 )
                             }
                         }
@@ -764,12 +776,15 @@ fun NoiseProtocolApp(
                                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                                     trailingIcon = {
                                         if (filterState.query.isNotEmpty()) {
-                                            IconButton(onClick = { updateFilter(filterState.copy(query = "")) }) {
+                                            IconButton(
+                                                onClick = { updateFilter(filterState.copy(query = "")) },
+                                                modifier = Modifier.testTag("btn_clear_filter_search")
+                                            ) {
                                                 Icon(Icons.Default.Close, contentDescription = null)
                                             }
                                         }
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().testTag("input_filter_search"),
                                     singleLine = true
                                 )
 
@@ -796,22 +811,26 @@ fun NoiseProtocolApp(
                                         selected = filterState.onlyFavorites,
                                         onClick = { updateFilter(filterState.copy(onlyFavorites = !filterState.onlyFavorites)) },
                                         label = { Text(stringResource(R.string.filter_favorites)) },
-                                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                        modifier = Modifier.testTag("chip_filter_favorites")
                                     )
                                     FilterChip(
                                         selected = filterState.onlyQuietHours,
                                         onClick = { updateFilter(filterState.copy(onlyQuietHours = !filterState.onlyQuietHours)) },
-                                        label = { Text(stringResource(R.string.filter_quiet_hours)) }
+                                        label = { Text(stringResource(R.string.filter_quiet_hours)) },
+                                        modifier = Modifier.testTag("chip_filter_quiet_hours")
                                     )
                                     FilterChip(
                                         selected = filterState.onlyMeter,
                                         onClick = { updateFilter(filterState.copy(onlyMeter = !filterState.onlyMeter)) },
-                                        label = { Text(stringResource(R.string.filter_only_meter)) }
+                                        label = { Text(stringResource(R.string.filter_only_meter)) },
+                                        modifier = Modifier.testTag("chip_filter_only_meter")
                                     )
                                     FilterChip(
                                         selected = filterState.onlyCalibrated,
                                         onClick = { updateFilter(filterState.copy(onlyCalibrated = !filterState.onlyCalibrated)) },
-                                        label = { Text(stringResource(R.string.filter_only_calibrated)) }
+                                        label = { Text(stringResource(R.string.filter_only_calibrated)) },
+                                        modifier = Modifier.testTag("chip_filter_only_calibrated")
                                     )
                                 }
                             }
@@ -918,7 +937,10 @@ fun NoiseProtocolApp(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(onClick = { updateFilter(RecordFilterState()) }) {
+                        Button(
+                            onClick = { updateFilter(RecordFilterState()) },
+                            modifier = Modifier.testTag("btn_empty_filter_reset")
+                        ) {
                             Text(stringResource(R.string.action_reset_filter))
                         }
                     }
