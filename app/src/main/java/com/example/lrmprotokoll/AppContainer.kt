@@ -40,10 +40,15 @@ import kotlinx.coroutines.SupervisorJob
  * Anwendung geteilten Abhaengigkeiten an einer Stelle, damit sie in Tests austauschbar sind,
  * ohne alle bestehenden Klassen mit Annotationen zu versehen.
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    meterTransportOverride: MeterTransport? = null,
+) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }
-    val meterTransport: MeterTransport by lazy { BleMeterTransport(context.applicationContext) }
+    val meterTransport: MeterTransport by lazy {
+        meterTransportOverride ?: BleMeterTransport(context.applicationContext)
+    }
 
     private val bluetoothAdapterStateObserver by lazy {
         BluetoothAdapterStateObserver(context.applicationContext)

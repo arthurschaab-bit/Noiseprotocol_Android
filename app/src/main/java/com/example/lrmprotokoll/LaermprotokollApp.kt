@@ -14,7 +14,15 @@ import io.sentry.android.core.SentryAndroid
 class LaermprotokollApp : Application() {
 
     lateinit var container: AppContainer
-        private set
+        internal set
+
+    fun setCustomContainer(customContainer: AppContainer) {
+        container = customContainer
+    }
+
+    fun resetContainer() {
+        container = AppContainer(this)
+    }
 
     override fun onCreate() {
         super.onCreate()

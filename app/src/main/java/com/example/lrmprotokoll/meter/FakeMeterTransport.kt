@@ -102,6 +102,48 @@ class FakeMeterTransport(
     }
 
     /**
+     * Setzt den Verbindungszustand explizit (fuer Tests).
+     */
+    fun setState(state: ConnectionState) {
+        _state.value = state
+    }
+
+    /**
+     * Speist einen Frame deterministisch ein (fuer UI- und Regressionstests).
+     */
+    suspend fun emitFrame(frame: MeterFrame) {
+        validFrameCount++
+        _lastFrameAt.value = frame.receivedAt
+        _frames.emit(frame)
+        _frameQuality.value = FrameQuality(validFrameCount + errorFrameCount, errorFrameCount)
+    }
+
+    /**
+     * Bequemer Helper zum Einspeisen eines Frames mit Standardwerten.
+     */
+    suspend fun emitFrame(
+        level: Double = baseLevel,
+        weighting: Weighting? = Weighting.A,
+        timeWeighting: TimeWeighting? = TimeWeighting.FAST,
+        range: MeasurementRange? = MeasurementRange.RANGE_30_130,
+        modeAssumptionConfirmed: Boolean = true,
+    ) {
+        val nowMs = System.currentTimeMillis().coerceAtLeast(lastEmittedEpochMs + 1)
+        lastEmittedEpochMs = nowMs
+        val frame = MeterFrame(
+            level = level,
+            weighting = weighting,
+            timeWeighting = timeWeighting,
+            range = range,
+            holdMax = null,
+            holdMin = null,
+            receivedAt = Instant.ofEpochMilli(nowMs),
+            modeAssumptionConfirmed = modeAssumptionConfirmed,
+        )
+        emitFrame(frame)
+    }
+
+    /**
      * Laesst nachfolgende Ticks wie verworfene Decode-Kandidaten wirken: kein Frame wird
      * emittiert, nur der Fehlerzaehler steigt - genau das Verhalten des echten
      * [Pce323FrameDecoder] bei einem unplausiblen Wert (Pegel ausserhalb 20-140 dB), nicht ein
