@@ -1,8 +1,10 @@
 package com.example.lrmprotokoll.ui
 
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -10,7 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -18,14 +20,18 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BleDevice
-import com.example.lrmprotokoll.meter.ble.BleScannerTestOverrides
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -41,10 +47,16 @@ class MeterScreenInstrumentedTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var app: LaermprotokollApp
+    private var customContainerInstalled = false
+    private var vorherigeMeterAdresse: String? = null
+    private var vorherigerMeterName: String? = null
 
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
+        val settings = app.container.settingsManager
+        vorherigeMeterAdresse = settings.meterDeviceAddress
+        vorherigerMeterName = settings.meterDeviceName
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
             automation.grantRuntimePermission(composeRule.activity.packageName, android.Manifest.permission.BLUETOOTH_SCAN)
@@ -54,8 +66,31 @@ class MeterScreenInstrumentedTest {
 
     @After
     fun tearDown() {
-        BleScannerTestOverrides.reset()
-        app.resetContainer()
+        app.stopService(Intent(app, AudioRecordingService::class.java))
+        runBlocking {
+            withTimeout(5_000L) {
+                AudioRecordingService.laeuft.first { !it }
+            }
+        }
+
+        val settings = app.container.settingsManager
+        settings.meterDeviceAddress = vorherigeMeterAdresse
+        settings.meterDeviceName = vorherigerMeterName
+
+        if (customContainerInstalled) {
+            app.resetContainer()
+            customContainerInstalled = false
+        }
+    }
+
+    private fun installContainer(container: AppContainer): AppContainer {
+        app.setCustomContainer(container)
+        customContainerInstalled = true
+        return container
+    }
+
+    private fun installScanProvider(provider: () -> Flow<BleDevice>) {
+        installContainer(AppContainer(app, bleScanProviderOverride = provider))
     }
 
     @Test
@@ -73,7 +108,7 @@ class MeterScreenInstrumentedTest {
 
     @Test
     fun scanFehlerAusScannerFlowWirdSichtbarUndSchnellesMehrfachTippenCrashtNicht() {
-        BleScannerTestOverrides.scanProvider = {
+        installScanProvider {
             flow { throw IllegalStateException("BLE-Scan fehlgeschlagen, errorCode=6") }
         }
         composeRule.setContent { MeterScreen(onBack = {}) }
@@ -89,10 +124,10 @@ class MeterScreenInstrumentedTest {
 
     @Test
     fun gleicherNameAndereMacZeigtWarnungUndAbbrechenBelaesstPinning() {
+        installScanProvider { flowOf(BleDevice("BB:BB:BB:BB:BB:BB", "PCE-323 Test", -42)) }
         val settings = app.container.settingsManager
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
-        BleScannerTestOverrides.scanProvider = { flowOf(BleDevice("BB:BB:BB:BB:BB:BB", "PCE-323 Test", -42)) }
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
         composeRule.waitUntil(5_000L) {
@@ -109,10 +144,10 @@ class MeterScreenInstrumentedTest {
 
     @Test
     fun gleicherNameAndereMacKannExplizitBestaetigtWerden() {
+        installScanProvider { flowOf(BleDevice("CC:CC:CC:CC:CC:CC", "PCE-323 Test", -41)) }
         val settings = app.container.settingsManager
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
-        BleScannerTestOverrides.scanProvider = { flowOf(BleDevice("CC:CC:CC:CC:CC:CC", "PCE-323 Test", -41)) }
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
         composeRule.waitUntil(5_000L) {
@@ -126,7 +161,7 @@ class MeterScreenInstrumentedTest {
 
     @Test
     fun langeGeraetelisteReagiertAufEchteWischgesteUndEndeIstErreichbar() {
-        BleScannerTestOverrides.scanProvider = {
+        installScanProvider {
             flow {
                 repeat(18) { index ->
                     emit(
@@ -152,8 +187,6 @@ class MeterScreenInstrumentedTest {
         val deviceList = scrollables[0]
 
         // Emulator-Mehrwert: echte Touch-Koordinaten müssen die LazyColumn tatsächlich bewegen.
-        // Wir verlangen nicht mehr, dass eine flakey Serie von Fling-Gesten exakt bis zum letzten
-        // Lazy-Item reicht; stattdessen wird zuerst echte Bewegung nachgewiesen.
         repeat(3) {
             deviceList.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
@@ -163,18 +196,17 @@ class MeterScreenInstrumentedTest {
         }.isFailure
         assertTrue("Eine echte Wischgeste muss die Geräteliste sichtbar bewegen", erstesGeraetNichtMehrSichtbar)
 
-        // Die Reichweite bis zum Listenende prüfen wir anschließend deterministisch über die
-        // LazyList-Semantik. Index 0 ist der feste Kopfbereich, Index 18 das letzte von 18 Geräten.
-        deviceList.performScrollToIndex(18)
+        // Das Listenende wird über seinen semantischen Test-Tag gesucht statt über einen fragilen
+        // numerischen LazyColumn-Index. Zusätzliche feste Items ändern diesen Test damit nicht.
+        deviceList.performScrollToNode(hasTestTag(GERAETE_LISTE_ENDE_TAG))
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Testgerät 17").assertIsDisplayed()
+        composeRule.onNodeWithTag(GERAETE_LISTE_ENDE_TAG).assertIsDisplayed()
     }
 
     @Test
     fun meterScreenSpiegeltLivePegelUndBestaetigteBewertungVonFakeTransport() {
         val fakeTransport = FakeMeterTransport()
-        val customContainer = AppContainer(app, meterTransportOverride = fakeTransport)
-        app.setCustomContainer(customContainer)
+        val customContainer = installContainer(AppContainer(app, meterTransportOverride = fakeTransport))
         val device = BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323 Test")
         customContainer.connectionSupervisor.start(device)
         composeRule.waitUntil(timeoutMillis = 5_000L) {
