@@ -78,7 +78,7 @@ class DriveSyncCoordinator(
         // nicht vom Testinhalt.
         val heute = jetzt.atZone(zone).toLocalDate()
         val von = heute.atStartOfDay(zone).toInstant()
-        val datumSchluessel = heute.toString()
+        val datumSchluessel = DriveAblage.tagesordner(jetzt, zone)
 
         val samples = levelSampleDao.zwischen(von.toEpochMilli(), jetzt.toEpochMilli())
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
@@ -107,49 +107,68 @@ class DriveSyncCoordinator(
             if (wavRecords.isNotEmpty()) {
                 val stundenZips = WavHourlyZipper.packeStundenZips(wavRecords, jetzt, zone)
                 if (stundenZips.isNotEmpty()) {
-                    // Die WAV-Pakete gehoeren in den Tagesordner des Messtages, nicht in den des
-                    // Uploads - deshalb der Datumsschluessel und nicht "heute".
-                    val wavOrdner = ordnerbaum.ordnerFuer(ordnerId, datumSchluessel, DriveKategorie.WAV)
-                        .getOrElse { ordnerId }
-                    val existierendeNamen = driveApi.dateienInOrdnerAuflisten(wavOrdner).getOrElse { emptySet() }
+                    // Die WAV-Pakete gehoeren in den jeweiligen Tagesordner des Messtages (Aufnahmedatum),
+                    // nicht pauschal in den des Upload-Tags. Cache für Ordner-Listings, um wiederholte API-Aufrufe zu vermeiden.
+                    val ordnerDateienCache = mutableMapOf<String, MutableSet<String>>()
+
                     for (zipPackage in stundenZips) {
                         val dateiName = zipPackage.zipFileName
-                        // Wenn die Datei noch nicht auf Drive existiert -> Neu anlegen
+                        val tagesSchluessel = zipPackage.tagesordner
+                        val wavOrdner = ordnerbaum.ordnerFuer(ordnerId, tagesSchluessel, DriveKategorie.WAV)
+                            .getOrElse { ordnerId }
+
+                        val existierendeNamen = ordnerDateienCache.getOrPut(wavOrdner) {
+                            driveApi.dateienInOrdnerAuflisten(wavOrdner)
+                                .getOrElse { emptySet() }
+                                .toMutableSet()
+                        }
+
+                        // Wenn die Datei noch nicht auf Drive im Tagesordner existiert -> Neu anlegen
                         if (!existierendeNamen.contains(dateiName)) {
+                            val inhalt = zipPackage.zipBytes
+                            if (inhalt.isEmpty()) {
+                                Log.w(TAG, "ZIP-Inhalt für $dateiName ist leer – überspringe")
+                                continue
+                            }
                             val uploadResult = driveApi.dateiAnlegen(
                                 name = dateiName,
                                 ordnerId = wavOrdner,
-                                inhalt = zipPackage.zipBytes,
+                                inhalt = inhalt,
                                 mimeType = "application/zip",
                                 gzip = false,
                             )
                             if (uploadResult.isFailure) {
                                 val err = uploadResult.exceptionOrNull()
                                 val httpCode = (err as? DriveApiException)?.httpCode
-                                Log.w(TAG, "ZIP-Upload fehlgeschlagen für $dateiName: ${err?.message}")
+                                Log.w(TAG, "ZIP-Upload fehlgeschlagen für $dateiName in $tagesSchluessel/WAV: ${err?.message}")
                                 if (httpCode == 403 || httpCode == 429) {
                                     Log.w(TAG, "Drive-Rate-Limit (HTTP $httpCode) beim ZIP-Upload erreicht – breche Batch ab")
                                     break
                                 }
                             } else {
+                                existierendeNamen.add(dateiName)
                                 zipPackagesUploadedCount++
                                 totalWavCountInZips += zipPackage.wavCount
-                                Log.i(TAG, "Stündliches ZIP-Archiv hochgeladen: $dateiName (${zipPackage.wavCount} WAVs)")
+                                Log.i(TAG, "Stündliches ZIP-Archiv hochgeladen: $dateiName in $tagesSchluessel/WAV (${zipPackage.wavCount} WAVs)")
                             }
                         } else if (!zipPackage.isClosedHour) {
                             // Laufende Stunde existiert bereits, hat aber eventuell neue WAVs erhalten -> Aktualisieren
                             val suchenResult = driveApi.dateiSuchen(dateiName, wavOrdner)
                             val existierendeDatei = suchenResult.getOrNull()
                             if (existierendeDatei != null) {
-                                val updateResult = driveApi.dateiAktualisieren(
-                                    fileId = existierendeDatei.id,
-                                    inhalt = zipPackage.zipBytes,
-                                    mimeType = "application/zip",
-                                    gzip = false,
-                                )
-                                if (updateResult.isSuccess) {
-                                    zipPackagesUploadedCount++
-                                    totalWavCountInZips += zipPackage.wavCount
+                                val inhalt = zipPackage.zipBytes
+                                if (inhalt.isNotEmpty()) {
+                                    val updateResult = driveApi.dateiAktualisieren(
+                                        fileId = existierendeDatei.id,
+                                        inhalt = inhalt,
+                                        mimeType = "application/zip",
+                                        gzip = false,
+                                    )
+                                    if (updateResult.isSuccess) {
+                                        zipPackagesUploadedCount++
+                                        totalWavCountInZips += zipPackage.wavCount
+                                        Log.i(TAG, "Stündliches ZIP-Archiv aktualisiert: $dateiName in $tagesSchluessel/WAV")
+                                    }
                                 }
                             }
                         }

@@ -14,13 +14,60 @@ private const val TAG = "WavHourlyZipper"
 
 /**
  * Repräsentiert ein stündlich gebündeltes ZIP-Archiv für den Google Drive Upload.
+ * Der ZIP-Inhalt wird bei Bedarf lazy erzeugt, damit bei bereits existierenden
+ * Archiven auf Drive keine unnötigen Megabytes im RAM allokiert werden.
  */
-data class HourlyZipPackage(
+class HourlyZipPackage(
     val zipFileName: String,
-    val zipBytes: ByteArray,
     val wavCount: Int,
     val isClosedHour: Boolean,
-)
+    val tagesordner: String = zipFileName.removePrefix("audio_").substringBefore('_'),
+    private val zipBytesProvider: () -> ByteArray,
+) {
+    val zipBytes: ByteArray by lazy(zipBytesProvider)
+
+    /** Sekundärer Konstruktor für direkte Bytes (z. B. in Tests). */
+    constructor(
+        zipFileName: String,
+        zipBytes: ByteArray,
+        wavCount: Int,
+        isClosedHour: Boolean,
+        tagesordner: String = zipFileName.removePrefix("audio_").substringBefore('_'),
+    ) : this(
+        zipFileName = zipFileName,
+        wavCount = wavCount,
+        isClosedHour = isClosedHour,
+        tagesordner = tagesordner,
+        zipBytesProvider = { zipBytes },
+    )
+
+    operator fun component1(): String = zipFileName
+    operator fun component2(): ByteArray = zipBytes
+    operator fun component3(): Int = wavCount
+    operator fun component4(): Boolean = isClosedHour
+    operator fun component5(): String = tagesordner
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is HourlyZipPackage) return false
+        return zipFileName == other.zipFileName &&
+            wavCount == other.wavCount &&
+            isClosedHour == other.isClosedHour &&
+            tagesordner == other.tagesordner
+    }
+
+    override fun hashCode(): Int {
+        var result = zipFileName.hashCode()
+        result = 31 * result + wavCount
+        result = 31 * result + isClosedHour.hashCode()
+        result = 31 * result + tagesordner.hashCode()
+        return result
+    }
+
+    override fun toString(): String {
+        return "HourlyZipPackage(zipFileName='$zipFileName', wavCount=$wavCount, isClosedHour=$isClosedHour, tagesordner='$tagesordner')"
+    }
+}
 
 /**
  * Bündelt einzelne WAV-Aufnahmen für jeweils 1-Stunden-Zeitfenster in standardkonforme ZIP-Archive.
@@ -56,19 +103,18 @@ object WavHourlyZipper {
         for ((stundenSchluessel, dateien) in nachStundeGruppiert) {
             val zipName = "audio_$stundenSchluessel.zip"
             val isClosedHour = stundenSchluessel != aktuelleStundeSchluessel
+            val tagesordner = stundenSchluessel.substringBefore('_')
 
-            val zipBytes = erstelleZipArchiv(dateien)
-            if (zipBytes != null && zipBytes.isNotEmpty()) {
-                ergebnisse.add(
-                    HourlyZipPackage(
-                        zipFileName = zipName,
-                        zipBytes = zipBytes,
-                        wavCount = dateien.size,
-                        isClosedHour = isClosedHour,
-                    )
+            ergebnisse.add(
+                HourlyZipPackage(
+                    zipFileName = zipName,
+                    wavCount = dateien.size,
+                    isClosedHour = isClosedHour,
+                    tagesordner = tagesordner,
+                    zipBytesProvider = { erstelleZipArchiv(dateien) ?: ByteArray(0) },
                 )
-                Log.d(TAG, "ZIP-Paket erstellt: $zipName (${dateien.size} WAVs, ${zipBytes.size} Bytes, abgeschlossen=$isClosedHour)")
-            }
+            )
+            Log.d(TAG, "ZIP-Paket vorbereitet: $zipName (${dateien.size} WAVs, abgeschlossen=$isClosedHour, Tagesordner=$tagesordner)")
         }
 
         return ergebnisse.sortedBy { it.zipFileName }

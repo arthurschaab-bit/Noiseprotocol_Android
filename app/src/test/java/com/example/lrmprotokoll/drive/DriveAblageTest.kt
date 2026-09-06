@@ -20,29 +20,29 @@ class DriveAblageTest {
     fun derTagesordnerHeisstNachDemDatumInDerZeitzoneDesNutzers() {
         // 23:30 Ortszeit ist 21:30 UTC - der Ordner muss trotzdem der des laufenden Tages sein.
         val abends = Instant.parse("2026-09-04T21:30:00Z")
-        assertEquals("20260904", DriveAblage.tagesordner(abends, BERLIN))
+        assertEquals("2026-09-04", DriveAblage.tagesordner(abends, BERLIN))
     }
 
     @Test
     fun kurzNachMitternachtBeginntEinNeuerTagesordner() {
         val kurzNachZwoelf = Instant.parse("2026-09-04T22:10:00Z") // 00:10 Ortszeit am 05.
-        assertEquals("20260905", DriveAblage.tagesordner(kurzNachZwoelf, BERLIN))
+        assertEquals("2026-09-05", DriveAblage.tagesordner(kurzNachZwoelf, BERLIN))
     }
 
     @Test
     fun jedeKategorieHatIhrenEigenenUnterordner() {
-        assertEquals(listOf("20260904", "WAV"), DriveAblage.pfad("20260904", DriveKategorie.WAV))
-        assertEquals(listOf("20260904", "Schallmessung"), DriveAblage.pfad("20260904", DriveKategorie.SCHALLMESSUNG))
-        assertEquals(listOf("20260904", "Fotos"), DriveAblage.pfad("20260904", DriveKategorie.FOTOS))
-        assertEquals(listOf("20260904", "Videos"), DriveAblage.pfad("20260904", DriveKategorie.VIDEOS))
-        assertEquals(listOf("20260904", "Bericht"), DriveAblage.pfad("20260904", DriveKategorie.BERICHT))
+        assertEquals(listOf("2026-09-04", "WAV"), DriveAblage.pfad("2026-09-04", DriveKategorie.WAV))
+        assertEquals(listOf("2026-09-04", "Schallmessung"), DriveAblage.pfad("2026-09-04", DriveKategorie.SCHALLMESSUNG))
+        assertEquals(listOf("2026-09-04", "Fotos"), DriveAblage.pfad("2026-09-04", DriveKategorie.FOTOS))
+        assertEquals(listOf("2026-09-04", "Videos"), DriveAblage.pfad("2026-09-04", DriveKategorie.VIDEOS))
+        assertEquals(listOf("2026-09-04", "Bericht"), DriveAblage.pfad("2026-09-04", DriveKategorie.BERICHT))
     }
 
     @Test
     fun derAnzeigepfadIstDerPfadDenDerNutzerInDriveSieht() {
         assertEquals(
-            "Lärmprotokoll/20260904/Videos",
-            DriveAblage.anzeigepfad("Lärmprotokoll", "20260904", DriveKategorie.VIDEOS),
+            "Lärmprotokoll/2026-09-04/Videos",
+            DriveAblage.anzeigepfad("Lärmprotokoll", "2026-09-04", DriveKategorie.VIDEOS),
         )
     }
 
@@ -90,9 +90,9 @@ class DriveAblageTest {
         val api = FakeOrdnerApi()
         val baum = DriveOrdnerbaum(api)
 
-        val id = baum.ordnerFuer("wurzel", "20260904", DriveKategorie.FOTOS).getOrThrow()
+        val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
 
-        assertEquals(listOf("20260904" to "wurzel", "Fotos" to "ordner-1"), api.angelegt)
+        assertEquals(listOf("2026-09-04" to "wurzel", "Fotos" to "ordner-1"), api.angelegt)
         assertEquals("ordner-2", id)
     }
 
@@ -100,10 +100,10 @@ class DriveAblageTest {
     fun einVorhandenerOrdnerWirdWiederverwendetStattDupliziert() = runTest {
         // Drive erlaubt gleichnamige Ordner nebeneinander - ohne die Suche haette der Nutzer
         // nach fuenf Zyklen fuenf "Fotos"-Ordner.
-        val api = FakeOrdnerApi(mutableMapOf("wurzel/20260904" to "tag-1", "tag-1/Fotos" to "fotos-1"))
+        val api = FakeOrdnerApi(mutableMapOf("wurzel/2026-09-04" to "tag-1", "tag-1/Fotos" to "fotos-1"))
         val baum = DriveOrdnerbaum(api)
 
-        val id = baum.ordnerFuer("wurzel", "20260904", DriveKategorie.FOTOS).getOrThrow()
+        val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
 
         assertEquals("fotos-1", id)
         assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
@@ -116,9 +116,9 @@ class DriveAblageTest {
         val api = FakeOrdnerApi()
         val baum = DriveOrdnerbaum(api)
 
-        baum.ordnerFuer("wurzel", "20260904", DriveKategorie.FOTOS).getOrThrow()
+        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
         val nachErstemLauf = api.suchAufrufe
-        repeat(5) { baum.ordnerFuer("wurzel", "20260904", DriveKategorie.FOTOS).getOrThrow() }
+        repeat(5) { baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow() }
 
         assertEquals("Kein einziger weiterer Suchaufruf", nachErstemLauf, api.suchAufrufe)
     }
@@ -128,13 +128,13 @@ class DriveAblageTest {
         val api = FakeOrdnerApi()
         val baum = DriveOrdnerbaum(api)
 
-        baum.ordnerFuer("wurzel", "20260904", DriveKategorie.FOTOS).getOrThrow()
-        baum.ordnerFuer("wurzel", "20260904", DriveKategorie.VIDEOS).getOrThrow()
+        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
+        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS).getOrThrow()
 
         assertEquals(
             "Der Tagesordner darf nur einmal entstehen",
             1,
-            api.angelegt.count { it.first == "20260904" },
+            api.angelegt.count { it.first == "2026-09-04" },
         )
     }
 
@@ -146,7 +146,7 @@ class DriveAblageTest {
         }
         val baum = DriveOrdnerbaum(api)
 
-        val ergebnis = baum.ordnerFuer("wurzel", "20260904", DriveKategorie.VIDEOS)
+        val ergebnis = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS)
 
         assertTrue(ergebnis.isFailure)
     }

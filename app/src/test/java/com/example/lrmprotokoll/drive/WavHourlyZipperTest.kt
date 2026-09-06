@@ -53,6 +53,7 @@ class WavHourlyZipperTest {
         // Paket 1: 08:00 Stunde (abgeschlossen)
         val p1 = zips[0]
         assertEquals("audio_2026-08-24_08-00.zip", p1.zipFileName)
+        assertEquals("2026-08-24", p1.tagesordner)
         assertEquals(2, p1.wavCount)
         assertTrue(p1.isClosedHour)
 
@@ -69,6 +70,7 @@ class WavHourlyZipperTest {
         // Paket 2: 09:00 Stunde (laufende Stunde)
         val p2 = zips[1]
         assertEquals("audio_2026-08-24_09-00.zip", p2.zipFileName)
+        assertEquals("2026-08-24", p2.tagesordner)
         assertEquals(1, p2.wavCount)
         assertFalse(p2.isClosedHour)
     }
