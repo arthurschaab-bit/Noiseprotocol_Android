@@ -29,6 +29,9 @@ import org.robolectric.annotation.GraphicsMode
  * Bonding-Warnung, Trenner, "Neues Gerät koppeln", Scan-Button) allein schon mehr Platz braucht
  * als der Viewport hoch ist - ohne echte Bluetooth-Geraete im Scan-Ergebnis noetig zu haben.
  */
+import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertNull
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w320dp-h240dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -47,5 +50,17 @@ class MeterScreenComposeTest {
         composeRule.setContent { MeterScreen(onBack = {}) }
 
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun entkoppelnButtonWirdAngezeigtUndLoeschtGeraeteadresse() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
+
+        composeRule.setContent { MeterScreen(onBack = {}) }
+
+        composeRule.onNodeWithTag("btn_meter_unpair").performScrollTo().assertIsDisplayed().performClick()
+
+        assertNull(app.container.settingsManager.meterDeviceAddress)
     }
 }

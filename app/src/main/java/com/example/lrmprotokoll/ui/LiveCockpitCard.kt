@@ -301,6 +301,7 @@ fun LiveCockpitCard(
                             text = { Text(stringResource(R.string.settings_trigger_source_mic)) },
                             onClick = {
                                 settings.audioTriggerQuelle = "MIKROFON"
+                                container.connectionSupervisor.stop()
                                 showTriggerMenu = false
                             }
                         )
@@ -489,7 +490,7 @@ fun LiveCockpitCard(
 
                 val s = letzteSession
                 if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
-                    val sessionEndeFuerChart = s.endedAt ?: jetzt
+                    val sessionEndeFuerChart = if (dienstAktiv) jetzt else (s.endedAt ?: jetzt)
                     val chartStart = if (dienstAktiv && (sessionEndeFuerChart - s.startedAt) > LIVE_FENSTER_MS) {
                         sessionEndeFuerChart - LIVE_FENSTER_MS
                     } else {

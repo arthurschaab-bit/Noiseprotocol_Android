@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -378,17 +380,34 @@ fun MeterScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            if (hasBluetoothPermissions) {
-                                ensureConnected()
-                            } else {
-                                permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
-                            }
-                        },
-                        modifier = Modifier.testTag("btn_meter_connect")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(stringResource(R.string.meter_action_connect))
+                        Button(
+                            onClick = {
+                                if (hasBluetoothPermissions) {
+                                    ensureConnected()
+                                } else {
+                                    permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
+                                }
+                            },
+                            modifier = Modifier.testTag("btn_meter_connect")
+                        ) {
+                            Text(stringResource(R.string.meter_action_connect))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                settings.meterDeviceAddress = null
+                                settings.meterDeviceName = null
+                                pairedAddress = null
+                                pairedName = null
+                                supervisor.stop()
+                            },
+                            modifier = Modifier.testTag("btn_meter_unpair")
+                        ) {
+                            Text(stringResource(R.string.meter_action_unpair))
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
