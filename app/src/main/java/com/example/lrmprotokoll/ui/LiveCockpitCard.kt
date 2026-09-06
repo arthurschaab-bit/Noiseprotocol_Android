@@ -106,6 +106,7 @@ fun LiveCockpitCard(
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
     val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
+    val micDb by AudioRecordingService.currentMicDb.collectAsState()
 
     val db = container.database
     val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
@@ -190,9 +191,9 @@ fun LiveCockpitCard(
      */
     val istMikrofonMessung = letzteSession?.deviceAddress?.isBlank() == true
 
-    val liveLevel = letzterFrame?.level
-    val isCalibrated = verbindungszustand == ConnectionState.STREAMING && liveLevel != null
-    val weightingText = letzterFrame?.weighting?.let { "dB(${it.name})" } ?: if (isCalibrated) "dB(A)" else "dB"
+    val isCalibrated = dienstAktiv && verbindungszustand == ConnectionState.STREAMING && letzterFrame != null
+    val liveLevel = if (isCalibrated) letzterFrame?.level else if (dienstAktiv) micDb else null
+    val weightingText = if (isCalibrated) letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB" else "dB"
 
     // Laufzeituhr für aktive Messung
     val sessionStartTime = letzteSession?.startedAt
@@ -350,7 +351,7 @@ fun LiveCockpitCard(
             // Dynamisch skalierte dB-Zahl
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = if (liveLevel != null && liveLevel > 0.0) String.format(Locale.US, "%.1f", liveLevel) else if (dienstAktiv) "36.3" else "--.-",
+                    text = if (liveLevel != null) String.format(Locale.US, "%.1f", liveLevel) else "--.-",
                     style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -368,7 +369,7 @@ fun LiveCockpitCard(
                 )
             }
 
-            val levelVal = liveLevel ?: (if (dienstAktiv) 36.3 else 0.0)
+            val levelVal = liveLevel ?: 0.0
             val levelDescription = when {
                 !dienstAktiv -> stringResource(R.string.cockpit_level_desc_ready)
                 levelVal <= 0.0 -> stringResource(R.string.cockpit_level_desc_waiting)
@@ -651,18 +652,21 @@ fun LiveCockpitCard(
     if (showMarkNoiseEventSheet) {
         MarkNoiseEventBottomSheet(
             currentDb = liveLevel,
-            currentWeighting = weightingText,
+            currentWeighting = if (isCalibrated) weightingText else "dB (Mikrofon, unkalibriert)",
             onDismiss = { showMarkNoiseEventSheet = false },
             onSaveEvent = { category, note ->
+                // Snapshot beim Tippen, bevor die Coroutine auf die Datenbank wartet.
+                val now = System.currentTimeMillis()
+                val microphoneLevel = AudioRecordingService.currentMicDb.value
+                val meterLevel = if (isCalibrated) letzterFrame?.level else null
                 scope.launch {
-                    val now = System.currentTimeMillis()
                     val record = NoiseRecord(
                         timestamp = now,
                         amplitude = 0.0,
-                        dbValue = liveLevel ?: 0.0,
+                        dbValue = microphoneLevel ?: 0.0,
                         filePath = "",
                         label = category,
-                        calibratedDbA = if (isCalibrated) liveLevel else null,
+                        calibratedDbA = meterLevel,
                         meterConnected = isCalibrated,
                         notes = if (note.isNotBlank()) note else null
                     )

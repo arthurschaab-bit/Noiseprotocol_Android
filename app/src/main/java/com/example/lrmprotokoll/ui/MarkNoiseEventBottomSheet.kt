@@ -67,7 +67,7 @@ fun MarkNoiseEventBottomSheet(
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val currentTimeStr = remember { timeFormat.format(Date()) }
     val dbText = remember(currentDb) {
-        if (currentDb != null && currentDb > 0) String.format(Locale.US, "%.1f", currentDb) else "--.-"
+        if (currentDb != null) String.format(Locale.US, "%.1f", currentDb) else "--.-"
     }
 
     ModalBottomSheet(
