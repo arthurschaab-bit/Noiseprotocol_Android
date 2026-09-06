@@ -1098,6 +1098,10 @@ class AudioRecordingService : LifecycleService() {
 
         // WAV-Dateien verbleiben sicher auf dem Gerät und werden gebündelt alle 30 Minuten
         // über den periodischen DriveSyncWorker synchronisiert, um Drive-Rate-Limits zu vermeiden.
+        // Bei aktiviertem Drive-Sync und WAV-Upload sofortigen Lauf starten:
+        if (settingsManager.driveSyncEnabled && settingsManager.driveUploadWav) {
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(applicationContext)
+        }
 
         letzteAufnahmeEndeTimestamp = System.currentTimeMillis()
         isRecordingActive.set(false)

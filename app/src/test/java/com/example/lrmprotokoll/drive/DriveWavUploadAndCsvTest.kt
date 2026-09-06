@@ -89,21 +89,41 @@ class DriveWavUploadAndCsvTest {
 
     private class TestDriveApiClient : DriveApiClient {
         val hochgeladeneDateien = mutableMapOf<String, ByteArray>()
-        override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> = Result.success("folder-id")
-        override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> = Result.success(DriveDatei("folder-id", name))
+        val dateiOrdnerZuordnung = mutableMapOf<String, String>()
+        val ordnerNamen = mutableMapOf<String, String>()
+        val ordnerEltern = mutableMapOf<String, String?>()
+        private var idCounter = 1
+
+        override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> {
+            val id = "ordner-$name-$idCounter"
+            idCounter++
+            ordnerNamen[id] = name
+            ordnerEltern[id] = elternId
+            return Result.success(id)
+        }
+
+        override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> {
+            val entry = ordnerNamen.entries.firstOrNull { it.value == name && ordnerEltern[it.key] == elternId }
+            return if (entry != null) Result.success(DriveDatei(entry.key, entry.value)) else Result.success(null)
+        }
+
         override suspend fun ordnerAuflisten(): Result<List<DriveDatei>> = Result.success(emptyList())
         override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String): Result<Unit> = Result.success(Unit)
         override suspend fun dateienInOrdnerAuflisten(ordnerId: String): Result<Set<String>> =
-            Result.success(hochgeladeneDateien.keys.toSet())
+            Result.success(dateiOrdnerZuordnung.filterValues { it == ordnerId }.keys)
+
         override suspend fun dateiSuchen(name: String, ordnerId: String): Result<DriveDatei?> {
-            return if (hochgeladeneDateien.containsKey(name)) Result.success(DriveDatei("file-$name", name)) else Result.success(null)
+            return if (dateiOrdnerZuordnung[name] == ordnerId) Result.success(DriveDatei("file-$name", name)) else Result.success(null)
         }
+
         override suspend fun dateiAnlegen(
             name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean
         ): Result<String> {
             hochgeladeneDateien[name] = inhalt
+            dateiOrdnerZuordnung[name] = ordnerId
             return Result.success("file-$name")
         }
+
         override suspend fun dateiAktualisieren(
             fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean
         ): Result<Unit> {
@@ -203,5 +223,75 @@ class DriveWavUploadAndCsvTest {
         // 2. CSV-Datei wurde mit erweiterten Spalten erstellt
         val csvDateien = driveApi.hochgeladeneDateien.filterKeys { it.endsWith(".csv") || it.startsWith("file-laermprotokoll_") }
         assertTrue("CSV-Datei muss existieren", csvDateien.isNotEmpty())
+    }
+
+    @Test
+    fun wavAufnahmenAusVerschiedenenTagenWerdenInDieJeweiligenTagesordnerGeroutetUndAlteClosedHoursNichtErneutHochgeladen() = runTest {
+        // Tag 1: 2026-08-20 14:15 UTC (16:15 Berlin)
+        val wavGestern = tempFolder.newFile("noise_20260820_161500.wav")
+        wavGestern.writeBytes(byteArrayOf(1, 2, 3))
+        val tGestern = Instant.parse("2026-08-20T14:15:00Z").toEpochMilli()
+        noiseDao.insert(
+            NoiseRecord(
+                id = 1,
+                timestamp = tGestern,
+                amplitude = 4000.0,
+                dbValue = 65.0,
+                filePath = wavGestern.absolutePath,
+            )
+        )
+
+        // Tag 2: 2026-08-23 10:00 UTC (12:00 Berlin) - Uhr steht auf 2026-08-23 12:00:00Z (14:00 Berlin)
+        val wavHeute = tempFolder.newFile("noise_20260823_120000.wav")
+        wavHeute.writeBytes(byteArrayOf(4, 5, 6))
+        val tHeute = Instant.parse("2026-08-23T10:00:00Z").toEpochMilli()
+        noiseDao.insert(
+            NoiseRecord(
+                id = 2,
+                timestamp = tHeute,
+                amplitude = 5000.0,
+                dbValue = 70.0,
+                filePath = wavHeute.absolutePath,
+            )
+        )
+
+        val coordinator = DriveSyncCoordinator(
+            driveApi = driveApi,
+            levelSampleDao = levelSampleDao,
+            dailyFileDao = dailyFileDao,
+            noiseDao = noiseDao,
+            settings = settings,
+            now = uhr,
+            zone = zone
+        )
+
+        val ergebnis1 = coordinator.syncEinenZyklus()
+        assertTrue(ergebnis1 is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+
+        val dateiGestern = "audio_2026-08-20_16-00.zip"
+        val dateiHeute = "audio_2026-08-23_12-00.zip"
+
+        assertTrue("Gestern-ZIP hochgeladen", driveApi.hochgeladeneDateien.containsKey(dateiGestern))
+        assertTrue("Heute-ZIP hochgeladen", driveApi.hochgeladeneDateien.containsKey(dateiHeute))
+
+        // Ordnerzuordnung prüfen:
+        val ordnerIdGestern = driveApi.dateiOrdnerZuordnung[dateiGestern]
+        val ordnerIdHeute = driveApi.dateiOrdnerZuordnung[dateiHeute]
+        assertNotNull(ordnerIdGestern)
+        assertNotNull(ordnerIdHeute)
+
+        // Die beiden ZIPs dürfen NICHT im selben Ordner liegen!
+        org.junit.Assert.assertNotEquals("Gestern und Heute dürfen nicht denselben Ordner haben", ordnerIdGestern, ordnerIdHeute)
+
+        // Der Elternordner des WAV-Ordners muss der jeweilige Tagesordner sein
+        val elternGestern = driveApi.ordnerEltern[ordnerIdGestern]
+        val elternHeute = driveApi.ordnerEltern[ordnerIdHeute]
+        assertEquals("2026-08-20", driveApi.ordnerNamen[elternGestern])
+        assertEquals("2026-08-23", driveApi.ordnerNamen[elternHeute])
+
+        // Zweiter Sync-Lauf: Da die Stunden abgeschlossen sind, darf kein neuer ZIP-Upload stattfinden
+        val anzahlUploadsVorher = driveApi.hochgeladeneDateien.size
+        val ergebnis2 = coordinator.syncEinenZyklus()
+        assertEquals(anzahlUploadsVorher, driveApi.hochgeladeneDateien.size)
     }
 }

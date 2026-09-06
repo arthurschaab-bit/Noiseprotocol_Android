@@ -118,11 +118,13 @@ object DriveSyncPlanung {
      * Startet sofort einen einmaligen Synchronisationslauf (z.B. nach einer WAV-Aufnahme).
      */
     fun starteSofort(context: Context) {
-        try {
-            val einschraenkungen = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+        val app = context.applicationContext as? LaermprotokollApp
+        val wlanOnly = app?.container?.settingsManager?.driveWlanOnly ?: false
+        val einschraenkungen = Constraints.Builder()
+            .setRequiredNetworkType(if (wlanOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .build()
 
+        try {
             val anfrage = OneTimeWorkRequestBuilder<DriveSyncWorker>()
                 .setConstraints(einschraenkungen)
                 .build()
