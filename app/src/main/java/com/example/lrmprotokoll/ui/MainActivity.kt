@@ -557,7 +557,8 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showFilterPanel = !showFilterPanel
                                     showOverflowMenu = false
-                                }
+                                },
+                                modifier = Modifier.testTag("menu_item_filter")
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },

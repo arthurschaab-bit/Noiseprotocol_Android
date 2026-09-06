@@ -179,8 +179,7 @@ class MainActivityNavigationAndroidTest {
     fun topAppBarOverflowMenuZeigtOptionenUndNavigiert() {
         setNavigationContent()
         composeRule.onNodeWithTag("btn_overflow_menu").assertIsDisplayed().performClick()
-        val filterTitle = composeRule.activity.getString(R.string.filter_title)
-        composeRule.onNodeWithText(filterTitle).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("menu_item_filter").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("home_lazy_column").performTouchInput { swipeUp() }
         composeRule.onNodeWithTag("input_filter_search").assertIsDisplayed()
     }
