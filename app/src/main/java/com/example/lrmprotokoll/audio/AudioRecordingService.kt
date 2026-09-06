@@ -222,6 +222,11 @@ class AudioRecordingService : LifecycleService() {
      * ueberwacht wird. Ohne gepinntes Geraet (Plan Abschnitt 6) passiert nichts.
      */
     private fun ensureMeterMonitoringStarted() {
+        if (settingsManager.audioTriggerQuelle == "MIKROFON") {
+            Log.d("AudioRecordingService", "Trigger-Quelle ist rein Mikrofon - Meter-Monitoring wird übersprungen")
+            connectionSupervisor.stop()
+            return
+        }
         val address = settingsManager.meterDeviceAddress ?: return
         val hasBluetoothConnect = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasConnectPermission(this)
         if (!hasBluetoothConnect) {

@@ -323,6 +323,25 @@ class SettingsManager(
         get() = prefs.getBoolean("drive_ordner_blockiert", false)
         set(value) = prefs.edit().putBoolean("drive_ordner_blockiert", value).apply()
 
+    /**
+     * Cache bereits erfolgreich hochgeladener abgeschlossener Stunden-ZIPs (z. B. "2026-09-04_14.zip").
+     * Verhindert, dass bei jedem Sync-Zyklus Dutzende historische ZIPs erneut zu Drive übertragen
+     * oder per API angefragt werden, was zu Rate-Limits und Blockaden aktueller Aufnahmen führt.
+     */
+    var driveUploadedClosedHourZips: Set<String>
+        get() = prefs.getStringSet("drive_uploaded_closed_hour_zips", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("drive_uploaded_closed_hour_zips", value).apply()
+
+    fun markiereZipAlsHochgeladen(zipName: String) {
+        val aktuell = driveUploadedClosedHourZips.toMutableSet()
+        aktuell.add(zipName)
+        driveUploadedClosedHourZips = aktuell
+    }
+
+    fun istZipBereitsHochgeladen(zipName: String): Boolean {
+        return driveUploadedClosedHourZips.contains(zipName)
+    }
+
     // ---------------------------------------------------------------- M11: Fotodokumentation
 
     /**

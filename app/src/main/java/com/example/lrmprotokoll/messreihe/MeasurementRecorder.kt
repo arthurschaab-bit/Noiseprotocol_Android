@@ -129,7 +129,9 @@ class MeasurementRecorder(
         if (job?.isActive == true) return
         ueberwachtesGeraet = device
         job = scope.launch {
-            schliesseVerwaisteSessions()
+            sessionMutex.withLock {
+                schliesseVerwaisteSessions()
+            }
 
             warJemalsVerbunden = false
             zuletztImAusfall = false
@@ -332,6 +334,9 @@ class MeasurementRecorder(
             return
         }
         for (session in offene) {
+            // Eine aktive Session (z.B. die gerade eroeffnete Mikrofon-Session) darf niemals
+            // geschlossen werden.
+            if (session.id == aktiveSessionId) continue
             try {
                 val letzterMesswert = measurementDao.fuerSession(session.id).maxOfOrNull { it.timestamp }
                 sessionDao.update(session.copy(endedAt = letzterMesswert ?: session.startedAt))

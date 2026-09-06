@@ -205,18 +205,37 @@ class VideoMuxer {
             val tonSpur = waehleSpur(tonQuelle, "audio/")
                 ?: throw IllegalStateException("Die Tondatei enthaelt keine Audiospur")
 
-            val videoZiel = muxer.addTrack(videoQuelle.getTrackFormat(videoSpur))
+            val videoFormat = videoQuelle.getTrackFormat(videoSpur)
+            val rotation = ermittleRotation(videoFormat, stummesVideo)
+            muxer.setOrientationHint(rotation)
+
+            val videoZiel = muxer.addTrack(videoFormat)
             val tonZiel = muxer.addTrack(tonQuelle.getTrackFormat(tonSpur))
             muxer.start()
 
-            kopiere(videoQuelle, muxer, videoZiel)
-            kopiere(tonQuelle, muxer, tonZiel)
+            val ersterVideoPtsUs = kopiere(videoQuelle, muxer, videoZiel, ptsVersatzUs = 0L)
+            kopiere(tonQuelle, muxer, tonZiel, ptsVersatzUs = ersterVideoPtsUs)
 
             muxer.stop()
         } finally {
             runCatching { muxer.release() }
             runCatching { videoQuelle.release() }
             runCatching { tonQuelle.release() }
+        }
+    }
+
+    private fun ermittleRotation(videoFormat: MediaFormat, stummesVideo: File): Int {
+        if (videoFormat.containsKey(MediaFormat.KEY_ROTATION)) {
+            return videoFormat.getInteger(MediaFormat.KEY_ROTATION)
+        }
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(stummesVideo.absolutePath)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        } catch (_: Exception) {
+            0
+        } finally {
+            runCatching { retriever.release() }
         }
     }
 
@@ -231,15 +250,18 @@ class VideoMuxer {
         return null
     }
 
-    private fun kopiere(quelle: MediaExtractor, muxer: MediaMuxer, zielSpur: Int) {
+    private fun kopiere(quelle: MediaExtractor, muxer: MediaMuxer, zielSpur: Int, ptsVersatzUs: Long = 0L): Long {
         val puffer = ByteBuffer.allocate(1 shl 20)
         val info = MediaCodec.BufferInfo()
+        var ersterPtsUs = -1L
         while (true) {
             val groesse = quelle.readSampleData(puffer, 0)
             if (groesse < 0) break
+            val sampleTime = quelle.sampleTime
+            if (ersterPtsUs < 0) ersterPtsUs = sampleTime
             info.offset = 0
             info.size = groesse
-            info.presentationTimeUs = quelle.sampleTime
+            info.presentationTimeUs = sampleTime + ptsVersatzUs
             // Die Flags des Extractors und die des Muxers sind zwei verschiedene Wertebereiche -
             // sie einfach zu uebernehmen, waere ein Zufallstreffer (Android Lint: WrongConstant).
             // Fuer den Muxer zaehlt genau eine Aussage: ob dieses Sample ein Keyframe ist.
@@ -253,5 +275,6 @@ class VideoMuxer {
             muxer.writeSampleData(zielSpur, puffer, info)
             quelle.advance()
         }
+        return ersterPtsUs.coerceAtLeast(0L)
     }
 }

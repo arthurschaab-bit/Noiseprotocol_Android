@@ -36,6 +36,7 @@ class DriveSyncCoordinator(
     private val dokumentationsFotoDao: com.example.lrmprotokoll.data.DokumentationsFotoDao? = null,
     /** Wie [dokumentationsFotoDao]: `null` heisst "keine Videos hochladen" (M11 Etappe B). */
     private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
+    private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
 ) {
 
     /**
@@ -114,6 +115,12 @@ class DriveSyncCoordinator(
                     for (zipPackage in stundenZips) {
                         val dateiName = zipPackage.zipFileName
                         val tagesSchluessel = zipPackage.tagesordner
+
+                        // Geschlossene Stunde und lokal bereits als hochgeladen registriert -> Ueberspringen
+                        if (zipPackage.isClosedHour && settings.istZipBereitsHochgeladen(dateiName)) {
+                            continue
+                        }
+
                         val wavOrdner = ordnerbaum.ordnerFuer(ordnerId, tagesSchluessel, DriveKategorie.WAV)
                             .getOrElse { ordnerId }
 
@@ -147,6 +154,9 @@ class DriveSyncCoordinator(
                                 }
                             } else {
                                 existierendeNamen.add(dateiName)
+                                if (zipPackage.isClosedHour) {
+                                    settings.markiereZipAlsHochgeladen(dateiName)
+                                }
                                 zipPackagesUploadedCount++
                                 totalWavCountInZips += zipPackage.wavCount
                                 Log.i(TAG, "Stündliches ZIP-Archiv hochgeladen: $dateiName in $tagesSchluessel/WAV (${zipPackage.wavCount} WAVs)")
@@ -171,6 +181,9 @@ class DriveSyncCoordinator(
                                     }
                                 }
                             }
+                        } else {
+                            // Bereits auf Drive vorhanden und geschlossene Stunde -> im lokalen Cache merken
+                            settings.markiereZipAlsHochgeladen(dateiName)
                         }
                     }
                 }
@@ -249,6 +262,12 @@ class DriveSyncCoordinator(
         val dao = dokumentationsFotoDao ?: return
 
         val offene = runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        if (offene.isNotEmpty()) {
+            diagnosticsReporter?.breadcrumb(
+                "DriveSync",
+                "Foto-Upload gestartet (${offene.size} offene(s) Foto(s))",
+            )
+        }
         for (foto in offene) {
             val datei = java.io.File(foto.dateiPfad)
             if (!datei.exists()) continue
@@ -271,7 +290,13 @@ class DriveSyncCoordinator(
 
             val inhalt = runCatching { datei.readBytes() }.getOrNull() ?: continue
             driveApi.dateiAnlegen(name, ziel, inhalt, "image/jpeg", gzip = false)
-                .onSuccess { fileId -> runCatching { dao.setzeDriveFileId(foto.id, fileId) } }
+                .onSuccess { fileId ->
+                    runCatching { dao.setzeDriveFileId(foto.id, fileId) }
+                    diagnosticsReporter?.breadcrumb("DriveSync", "Foto erfolgreich hochgeladen: $name")
+                }
+                .onFailure { fehler ->
+                    diagnosticsReporter?.breadcrumb("DriveSync", "Foto-Upload fehlgeschlagen ($name): ${fehler.message}")
+                }
         }
     }
 

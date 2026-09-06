@@ -390,6 +390,7 @@ private suspend fun starteAufnahme(
             "Mikrofon ${if (tonLaeuft) "laeuft" else "aus"}, frei ${frei / (1024 * 1024)} MB)",
     )
 
+    var videoEchtGestartetAm = jetzt
     val ausgabe = FileOutputOptions.Builder(videoDatei).build()
     val aufnahme = runCatching {
         capture.output
@@ -399,6 +400,9 @@ private suspend fun starteAufnahme(
             // der Videoaufnahme ein Loch - genau das, was Owner-Entscheidung E9 vermeidet. Der
             // Ton kommt aus dem laufenden AudioRecord und wird nachtraeglich einmultiplext.
             .start(ContextCompat.getMainExecutor(context)) { ereignis ->
+                if (ereignis is VideoRecordEvent.Start) {
+                    videoEchtGestartetAm = System.currentTimeMillis()
+                }
                 if (ereignis is VideoRecordEvent.Finalize) {
                     scope.launch {
                         beendeAufnahme(
@@ -407,7 +411,7 @@ private suspend fun starteAufnahme(
                             videoId = videoId,
                             videoDatei = videoDatei,
                             pcmDatei = pcmDatei,
-                            gestartetAm = jetzt,
+                            gestartetAm = videoEchtGestartetAm,
                             fehlerhaft = ereignis.hasError(),
                             onShowSnackbar = onShowSnackbar,
                             onFertig = onBeendet,

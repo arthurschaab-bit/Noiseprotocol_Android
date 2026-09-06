@@ -718,4 +718,21 @@ class MeasurementRecorderTest {
 
         assertTrue(connectionEventDao.geschrieben.isEmpty())
     }
+
+    @Test
+    fun mikrofonMessungBleibtOffenWennMessgeraetNichtVerbundenIst() = runTest(UnconfinedTestDispatcher()) {
+        val recorder = recorderMit(sessionDao, measurementDao)
+
+        recorder.starteMikrofonMessung()
+        val mikrofonSessionId = recorder.laufendeSessionId
+        assertNotNull(mikrofonSessionId)
+
+        // start(device) wird aufgerufen, waehrend die Mikrofon-Messung laeuft
+        recorder.start(device)
+        runCurrent()
+
+        val session = sessionDao.zeilen[mikrofonSessionId]
+        assertNotNull("Session muss existieren", session)
+        assertNull("Mikrofon-Session darf nicht als verwaist vorzeitig beendet werden", session?.endedAt)
+    }
 }

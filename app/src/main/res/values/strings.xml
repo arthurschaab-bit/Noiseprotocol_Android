@@ -112,6 +112,7 @@
     <string name="meter_no_device_paired">Kein Messgerät gekoppelt</string>
     <string name="meter_action_disconnect">Verbindung trennen</string>
     <string name="meter_action_connect">Verbinden</string>
+    <string name="meter_action_unpair">Entkoppeln</string>
     <string name="meter_action_scan">Geräte in Reichweite suchen</string>
     <string name="meter_scanning_title">Suche nach PCE-323 BLE…</string>
     <string name="meter_found_devices_title">Gefundene Geräte</string>

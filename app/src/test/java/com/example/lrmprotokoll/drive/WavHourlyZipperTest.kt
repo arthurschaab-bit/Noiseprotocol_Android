@@ -50,29 +50,29 @@ class WavHourlyZipperTest {
 
         assertEquals(2, zips.size)
 
-        // Paket 1: 08:00 Stunde (abgeschlossen)
+        // Neueste Stunde zuerst (09:00, laufende Stunde)
         val p1 = zips[0]
-        assertEquals("audio_2026-08-24_08-00.zip", p1.zipFileName)
+        assertEquals("audio_2026-08-24_09-00.zip", p1.zipFileName)
         assertEquals("2026-08-24", p1.tagesordner)
-        assertEquals(2, p1.wavCount)
-        assertTrue(p1.isClosedHour)
+        assertEquals(1, p1.wavCount)
+        assertFalse(p1.isClosedHour)
+
+        // Ältere Stunde als zweites (08:00, abgeschlossen)
+        val p2 = zips[1]
+        assertEquals("audio_2026-08-24_08-00.zip", p2.zipFileName)
+        assertEquals("2026-08-24", p2.tagesordner)
+        assertEquals(2, p2.wavCount)
+        assertTrue(p2.isClosedHour)
 
         // Inhalt prüfen
-        val zip1In = ZipInputStream(ByteArrayInputStream(p1.zipBytes))
-        val entry1 = zip1In.nextEntry
+        val zip2In = ZipInputStream(ByteArrayInputStream(p2.zipBytes))
+        val entry1 = zip2In.nextEntry
         assertNotNull(entry1)
         assertEquals("rec_0810.wav", entry1!!.name)
-        val entry2 = zip1In.nextEntry
+        val entry2 = zip2In.nextEntry
         assertNotNull(entry2)
         assertEquals("rec_0845.wav", entry2!!.name)
-        assertNull(zip1In.nextEntry)
-
-        // Paket 2: 09:00 Stunde (laufende Stunde)
-        val p2 = zips[1]
-        assertEquals("audio_2026-08-24_09-00.zip", p2.zipFileName)
-        assertEquals("2026-08-24", p2.tagesordner)
-        assertEquals(1, p2.wavCount)
-        assertFalse(p2.isClosedHour)
+        assertNull(zip2In.nextEntry)
     }
 
     @Test

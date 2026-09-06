@@ -206,6 +206,7 @@ class AppContainer(
             settings = settingsManager,
             dokumentationsFotoDao = database.dokumentationsFotoDao(),
             beweisVideoDao = database.beweisVideoDao(),
+            diagnosticsReporter = diagnosticsReporter,
         )
     }
 

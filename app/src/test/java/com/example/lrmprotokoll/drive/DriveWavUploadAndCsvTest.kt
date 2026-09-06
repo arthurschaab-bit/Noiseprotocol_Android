@@ -293,5 +293,44 @@ class DriveWavUploadAndCsvTest {
         val anzahlUploadsVorher = driveApi.hochgeladeneDateien.size
         val ergebnis2 = coordinator.syncEinenZyklus()
         assertEquals(anzahlUploadsVorher, driveApi.hochgeladeneDateien.size)
+
+        // Nach erfolgreichem Sync muessen die abgeschlossenen Stunden im Settings-Cache vermerkt sein
+        assertTrue(settings.istZipBereitsHochgeladen(dateiGestern))
+        assertTrue(settings.istZipBereitsHochgeladen(dateiHeute))
+    }
+
+    @Test
+    fun bereitsImCacheMarkierteAbgeschlosseneStundenZipsWerdenKomplettUebersprungen() = runTest {
+        val wavDatei = tempFolder.newFile("noise_20260820_160000.wav")
+        wavDatei.writeBytes(byteArrayOf(1, 2, 3))
+        val tWav = Instant.parse("2026-08-20T14:30:00Z").toEpochMilli()
+        noiseDao.insert(
+            NoiseRecord(
+                id = 1,
+                timestamp = tWav,
+                amplitude = 1000.0,
+                dbValue = 60.0,
+                filePath = wavDatei.absolutePath,
+            )
+        )
+
+        val zipName = "audio_2026-08-20_16-00.zip"
+        // Bereits als hochgeladen markiert
+        settings.markiereZipAlsHochgeladen(zipName)
+
+        val coordinator = DriveSyncCoordinator(
+            driveApi = driveApi,
+            levelSampleDao = levelSampleDao,
+            dailyFileDao = dailyFileDao,
+            noiseDao = noiseDao,
+            settings = settings,
+            now = uhr,
+            zone = zone
+        )
+
+        coordinator.syncEinenZyklus()
+
+        // Da die Stunde abgeschlossen und gecacht ist, darf die ZIP-Datei gar nicht erst hochgeladen werden
+        assertTrue("ZIP darf nicht hochgeladen werden, da bereits gecacht", !driveApi.hochgeladeneDateien.containsKey(zipName))
     }
 }

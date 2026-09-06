@@ -117,7 +117,8 @@ object WavHourlyZipper {
             Log.d(TAG, "ZIP-Paket vorbereitet: $zipName (${dateien.size} WAVs, abgeschlossen=$isClosedHour, Tagesordner=$tagesordner)")
         }
 
-        return ergebnisse.sortedBy { it.zipFileName }
+        // Neueste Stunden zuerst synchronisieren, damit heutige Aufnahmen sofort in Drive landen
+        return ergebnisse.sortedByDescending { it.zipFileName }
     }
 
     private fun erstelleZipArchiv(dateien: List<File>): ByteArray? {

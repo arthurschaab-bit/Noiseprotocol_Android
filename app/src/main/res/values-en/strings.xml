@@ -112,6 +112,7 @@
     <string name="meter_no_device_paired">No sound meter paired</string>
     <string name="meter_action_disconnect">Disconnect</string>
     <string name="meter_action_connect">Connect</string>
+    <string name="meter_action_unpair">Unpair</string>
     <string name="meter_action_scan">Scan for nearby devices</string>
     <string name="meter_scanning_title">Scanning for PCE-323 BLE…</string>
     <string name="meter_found_devices_title">Found Devices</string>
