@@ -9,11 +9,11 @@ import java.util.Locale
  * Die Ablagestruktur auf Google Drive (Owner-Vorgabe):
  *
  * ```
- * <gewaehlter Ordner>/JJJJMMTT/WAV
- * <gewaehlter Ordner>/JJJJMMTT/Schallmessung
- * <gewaehlter Ordner>/JJJJMMTT/Fotos
- * <gewaehlter Ordner>/JJJJMMTT/Videos
- * <gewaehlter Ordner>/JJJJMMTT/Bericht
+ * <gewaehlter Ordner>/JJJJ-MM-TT/WAV
+ * <gewaehlter Ordner>/JJJJ-MM-TT/Schallmessung
+ * <gewaehlter Ordner>/JJJJ-MM-TT/Fotos
+ * <gewaehlter Ordner>/JJJJ-MM-TT/Videos
+ * <gewaehlter Ordner>/JJJJ-MM-TT/Bericht
  * ```
  *
  * Massgeblich ist das Datum der **Aufnahme**, nicht das des Uploads: Ein Video von gestern
@@ -30,9 +30,9 @@ enum class DriveKategorie(val ordnername: String) {
 
 object DriveAblage {
 
-    private val TAGESFORMAT = DateTimeFormatter.ofPattern("yyyyMMdd", Locale.US)
+    private val TAGESFORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
 
-    /** Tagesordnername aus einem Zeitpunkt - JJJJMMTT in der Zeitzone des Nutzers. */
+    /** Tagesordnername aus einem Zeitpunkt - JJJJ-MM-TT in der Zeitzone des Nutzers. */
     fun tagesordner(zeitpunkt: Instant, zone: ZoneId): String =
         TAGESFORMAT.format(zeitpunkt.atZone(zone))
 
