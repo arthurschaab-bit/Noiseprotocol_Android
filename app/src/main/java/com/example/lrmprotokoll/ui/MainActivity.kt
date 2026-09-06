@@ -151,7 +151,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
 
     fun navigiereZuTab(route: String) {
         navController.navigate(route) {
-            popUpTo("main") { inclusive = route == "main" }
+            popUpTo("main") { inclusive = false }
             launchSingleTop = true
         }
     }
@@ -367,7 +367,9 @@ fun NoiseProtocolApp(
         val id = offeneSession?.id
         if (settingsManager.fotoDokuAktiv && id != null && id != zuletztGefragteSession) {
             zuletztGefragteSession = id
-            fotoSheetFuerSession = id
+            if (container.database.dokumentationsFotoDao().fuerSession(id).isEmpty()) {
+                fotoSheetFuerSession = id
+            }
         }
     }
     fotoSheetFuerSession?.let { id ->
@@ -555,7 +557,8 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showFilterPanel = !showFilterPanel
                                     showOverflowMenu = false
-                                }
+                                },
+                                modifier = Modifier.testTag("menu_item_filter")
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },

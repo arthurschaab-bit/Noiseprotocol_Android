@@ -434,7 +434,7 @@ fun ProtokollDetailScreen(
                                         .fillMaxWidth()
                                         .clickable(enabled = abspielbar) {
                                             if (!com.example.lrmprotokoll.report.BerichtDatei.oeffne(context, datei)) {
-                                                onShowSnackbar?.invoke("Keine App zum Abspielen gefunden")
+                                                onShowSnackbar?.invoke("Video nicht verfügbar oder keine App zum Abspielen gefunden")
                                             }
                                         }
                                         .padding(vertical = 6.dp),

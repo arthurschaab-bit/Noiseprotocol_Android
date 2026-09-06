@@ -64,13 +64,23 @@ object BerichtDatei {
      * statt dass die Aktion wirkungslos verpufft.
      */
     fun oeffne(context: Context, datei: File): Boolean {
-        val uri = FileProvider.getUriForFile(context, "${'$'}{context.packageName}.fileprovider", datei)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mimeTypFuer(datei.name))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            if (!datei.isFile || !datei.canRead()) return false
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", datei)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeTypFuer(datei.name))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (_: android.content.ActivityNotFoundException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: SecurityException) {
+            false
         }
-        return runCatching { context.startActivity(intent) }.isSuccess
     }
 
     fun teile(context: Context, datei: File, chooserTitel: String = "Teilen über…") {

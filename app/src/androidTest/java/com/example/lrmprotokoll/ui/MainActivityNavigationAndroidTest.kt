@@ -38,10 +38,14 @@ class MainActivityNavigationAndroidTest {
         fakeTransport = FakeMeterTransport()
         app.setCustomContainer(AppContainer(app, fakeTransport))
         app.container.settingsManager.onboardingCompleted = true
+        app.container.settingsManager.fotoDokuAktiv = false
+        app.container.database.clearAllTables()
     }
 
     @After
     fun tearDown() {
+        app.container.settingsManager.fotoDokuAktiv = false
+        app.container.database.clearAllTables()
         app.resetContainer()
     }
 
@@ -57,6 +61,58 @@ class MainActivityNavigationAndroidTest {
             }
         }
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun fotoAbfrageBleibtNachNavigationErledigtUndSessionUnveraendert() {
+        app.container.settingsManager.fotoDokuAktiv = true
+        val sessionId = runBlocking {
+            app.container.database.sessionDao().insert(
+                SessionEntity(startedAt = System.currentTimeMillis(), endedAt = null,
+                    deviceAddress = "", deviceName = "Mikrofon", weighting = null, timeWeighting = null)
+            )
+        }
+        val navController = TestNavHostController(composeRule.activity)
+        setNavigationContent(navController)
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Ohne Foto fortfahren").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Ohne Foto fortfahren").performClick()
+        composeRule.waitForIdle()
+        val startEntry = navController.currentBackStackEntry!!.id
+        repeat(3) {
+            composeRule.onNodeWithTag("nav_item_settings").performClick()
+            composeRule.onNodeWithTag("nav_item_main").performClick()
+            composeRule.waitForIdle()
+            assertEquals(startEntry, navController.currentBackStackEntry!!.id)
+            composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+            assertEquals(sessionId, runBlocking { app.container.database.sessionDao().offeneSession()!!.id })
+        }
+    }
+
+    @Test
+    fun vorhandeneFotosUnterdrueckenAbfrageAuchBeiNeuemUiState() {
+        app.container.settingsManager.fotoDokuAktiv = true
+        val sessionId = runBlocking {
+            val id = app.container.database.sessionDao().insert(
+                SessionEntity(startedAt = System.currentTimeMillis(), endedAt = null,
+                    deviceAddress = "", deviceName = "Mikrofon", weighting = null, timeWeighting = null)
+            )
+            app.container.database.dokumentationsFotoDao().insert(
+                com.example.lrmprotokoll.data.DokumentationsFotoEntity(sessionId = id,
+                    kategorie = "MESSAUFBAU", dateiPfad = "/beweis.jpg", aufgenommenAm = 123L)
+            )
+            id
+        }
+        setNavigationContent()
+        repeat(3) {
+            composeRule.onNodeWithTag("nav_item_settings").performClick()
+            composeRule.onNodeWithTag("nav_item_main").performClick()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+        }
+        assertEquals(1, runBlocking { app.container.database.dokumentationsFotoDao().fuerSession(sessionId).size })
+        assertEquals(sessionId, runBlocking { app.container.database.sessionDao().offeneSession()!!.id })
     }
 
     @Test
@@ -123,8 +179,7 @@ class MainActivityNavigationAndroidTest {
     fun topAppBarOverflowMenuZeigtOptionenUndNavigiert() {
         setNavigationContent()
         composeRule.onNodeWithTag("btn_overflow_menu").assertIsDisplayed().performClick()
-        val filterTitle = composeRule.activity.getString(R.string.filter_title)
-        composeRule.onNodeWithText(filterTitle).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("menu_item_filter").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("home_lazy_column").performTouchInput { swipeUp() }
         composeRule.onNodeWithTag("input_filter_search").assertIsDisplayed()
     }
