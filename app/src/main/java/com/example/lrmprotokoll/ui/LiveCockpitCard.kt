@@ -54,6 +54,9 @@ const val START_MEASUREMENT_BUTTON_TAG = "start_measurement_button"
 const val END_MEASUREMENT_BUTTON_TAG = "end_measurement_button"
 const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
 const val VIDEO_BEWEIS_BUTTON_TAG = "video_beweis_button"
+const val END_MEASUREMENT_CONFIRM_DIALOG_TAG = "end_measurement_confirm_dialog"
+const val DISABLE_WAV_CONFIRM_DIALOG_TAG = "disable_wav_confirm_dialog"
+const val DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG = "disconnect_bluetooth_confirm_dialog"
 
 /** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
  * Rasterung fuer [berechneDbFensterAb] - beide an einer Stelle, damit sie nicht auseinanderlaufen. */
@@ -117,6 +120,9 @@ fun LiveCockpitCard(
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
+    var showEndMeasurementConfirm by remember { mutableStateOf(false) }
+    var showDisableWavConfirm by remember { mutableStateOf(false) }
+    var showDisconnectBluetoothConfirm by remember { mutableStateOf(false) }
 
     // Quick-Settings State
     var autoEventDetection by remember { mutableStateOf(settings.aiEnabled) }
@@ -134,11 +140,6 @@ fun LiveCockpitCard(
         }
     }
 
-    // Gerastertes Zeitfenster fuer die DB-Abfrage (PROMPT_M9A.md Aufgabe 1): "jetzt" tickt
-    // sekuendlich (siehe LaunchedEffect unten), berechneDbFensterAb() liefert daraus aber nur
-    // alle LIVE_FENSTER_RASTER_MS einen NEUEN Wert - dieser hier bleibt also die meiste Zeit
-    // stabil, und genau deshalb kann er unten als LaunchedEffect-Schluessel dienen, ohne die
-    // Datenbank-Abfrage jede Sekunde neu zu abonnieren.
     val dbFensterAb = letzteSession?.let { s ->
         berechneDbFensterAb(s.startedAt, s.endedAt ?: jetzt, dienstAktiv)
     }
@@ -150,10 +151,6 @@ fun LiveCockpitCard(
                 db.measurementDao().fuerSessionAbFlow(s.id, dbFensterAb).collectLatest { geladeneMesswerte ->
                     messwerte = geladeneMesswerte
                     if (geladeneMesswerte.isNotEmpty()) {
-                        // Dispatchers.Default statt im Kompositionskontext (der laeuft auf dem
-                        // Main-Thread) - leqUndMax() ist zwar ein einziger O(n)-Durchlauf ohne
-                        // Sortierung, aber bei einer langen Session trotzdem kein Fall fuer den
-                        // UI-Thread.
                         kennwerte = withContext(Dispatchers.Default) {
                             AkustischeKennwerte.leqUndMax(geladeneMesswerte)
                         }
@@ -184,18 +181,11 @@ fun LiveCockpitCard(
         }
     }
 
-    /**
-     * Ob die angezeigte Messung ein reiner Mikrofonlauf ist. Massgeblich ist die Session, nicht
-     * der Live-Zustand: Der Verlauf zeigt die aufgezeichneten Werte, und die stammen von der
-     * Quelle, mit der die Session begonnen hat.
-     */
     val istMikrofonMessung = letzteSession?.deviceAddress?.isBlank() == true
-
     val isCalibrated = dienstAktiv && verbindungszustand == ConnectionState.STREAMING && letzterFrame != null
     val liveLevel = if (isCalibrated) letzterFrame?.level else if (dienstAktiv) micDb else null
     val weightingText = if (isCalibrated) letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB" else "dB"
 
-    // Laufzeituhr für aktive Messung
     val sessionStartTime = letzteSession?.startedAt
     val elapsedSeconds = if (dienstAktiv && sessionStartTime != null) ((jetzt - sessionStartTime) / 1000).coerceAtLeast(0) else 0L
     val timerString = String.format(Locale.US, "%02d:%02d:%02d", elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60)
@@ -204,9 +194,6 @@ fun LiveCockpitCard(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ==========================================
-        // 1. TOP SUBHEADER BAR
-        // ==========================================
         val istRuhe = istAktuellRuhezeit(settings)
         val schwelle = if (istRuhe) settings.quietHoursThreshold else settings.dbThreshold
         var showTriggerMenu by remember { mutableStateOf(false) }
@@ -216,7 +203,6 @@ fun LiveCockpitCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Title & Subtitle
             Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
                     text = stringResource(R.string.cockpit_title),
@@ -233,7 +219,6 @@ fun LiveCockpitCard(
                 )
             }
 
-            // Right: Trigger Selector & Threshold
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -249,10 +234,6 @@ fun LiveCockpitCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                // Bei "Automatisch" zusaetzlich anzeigen, worauf es gerade
-                                // hinauslaeuft. Die Logik in MeterTriggerSource ist korrekt
-                                // (Messgeraet bevorzugt, sonst Mikrofon) - nur konnte der Nutzer
-                                // bisher nicht erkennen, welche Quelle tatsaechlich ausloest.
                                 text = if (!settings.recordWavAudio) {
                                     "Kein Audio (DSGVO)"
                                 } else when (settings.audioTriggerQuelle) {
@@ -300,17 +281,27 @@ fun LiveCockpitCard(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.settings_trigger_source_mic)) },
                             onClick = {
-                                settings.audioTriggerQuelle = "MIKROFON"
-                                container.connectionSupervisor.stop()
                                 showTriggerMenu = false
+                                if (verbindungszustand == ConnectionState.IDLE ||
+                                    verbindungszustand == ConnectionState.DISCONNECTED ||
+                                    verbindungszustand == ConnectionState.FAILED
+                                ) {
+                                    settings.audioTriggerQuelle = "MIKROFON"
+                                } else {
+                                    showDisconnectBluetoothConfirm = true
+                                }
                             }
                         )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text(if (settings.recordWavAudio) "WAV-Aufnahme: Aktiv" else "WAV-Aufnahme: Aus (DSGVO)") },
                             onClick = {
-                                settings.recordWavAudio = !settings.recordWavAudio
                                 showTriggerMenu = false
+                                if (settings.recordWavAudio) {
+                                    showDisableWavConfirm = true
+                                } else {
+                                    settings.recordWavAudio = true
+                                }
                             }
                         )
                     }
@@ -326,13 +317,6 @@ fun LiveCockpitCard(
             }
         }
 
-        // ==========================================
-        // 2. CENTER LIVE DB DISPLAY
-        // ==========================================
-        // liveRegion (PROMPT_M9_UX.md Aufgabe 4): der Pegel und seine Einordnung aendern sich
-        // laufend, ohne dass ein Screenreader das ohne Fokus mitbekaeme. mergeDescendants fasst
-        // die Kind-Texte (Zahl, Bewertungseinheit, Einordnung) zu EINER Ansage zusammen statt
-        // TalkBack fragmentweise vorlesen zu lassen.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -349,7 +333,6 @@ fun LiveCockpitCard(
             )
             Spacer(modifier = Modifier.height(2.dp))
 
-            // Dynamisch skalierte dB-Zahl
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = if (liveLevel != null) String.format(Locale.US, "%.1f", liveLevel) else "--.-",
@@ -386,9 +369,6 @@ fun LiveCockpitCard(
             )
         }
 
-        // ==========================================
-        // 3. SOUND LEVEL HISTORY CARD (mit Inline Stat Cards)
-        // ==========================================
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -428,7 +408,6 @@ fun LiveCockpitCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Inline Stat Card 1: LAeq (Avg)
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -439,9 +418,6 @@ fun LiveCockpitCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                // Ohne kalibriertes Messgeraet ist es kein LAeq - eine
-                                // A-Bewertung findet nirgends statt. "Mittelwert" ist die
-                                // ehrliche Beschriftung fuer denselben Rechenweg.
                                 text = if (istMikrofonMessung) {
                                     "${stringResource(R.string.cockpit_leq_label_mic)}: "
                                 } else {
@@ -458,7 +434,6 @@ fun LiveCockpitCard(
                         }
                     }
 
-                    // Inline Stat Card 2: LMax (Peak)
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -511,8 +486,6 @@ fun LiveCockpitCard(
                     }
 
                     if (istMikrofonMessung) {
-                        // Der Verlauf ist nuetzlich, aber er ist kein Schallpegel. Das gehoert
-                        // an die Grafik, nicht in eine Fussnote weit darunter.
                         Text(
                             text = stringResource(R.string.cockpit_mic_uncalibrated),
                             style = MaterialTheme.typography.bodySmall,
@@ -550,9 +523,6 @@ fun LiveCockpitCard(
             }
         }
 
-        // ==========================================
-        // 4. ACTION BUTTONS
-        // ==========================================
         if (dienstAktiv) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
@@ -573,9 +543,6 @@ fun LiveCockpitCard(
                     )
                 }
 
-                // Der Owner-Auftrag lautet "Videobeweis starten WAEHREND Aufzeichnung" - der
-                // Knopf steht deshalb bewusst in diesem Block, der nur bei laufendem Dienst
-                // gezeichnet wird.
                 if (onNavigateToVideo != null) {
                     OutlinedButton(
                         onClick = onNavigateToVideo,
@@ -594,13 +561,7 @@ fun LiveCockpitCard(
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        val intent = Intent(context, AudioRecordingService::class.java).apply {
-                            action = ACTION_STOP_SERVICE
-                        }
-                        context.startService(intent)
-                        container.connectionSupervisor.stop()
-                    },
+                    onClick = { showEndMeasurementConfirm = true },
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -649,14 +610,91 @@ fun LiveCockpitCard(
         }
     }
 
-    // Modal Bottom Sheet für Mark Noise Event
+    if (showEndMeasurementConfirm) {
+        AlertDialog(
+            modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG),
+            onDismissRequest = { showEndMeasurementConfirm = false },
+            title = { Text("Messung wirklich beenden?") },
+            text = {
+                Text(
+                    "Damit werden die laufende Messung, die WAV-/Mikrofonaufzeichnung und die " +
+                        "PCE-323-Verbindung beendet. Die bisher erfassten Daten bleiben erhalten."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showEndMeasurementConfirm = false
+                        context.startService(Intent(context, AudioRecordingService::class.java).apply {
+                            action = ACTION_STOP_SERVICE
+                        })
+                        container.connectionSupervisor.stop()
+                    }
+                ) { Text("Messung beenden") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndMeasurementConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
+    if (showDisableWavConfirm) {
+        AlertDialog(
+            modifier = Modifier.testTag(DISABLE_WAV_CONFIRM_DIALOG_TAG),
+            onDismissRequest = { showDisableWavConfirm = false },
+            title = { Text("WAV-Aufzeichnung deaktivieren?") },
+            text = {
+                Text(
+                    "Neue Lärmereignisse werden dann ohne WAV-Beweisdatei gespeichert. " +
+                        "Pegelprotokoll und PCE-323-Messung können weiterlaufen."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settings.recordWavAudio = false
+                        showDisableWavConfirm = false
+                    }
+                ) { Text("WAV deaktivieren") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisableWavConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
+    if (showDisconnectBluetoothConfirm) {
+        AlertDialog(
+            modifier = Modifier.testTag(DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG),
+            onDismissRequest = { showDisconnectBluetoothConfirm = false },
+            title = { Text("Bluetooth-Verbindung beenden?") },
+            text = {
+                Text(
+                    "Der Trigger wird auf das interne Mikrofon umgestellt und die Verbindung zum " +
+                        "PCE-323 beendet. Kalibrierte PCE-Messwerte stehen danach nicht mehr zur Verfügung."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settings.audioTriggerQuelle = "MIKROFON"
+                        container.connectionSupervisor.stop()
+                        showDisconnectBluetoothConfirm = false
+                    }
+                ) { Text("PCE trennen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectBluetoothConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
     if (showMarkNoiseEventSheet) {
         MarkNoiseEventBottomSheet(
             currentDb = liveLevel,
             currentWeighting = if (isCalibrated) weightingText else "dB (Mikrofon, unkalibriert)",
             onDismiss = { showMarkNoiseEventSheet = false },
             onSaveEvent = { category, note ->
-                // Snapshot beim Tippen, bevor die Coroutine auf die Datenbank wartet.
                 val now = System.currentTimeMillis()
                 val microphoneLevel = AudioRecordingService.currentMicDb.value
                 val meterLevel = if (isCalibrated) letzterFrame?.level else null
