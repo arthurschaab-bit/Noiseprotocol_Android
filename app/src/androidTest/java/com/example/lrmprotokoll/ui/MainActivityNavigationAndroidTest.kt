@@ -128,7 +128,11 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
         composeRule.onNodeWithTag("drawer_item_main").performClick()
         // Eindeutiger Tag statt Text-Suche, da der App-Name auch im (immer komponierten, aber
-        // geschlossenen) Navigations-Drawer vorkommt.
+        // geschlossenen) Navigations-Drawer vorkommt. waitUntil statt sofortiger Assertion, da
+        // die Drawer-Schliess-Animation und die Navigation asynchron ablaufen.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag("home_title").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("home_title").assertIsDisplayed()
     }
 

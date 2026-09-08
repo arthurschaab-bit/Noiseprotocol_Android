@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
@@ -48,7 +49,11 @@ class AppStartupSmokeInstrumentedTest {
         val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)
 
         // 1. Startscreen (Home) ist geladen. Eindeutiger Tag statt Text-Suche, da "appName" auch
-        // im (immer komponierten, aber geschlossenen) Navigations-Drawer vorkommt.
+        // im (immer komponierten, aber geschlossenen) Navigations-Drawer vorkommt. waitUntil statt
+        // sofortiger Assertion, da der erste Frame durch YAMNet-Initialisierung verzoegert sein kann.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag("home_title").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("home_title").assertIsDisplayed()
 
         // 2. Navigation zu Protokoll
