@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -210,11 +211,21 @@ fun ProtokollDetailScreen(
         }
 
         val threshold = container.settingsManager.dbThreshold.toDouble()
+        val protokollListState = rememberLazyListState()
+        // LazyColumn besitzt neben den Ereignissen einige feste/bedingte Kopf- und Auditzeilen.
+        // Die exakte Zahl sorgt dafuer, dass der Fast-Scroller bis zum wirklichen Listenende
+        // abbildet, ohne dafuer 20.000+ Eintraege zu materialisieren.
+        val fastScrollItemCount = 4 +
+            (if (sessionRecords.isNotEmpty()) 1 + sessionRecords.size else 0) +
+            (if (beweisvideos.isNotEmpty()) 1 else 0) +
+            (if (ausfallbaender.isNotEmpty()) 1 + ausfallbaender.size else 0)
 
         LazyColumn(
+            state = protokollListState,
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .fastScrollBar(protokollListState, fastScrollItemCount),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -231,15 +242,12 @@ fun ProtokollDetailScreen(
                         }
                     }
                 ) {
-                    // 4-Kachel Metriken
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         SummaryMetricItem(stringResource(R.string.stat_duration), dauerText, modifier = Modifier.weight(1f))
                         SummaryMetricItem(
-                            // Ohne Messgeraet gibt es kein LAeq - keine A-Bewertung, keine
-                            // Kalibrierung. Derselbe Rechenweg, aber ehrlich beschriftet.
                             if (session?.deviceAddress?.isBlank() == true) "📈 Mittelwert" else "📈 LAeq",
                             kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
                             modifier = Modifier.weight(1f)
@@ -418,16 +426,11 @@ fun ProtokollDetailScreen(
                             beweisvideos.forEach { video ->
                                 val datei = java.io.File(video.dateiPfad)
                                 val zustand = when {
-                                    // Reihenfolge zaehlt: Der Fehlerfall ist ein Endzustand und
-                                    // muss VOR dem Zwischenzustand stehen - sonst zeigte die
-                                    // Zeile "Ton wird hinzugefügt …" unbegrenzt weiter, obwohl
-                                    // nichts mehr passiert.
                                     video.muxFehlgeschlagen -> "ohne Ton (Zusammenführen fehlgeschlagen)"
                                     !video.tonGemuxt -> "Ton wird hinzugefügt …"
                                     video.hatTonspur -> "mit Ton"
                                     else -> "ohne Ton (Mikrofon lief nicht)"
                                 }
-                                // Auch die stumme Fassung ist ein Beleg und bleibt abspielbar.
                                 val abspielbar = (video.tonGemuxt || video.muxFehlgeschlagen) && datei.exists()
                                 Row(
                                     modifier = Modifier

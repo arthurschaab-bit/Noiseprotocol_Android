@@ -493,7 +493,8 @@ fun NoiseProtocolApp(
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.testTag("home_title")
                     )
                 },
                 navigationIcon = {
@@ -530,14 +531,14 @@ fun NoiseProtocolApp(
                                 }
                             }
                         },
-                        modifier = Modifier.padding(end = 6.dp).testTag("badge_microphone_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 6.dp).testTag("badge_microphone_status")
                     )
 
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
                         onClick = { showPairingDialog = true },
-                        modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status")
                     )
 
                     Box {

@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -18,6 +19,7 @@ import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.ui.END_MEASUREMENT_BUTTON_TAG
+import com.example.lrmprotokoll.ui.END_MEASUREMENT_CONFIRM_DIALOG_TAG
 import com.example.lrmprotokoll.ui.LiveCockpitCard
 import com.example.lrmprotokoll.ui.START_MEASUREMENT_BUTTON_TAG
 import org.junit.After
@@ -109,9 +111,11 @@ class ForegroundServiceAndroidTest {
         assertTrue("Notification muss als ongoing markiert sein", activeNotification!!.isOngoing)
         assertEquals("noise_monitoring_channel", activeNotification.notification.channelId)
 
-        // 3. Stoppen über UI (Beenden-Button)
+        // 3. Stoppen über UI (Beenden-Button) inkl. Sicherheitsabfrage
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(END_MEASUREMENT_BUTTON_TAG).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("Messung beenden").performClick()
 
         // 4. Warten bis Service beendet und Notification entfernt ist
         composeRule.waitUntil(timeoutMillis = 7_000L) {

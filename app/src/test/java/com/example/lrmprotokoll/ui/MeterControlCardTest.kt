@@ -91,7 +91,9 @@ class MeterControlCardTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("PCE-323 Messgerät").assertIsDisplayed()
-        composeRule.onNodeWithText("BT: Getrennt").assertIsDisplayed()
+        // Das BluetoothStatusBadge nennt jetzt immer den Geraetenamen (Default "PCE-323") statt
+        // eines generischen "BT: ..."-Textes.
+        composeRule.onNodeWithText("PCE-323: Nicht verbunden").assertIsDisplayed()
         composeRule.onNodeWithText("Gerät koppeln").assertIsDisplayed()
     }
 
@@ -123,7 +125,9 @@ class MeterControlCardTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("PCE-323 #1").assertIsDisplayed()
+        // Das BluetoothStatusBadge zeigt bei STREAMING jetzt "$name: Verbunden" statt nur des
+        // blossen Geraetenamens.
+        composeRule.onNodeWithText("PCE-323 #1: Verbunden").assertIsDisplayed()
         composeRule.onNodeWithText("58.4 dB(A)").assertIsDisplayed()
         composeRule.onNodeWithText("Trennen").assertIsDisplayed()
     }

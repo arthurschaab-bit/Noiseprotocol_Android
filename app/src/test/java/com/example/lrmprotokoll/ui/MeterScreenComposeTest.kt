@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -60,6 +61,9 @@ class MeterScreenComposeTest {
         composeRule.setContent { MeterScreen(onBack = {}) }
 
         composeRule.onNodeWithTag("btn_meter_unpair").performScrollTo().assertIsDisplayed().performClick()
+        // Entkoppeln verlangt seit der Sicherheitsabfrage eine explizite Bestätigung.
+        composeRule.onNodeWithTag(METER_DISCONNECT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText("PCE trennen").performClick()
 
         assertNull(app.container.settingsManager.meterDeviceAddress)
     }

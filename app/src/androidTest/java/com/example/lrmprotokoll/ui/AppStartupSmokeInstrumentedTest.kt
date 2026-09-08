@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -46,8 +47,16 @@ class AppStartupSmokeInstrumentedTest {
         val startLabel = composeRule.activity.getString(R.string.nav_start)
         val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)
 
-        // 1. Startscreen (Home) ist geladen
-        composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
+        // 1. Startscreen (Home) ist geladen. Eindeutiger Tag statt Text-Suche, da "appName" auch
+        // im (immer komponierten, aber geschlossenen) Navigations-Drawer vorkommt.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            try {
+                composeRule.onNodeWithTag("home_title").assertIsDisplayed()
+                true
+            } catch (e: AssertionError) {
+                false
+            }
+        }
 
         // 2. Navigation zu Protokoll
         composeRule.onAllNodesWithText(protocolLabel).onFirst().performClick()

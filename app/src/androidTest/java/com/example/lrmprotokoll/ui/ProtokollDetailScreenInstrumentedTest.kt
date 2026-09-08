@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -99,7 +100,10 @@ class ProtokollDetailScreenInstrumentedTest {
         // 1. Titel & Kopfzeile - erst warten, bis die Session aus Room geladen ist.
         wartetBisAngezeigt(sessionTitle)
         composeRule.onNodeWithText(sessionTitle, substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("PCE-323 Testgerät", substring = true).assertIsDisplayed()
+        // Zusammengesetzter Matcher, da der Geraetename durch das neue BluetoothStatusBadge in
+        // der TopAppBar zusaetzlich sichtbar ist und "Start:" nur die Untertitel-Zeile trifft.
+        composeRule.onNode(hasText("PCE-323 Testgerät", substring = true) and hasText("Start:", substring = true))
+            .assertIsDisplayed()
 
         // 2. Kennwerte- und Pegelverlauf-Überschriften
         composeRule.onNodeWithText(metricsTitle).assertIsDisplayed()
