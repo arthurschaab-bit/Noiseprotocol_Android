@@ -4,6 +4,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
@@ -14,6 +16,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * Rechnet eine Position auf der Schnellscroll-Leiste deterministisch auf einen Listenindex ab.
@@ -42,12 +46,22 @@ fun Modifier.fastScrollBar(
     if (itemCount < minimumItemCount) return@composed this
 
     val density = LocalDensity.current
+    val scrollScope = rememberCoroutineScope()
+    val scrollJobHolder = remember { arrayOfNulls<Job>(1) }
     val touchWidthPx = with(density) { 32.dp.toPx() }
     val trackWidthPx = with(density) { 3.dp.toPx() }
     val thumbWidthPx = with(density) { 7.dp.toPx() }
     val minThumbHeightPx = with(density) { 40.dp.toPx() }
     val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)
     val thumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+
+    fun scrollToFraction(fraction: Float) {
+        val targetIndex = fastScrollTargetIndex(fraction, itemCount)
+        scrollJobHolder[0]?.cancel()
+        scrollJobHolder[0] = scrollScope.launch {
+            listState.scrollToItem(targetIndex)
+        }
+    }
 
     this
         .drawWithContent {
@@ -87,14 +101,18 @@ fun Modifier.fastScrollBar(
                 else (y / size.height.toFloat()).coerceIn(0f, 1f)
 
                 down.consume()
-                listState.scrollToItem(fastScrollTargetIndex(fractionFor(down.position.y), itemCount))
+                // scrollToItem() ist eine normale suspend-Funktion und darf nicht direkt aus dem
+                // @RestrictsSuspension-AwaitPointerEventScope aufgerufen werden. Der separate
+                // Compose-CoroutineScope haelt Pointer-Verarbeitung und LazyList-Scroll sauber
+                // getrennt; die vorherige Zielbewegung wird beim Ziehen abgebrochen.
+                scrollToFraction(fractionFor(down.position.y))
 
                 while (true) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) break
                     change.consume()
-                    listState.scrollToItem(fastScrollTargetIndex(fractionFor(change.position.y), itemCount))
+                    scrollToFraction(fractionFor(change.position.y))
                 }
             }
         }
