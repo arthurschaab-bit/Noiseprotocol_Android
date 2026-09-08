@@ -23,7 +23,7 @@ class BluetoothStatusBadgeTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun zeigtGeraetenamenBeiStreamingAn() {
+    fun zeigtGeraetenamenUndVerbundenBeiStreamingAn() {
         var clicked = false
         composeRule.setContent {
             BluetoothStatusBadge(
@@ -34,7 +34,7 @@ class BluetoothStatusBadgeTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("PCE-323").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("PCE-323: Verbunden").assertIsDisplayed().performClick()
         assertTrue("Badge-Klick-Callback muss ausgefuehrt werden", clicked)
     }
 
@@ -48,11 +48,11 @@ class BluetoothStatusBadgeTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("BT: Suche…").assertIsDisplayed()
+        composeRule.onNodeWithText("PCE-323: Suche…").assertIsDisplayed()
     }
 
     @Test
-    fun zeigtAusBeiIdleAn() {
+    fun zeigtNichtVerbundenBeiIdleAn() {
         composeRule.setContent {
             BluetoothStatusBadge(
                 state = ConnectionState.IDLE,
@@ -61,7 +61,6 @@ class BluetoothStatusBadgeTest {
         }
         composeRule.waitForIdle()
 
-        val offStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.status_off)
-        composeRule.onNodeWithText("BT: $offStr").assertIsDisplayed()
+        composeRule.onNodeWithText("PCE-323: Nicht verbunden").assertIsDisplayed()
     }
 }
