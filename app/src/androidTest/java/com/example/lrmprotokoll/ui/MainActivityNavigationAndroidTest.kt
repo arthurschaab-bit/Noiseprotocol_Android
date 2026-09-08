@@ -128,25 +128,14 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
         composeRule.onNodeWithTag("drawer_item_main").performClick()
         // Eindeutiger Tag statt Text-Suche, da der App-Name auch im (immer komponierten, aber
-        // geschlossenen) Navigations-Drawer vorkommt. Blosse Existenz im Semantics-Baum reicht
-        // nicht: der Knoten kann existieren, aber noch nicht platziert/gemessen sein - deshalb
-        // pollt waitUntil auf assertIsDisplayed() selbst, statt nur auf Existenz.
-        try {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                try {
-                    composeRule.onNodeWithTag("home_title").assertIsDisplayed()
-                    true
-                } catch (e: AssertionError) {
-                    false
-                }
+        // geschlossenen) Navigations-Drawer vorkommt.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            try {
+                composeRule.onNodeWithTag("home_title").assertIsDisplayed()
+                true
+            } catch (e: AssertionError) {
+                false
             }
-        } catch (e: ComposeTimeoutException) {
-            // Diagnose: zeigt, was auf dem Emulator tatsaechlich sichtbar ist, statt nur zu
-            // wissen, dass "home_title" es nicht ist.
-            throw AssertionError(
-                "home_title nach 10s nicht sichtbar. Sichtbarer Baum:\n" + composeRule.onRoot().printToString(),
-                e
-            )
         }
     }
 

@@ -531,14 +531,14 @@ fun NoiseProtocolApp(
                                 }
                             }
                         },
-                        modifier = Modifier.padding(end = 6.dp).testTag("badge_microphone_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 6.dp).testTag("badge_microphone_status")
                     )
 
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
                         onClick = { showPairingDialog = true },
-                        modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status")
                     )
 
                     Box {
