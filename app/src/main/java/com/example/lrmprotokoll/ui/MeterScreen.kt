@@ -64,7 +64,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -86,19 +85,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val SCAN_DURATION_MS = 10_000L
 private const val TAG = "MeterScreen"
+const val METER_DISCONNECT_CONFIRM_DIALOG_TAG = "meter_disconnect_confirm_dialog"
 
 /**
  * Kopplung und Live-Anzeige fuer das PCE-323 (Plan Abschnitt 9, minimale Ausbaustufe M2).
- * Reine Anzeige: keine Persistenz der Messreihe, keine Verknuepfung mit dem Aufnahme-Trigger
- * (das ist M4). Der Pegel traegt nur dann ein "dB(A)"/"dB(C)"-Label, wenn
- * [MeterFrame.modeAssumptionConfirmed] gesetzt ist - bis dahin ist die Frequenzbewertung des
- * realen Geraets nur eine Annahme, kein bestaetigtes Wissen (docs/PROTOKOLL_PCE-323.md,
- * Abschnitt 9).
- *
- * Zusaetzlich werden Bewertung, Zeitbewertung und Messbereich gespiegelt, wie sie der Decoder
- * unter dieser noch unbestaetigten Annahme interpretiert - deutlich markiert, damit ein
- * Vergleich mit der Geraeteanzeige moeglich ist und der Owner die Annahme bestaetigen oder
- * verwerfen kann.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,12 +104,8 @@ fun MeterScreen(
     val scope = rememberCoroutineScope()
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasBluetoothPermissions by remember {
-        mutableStateOf(BluetoothPermissions.hasPermissions(context))
-    }
-    var isLocationEnabled by remember {
-        mutableStateOf(BluetoothPermissions.isLocationEnabled(context))
-    }
+    var hasBluetoothPermissions by remember { mutableStateOf(BluetoothPermissions.hasPermissions(context)) }
+    var isLocationEnabled by remember { mutableStateOf(BluetoothPermissions.isLocationEnabled(context)) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -132,10 +118,6 @@ fun MeterScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Der Verbindungszustand kommt vom ConnectionSupervisor, nicht direkt vom Transport (PROMPT_M3
-    // Aufgabe 3): nur der Supervisor kennt RECONNECTING/DEGRADED/FAILED, und nur er - vom
-    // AudioRecordingService betrieben - ueberlebt das Schliessen dieses Screens. Die UI
-    // beobachtet nur noch, sie treibt die Verbindung nicht mehr selbst.
     val connectionState by supervisor.state.collectAsState()
     val latestFrame by transport.frames.collectAsState(initial = null)
 
@@ -145,6 +127,7 @@ fun MeterScreen(
     var scanFehler by remember { mutableStateOf<String?>(null) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
     var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
+    var showDisconnectConfirm by remember { mutableStateOf(false) }
 
     fun ensureConnected() {
         context.startForegroundService(Intent(context, AudioRecordingService::class.java))
@@ -171,8 +154,7 @@ fun MeterScreen(
                                 Log.w(
                                     TAG,
                                     "Advertiser ${device.address} traegt denselben Namen " +
-                                        "wie das gepinnte Geraet ($pairedAddress), aber " +
-                                        "eine andere Adresse - moeglicher Spoofing-Versuch",
+                                        "wie das gepinnte Geraet ($pairedAddress), aber eine andere Adresse",
                                 )
                             }
                         }
@@ -190,20 +172,15 @@ fun MeterScreen(
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasBluetoothPermissions = BluetoothPermissions.hasPermissions(context)
         isLocationEnabled = BluetoothPermissions.isLocationEnabled(context)
-        if (hasBluetoothPermissions) {
-            starteScan()
-        }
+        if (hasBluetoothPermissions) starteScan()
     }
 
     fun requestPermissionsUndScanne() {
-        if (hasBluetoothPermissions) {
-            starteScan()
-        } else {
-            permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
-        }
+        if (hasBluetoothPermissions) starteScan()
+        else permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
     }
 
     fun pinne(device: BleDevice) {
@@ -243,6 +220,35 @@ fun MeterScreen(
         )
     }
 
+    if (showDisconnectConfirm) {
+        AlertDialog(
+            modifier = Modifier.testTag(METER_DISCONNECT_CONFIRM_DIALOG_TAG),
+            onDismissRequest = { showDisconnectConfirm = false },
+            title = { Text("Bluetooth-Verbindung beenden?") },
+            text = {
+                Text(
+                    "Das PCE-323 wird getrennt und aus der App-Kopplung entfernt. " +
+                        "Eine laufende Mikrofon-/WAV-Erfassung kann weiterlaufen, kalibrierte PCE-Werte aber nicht."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settings.meterDeviceAddress = null
+                        settings.meterDeviceName = null
+                        pairedAddress = null
+                        pairedName = null
+                        supervisor.stop()
+                        showDisconnectConfirm = false
+                    }
+                ) { Text("PCE trennen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -268,8 +274,6 @@ fun MeterScreen(
             )
         }
     ) { padding ->
-        // Stabile Sortierung der Geräteliste: Gepinntes Gerät zuerst, dann alphabetisch nach
-        // Name und MAC-Adresse. RSSI-Schwankungen verändern dadurch nicht mehr die Zeilenposition.
         val sortierteGefundeneGeraete = remember(foundDevices.toMap(), pairedAddress) {
             sortiereGefundeneGeraete(foundDevices.values, pairedAddress)
         }
@@ -287,12 +291,6 @@ fun MeterScreen(
                     Text(label, style = MaterialTheme.typography.titleMedium)
                 }
 
-                // Plan Abschnitt 6: createBond() fuehrte in der M0-Aufzeichnung zu einem
-                // sofortigen Disconnect (Pce323Profile.BONDING_SUPPORTED-KDoc) - ein erneuter
-                // Versuch wuerde die Verbindung nur wieder gefaehrden. Die Konsequenz aus dem
-                // Plan ist deshalb nicht ein Bonding-Versuch, sondern die ehrliche
-                // Kennzeichnung: Sicherheit vorzutaeuschen waere schlimmer als eine
-                // dokumentierte Luecke.
                 if (!Pce323Profile.BONDING_SUPPORTED) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -315,10 +313,6 @@ fun MeterScreen(
 
                 val frame = latestFrame
                 if (frame != null && connectionState == ConnectionState.STREAMING) {
-                    // Die Annahme-Zuordnung darf den Pegel erst dann als "dB(A)"/"dB(C)"
-                    // beschriften, wenn sie am Geraet bestaetigt ist (Review PR #15, Befund 1) -
-                    // solange modeAssumptionConfirmed false ist, gilt weighting != null als
-                    // "angenommen", nicht als gesichertes Wissen.
                     val confirmedWeighting = frame.weighting.takeIf { frame.modeAssumptionConfirmed }
                     Text(
                         if (confirmedWeighting != null) {
@@ -327,13 +321,9 @@ fun MeterScreen(
                             "${String.format("%.1f", frame.level)} dB"
                         },
                         style = MaterialTheme.typography.displayLarge,
-                        // liveRegion (PROMPT_M9_UX.md Aufgabe 4): der Pegel aendert sich rund
-                        // alle 515 ms, ohne dass ein Screenreader das ohne Fokus mitbekaeme.
                         modifier = Modifier
                             .testTag("live_meter_level_display")
-                            .semantics(mergeDescendants = true) {
-                                liveRegion = LiveRegionMode.Polite
-                            }
+                            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
                     )
                     if (confirmedWeighting == null) {
                         Text(
@@ -356,11 +346,7 @@ fun MeterScreen(
                                     stringResource(R.string.meter_unconfirmed_warning)
                                 },
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (frame.modeAssumptionConfirmed) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                }
+                                color = if (frame.modeAssumptionConfirmed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(stringResource(R.string.meter_weighting_value, weightingLabel(frame.weighting)), style = MaterialTheme.typography.bodyMedium)
@@ -386,24 +372,15 @@ fun MeterScreen(
                     ) {
                         Button(
                             onClick = {
-                                if (hasBluetoothPermissions) {
-                                    ensureConnected()
-                                } else {
-                                    permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
-                                }
+                                if (hasBluetoothPermissions) ensureConnected()
+                                else permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                             },
                             modifier = Modifier.testTag("btn_meter_connect")
                         ) {
                             Text(stringResource(R.string.meter_action_connect))
                         }
                         OutlinedButton(
-                            onClick = {
-                                settings.meterDeviceAddress = null
-                                settings.meterDeviceName = null
-                                pairedAddress = null
-                                pairedName = null
-                                supervisor.stop()
-                            },
+                            onClick = { showDisconnectConfirm = true },
                             modifier = Modifier.testTag("btn_meter_unpair")
                         ) {
                             Text(stringResource(R.string.meter_action_unpair))
@@ -416,9 +393,7 @@ fun MeterScreen(
                 if (!hasBluetoothPermissions) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -436,12 +411,8 @@ fun MeterScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
-                                onClick = {
-                                    permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                )
+                                onClick = { permissionLauncher.launch(BluetoothPermissions.requiredPermissions()) },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
                                 Text(stringResource(R.string.permission_grant_button))
                             }
@@ -450,9 +421,7 @@ fun MeterScreen(
                 } else if (BluetoothPermissions.isLocationRequiredForScan() && !isLocationEnabled) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -470,12 +439,8 @@ fun MeterScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
-                                onClick = {
-                                    context.startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                )
+                                onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
                                 Text("Standort aktivieren")
                             }
@@ -503,11 +468,8 @@ fun MeterScreen(
                 val befund = GeraetePinning.beurteile(device.address, device.name, pairedAddress, pairedName)
                 Card(
                     onClick = {
-                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
-                            verdaechtigesGeraet = device
-                        } else {
-                            pinne(device)
-                        }
+                        if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) verdaechtigesGeraet = device
+                        else pinne(device)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -516,10 +478,7 @@ fun MeterScreen(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(device.name ?: "(ohne Namen)", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "${device.address} · ${device.rssi} dBm",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text("${device.address} · ${device.rssi} dBm", style = MaterialTheme.typography.bodySmall)
                         if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -528,7 +487,7 @@ fun MeterScreen(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.height(16.dp).width(16.dp),
-                                    )
+                                )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     stringResource(R.string.meter_spoof_warning),
@@ -540,31 +499,16 @@ fun MeterScreen(
                     }
                 }
                 if (index == sortierteGefundeneGeraete.lastIndex) {
-                    Spacer(
-                        modifier = Modifier
-                            .height(1.dp)
-                            .testTag(GERAETE_LISTE_ENDE_TAG)
-                    )
+                    Spacer(modifier = Modifier.height(1.dp).testTag(GERAETE_LISTE_ENDE_TAG))
                 }
             }
         }
     }
 }
 
-/** Fuer den Compose-Regressionstest (M7c Aufgabe 4): markiert das Ende der
- * Geraeteliste, damit ein Test pruefen kann, dass die letzte Zeile per Scroll erreichbar ist. */
 const val GERAETE_LISTE_ENDE_TAG = "meter_geraete_liste_ende"
-
-/** Fuer denselben Regressionstest: markiert den Scan-Button am Ende des festen Kopfbereichs,
- * erreichbar unabhaengig davon, ob die Geraeteliste gerade Eintraege enthaelt. */
 const val SCAN_BUTTON_TAG = "meter_scan_button"
 
-/**
- * Beschriftungen fuer die drei Annahme-Werte aus [Pce323Profile] (Bereich/Fast-Slow/A-C) - ein
- * `null` (unbekannter Bytewert) wird als solches ausgeschrieben, nie stillschweigend
- * weggelassen. Diese Zuordnung ist unbestaetigt; die Live-Anzeige in [MeterScreen] existiert
- * genau dafuer, sie am realen Geraet gegenzupruefen.
- */
 private fun weightingLabel(weighting: Weighting?): String = when (weighting) {
     Weighting.A -> "A"
     Weighting.C -> "C"
@@ -577,11 +521,6 @@ private fun timeWeightingLabel(timeWeighting: TimeWeighting?): String = when (ti
     null -> "unbekannter Wert"
 }
 
-/**
- * Uebersetzt eine beim Scan aufgetretene Exception in eine fuer den Nutzer verstaendliche
- * Meldung, statt die App abstuerzen zu lassen (Geraetetest-Rueckmeldung: "Scannen crashed die
- * App"). Als reine Funktion ohne Android-/Compose-Abhaengigkeit per JVM-Test pruefbar.
- */
 internal fun scanFehlermeldung(fehler: Throwable): String = when (fehler) {
     is SecurityException -> "Bluetooth-Berechtigung wurde entzogen - bitte erneut erteilen."
     else -> "Scan fehlgeschlagen: ${fehler.message ?: fehler::class.simpleName ?: "unbekannter Fehler"}"
@@ -595,11 +534,6 @@ private fun rangeLabel(range: MeasurementRange?): String = when (range) {
     null -> "unbekannter Wert"
 }
 
-/**
- * Verbindungszustand wird nie nur farblich kodiert (Barrierefreiheit) - immer Text und Icon.
- * Der Text kommt aus [com.example.lrmprotokoll.meter.label], damit Notification und Live-Anzeige
- * nie auseinanderlaufen; Icon und Farbe bleiben UI-lokal.
- */
 @Composable
 private fun connectionStateDisplay(state: ConnectionState): Triple<ImageVector, String, Color> {
     val (icon, color) = when (state) {
@@ -617,11 +551,6 @@ private fun connectionStateDisplay(state: ConnectionState): Triple<ImageVector, 
     return Triple(icon, state.label(), color)
 }
 
-/**
- * Stabile Sortierung für gefundene Bluetooth-Geräte: Gepinntes Gerät steht ganz oben,
- * gefolgt von benannten Geräten alphabetisch, danach unbenannte Geräte.
- * RSSI-Schwankungen beeinflussen die Positionierung nicht, sodass die Liste im UI ruhig bleibt.
- */
 internal fun sortiereGefundeneGeraete(devices: Collection<BleDevice>, pairedAddress: String?): List<BleDevice> {
     return devices.sortedWith(
         compareByDescending<BleDevice> { it.address == pairedAddress }
