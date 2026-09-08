@@ -17,6 +17,19 @@ enum class DiagnosticCode {
     AUDIO_FOREGROUND_SERVICE_FAILED,
 
     /**
+     * Der Dienst soll laut persistentem Zustand weiter Audio erfassen, aber der echte
+     * AudioRecord-Pfad ist nicht aktiv. Dieser Fehler haette den HW-Test vom 07.09. direkt nach
+     * dem Service-Recreate sichtbar gemacht, statt erst ueber fehlende WAV-Dateien aufzufallen.
+     */
+    AUDIO_MONITORING_STOPPED_UNEXPECTEDLY,
+
+    /** Service wurde zerstoert, obwohl die Audio-Ueberwachung nicht explizit beendet wurde. */
+    AUDIO_SERVICE_DESTROYED_WHILE_RECORDING,
+
+    /** Eine bereits gestartete Ereignis-WAV wurde vor der konfigurierten Dauer unterbrochen. */
+    AUDIO_WAV_INTERRUPTED,
+
+    /**
      * Ueber der Schwelle gemessen, aber ueber ein ganzes Zeitfenster kein einziges Ereignis
      * gespeichert - die Ausloesung funktioniert stillschweigend nicht. Siehe [TriggerWachhund].
      */
