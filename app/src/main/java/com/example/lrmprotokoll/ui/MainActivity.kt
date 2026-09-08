@@ -493,7 +493,8 @@ fun NoiseProtocolApp(
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.testTag("home_title")
                     )
                 },
                 navigationIcon = {

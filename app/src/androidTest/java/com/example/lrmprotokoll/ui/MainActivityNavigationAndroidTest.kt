@@ -127,7 +127,9 @@ class MainActivityNavigationAndroidTest {
         composeRule.onAllNodesWithText(composeRule.activity.getString(R.string.nav_settings)).onFirst().assertIsDisplayed()
         composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
         composeRule.onNodeWithTag("drawer_item_main").performClick()
-        composeRule.onAllNodesWithText(composeRule.activity.getString(R.string.app_name)).onFirst().assertIsDisplayed()
+        // Eindeutiger Tag statt Text-Suche, da der App-Name auch im (immer komponierten, aber
+        // geschlossenen) Navigations-Drawer vorkommt.
+        composeRule.onNodeWithTag("home_title").assertIsDisplayed()
     }
 
     @Test

@@ -150,8 +150,11 @@ class MeterScreenAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // Gekoppeltes Gerät wird mit Name und Adresse aufgeführt
-        composeRule.onNodeWithText(testName, substring = true).performScrollTo().assertIsDisplayed()
+        // Gekoppeltes Gerät wird mit Name und Adresse aufgeführt (exakter Text, da der
+        // Geraetename durch das neue BluetoothStatusBadge in der TopAppBar zusaetzlich
+        // sichtbar ist und ein reiner Substring-Treffer sonst mehrdeutig waere)
+        val pairedInfo = composeRule.activity.getString(R.string.meter_paired_info, testName, testAddress)
+        composeRule.onNodeWithText(pairedInfo).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(testAddress, substring = true).assertIsDisplayed()
 
         // Verbinden-Button ist sichtbar
