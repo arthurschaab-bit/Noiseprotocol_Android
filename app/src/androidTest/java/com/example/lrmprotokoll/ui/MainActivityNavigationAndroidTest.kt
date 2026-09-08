@@ -128,12 +128,17 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
         composeRule.onNodeWithTag("drawer_item_main").performClick()
         // Eindeutiger Tag statt Text-Suche, da der App-Name auch im (immer komponierten, aber
-        // geschlossenen) Navigations-Drawer vorkommt. waitUntil statt sofortiger Assertion, da
-        // die Drawer-Schliess-Animation und die Navigation asynchron ablaufen.
+        // geschlossenen) Navigations-Drawer vorkommt. Blosse Existenz im Semantics-Baum reicht
+        // nicht: der Knoten kann existieren, aber noch nicht platziert/gemessen sein - deshalb
+        // pollt waitUntil auf assertIsDisplayed() selbst, statt nur auf Existenz.
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("home_title").fetchSemanticsNodes().isNotEmpty()
+            try {
+                composeRule.onNodeWithTag("home_title").assertIsDisplayed()
+                true
+            } catch (e: AssertionError) {
+                false
+            }
         }
-        composeRule.onNodeWithTag("home_title").assertIsDisplayed()
     }
 
     @Test
