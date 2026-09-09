@@ -48,24 +48,36 @@ object SicherungManager {
         settings: SettingsManager,
     ): SicherungsErgebnis = withContext(Dispatchers.IO) {
         try {
-            val datenbankBytes = leseDatenbankNachCheckpoint(context)
-            val manifestBytes = buildManifest().toString(2).toByteArray(Charsets.UTF_8)
-            val einstellungenBytes = buildEinstellungenJson(settings).toString(2).toByteArray(Charsets.UTF_8)
-
+            val zipBytes = baueSicherungsBytes(context, settings)
             val output = context.contentResolver.openOutputStream(ziel)
                 ?: return@withContext SicherungsErgebnis(false, "Zieldatei konnte nicht geöffnet werden.")
-            output.use { out ->
-                ZipOutputStream(out).use { zos ->
-                    schreibeEintrag(zos, MANIFEST_ENTRY, manifestBytes)
-                    schreibeEintrag(zos, EINSTELLUNGEN_ENTRY, einstellungenBytes)
-                    schreibeEintrag(zos, DATENBANK_ENTRY, datenbankBytes)
-                }
-            }
+            output.use { it.write(zipBytes) }
             SicherungsErgebnis(true, "Sicherung erstellt.")
         } catch (e: Exception) {
             SicherungsErgebnis(false, "Sicherung fehlgeschlagen: ${e.message}")
         }
     }
+
+    /**
+     * Baut die eigentliche Sicherungs-ZIP (Manifest + Einstellungen + Datenbank nach
+     * WAL-Checkpoint) als Bytes - der Kern von [erstelleSicherung], separat aufrufbar fuer Ziele
+     * ohne SAF-[Uri] (die automatische Drive-Sicherung, siehe
+     * [com.example.lrmprotokoll.drive.DriveDatenbankSicherung]).
+     */
+    suspend fun baueSicherungsBytes(context: Context, settings: SettingsManager): ByteArray =
+        withContext(Dispatchers.IO) {
+            val datenbankBytes = leseDatenbankNachCheckpoint(context)
+            val manifestBytes = buildManifest().toString(2).toByteArray(Charsets.UTF_8)
+            val einstellungenBytes = buildEinstellungenJson(settings).toString(2).toByteArray(Charsets.UTF_8)
+
+            val puffer = java.io.ByteArrayOutputStream()
+            ZipOutputStream(puffer).use { zos ->
+                schreibeEintrag(zos, MANIFEST_ENTRY, manifestBytes)
+                schreibeEintrag(zos, EINSTELLUNGEN_ENTRY, einstellungenBytes)
+                schreibeEintrag(zos, DATENBANK_ENTRY, datenbankBytes)
+            }
+            puffer.toByteArray()
+        }
 
     suspend fun spieleSicherungEin(
         context: Context,
@@ -73,24 +85,40 @@ object SicherungManager {
         settings: SettingsManager,
     ): SicherungsErgebnis = withContext(Dispatchers.IO) {
         try {
+            val input = context.contentResolver.openInputStream(quelle)
+                ?: return@withContext SicherungsErgebnis(false, "Sicherungsdatei konnte nicht geöffnet werden.")
+            val zipBytes = input.use { it.readBytes() }
+            spieleSicherungBytesEin(context, zipBytes, settings)
+        } catch (e: Exception) {
+            SicherungsErgebnis(false, "Wiederherstellung fehlgeschlagen: ${e.message}")
+        }
+    }
+
+    /**
+     * Der Kern von [spieleSicherungEin], auf rohen ZIP-Bytes statt einem SAF-[Uri] - fuer eine
+     * aus Drive heruntergeladene Sicherung (siehe
+     * [com.example.lrmprotokoll.drive.DriveDatenbankSicherung]).
+     */
+    suspend fun spieleSicherungBytesEin(
+        context: Context,
+        zipBytes: ByteArray,
+        settings: SettingsManager,
+    ): SicherungsErgebnis = withContext(Dispatchers.IO) {
+        try {
             var manifest: JSONObject? = null
             var einstellungen: JSONObject? = null
             var datenbankBytes: ByteArray? = null
 
-            val input = context.contentResolver.openInputStream(quelle)
-                ?: return@withContext SicherungsErgebnis(false, "Sicherungsdatei konnte nicht geöffnet werden.")
-            input.use { inp ->
-                ZipInputStream(inp).use { zis ->
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        when (entry.name) {
-                            MANIFEST_ENTRY -> manifest = JSONObject(zis.readBytes().toString(Charsets.UTF_8))
-                            EINSTELLUNGEN_ENTRY -> einstellungen = JSONObject(zis.readBytes().toString(Charsets.UTF_8))
-                            DATENBANK_ENTRY -> datenbankBytes = zis.readBytes()
-                        }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
+            ZipInputStream(zipBytes.inputStream()).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    when (entry.name) {
+                        MANIFEST_ENTRY -> manifest = JSONObject(zis.readBytes().toString(Charsets.UTF_8))
+                        EINSTELLUNGEN_ENTRY -> einstellungen = JSONObject(zis.readBytes().toString(Charsets.UTF_8))
+                        DATENBANK_ENTRY -> datenbankBytes = zis.readBytes()
                     }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
                 }
             }
 

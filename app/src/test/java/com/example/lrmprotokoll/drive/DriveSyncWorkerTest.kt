@@ -115,6 +115,9 @@ class DriveSyncWorkerTest {
             fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
         ) = kotlin.Result.success(Unit)
 
+        override suspend fun dateiHerunterladen(fileId: String): kotlin.Result<ByteArray> =
+            throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun dateiHochladenResumable(
             name: String,
             ordnerId: String,

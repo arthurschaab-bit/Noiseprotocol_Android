@@ -207,6 +207,9 @@ class AppContainer(
             dokumentationsFotoDao = database.dokumentationsFotoDao(),
             beweisVideoDao = database.beweisVideoDao(),
             diagnosticsReporter = diagnosticsReporter,
+            datenbankSicherungQuelle = {
+                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsBytes(context.applicationContext, settingsManager)
+            },
         )
     }
 

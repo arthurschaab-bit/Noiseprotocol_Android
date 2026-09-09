@@ -229,6 +229,20 @@ class GoogleDriveApiClient(
         Unit
     }
 
+    override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> = mitToken { token ->
+        val url = "$basisUrl/drive/v3/files/$fileId".toHttpUrl().newBuilder()
+            .addQueryParameter("alt", "media")
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        fuehreAusBytes(request)
+    }
+
     override suspend fun dateiHochladenResumable(
         name: String,
         ordnerId: String,
@@ -450,6 +464,34 @@ class GoogleDriveApiClient(
                         val rumpf = it.body?.string().orEmpty()
                         if (it.isSuccessful) {
                             fortsetzung.resumeWith(Result.success(rumpf))
+                        } else {
+                            fortsetzung.resumeWithException(
+                                DriveApiException("Drive antwortete mit HTTP ${it.code}", httpCode = it.code)
+                            )
+                        }
+                    }
+                }
+            })
+        }
+
+    /**
+     * Wie [fuehreAus], liefert aber die rohen Bytes des Antwortkoerpers statt eines Strings.
+     * [okhttp3.ResponseBody.string] dekodiert ueber ein Charset - fuer eine binaere ZIP-Sicherung
+     * (siehe [dateiHerunterladen]) waere das Datenverlust, kein blosser Umweg.
+     */
+    private suspend fun fuehreAusBytes(request: Request): ByteArray =
+        suspendCancellableCoroutine { fortsetzung ->
+            val call = client.newCall(request)
+            fortsetzung.invokeOnCancellation { runCatching { call.cancel() } }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: java.io.IOException) {
+                    fortsetzung.resumeWithException(DriveApiException("Drive nicht erreichbar", cause = e))
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (it.isSuccessful) {
+                            fortsetzung.resumeWith(Result.success(it.body?.bytes() ?: ByteArray(0)))
                         } else {
                             fortsetzung.resumeWithException(
                                 DriveApiException("Drive antwortete mit HTTP ${it.code}", httpCode = it.code)

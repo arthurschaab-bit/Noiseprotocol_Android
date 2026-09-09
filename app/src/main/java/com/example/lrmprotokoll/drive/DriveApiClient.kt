@@ -110,4 +110,13 @@ interface DriveApiClient {
         mimeType: String,
         gzip: Boolean = false,
     ): Result<Unit>
+
+    /**
+     * Laedt den rohen Inhalt einer Datei herunter (`alt=media`) - Gegenstueck zu [dateiAnlegen]
+     * fuer die Datenbank-Wiederherstellung aus Drive (Owner-Entscheidung 09.09.2026, siehe
+     * [com.example.lrmprotokoll.drive.DriveDatenbankSicherung]). Die Sicherungsdatei ist wie die
+     * taegliche CSV klein genug fuer den einfachen, nicht-gestreamten Weg - anders als beim
+     * Video-Upload gibt es hier keine 200-MB-Groessenordnung.
+     */
+    suspend fun dateiHerunterladen(fileId: String): Result<ByteArray>
 }

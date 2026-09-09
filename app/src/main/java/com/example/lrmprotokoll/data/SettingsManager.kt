@@ -381,6 +381,19 @@ class SettingsManager(
         get() = prefs.getBoolean("foto_doku_drive_upload", true)
         set(value) = prefs.edit().putBoolean("foto_doku_drive_upload", value).apply()
 
+    /**
+     * Automatische, vollstaendige Datenbank-Sicherung nach Drive (`<Ordner>/BACKUP/`), Default
+     * AN - Owner-Entscheidung 09.09.2026 nach Datenverlust durch Deinstallation: Die taegliche
+     * CSV ist fuer eine echte Wiederherstellung zu grob, deshalb zusaetzlich ein verlustfreies
+     * Abbild der gesamten Datenbank (siehe [com.example.lrmprotokoll.drive.DriveDatenbankSicherung]).
+     * Anders als bei Fotos/Videos keine besondere Datenschutz-Erwaegung (keine Bilder/Ton), aber
+     * ein eigener Schalter analog zu [fotoDokuDriveUpload]/[videoDriveUpload], falls jemand die
+     * automatische Sicherung dennoch nicht will.
+     */
+    var datenbankSicherungDriveUpload: Boolean
+        get() = prefs.getBoolean("datenbank_sicherung_drive_upload", true)
+        set(value) = prefs.edit().putBoolean("datenbank_sicherung_drive_upload", value).apply()
+
     // ---------------------------------------------------------------- M11: Videobeweis
 
     /**

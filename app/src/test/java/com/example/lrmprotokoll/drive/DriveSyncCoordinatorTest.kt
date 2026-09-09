@@ -20,6 +20,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -125,6 +126,9 @@ class DriveSyncCoordinatorTest {
             letzterAktualisierterInhalt = inhalt
             return dateiAktualisierenErgebnis
         }
+
+        override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> =
+            throw NotImplementedError("im Test nicht benoetigt")
 
         override suspend fun dateiHochladenResumable(
             name: String,
@@ -602,6 +606,67 @@ class DriveSyncCoordinatorTest {
         val ergebnis = koordinatorMitVideos(dao, client).syncEinenZyklus()
 
         assertEquals(0, client.aufrufe)
+        assertTrue(ergebnis !is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen)
+    }
+
+    // ---------------------------------------------------------------- Datenbank-Sicherung (Drive)
+
+    private fun koordinatorMitDatenbankSicherung(quelle: (suspend () -> ByteArray)?) = DriveSyncCoordinator(
+        driveApi = driveApi, levelSampleDao = levelSampleDao, dailyFileDao = dailyFileDao,
+        noiseDao = noiseDao, settings = settings, now = uhr, zone = zone,
+        datenbankSicherungQuelle = quelle,
+    )
+
+    @Test
+    fun ohneQuelleGehtKeineDatenbankSicherungRaus() = runTest {
+        // datenbankSicherungQuelle ist optional (wie dokumentationsFotoDao/beweisVideoDao) -
+        // `null` (der Default in AppContainer NICHT gesetzt) darf den Zyklus nicht crashen.
+        koordinatorMitDatenbankSicherung(null).syncEinenZyklus()
+
+        assertEquals(0, driveApi.anlegenAufrufe)
+        assertEquals(0, driveApi.aktualisierenAufrufe)
+    }
+
+    @Test
+    fun beiDeaktiviertemSchalterGehtKeineDatenbankSicherungRausObwohlEineQuelleDaIst() = runTest {
+        settings.datenbankSicherungDriveUpload = false
+        var quelleAufgerufen = false
+
+        koordinatorMitDatenbankSicherung({ quelleAufgerufen = true; byteArrayOf(1) }).syncEinenZyklus()
+
+        assertTrue("Die Quelle darf gar nicht erst aufgerufen werden", !quelleAufgerufen)
+        assertEquals(0, driveApi.anlegenAufrufe)
+    }
+
+    @Test
+    fun mitAktiviertemSchalterWirdDieDatenbankSicherungHochgeladen() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        val bytes = byteArrayOf(1, 2, 3, 4)
+
+        koordinatorMitDatenbankSicherung({ bytes }).syncEinenZyklus()
+
+        assertEquals(1, driveApi.anlegenAufrufe)
+        assertArrayEquals(bytes, driveApi.letzterAktualisierterInhalt)
+    }
+
+    @Test
+    fun eineBestehendeSicherungWirdAktualisiertStattEinerZweiten() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        driveApi.dateiSuchenErgebnis = Result.success(DriveDatei(id = "bestehend", name = BACKUP_DATEINAME))
+
+        koordinatorMitDatenbankSicherung({ byteArrayOf(9) }).syncEinenZyklus()
+
+        assertEquals(0, driveApi.anlegenAufrufe)
+        assertEquals(1, driveApi.aktualisierenAufrufe)
+    }
+
+    @Test
+    fun einFehlerBeimErstellenDerSicherungReisstDenRestDesZyklusNichtMit() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+
+        val ergebnis = koordinatorMitDatenbankSicherung({ throw java.io.IOException("Checkpoint fehlgeschlagen") })
+            .syncEinenZyklus()
+
         assertTrue(ergebnis !is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen)
     }
 }
