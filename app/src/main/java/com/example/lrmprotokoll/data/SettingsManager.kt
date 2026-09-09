@@ -407,16 +407,18 @@ class SettingsManager(
         set(value) = prefs.edit().putString("video_aufloesung", value).apply()
 
     /**
-     * Drive-Upload fuer Beweisvideos. Default **AUS** - bewusst anders als [driveUploadWav] und
-     * [fotoDokuDriveUpload].
+     * Drive-Upload fuer Beweisvideos. Default **AN** (Owner-Entscheidung nach Datenverlust durch
+     * Deinstallation, 09.09.2026) - vorher bewusst AUS, siehe unten.
      *
      * Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen, und zwar bewegt und mit
-     * Ton. Das ist die datenschutzsensibelste Datenart der gesamten App; sie ohne ausdrueckliche
-     * Zustimmung in eine Cloud zu schieben, waere die falsche Voreinstellung. Dazu kommt die
-     * schiere Groesse: ein einziger Clip uebersteigt das Datenvolumen eines ganzen Messtages.
+     * Ton. Das war der Grund fuer die urspruengliche Default-AUS-Einstellung; der Owner hat sich
+     * jedoch ausdruecklich dafuer entschieden, den Datenschutz-Vorteil gegen das Risiko eines
+     * vollstaendigen Datenverlusts bei App-Deinstallation abzuwaegen und Video-Upload wie WAV und
+     * Fotos standardmaessig zu aktivieren. Weiterhin nur ein Schalter in den Einstellungen, kein
+     * Zwang - wer widerspricht, kann ihn jederzeit wieder ausschalten.
      */
     var videoDriveUpload: Boolean
-        get() = prefs.getBoolean("video_drive_upload", false)
+        get() = prefs.getBoolean("video_drive_upload", true)
         set(value) = prefs.edit().putBoolean("video_drive_upload", value).apply()
 
     // ---------------------------------------------------------------- M6: Sicherheit

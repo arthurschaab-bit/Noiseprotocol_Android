@@ -275,9 +275,13 @@ vom 04.09.2026:
   Zeitraum. Gelöscht werden dabei nur die Dateien, nicht die Protokolleinträge; Dateien der
   letzten fünf Minuten bleiben immer erhalten, weil während einer laufenden Messung gerade an
   ihnen geschrieben wird.
-- **Der Video-Upload nach Google Drive ist standardmäßig AUS** — bewusst anders als WAV und
-  Fotos. Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen und ist um ein Vielfaches
-  größer als alles andere, was die App speichert.
+- **Der Video-Upload nach Google Drive ist seit 09.09.2026 standardmäßig AN**, wie WAV und
+  Fotos — vorher bewusst AUS, weil ein Video Dritte, Kennzeichen und Wohnungsinneres zeigen kann
+  und um ein Vielfaches größer ist als alles andere, was die App speichert. Nach einem
+  Totalverlust durch Deinstallation hat der Owner sich ausdrücklich für „lieber alles in Drive"
+  entschieden; der Schalter in den Einstellungen bleibt bestehen, wer widersprechen will, kann
+  ihn weiterhin ausschalten. Fotos und Videos werden außerdem sofort nach Aufnahme/Mux
+  hochgeladen statt erst im nächsten 30-Minuten-Zyklus (wie WAV schon vorher).
 - **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) und M7c (Live-Dashboard,
   NavigationBar, Pegelverlauf-Chart) sind mangels Emulator in dieser Entwicklungsumgebung nicht
   visuell geprüft** — wohl aber durch echte Compose-UI-Tests unter Robolectric gegen die

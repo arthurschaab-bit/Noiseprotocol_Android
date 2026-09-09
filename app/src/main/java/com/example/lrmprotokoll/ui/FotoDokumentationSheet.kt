@@ -88,6 +88,10 @@ fun FotoDokumentationSheet(
             if (id != null) {
                 gezaehlt.value = gezaehlt.value + (kategorie to (gezaehlt.value[kategorie] ?: 0) + 1)
                 notiz = ""
+                // Nicht auf den naechsten 30-Minuten-Zyklus warten: ein Foto ist Beweismaterial
+                // und soll wie eine WAV-Aufnahme (AudioRecordingService) sofort synchronisiert
+                // werden, bevor z.B. eine Deinstallation es unwiderruflich lokal loescht.
+                com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(context)
             }
         }
     }
