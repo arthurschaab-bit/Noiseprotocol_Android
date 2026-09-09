@@ -510,9 +510,12 @@ class DriveSyncCoordinatorTest {
     )
 
     @Test
-    fun ohneAusdrucklicheZustimmungGehtKeinVideoRaus() = runTest {
-        // videoDriveUpload ist bewusst default AUS: Ein Video kann Dritte, Kennzeichen und
-        // Wohnungsinneres zeigen - die datenschutzsensibelste Datenart der App.
+    fun beiDeaktiviertemVideoUploadGehtKeinVideoRaus() = runTest {
+        // videoDriveUpload ist seit 09.09.2026 default AN (Owner-Entscheidung), aber weiterhin
+        // abschaltbar: Ein Video kann Dritte, Kennzeichen und Wohnungsinneres zeigen - die
+        // datenschutzsensibelste Datenart der App. Wer widerspricht, muss wirksam widersprechen
+        // koennen.
+        settings.videoDriveUpload = false
         val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath)))
         val client = ResumableClient(driveApi)
 

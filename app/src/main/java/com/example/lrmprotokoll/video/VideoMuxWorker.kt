@@ -99,6 +99,10 @@ class VideoMuxWorker @JvmOverloads constructor(
                 runCatching { stumm.delete() }
                 runCatching { pcm.delete() }
                 diagnose.breadcrumb("Videobeweis", "Mux-Lauf fertig (Video $videoId, $groesse Bytes)")
+                // Erst ab hier ist das Video ueberhaupt hochladbar (nichtHochgeladene() verlangt
+                // tonGemuxt). Nicht auf den naechsten 30-Minuten-Zyklus warten - dasselbe Prinzip
+                // wie beim sofortigen Sync nach einer WAV-Aufnahme.
+                com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(applicationContext)
                 Result.success()
             },
             onFailure = { fehler ->

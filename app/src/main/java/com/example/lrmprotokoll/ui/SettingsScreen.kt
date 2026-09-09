@@ -1606,9 +1606,10 @@ fun SettingsScreen(
                     })
                 }
                 Text(
-                    "Standardmäßig aus – anders als bei Audio und Fotos. Ein Video kann Dritte, " +
-                        "Kennzeichen und Wohnungsinneres zeigen und ist dabei um ein Vielfaches " +
-                        "größer als alles andere, was die App speichert.",
+                    "Standardmäßig an, wie Audio und Fotos. Ein Video kann Dritte, Kennzeichen " +
+                        "und Wohnungsinneres zeigen und ist dabei um ein Vielfaches größer als " +
+                        "alles andere, was die App speichert – wer das nicht möchte, kann hier " +
+                        "widersprechen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
