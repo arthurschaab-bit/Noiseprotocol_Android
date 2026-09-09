@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -261,6 +262,34 @@ class GoogleDriveApiClientTest {
         assertEquals("PATCH", anfrage.method)
         assertEquals("/upload/drive/v3/files/datei-1?uploadType=media", anfrage.path)
         assertEquals("neuer Inhalt", anfrage.body.readUtf8())
+    }
+
+    @Test
+    fun dateiHerunterladenSendetAltMediaUndLiefertRoheBytes() = runTest {
+        // Absichtlich Bytes, die kein gueltiges UTF-8 sind (0xFF, 0x00) - waeren sie ueber
+        // ResponseBody.string() gelaufen, waere das Ergebnis lautlos verstuemmelt, nicht nur
+        // "anders". Genau das soll dateiHerunterladen (anders als fuehreAus) vermeiden.
+        val roheBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0xFF.toByte(), 0x00, 0x7A, 0x69, 0x70)
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(roheBytes)))
+
+        val ergebnis = client.dateiHerunterladen("datei-1")
+
+        assertTrue(ergebnis.isSuccess)
+        assertArrayEquals(roheBytes, ergebnis.getOrThrow())
+        val anfrage = server.takeRequest()
+        assertEquals("GET", anfrage.method)
+        assertEquals("/drive/v3/files/datei-1?alt=media", anfrage.path)
+        assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
+    }
+
+    @Test
+    fun dateiHerunterladenBeiHttpFehlerLiefertDriveApiException() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404))
+
+        val ergebnis = client.dateiHerunterladen("weg")
+
+        assertTrue(ergebnis.isFailure)
+        assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
     }
 
     @Test

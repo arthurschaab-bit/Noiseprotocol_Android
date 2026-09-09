@@ -37,6 +37,14 @@ class DriveSyncCoordinator(
     /** Wie [dokumentationsFotoDao]: `null` heisst "keine Videos hochladen" (M11 Etappe B). */
     private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
     private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
+    /**
+     * Liefert die Datenbanksicherung als ZIP-Bytes (siehe [DriveDatenbankSicherung]). `null`
+     * heisst "keine automatische Datenbank-Sicherung" - wie [dokumentationsFotoDao]/
+     * [beweisVideoDao] optional, damit bestehende Test-Aufbauten nicht alle ein weiteres Fake
+     * mitschleppen muessen. Als Funktion statt eines direkten [android.content.Context]-Zugriffs,
+     * damit der Koordinator selbst ohne Android-Abhaengigkeit bleibt und testbar.
+     */
+    private val datenbankSicherungQuelle: (suspend () -> ByteArray)? = null,
 ) {
 
     /**
@@ -102,6 +110,7 @@ class DriveSyncCoordinator(
         // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
         ladeFotosHoch(ordnerId)
         ladeVideosHoch(ordnerId)
+        ladeDatenbankSicherungHoch(ordnerId)
 
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
@@ -366,6 +375,29 @@ class DriveSyncCoordinator(
                 }
             }
         }
+    }
+
+    /**
+     * Spiegelt die komplette Datenbank nach `<Ordner>/BACKUP/` (siehe [DriveDatenbankSicherung])
+     * - eigener Schalter [SettingsManager.datenbankSicherungDriveUpload], eigenes `runCatching`:
+     * Ein Fehlschlag hier darf CSV/WAV/Foto/Video-Sync desselben Zyklus nie mitreissen, genau wie
+     * bei [ladeFotosHoch]/[ladeVideosHoch].
+     */
+    private suspend fun ladeDatenbankSicherungHoch(ordnerId: String) {
+        if (!settings.datenbankSicherungDriveUpload) return
+        val quelle = datenbankSicherungQuelle ?: return
+
+        val bytes = runCatching { quelle() }.getOrElse { fehler ->
+            diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung konnte nicht erstellt werden: ${fehler.message}")
+            return
+        }
+        DriveDatenbankSicherung.hochladen(driveApi, ordnerId, bytes)
+            .onSuccess {
+                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${bytes.size} Bytes)")
+            }
+            .onFailure { fehler ->
+                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung-Upload fehlgeschlagen: ${fehler.message}")
+            }
     }
 
     private suspend fun schreibeDatei(

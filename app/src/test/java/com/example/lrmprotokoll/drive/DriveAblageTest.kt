@@ -78,6 +78,8 @@ class DriveAblageTest {
         override suspend fun dateiAktualisieren(
             fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
         ) = Result.success(Unit)
+        override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> =
+            throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun dateiHochladenResumable(
             name: String, ordnerId: String, datei: java.io.File, mimeType: String,
             fortsetzenAb: String?, sessionGestartet: suspend (String) -> Unit,

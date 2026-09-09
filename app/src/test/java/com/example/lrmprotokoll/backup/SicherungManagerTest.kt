@@ -110,4 +110,39 @@ class SicherungManagerTest {
         assertTrue(wiederhergestellteDao.getAlleAktiven().any { it.timestamp == eindeutigerZeitstempel })
         assertEquals("sicherung-test-topic", zielSettings.ntfyTopic)
     }
+
+    /**
+     * [SicherungManager.baueSicherungsBytes]/[SicherungManager.spieleSicherungBytesEin] direkt
+     * auf Bytes statt eines SAF-[Uri] - der Weg, den die automatische Drive-Sicherung
+     * ([com.example.lrmprotokoll.drive.DriveDatenbankSicherung]) nutzt. [erstelleSicherung]/
+     * [spieleSicherungEin] sind seit diesem Refactor nur noch duenne Uri-Wrapper darum - dieser
+     * Test belegt, dass die eigentliche Sicherungslogik auch ohne Uri denselben Roundtrip liefert.
+     */
+    @Test
+    fun baueUndSpieleSicherungsBytesEinUebertraegtAufnahmen() = runTest {
+        AppDatabase.resetInstance()
+        val dao = AppDatabase.getDatabase(context).noiseDao()
+        val eindeutigerZeitstempel = 1_800_100_000_000L + System.nanoTime() % 1_000_000L
+        dao.insert(
+            NoiseRecord(
+                timestamp = eindeutigerZeitstempel,
+                amplitude = 0.0,
+                dbValue = 65.0,
+                filePath = "",
+                label = "SicherungManagerTest-Bytes-Marker",
+            )
+        )
+
+        val zipBytes = SicherungManager.baueSicherungsBytes(context, neueSettings())
+        assertTrue(zipBytes.isNotEmpty())
+
+        dao.deleteMultiple(dao.getAlleAktiven().filter { it.timestamp == eindeutigerZeitstempel }.map { it.id })
+        assertTrue(dao.getAlleAktiven().none { it.timestamp == eindeutigerZeitstempel })
+
+        val restoreErgebnis = SicherungManager.spieleSicherungBytesEin(context, zipBytes, neueSettings())
+        assertTrue(restoreErgebnis.erfolg)
+
+        val wiederhergestellteDao = AppDatabase.getDatabase(context).noiseDao()
+        assertTrue(wiederhergestellteDao.getAlleAktiven().any { it.timestamp == eindeutigerZeitstempel })
+    }
 }

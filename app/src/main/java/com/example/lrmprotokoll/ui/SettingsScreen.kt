@@ -188,6 +188,12 @@ fun SettingsScreen(
     var sicherungLaeuft by remember { mutableStateOf(false) }
     var ausstehendeWiederherstellungUri by remember { mutableStateOf<Uri?>(null) }
 
+    // Datenbank-Sicherung aus Drive (Owner-Entscheidung 09.09.2026): manuell auf Knopfdruck,
+    // kein automatischer Download beim Sync - eine Wiederherstellung ist immer destruktiv
+    // (ueberschreibt die lokale Datenbank), das soll nie ungefragt passieren.
+    var ausstehendeDriveWiederherstellung by remember { mutableStateOf(false) }
+    var driveWiederherstellungLaeuft by remember { mutableStateOf(false) }
+
     suspend fun verarbeiteDriveEinrichtungsVersuch(ordner: String = driveOrdnerName) {
         when (val versuch = versucheDriveEinrichtung(container, settings, ordner, context)) {
             is DriveEinrichtungsVersuch.Erfolg -> {
@@ -1250,10 +1256,81 @@ fun SettingsScreen(
                 ) {
                     Text(stringResource(R.string.settings_backup_restore))
                 }
-                if (sicherungLaeuft) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { ausstehendeDriveWiederherstellung = true },
+                    enabled = !sicherungLaeuft && !driveWiederherstellungLaeuft && driveOrdnerId != null,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Von Drive wiederherstellen")
+                }
+                if (driveOrdnerId == null) {
+                    Text(
+                        "Erst verfügbar, wenn Drive-Sync eingerichtet ist.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (sicherungLaeuft || driveWiederherstellungLaeuft) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
+            }
+
+            if (ausstehendeDriveWiederherstellung) {
+                AlertDialog(
+                    onDismissRequest = { ausstehendeDriveWiederherstellung = false },
+                    title = { Text(stringResource(R.string.settings_backup_restore_warning_title)) },
+                    text = {
+                        Text(
+                            stringResource(R.string.settings_backup_restore_warning_text) +
+                                " Die Sicherung wird zuerst von Google Drive heruntergeladen."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            ausstehendeDriveWiederherstellung = false
+                            val ordnerId = driveOrdnerId
+                            scope.launch {
+                                driveWiederherstellungLaeuft = true
+                                val ergebnis = if (ordnerId == null) {
+                                    com.example.lrmprotokoll.backup.SicherungsErgebnis(false, "Kein Drive-Ordner eingerichtet.")
+                                } else {
+                                    val heruntergeladen = withContext(Dispatchers.IO) {
+                                        com.example.lrmprotokoll.drive.DriveDatenbankSicherung.herunterladen(
+                                            container.driveApiClient, ordnerId,
+                                        )
+                                    }
+                                    heruntergeladen.fold(
+                                        onSuccess = { bytes -> SicherungManager.spieleSicherungBytesEin(context, bytes, settings) },
+                                        onFailure = { fehler ->
+                                            com.example.lrmprotokoll.backup.SicherungsErgebnis(
+                                                false, "Herunterladen fehlgeschlagen: ${fehler.message}",
+                                            )
+                                        },
+                                    )
+                                }
+                                driveWiederherstellungLaeuft = false
+                                if (ergebnis.erfolg) {
+                                    SicherungManager.starteNeustart(context)
+                                } else {
+                                    onShowSnackbar?.invoke(ergebnis.nachricht)
+                                }
+                            }
+                        }) {
+                            Text(
+                                stringResource(R.string.settings_backup_restore_confirm),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { ausstehendeDriveWiederherstellung = false }) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                    }
+                )
             }
 
             ausstehendeWiederherstellungUri?.let { uri ->
