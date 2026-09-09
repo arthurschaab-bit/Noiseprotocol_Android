@@ -79,7 +79,30 @@ class AudioRecordingService : LifecycleService() {
     data class Aufnahmeformat(val abtastrate: Int, val kanaele: Int)
 
     private val serviceJob = SupervisorJob()
-    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+
+    // CoroutineExceptionHandler als zweites Netz (dasselbe Prinzip wie
+    // AppContainer.connectionSupervisorScope, Review-Befund 2, PR #16): der Mikrofon-Lese-/
+    // Schreibpfad in startMonitoring() faengt seine bekannten Fehlerquellen selbst ab, aber ohne
+    // Handler hier wuerde eine Ausnahme aus einem uebersehenen Pfad isRunning/_audioAufnahmeAktiv
+    // unbemerkt auf "aktiv" einfrieren, statt wenigstens geloggt zu werden - der SupervisorJob
+    // haelt den Scope zwar am Leben, aber nur der Handler verhindert, dass der Fehler spurlos
+    // verschwindet.
+    private val serviceScope = CoroutineScope(
+        Dispatchers.IO + serviceJob + CoroutineExceptionHandler { _, throwable ->
+            Log.e("AudioRecordingService", "Unerwarteter Fehler im serviceScope", throwable)
+            if (::diagnosticsReporter.isInitialized) {
+                diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.APP_UNCAUGHT,
+                    component = "AudioRecordingService",
+                    operation = "serviceScope",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                    handled = false,
+                    cause = throwable,
+                    message = "Unerwarteter Fehler im serviceScope",
+                )
+            }
+        }
+    )
 
     private var isForegroundActive = false
     /** Soll die Audio-Schleife laufen? Der echte Zustand steht in [_audioAufnahmeAktiv]. */
@@ -525,6 +548,7 @@ class AudioRecordingService : LifecycleService() {
             val buffer = ShortArray(bufferSize / 2)
             val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
             var unerwarteterReadFehler: Int? = null
+            var unerwarteterSchreibFehler: Throwable? = null
 
             while (isRunning) {
                 val readSize = audioRecord.read(buffer, 0, buffer.size)
@@ -540,14 +564,36 @@ class AudioRecordingService : LifecycleService() {
 
                     val pcmBytes = tempByteBuffer.array()
                     val pcmLen = readSize * 2
-                    updateRollingBuffer()
-                    writeToRollingBuffer(pcmBytes, pcmLen)
 
-                    activeWavRecorder?.let { rec ->
-                        rec.writeChunk(pcmBytes, pcmLen)
-                        if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
+                    // Schreibfehler (z.B. Speicher voll waehrend rec.writeChunk) duerfen diese
+                    // Coroutine nicht ungefangen verlassen: serviceScope hat keinen
+                    // CoroutineExceptionHandler, eine hier durchschlagende Exception wuerde also
+                    // isRunning/_audioAufnahmeAktiv auf "aktiv" einfrieren, ohne dass die
+                    // Aufraeumroutine unten je laeuft - genau der Zustand, den
+                    // pruefeAudioSollIstAbweichung() eigentlich erkennen soll. Deshalb derselbe
+                    // saubere Abbruchpfad wie bei einem echten AudioRecord.read-Fehler.
+                    try {
+                        updateRollingBuffer()
+                        writeToRollingBuffer(pcmBytes, pcmLen)
+
+                        activeWavRecorder?.let { rec ->
+                            rec.writeChunk(pcmBytes, pcmLen)
+                            if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
+                        }
+                        videoTonMitschnitt.schreibe(pcmBytes, pcmLen, System.currentTimeMillis())
+                    } catch (e: Throwable) {
+                        unerwarteterSchreibFehler = e
+                        diagnosticsReporter.report(
+                            code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FILE_WRITE_FAILED,
+                            component = "AudioRecordingService",
+                            operation = "writeChunk",
+                            severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                            cause = e,
+                            details = mapOf("meterState" to connectionSupervisor.state.value.name),
+                        )
+                        isRunning = false
+                        continue
                     }
-                    videoTonMitschnitt.schreibe(pcmBytes, pcmLen, System.currentTimeMillis())
 
                     val currentDb = calculateDb(buffer, readSize)
                     letzterMikrofonDb = currentDb
@@ -587,6 +633,7 @@ class AudioRecordingService : LifecycleService() {
                 "Mikrofon-Monitoring beendet",
                 data = mapOf(
                     "readFehler" to unerwarteterReadFehler,
+                    "schreibFehler" to unerwarteterSchreibFehler?.javaClass?.simpleName,
                     "audioWeiterErwartet" to settingsManager.audioMonitoringWasActive,
                     "meterState" to connectionSupervisor.state.value.name,
                 ),
@@ -597,10 +644,11 @@ class AudioRecordingService : LifecycleService() {
             audioRecord.release()
             NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
 
-            // Ein echter Read-Fehler soll nicht zu einem "halb lebenden" Dienst fuehren. Durch
-            // START_STICKY + AudioStartPolicy wird der zuvor aktive Audiopfad beim Recreate
-            // wieder aufgenommen; das Diagnose-Bundle enthaelt gleichzeitig den exakten Grund.
-            if (unerwarteterReadFehler != null && settingsManager.audioMonitoringWasActive) {
+            // Ein echter Read- oder Schreibfehler soll nicht zu einem "halb lebenden" Dienst
+            // fuehren. Durch START_STICKY + AudioStartPolicy wird der zuvor aktive Audiopfad beim
+            // Recreate wieder aufgenommen; das Diagnose-Bundle enthaelt gleichzeitig den exakten
+            // Grund.
+            if ((unerwarteterReadFehler != null || unerwarteterSchreibFehler != null) && settingsManager.audioMonitoringWasActive) {
                 stopSelf()
             }
         }
