@@ -28,7 +28,10 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
+import com.example.lrmprotokoll.report.GesamtberichtExport
+import com.example.lrmprotokoll.report.GesamtberichtStammdaten
 import com.example.lrmprotokoll.report.PeriodenBerichtExport
+import com.example.lrmprotokoll.report.ermittleGesamtbericht
 import com.example.lrmprotokoll.report.ermittlePeriodenBericht
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,20 +59,34 @@ fun ProtokollScreen(
     val db = container.database
     val scope = rememberCoroutineScope()
     val periodenExport = remember { PeriodenBerichtExport(context) }
+    val gesamtberichtExport = remember { GesamtberichtExport(context) }
 
     var searchQuery by remember { mutableStateOf("") }
     var filterOnlyWithEvents by remember { mutableStateOf(false) }
     var zeigeZeitraumDialog by remember { mutableStateOf(false) }
     var zeitraumWirdErstellt by remember { mutableStateOf(false) }
+    // Owner-Anfrage 09.09.2026: derselbe Zeitraum-Dialog soll wahlweise den knappen
+    // Zeitraumbericht (bisher) oder den vollstaendigen Gesamtbericht mit Geraete-/
+    // Messaufbau-/Randbedingungsangaben aus den Einstellungen erzeugen.
+    var alsGesamtbericht by remember { mutableStateOf(false) }
 
     fun erstelleUndTeileZeitraumbericht(von: Long, bis: Long) {
         zeitraumWirdErstellt = true
         scope.launch {
-            val datei = withContext(Dispatchers.IO) {
-                val bericht = ermittlePeriodenBericht(db, von, bis)
-                periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
+            if (alsGesamtbericht) {
+                val datei = withContext(Dispatchers.IO) {
+                    val bericht = ermittleGesamtbericht(db, von, bis)
+                    val stammdaten = GesamtberichtStammdaten.ausEinstellungen(container.settingsManager)
+                    gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
+                }
+                gesamtberichtExport.teilen(datei)
+            } else {
+                val datei = withContext(Dispatchers.IO) {
+                    val bericht = ermittlePeriodenBericht(db, von, bis)
+                    periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
+                }
+                periodenExport.teilen(datei)
             }
-            periodenExport.teilen(datei)
             zeitraumWirdErstellt = false
             zeigeZeitraumDialog = false
         }
@@ -250,6 +267,26 @@ fun ProtokollScreen(
                     }
                 } else {
                     Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().testTag("switch_row_gesamtbericht"),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(stringResource(R.string.period_report_full_toggle))
+                                Text(
+                                    stringResource(R.string.period_report_full_toggle_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = alsGesamtbericht,
+                                onCheckedChange = { alsGesamtbericht = it },
+                                modifier = Modifier.testTag("switch_gesamtbericht"),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                         TextButton(onClick = {
                             val bis = System.currentTimeMillis()
                             erstelleUndTeileZeitraumbericht(bis - 7L * 24 * 60 * 60 * 1000, bis)

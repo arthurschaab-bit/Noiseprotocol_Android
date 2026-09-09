@@ -440,6 +440,8 @@
     <string name="period_report_preset_30_days">Last 30 days</string>
     <string name="period_report_preset_this_month">This month</string>
     <string name="period_report_generating">Generating report…</string>
+    <string name="period_report_full_toggle">Full comprehensive report</string>
+    <string name="period_report_full_toggle_hint">Includes device, setup, and condition details from Settings plus one page per measurement day.</string>
     <string name="widget_description">Shows monitoring status and the current level, tap to start/stop.</string>
     <string name="widget_status_active">Active</string>
     <string name="widget_status_inactive">Inactive</string>

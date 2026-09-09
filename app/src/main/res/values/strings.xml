@@ -440,6 +440,8 @@
     <string name="period_report_preset_30_days">Letzte 30 Tage</string>
     <string name="period_report_preset_this_month">Dieser Monat</string>
     <string name="period_report_generating">Bericht wird erstellt…</string>
+    <string name="period_report_full_toggle">Vollständiger Gesamtbericht</string>
+    <string name="period_report_full_toggle_hint">Mit Geräte-, Messaufbau- und Randbedingungsangaben aus den Einstellungen sowie einer eigenen Seite je Messtag.</string>
     <string name="widget_description">Zeigt Überwachungsstatus und aktuellen Pegel, tippen zum Starten/Stoppen.</string>
     <string name="widget_status_active">Aktiv</string>
     <string name="widget_status_inactive">Inaktiv</string>

@@ -139,8 +139,12 @@ class PeriodenBerichtExport(private val context: Context) {
  * eine einzelne Session mehrere Tage umfassen kann. Ohne Zoom/Pan (ein PDF ist statisch, das
  * Original bietet das nur fuer die interaktive Anzeige) und ohne den Live-Puls-Punkt (nur fuer die
  * laufende Aufzeichnung relevant, ein Periodenbericht schaut immer zurueck).
+ *
+ * `internal` statt `private`: [com.example.lrmprotokoll.report.GesamtberichtExport] zeichnet
+ * dieselben Pegelkurven fuer seine Tagesseiten - dieselbe Begruendung wie am Anfang dieser Datei
+ * (keine zweite Chart-Zeichenroutine neben dieser).
  */
-private fun zeichnePegelverlaufChart(
+internal fun zeichnePegelverlaufChart(
     canvas: Canvas,
     spalten: List<ChartSpalte>,
     ausfallbaender: List<Ausfallband>,

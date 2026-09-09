@@ -381,6 +381,81 @@ class SettingsManager(
         get() = prefs.getBoolean("foto_doku_drive_upload", true)
         set(value) = prefs.edit().putBoolean("foto_doku_drive_upload", value).apply()
 
+    // ---------------------------------------------------------------- Gesamtbericht: Stammdaten
+
+    /**
+     * Frei ausfuellbare Angaben zu Messgeraet, Messaufbau und Randbedingungen fuer den
+     * Gesamtbericht ([com.example.lrmprotokoll.report.GesamtberichtExport]). Alle Felder bleiben
+     * leer, bis der Nutzer sie in den Einstellungen ausfuellt - der Bericht zeigt dann
+     * "nicht angegeben" statt einen Wert zu erfinden (dieselbe Regel wie bei
+     * [SessionEntity.weighting]: eine unbestaetigte Angabe wird nicht durch einen Platzhalterwert
+     * ersetzt, der als bestaetigte Tatsache missverstanden werden koennte).
+     *
+     * Bewusst EIN Satz Angaben statt zeitraumabhaengiger Historie (z. B. "Mikrofonhoehe von X bis
+     * Y anders"): Ein Wechsel des Messaufbaus mitten in der Auswertung ist eine seltene Ausnahme,
+     * fuer die der Nutzer die Felder vor dem naechsten Berichtslauf manuell aktualisiert. Eine
+     * generische Zeitraum-Historie waere deutlich mehr UI/Datenmodell fuer einen Randfall.
+     */
+    var berichtGeraetHersteller: String
+        get() = prefs.getString("bericht_geraet_hersteller", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_geraet_hersteller", value).apply()
+
+    var berichtGeraetTyp: String
+        get() = prefs.getString("bericht_geraet_typ", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_geraet_typ", value).apply()
+
+    var berichtGeraetGenauigkeitsklasse: String
+        get() = prefs.getString("bericht_geraet_genauigkeitsklasse", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_geraet_genauigkeitsklasse", value).apply()
+
+    var berichtGeraetSeriennummer: String
+        get() = prefs.getString("bericht_geraet_seriennummer", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_geraet_seriennummer", value).apply()
+
+    /** Freitext, z.B. "94 dB(A) mit Kalibrator XY; vor Messung protokolliert am TT.MM.JJJJ". */
+    var berichtGeraetKalibrierung: String
+        get() = prefs.getString("bericht_geraet_kalibrierung", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_geraet_kalibrierung", value).apply()
+
+    var berichtMessort: String
+        get() = prefs.getString("bericht_messort", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_messort", value).apply()
+
+    var berichtMikrofonposition: String
+        get() = prefs.getString("bericht_mikrofonposition", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_mikrofonposition", value).apply()
+
+    var berichtMikrofonhoehe: String
+        get() = prefs.getString("bericht_mikrofonhoehe", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_mikrofonhoehe", value).apply()
+
+    var berichtEntfernungZurQuelle: String
+        get() = prefs.getString("bericht_entfernung_zur_quelle", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_entfernung_zur_quelle", value).apply()
+
+    var berichtInnenAussen: String
+        get() = prefs.getString("bericht_innen_aussen", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_innen_aussen", value).apply()
+
+    /** Nur bei Innenraummessungen relevant - bleibt sonst unbeachtet, auch wenn ausgefuellt. */
+    var berichtFensterzustand: String
+        get() = prefs.getString("bericht_fensterzustand", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_fensterzustand", value).apply()
+
+    /** Freitext, da die App keine Wetterstation anbindet - manuelle Angabe je nach Kenntnisstand. */
+    var berichtWetter: String
+        get() = prefs.getString("bericht_wetter", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_wetter", value).apply()
+
+    /**
+     * Ergaenzender Freitext zur Datenqualitaet (z.B. bekannte Messluecken-Ursachen). Die
+     * Datenverfuegbarkeit selbst wird aus den vorhandenen Ausfallbaendern berechnet, nicht hier
+     * eingetragen - dieses Feld ist nur fuer zusaetzlichen Kontext, den die App nicht kennt.
+     */
+    var berichtDatenqualitaetHinweis: String
+        get() = prefs.getString("bericht_datenqualitaet_hinweis", "") ?: ""
+        set(value) = prefs.edit().putString("bericht_datenqualitaet_hinweis", value).apply()
+
     /**
      * Automatische, vollstaendige Datenbank-Sicherung nach Drive (`<Ordner>/BACKUP/`), Default
      * AN - Owner-Entscheidung 09.09.2026 nach Datenverlust durch Deinstallation: Die taegliche
