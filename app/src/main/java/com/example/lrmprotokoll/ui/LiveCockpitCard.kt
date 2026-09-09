@@ -124,6 +124,17 @@ fun LiveCockpitCard(
     var showDisableWavConfirm by remember { mutableStateOf(false) }
     var showDisconnectBluetoothConfirm by remember { mutableStateOf(false) }
 
+    // Notification-Aktion "Stoppen" kann selbst keinen Dialog zeigen (siehe PendingUiAction) -
+    // sie signalisiert hierueber, dass derselbe Bestaetigungsdialog wie beim In-App-Button
+    // erscheinen soll, statt die Messung ungefragt zu beenden.
+    val stopConfirmationRequested by PendingUiAction.stopConfirmationRequested.collectAsState()
+    LaunchedEffect(stopConfirmationRequested) {
+        if (stopConfirmationRequested) {
+            showEndMeasurementConfirm = true
+            PendingUiAction.consumeStopConfirmationRequest()
+        }
+    }
+
     // Quick-Settings State
     var autoEventDetection by remember { mutableStateOf(settings.aiEnabled) }
     var audioSnippetEnabled by remember { mutableStateOf(settings.driveUploadWav) }

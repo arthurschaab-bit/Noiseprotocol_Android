@@ -102,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        behandleEingehendesIntent(intent)
         setContent {
             LaermprotokollTheme {
                 Surface(
@@ -119,6 +120,28 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        behandleEingehendesIntent(intent)
+    }
+
+    /**
+     * Reagiert auf die Notification-Aktion "Stoppen" (siehe
+     * [com.example.lrmprotokoll.audio.EXTRA_REQUEST_STOP_CONFIRMATION]): loest im Cockpit denselben
+     * Bestaetigungsdialog aus wie der In-App-Button "Messung beenden", statt die Messung direkt zu
+     * stoppen.
+     */
+    private fun behandleEingehendesIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(
+                com.example.lrmprotokoll.audio.EXTRA_REQUEST_STOP_CONFIRMATION,
+                false
+            ) == true
+        ) {
+            PendingUiAction.requestStopConfirmation()
         }
     }
 }

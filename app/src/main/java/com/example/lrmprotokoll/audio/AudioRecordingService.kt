@@ -52,6 +52,16 @@ private const val NOTIFICATION_CHANNEL_ID = "noise_monitoring_channel"
 const val EXTRA_START_AUDIO_MONITORING = "start_audio_monitoring"
 const val ACTION_START_AUDIO_MONITORING = "com.example.lrmprotokoll.START_AUDIO_MONITORING"
 const val ACTION_STOP_AUDIO_RECORDING = "com.example.lrmprotokoll.STOP_AUDIO_RECORDING"
+
+/**
+ * Bugfix (Owner-Feedback 09.09.2026): Die Notification-Aktion "Stoppen" schickte bisher direkt
+ * [ACTION_STOP_SERVICE] an den Dienst - ohne den Bestaetigungsdialog aus dem Cockpit zu
+ * durchlaufen, der genau vor dieser Unterbrechung einer laufenden Beweiserfassung warnen soll.
+ * Ein Service kann selbst keinen Compose-Dialog zeigen; die Notification oeffnet daher
+ * stattdessen die App mit diesem Extra, das das Cockpit anweist, denselben "Messung wirklich
+ * beenden?"-Dialog wie der In-App-Button einzublenden.
+ */
+const val EXTRA_REQUEST_STOP_CONFIRMATION = "request_stop_confirmation"
 const val ACTION_STOP_SERVICE = "STOP_SERVICE"
 
 class AudioRecordingService : LifecycleService() {
@@ -377,8 +387,17 @@ class AudioRecordingService : LifecycleService() {
     }
 
     private fun buildNotification(meterState: ConnectionState): Notification {
-        val stopIntent = Intent(this, AudioRecordingService::class.java).apply { action = ACTION_STOP_SERVICE }
-        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        // Oeffnet die App statt den Dienst direkt zu stoppen (siehe KDoc von
+        // EXTRA_REQUEST_STOP_CONFIRMATION): nur so kann der Bestaetigungsdialog erscheinen.
+        val stopIntent = Intent(this, com.example.lrmprotokoll.ui.MainActivity::class.java).apply {
+            putExtra(EXTRA_REQUEST_STOP_CONFIRMATION, true)
+        }
+        val stopPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         val contentText = stillerAusfallHinweis ?: leiteNotificationTextAb(
             istMessgeraetGepinnt = settingsManager.meterDeviceAddress != null,
