@@ -1,9 +1,13 @@
 package com.example.lrmprotokoll.standort
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.LocationManager
 import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +42,17 @@ interface StandortErmittlung {
 class GeraeteStandortErmittlung(private val context: Context) : StandortErmittlung {
 
     override fun aktuellerStandort(): Standort? {
+        // Explizite Pruefung statt sich auf den runCatching()-Aufrufer zu verlassen: Lint erkennt
+        // eine Berechtigungspruefung nur innerhalb derselben Methode, die den Location-Aufruf
+        // macht - siehe MissingPermission-Regel. Der Aufrufer (GesamtberichtStammdatenSheet)
+        // prueft/fragt die Berechtigung zusaetzlich VOR dem Aufruf an (siehe Klassen-KDoc), diese
+        // Pruefung hier ist die zweite, für den Compiler/Lint sichtbare Absicherung.
+        val berechtigt = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        if (!berechtigt) return null
+
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         val kandidaten = listOf(
             LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER,
@@ -61,6 +76,9 @@ class GeraeteStandortErmittlung(private val context: Context) : StandortErmittlu
         adressen?.firstOrNull()?.getAddressLine(0)
     }
 
+    // Ohne die Annotation sieht Lint den SDK_INT-Guard in adresseFuer() nicht ueber die
+    // Funktionsgrenze hinweg und meldet NewApi auf getFromLocation(..., GeocodeListener) (API 33).
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private suspend fun geocoderAsync(geocoder: Geocoder, standort: Standort) =
         suspendCancellableCoroutine { fortsetzung ->
             runCatching {
