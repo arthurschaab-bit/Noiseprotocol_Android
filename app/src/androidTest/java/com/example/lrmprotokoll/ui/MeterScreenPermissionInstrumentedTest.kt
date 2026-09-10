@@ -13,6 +13,7 @@ import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,6 +54,9 @@ class MeterScreenPermissionInstrumentedTest {
         BerechtigungsTestHelfer.gewaehre(Manifest.permission.BLUETOOTH_CONNECT)
     }
 
+    // CI-Fund 10.09.2026 (PR #132): siehe BerechtigungsTestHelfer-KDoc - entziehe() toetet den
+    // laufenden instrumentierten Prozess und reisst den gesamten Testlauf ab.
+    @Ignore("entziehe() toetet den instrumentierten Prozess und reisst den ganzen Testlauf ab - siehe BerechtigungsTestHelfer-KDoc")
     @Test
     fun ohneBerechtigungFragtDerScanButtonErstNachUndBesitztDanachDieBerechtigung() {
         BerechtigungsTestHelfer.entziehe(Manifest.permission.BLUETOOTH_SCAN)
