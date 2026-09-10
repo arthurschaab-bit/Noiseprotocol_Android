@@ -55,6 +55,30 @@ if [ "$api_level" -ge 31 ]; then
   faelle+=("com.example.lrmprotokoll.ui.MeterScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScanButtonErstNachUndBesitztDanachDieBerechtigung|android.permission.BLUETOOTH_SCAN,android.permission.BLUETOOTH_CONNECT")
 fi
 
+# CI-Fund 10.09.2026 (3. Iteration, PR #132): fuer ACCESS_COARSE_LOCATION blieb der
+# Berechtigungsdialog beim vorigen Lauf komplett aus (kein GrantPermissionsActivity im Logcat
+# im gesamten Testfenster) - der App-Code fragt nur, wenn checkSelfPermission() DENIED liefert,
+# also war die Berechtigung zum Startzeitpunkt des Tests offenbar noch (oder wieder) gewaehrt,
+# obwohl `pm revoke` vorher lief. Ursache noch nicht sicher geklaert (CAMERA revoked im selben
+# Skript zuverlaessig). Deshalb hier: nach jedem `pm revoke` per `dumpsys package` verifizieren,
+# bei Bedarf einmal wiederholen (kurze Wartezeit fuer moegliche Propagationsverzoegerung), und
+# das Ergebnis so oder so ins Log schreiben - naechster Fehlschlag zeigt dann die echte Ursache,
+# statt erneut zu raten.
+revoke_und_pruefe() {
+  local berechtigung="$1"
+  local versuch status_ausschnitt
+  for versuch in 1 2; do
+    adb shell pm revoke "$APP_ID" "$berechtigung" || true
+    status_ausschnitt=$(adb shell dumpsys package "$APP_ID" | grep -A1 "$berechtigung:" | tr -d '\r')
+    echo "pm revoke $berechtigung (Versuch $versuch) - dumpsys-Ausschnitt: $status_ausschnitt"
+    if echo "$status_ausschnitt" | grep -q "granted=false"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "::warning::$berechtigung liess sich laut dumpsys nicht als granted=false bestaetigen - Test laeuft trotzdem weiter, siehe Diagnose-Ausgabe oben."
+}
+
 fehlgeschlagen=0
 for eintrag in "${faelle[@]}"; do
   klasse_methode="${eintrag%%|*}"
@@ -65,7 +89,7 @@ for eintrag in "${faelle[@]}"; do
   adb shell am force-stop "$APP_ID" || true
   IFS=',' read -ra perms <<< "$berechtigungen"
   for p in "${perms[@]}"; do
-    adb shell pm revoke "$APP_ID" "$p" || true
+    revoke_und_pruefe "$p"
   done
 
   ausgabe=$(adb shell am instrument -w -e class "$klasse_methode" "$RUNNER" 2>&1)
