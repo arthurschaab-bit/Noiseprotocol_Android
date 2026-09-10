@@ -5,8 +5,10 @@ import android.content.pm.PackageManager
 import android.os.StatFs
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
+import androidx.camera.core.ZoomState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FallbackStrategy
 import androidx.camera.video.FileOutputOptions
@@ -18,6 +20,7 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,12 +58,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.BeweisVideoEntity
@@ -128,6 +133,12 @@ fun VideoAufnahmeScreen(
     /** Verhindert, dass die automatisch startende Aufnahme nach dem Stopp erneut anlaeuft. */
     var abgeschlossen by remember { mutableStateOf(false) }
 
+    // Zoomfunktion (Owner-Anfrage 10.09.2026): [camera] traegt cameraControl (zum Setzen) und
+    // cameraInfo.zoomState (zum Lesen von Verhaeltnis/Grenzen) - beides liefert erst
+    // bindToLifecycle(), deshalb hier separat vom [videoCapture] gehalten.
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var zoomState by remember { mutableStateOf<ZoomState?>(null) }
+
     val vorschau = remember { PreviewView(context) }
 
     DisposableEffect(kameraErlaubt) {
@@ -144,7 +155,7 @@ fun VideoAufnahmeScreen(
                     val preview = Preview.Builder().build().also { it.surfaceProvider = vorschau.surfaceProvider }
 
                     anbieter.unbindAll()
-                    anbieter.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
+                    camera = anbieter.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
                     videoCapture = capture
                 }.onFailure { fehler ->
                     // Ein Kamerafehler darf die laufende Pegelmessung unter keinen Umstaenden
@@ -167,6 +178,20 @@ fun VideoAufnahmeScreen(
             runCatching { aufnahme?.stop() }
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
             videoCapture = null
+            camera = null
+        }
+    }
+
+    // observeForever statt LiveData.observe(lifecycleOwner, ...): Der Lebenszyklus dieser
+    // Beobachtung soll an [camera] haengen (neu registrieren, sobald bindToLifecycle eine neue
+    // Kamera liefert), nicht an einem Compose-eigenen LifecycleOwner - DisposableEffect uebernimmt
+    // das Abmelden zuverlaessig genauso.
+    DisposableEffect(camera) {
+        val aktuelleKamera = camera
+        val beobachter = Observer<ZoomState> { zoomState = it }
+        aktuelleKamera?.cameraInfo?.zoomState?.observeForever(beobachter)
+        onDispose {
+            aktuelleKamera?.cameraInfo?.zoomState?.removeObserver(beobachter)
         }
     }
 
@@ -240,7 +265,20 @@ fun VideoAufnahmeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color.Black),
+                    .background(Color.Black)
+                    // Pinch-to-Zoom: setZoomRatio() statt setLinearZoom(), damit sich eine
+                    // Pinch-Geste 1:1 auf das optische/digitale Zoomverhaeltnis abbildet, das auch
+                    // der kleine Indikator unten anzeigt - mit setLinearZoom() (0..1) muesste
+                    // dieselbe Umrechnung an zwei Stellen dupliziert werden.
+                    .pointerInput(camera) {
+                        detectTransformGestures { _, _, zoomAenderung, _ ->
+                            val steuerung = camera?.cameraControl ?: return@detectTransformGestures
+                            val stand = zoomState ?: return@detectTransformGestures
+                            val neuesVerhaeltnis = (stand.zoomRatio * zoomAenderung)
+                                .coerceIn(stand.minZoomRatio, stand.maxZoomRatio)
+                            steuerung.setZoomRatio(neuesVerhaeltnis)
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 if (kameraErlaubt) {
@@ -248,6 +286,24 @@ fun VideoAufnahmeScreen(
                         factory = { vorschau },
                         modifier = Modifier.fillMaxSize(),
                     )
+                    zoomState?.let { stand ->
+                        if (stand.maxZoomRatio > stand.minZoomRatio) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                Text(
+                                    text = String.format(java.util.Locale.getDefault(), "%.1f×", stand.zoomRatio),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Text("Kamera-Berechtigung erforderlich", color = Color.White)
                 }
