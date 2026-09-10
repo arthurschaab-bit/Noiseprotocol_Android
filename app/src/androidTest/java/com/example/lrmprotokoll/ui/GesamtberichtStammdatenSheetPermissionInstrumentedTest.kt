@@ -9,7 +9,6 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
 import org.junit.After
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,12 +37,13 @@ class GesamtberichtStammdatenSheetPermissionInstrumentedTest {
         BerechtigungsTestHelfer.gewaehre(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
-    // CI-Fund 10.09.2026 (PR #132): siehe BerechtigungsTestHelfer-KDoc - entziehe() toetet den
-    // laufenden instrumentierten Prozess und reisst den gesamten Testlauf ab.
-    @Ignore("entziehe() toetet den instrumentierten Prozess und reisst den ganzen Testlauf ab - siehe BerechtigungsTestHelfer-KDoc")
+    // Vorbedingung "ACCESS_COARSE_LOCATION nicht gewaehrt" kommt von aussen per
+    // `adb shell pm revoke`, siehe BerechtigungsTestHelfer-KDoc und
+    // .github/workflows/emulator-tests.yml (CI-Fund 10.09.2026/PR #132). Ueber
+    // `./gradlew connectedDebugAndroidTest` allein schlaegt dieser Test fehl, weil die
+    // Berechtigung dann bereits gewaehrt ist (AGP `pm install -g`).
     @Test
     fun ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand() {
-        BerechtigungsTestHelfer.entziehe(Manifest.permission.ACCESS_COARSE_LOCATION)
         composeRule.setContent { GesamtberichtStammdatenSheet(sessionId = sessionId, onFertig = {}) }
         composeRule.waitForIdle()
 
