@@ -415,7 +415,10 @@ fun NoiseProtocolApp(
     stammdatenSheetFuerSession?.let { id ->
         GesamtberichtStammdatenSheet(sessionId = id, onFertig = { stammdatenSheetFuerSession = null })
     }
-    val classifier = remember { NoiseClassifier(context) }
+    // Lazy statt sofort per remember: siehe Begruendung in ProtokollDetailScreen.kt - der
+    // init-Block von NoiseClassifier laedt synchron das YAMNet-Modell und wird hier nur bei
+    // tatsaechlicher Klassifizierung gebraucht (alle Aufrufstellen unten sind in scope.launch).
+    val classifier = remember { lazy { NoiseClassifier(context) } }
 
     var reportTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }
     var referenceToDelete by remember { mutableStateOf<ReferenceSound?>(null) }
@@ -609,7 +612,7 @@ fun NoiseProtocolApp(
                                     scope.launch {
                                         val count = klassifiziereUndSpeichere(
                                             kandidaten = records.filter { it.detectedLabel == null },
-                                            classifier = classifier,
+                                            classifier = classifier.value,
                                             dao = dao,
                                             rohdatenDao = rohdatenDao,
                                         )
@@ -626,7 +629,7 @@ fun NoiseProtocolApp(
                                         val count = bewerteAlleNeu(
                                             noiseDao = dao,
                                             rohdatenDao = rohdatenDao,
-                                            konfiguration = classifier.aktuelleKonfiguration(),
+                                            konfiguration = classifier.value.aktuelleKonfiguration(),
                                         )
                                         val msg = if (count > 0) {
                                             context.getString(R.string.ai_reevaluated_count, count)
@@ -1039,7 +1042,7 @@ fun NoiseProtocolApp(
                                             try {
                                                 val count = klassifiziereUndSpeichere(
                                                     kandidaten = unklassifizierteDesTages,
-                                                    classifier = classifier,
+                                                    classifier = classifier.value,
                                                     dao = dao,
                                                     rohdatenDao = rohdatenDao,
                                                 )
@@ -1130,7 +1133,7 @@ fun NoiseProtocolApp(
                                 },
                                 onAiRecognize = {
                                     scope.launch {
-                                        val detected = classifier.classify(File(record.filePath))
+                                        val detected = classifier.value.classify(File(record.filePath))
                                         dao.update(record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)))
                                     }
                                 }
@@ -1165,7 +1168,7 @@ fun NoiseProtocolApp(
                     onClick = {
                         val record = showReferenceDialog ?: return@Button
                         scope.launch {
-                            val detailed = classifier.classifyDetailed(File(record.filePath))
+                            val detailed = classifier.value.classifyDetailed(File(record.filePath))
                             if (detailed != null && refName.isNotBlank()) {
                                 dao.insertReference(ReferenceSound(name = refName.trim(), pattern = detailed.joinToString(",")))
                                 onShowSnackbar(context.getString(R.string.learn_pattern_success, refName), null, null)
