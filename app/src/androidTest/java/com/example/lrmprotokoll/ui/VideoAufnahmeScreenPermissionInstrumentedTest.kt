@@ -40,17 +40,20 @@ class VideoAufnahmeScreenPermissionInstrumentedTest {
     // BerechtigungsTestHelfer-KDoc und .github/workflows/emulator-tests.yml (CI-Fund 10.09.2026/
     // PR #132). Ueber `./gradlew connectedDebugAndroidTest` allein schlaegt dieser Test fehl, weil
     // CAMERA dann bereits gewaehrt ist (AGP `pm install -g`).
+    //
+    // CI-Fund 10.09.2026 (2. Iteration): KEINE Pruefung auf den Hinweistext direkt nach
+    // setContent()/waitForIdle() - die LaunchedEffect-Anfrage feuert so unmittelbar, dass der
+    // echte Systemdialog (GrantPermissionsActivity) zu diesem Zeitpunkt bereits den Fokus
+    // uebernommen haben kann; die Compose-Test-Abfrage schlug dann mit "No compose hierarchies
+    // found in the app" fehl, weil die Activity in dem Moment nicht (mehr) im Vordergrund war.
+    // Der eigentliche #129-Nachweis (Dialog erscheint wirklich UND der Hinweis verschwindet
+    // danach) bleibt unveraendert bestehen.
     @Test
     fun ohneBerechtigungFragtDerScreenBeimBetretenNachUndSchaltetNachErlaubnisWeiter() {
         composeRule.setContent { VideoAufnahmeScreen(onBack = {}, onShowSnackbar = {}) }
-        composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Kamera-Berechtigung erforderlich").fetchSemanticsNodes().let {
-            assertTrue("Ohne Berechtigung muss der Hinweis zunaechst sichtbar sein", it.isNotEmpty())
-        }
-
-        // Wie beim Foto-Sheet der eigentliche #129-Nachweis: Ohne dass der Screen tatsaechlich
-        // den echten Systemdialog ausloest, kommt dieser Aufruf nie durch.
+        // Der eigentliche #129-Nachweis: Ohne dass der Screen tatsaechlich den echten
+        // Systemdialog ausloest, kommt dieser Aufruf nie durch.
         BerechtigungsTestHelfer.erlaubeSystemdialog()
         composeRule.waitForIdle()
 

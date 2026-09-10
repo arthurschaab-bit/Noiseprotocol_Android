@@ -46,7 +46,7 @@ import androidx.test.uiautomator.Until
  */
 object BerechtigungsTestHelfer {
 
-    private const val WARTEZEIT_DIALOG_MS = 5_000L
+    private const val WARTEZEIT_DIALOG_MS = 4_000L
     private const val WARTEZEIT_TEXT_FALLBACK_MS = 1_500L
 
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
@@ -56,13 +56,29 @@ object BerechtigungsTestHelfer {
         instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, permission)
     }
 
-    /** Wartet auf den System-Berechtigungsdialog und tippt "Zulassen". */
+    /**
+     * Wartet auf den System-Berechtigungsdialog und tippt "Zulassen".
+     *
+     * **CI-Fund 10.09.2026 (2. Iteration, PR #132):** CAMERA/ACCESS_COARSE_LOCATION zeigen auf
+     * dem CI-Emulator (`aosp_atd`, API 34) den DREI-Knopf-Dialog ("Nur diesmal" / "Waehrend der
+     * Verwendung der App" / "Nicht zulassen") statt des einfachen Zwei-Knopf-Dialogs - dessen
+     * "Zulassen"-Knopf hat eine ANDERE Ressourcen-ID (`permission_allow_foreground_only_button`
+     * bzw. `permission_allow_one_time_button`) als `permission_allow_button`, das nur beim
+     * einfachen Dialog existiert (z.B. BLUETOOTH_SCAN/BLUETOOTH_CONNECT - dort funktionierte die
+     * urspruengliche, auf `permission_allow_button` beschraenkte Suche deshalb bereits im ersten
+     * Lauf). Ohne diese zusaetzlichen IDs blieb der echte Dialog rund 19s sichtbar
+     * (Logcat-Beleg: `GrantPermissionsActivity` displayed/dismissed), wurde aber nie gefunden.
+     */
     fun erlaubeSystemdialog() {
         klickeSystemdialogKnopf(
-            idSuffix = "permission_allow_button",
+            idSuffixe = listOf(
+                "permission_allow_button",
+                "permission_allow_foreground_only_button",
+                "permission_allow_one_time_button",
+            ),
             textKandidaten = listOf(
                 "Zulassen", "Allow",
-                "Während der Verwendung der App zulassen", "While using the app",
+                "Während der Verwendung der App zulassen", "While using the app", "Only while using the app",
                 "Nur diesmal zulassen", "Only this time",
             ),
         )
@@ -71,7 +87,7 @@ object BerechtigungsTestHelfer {
     /** Wartet auf den System-Berechtigungsdialog und tippt "Nicht zulassen". */
     fun verweigereSystemdialog() {
         klickeSystemdialogKnopf(
-            idSuffix = "permission_deny_button",
+            idSuffixe = listOf("permission_deny_button"),
             textKandidaten = listOf("Nicht zulassen", "Deny", "Ablehnen"),
         )
     }
@@ -87,12 +103,13 @@ object BerechtigungsTestHelfer {
 
     /**
      * Sucht zuerst ueber die Ressourcen-ID (stabil, aber je nach Geraetebild
-     * `com.android.permissioncontroller` oder `com.google.android.permissioncontroller`), erst
-     * als Rueckfall ueber den - locale-abhaengigen - sichtbaren Text.
+     * `com.android.permissioncontroller` oder `com.google.android.permissioncontroller`, und je
+     * nach Zwei- oder Drei-Knopf-Dialog eine von [idSuffixe]), erst als Rueckfall ueber den -
+     * locale-abhaengigen - sichtbaren Text.
      */
-    private fun klickeSystemdialogKnopf(idSuffix: String, textKandidaten: List<String>) {
+    private fun klickeSystemdialogKnopf(idSuffixe: List<String>, textKandidaten: List<String>) {
         val idSelektoren = listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
-            .map { paket -> By.res(paket, idSuffix) }
+            .flatMap { paket -> idSuffixe.map { suffix -> By.res(paket, suffix) } }
         for (selektor in idSelektoren) {
             if (geraet.wait(Until.hasObject(selektor), WARTEZEIT_DIALOG_MS)) {
                 geraet.findObject(selektor).click()
@@ -107,7 +124,7 @@ object BerechtigungsTestHelfer {
             }
         }
         throw AssertionError(
-            "Kein System-Berechtigungsdialog gefunden (weder per Ressourcen-ID '$idSuffix' " +
+            "Kein System-Berechtigungsdialog gefunden (weder per Ressourcen-ID $idSuffixe " +
                 "noch per Text $textKandidaten) - siehe emulator-diagnostics-Artefakt bei einem " +
                 "CI-Fehlschlag."
         )
