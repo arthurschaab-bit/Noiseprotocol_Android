@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +20,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.FotoKategorie
@@ -49,10 +54,14 @@ import kotlinx.coroutines.withContext
  * System-Kamera-App, nicht CameraX. Fuer ein Belegfoto braucht niemand eine eigene
  * Kameraoberflaeche, und es kostet keine neue Abhaengigkeit.
  *
- * **`android.permission.CAMERA` wird bewusst NICHT deklariert.** Ein Intent an eine fremde
- * Kamera-App braucht die Berechtigung nicht - sobald eine App sie aber im Manifest deklariert,
- * verlangt Android, dass sie auch gewaehrt ist. Man handelt sich damit einen
- * Berechtigungsdialog ein, den man sonst gar nicht braeuchte.
+ * **`android.permission.CAMERA` wird inzwischen im Manifest deklariert** (fuer [VideoAufnahmeScreen]
+ * / CameraX, M11 B) - der urspruengliche Plan, sie hier bewusst nicht zu deklarieren, um den
+ * Laufzeit-Dialog zu sparen, gilt seitdem nicht mehr. Laut Android-Doku zu
+ * `ACTION_IMAGE_CAPTURE` schlaegt der Kamera-Intent auf vielen Geraeten aber genau dann
+ * ohne sichtbaren Fehler fehl, wenn die App die Permission deklariert, sie zur Laufzeit jedoch
+ * NICHT gewaehrt ist - der Aufnahme-Button wirkt dann "ohne Funktion". Deshalb wird die
+ * Berechtigung hier vor dem Start des Kamera-Intents geprueft und bei Bedarf angefragt, genau wie
+ * in [VideoAufnahmeScreen].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,8 +78,17 @@ fun FotoDokumentationSheet(
     val kategorien = remember { fotoDoku.abzufragendeKategorien() }
     var offeneKategorie by remember { mutableStateOf<FotoKategorie?>(null) }
     var rohdatei by remember { mutableStateOf<File?>(null) }
+    var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var notiz by remember { mutableStateOf("") }
     val gezaehlt = remember { mutableStateOf(mapOf<FotoKategorie, Int>()) }
+    var zeigeBestaetigung by remember { mutableStateOf(false) }
+
+    fun ohneRestFortfahren() {
+        // Auslassungen festhalten - besonders relevant bei "PFLICHT". Blockiert wird die Messung
+        // dabei nie: Sie laeuft ohnehin schon.
+        kategorien.filter { (gezaehlt.value[it] ?: 0) == 0 }.forEach { fotoDoku.meldeUebersprungen(it) }
+        onFertig()
+    }
 
     val kameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { erfolgreich ->
         val kategorie = offeneKategorie
@@ -96,13 +114,31 @@ fun FotoDokumentationSheet(
         }
     }
 
+    // Siehe Klassen-KDoc: android.permission.CAMERA ist inzwischen im Manifest deklariert (fuer
+    // VideoAufnahmeScreen/CameraX). Ohne diese explizite Anfrage schlaegt der Kamera-Intent auf
+    // vielen Geraeten fehl, wenn die Berechtigung nicht zusaetzlich zur Laufzeit gewaehrt ist.
+    val berechtigungsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { erlaubt ->
+        val uri = pendingUri
+        pendingUri = null
+        if (erlaubt && uri != null) {
+            runCatching { kameraLauncher.launch(uri) }.onFailure {
+                offeneKategorie = null
+                rohdatei = null
+            }
+        } else {
+            offeneKategorie?.let { fotoDoku.meldeUebersprungen(it) }
+            offeneKategorie = null
+            rohdatei = null
+        }
+    }
+
     LaunchedEffect(sessionId) {
         gezaehlt.value = withContext(Dispatchers.IO) {
             fotoDoku.fuerSession(sessionId).groupingBy { FotoKategorie.vonName(it.kategorie) }.eachCount()
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onFertig, sheetState = sheetState) {
+    ModalBottomSheet(onDismissRequest = { zeigeBestaetigung = true }, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text("Fotodokumentation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
@@ -141,12 +177,19 @@ fun FotoDokumentationSheet(
                             )
                             offeneKategorie = kategorie
                             rohdatei = datei
-                            // Kein resolveActivity(): Das liefert ab targetSdk 30 ohne
-                            // <queries>-Eintrag null, auch wenn eine Kamera-App vorhanden ist.
-                            // Stattdessen den Fehlschlag beim Start abfangen.
-                            runCatching { kameraLauncher.launch(uri) }.onFailure {
-                                offeneKategorie = null
-                                rohdatei = null
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                                PackageManager.PERMISSION_GRANTED
+                            ) {
+                                // Kein resolveActivity(): Das liefert ab targetSdk 30 ohne
+                                // <queries>-Eintrag null, auch wenn eine Kamera-App vorhanden ist.
+                                // Stattdessen den Fehlschlag beim Start abfangen.
+                                runCatching { kameraLauncher.launch(uri) }.onFailure {
+                                    offeneKategorie = null
+                                    rohdatei = null
+                                }
+                            } else {
+                                pendingUri = uri
+                                berechtigungsLauncher.launch(Manifest.permission.CAMERA)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -165,17 +208,44 @@ fun FotoDokumentationSheet(
 
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = {
-                    // Auslassungen festhalten - besonders relevant bei "PFLICHT". Blockiert wird
-                    // die Messung dabei nie: Sie laeuft ohnehin schon.
-                    kategorien.filter { (gezaehlt.value[it] ?: 0) == 0 }.forEach { fotoDoku.meldeUebersprungen(it) }
-                    onFertig()
-                },
+                onClick = { ohneRestFortfahren() },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (gezaehlt.value.values.sum() == 0) "Ohne Foto fortfahren" else "Fertig")
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    // Wegwischen/Antippen ausserhalb des Sheets bricht sonst kommentarlos ab, ohne die
+    // Auslassungen zu melden (anders als der explizite Button oben) - deshalb hier erst
+    // rueckfragen. Bei "Abbrechen" faehrt das Sheet wieder aus, statt zu verschwinden.
+    if (zeigeBestaetigung) {
+        AlertDialog(
+            onDismissRequest = {
+                zeigeBestaetigung = false
+                scope.launch { sheetState.show() }
+            },
+            title = { Text("Wirklich ohne Foto fortfahren?") },
+            text = {
+                Text("Ohne ein Foto vom Messaufbau lässt sich später nicht mehr belegen, wie und wo gemessen wurde.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    zeigeBestaetigung = false
+                    ohneRestFortfahren()
+                }) {
+                    Text("Ohne Foto fortfahren")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    zeigeBestaetigung = false
+                    scope.launch { sheetState.show() }
+                }) {
+                    Text("Zurück")
+                }
+            },
+        )
     }
 }
