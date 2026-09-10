@@ -76,8 +76,18 @@ If no Android SDK is present (cloud sandboxes):
   Migration tests are the proof. `fallbackToDestructiveMigration()` is forbidden.
 - **Do not touch:** `.idea/`, `manifest_error.txt`, `gradle/wrapper/*`, `app/schemas/*.json`
   contents (only rename per plan when a class moves), unless the task explicitly says so.
-- **Crypto/BLE security code (M6):** implement exactly as the plan specifies; flag any
-  deviation explicitly in the PR — the owner reviews these parts personally.
+- **Crypto/BLE-Sicherheitscode (M6, Owner-Klarstellung 10.09.2026):** Es gibt in diesem Repo
+  keine selbstgeschriebene Kryptographie — alle Verschlüsselung läuft über
+  `androidx.security.crypto` (Tink) mit Schlüsseln im Android Keystore (`SettingsManager.kt`);
+  BLE-Sicherheit ist App-Logik (Geräte-Pinning, Stream-Plausibilisierung — `GeraetePinning.kt`,
+  `ConnectionSupervisor.kt`), keine Kryptographie. Änderungen an diesem Code werden deshalb
+  nicht als "Crypto-Review", sondern anhand von `docs/CHECKLISTE_M6_SICHERHEITSREVIEW.md`
+  geprüft (Teil 1: korrekte Keystore/EncryptedSharedPreferences-Nutzung, Teil 2: Plausibilität
+  der BLE-Sicherheitslogik gegen das Bedrohungsmodell aus Plan Abschnitt 6) — das kann der
+  Owner ohne Krypto-Hintergrundwissen selbst durchgehen. Jede Abweichung vom Plan explizit im
+  PR flaggen. Sollte künftig tatsächlich eine neue kryptographische Primitive nötig werden
+  (nicht nur ein Aufruf von Keystore/Tink), ist das kein Fall für diese Checkliste, sondern ein
+  offener Punkt für den Owner (Abschnitt 8a) — niemals selbst entscheiden oder implementieren.
 
 ## 6. Verification — non-negotiable
 
