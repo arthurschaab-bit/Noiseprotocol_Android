@@ -353,9 +353,42 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
     }
 }
 
+/**
+ * Migration 17 -> 18: neue Tabelle `stammdaten_verlauf` (Gesamtbericht-Stammdaten am Messbeginn
+ * statt fest in den Einstellungen, Owner-Anfrage 10.09.2026).
+ *
+ * Rein additiv wie die Migrationen zuvor. Die zuvor in den Einstellungen gepflegten Werte
+ * (SettingsManager, PR #128) werden bewusst NICHT automatisch in eine erste Zeile übernommen:
+ * Es waren Freitext-Platzhalter ohne Zeitstempel und ohne Garantie, dass sie überhaupt befüllt
+ * wurden - eine erfundene erste Verlaufszeile wäre schlechter als ein leerer Verlauf, bei dem
+ * der Dialog beim ersten Aufruf einfach mit leeren Feldern startet.
+ */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `stammdaten_verlauf` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`erstelltAm` INTEGER NOT NULL, " +
+                "`geraetHersteller` TEXT NOT NULL, " +
+                "`geraetTyp` TEXT NOT NULL, " +
+                "`geraetGenauigkeitsklasse` TEXT NOT NULL, " +
+                "`geraetSeriennummer` TEXT NOT NULL, " +
+                "`geraetKalibrierung` TEXT NOT NULL, " +
+                "`messort` TEXT NOT NULL, " +
+                "`mikrofonposition` TEXT NOT NULL, " +
+                "`mikrofonhoehe` TEXT NOT NULL, " +
+                "`entfernungZurQuelle` TEXT NOT NULL, " +
+                "`innenAussen` TEXT NOT NULL, " +
+                "`fensterzustand` TEXT NOT NULL, " +
+                "`wetter` TEXT NOT NULL, " +
+                "`datenqualitaetHinweis` TEXT NOT NULL)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+    MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
 )
 
 @Database(
@@ -364,9 +397,9 @@ val ALLE_MIGRATIONEN = arrayOf(
         LevelSampleEntity::class, DriveDailyFileEntity::class,
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
-        DokumentationsFotoEntity::class, BeweisVideoEntity::class,
+        DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)
@@ -394,6 +427,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dokumentationsFotoDao(): DokumentationsFotoDao
 
     abstract fun beweisVideoDao(): BeweisVideoDao
+
+    abstract fun stammdatenVerlaufDao(): StammdatenVerlaufDao
 
     companion object {
         @Volatile

@@ -248,6 +248,14 @@ class AppContainer(
         )
     }
 
+    val wetterProvider: com.example.lrmprotokoll.wetter.WetterProvider by lazy {
+        com.example.lrmprotokoll.wetter.OpenMeteoWetterProvider()
+    }
+
+    val standortErmittlung: com.example.lrmprotokoll.standort.StandortErmittlung by lazy {
+        com.example.lrmprotokoll.standort.GeraeteStandortErmittlung(context.applicationContext)
+    }
+
     val retentionCoordinator: RetentionCoordinator by lazy {
         RetentionCoordinator(
             measurementDao = database.measurementDao(),

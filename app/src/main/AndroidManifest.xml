@@ -17,7 +17,14 @@
     <!-- Legacy-Bluetooth-Berechtigungen für Android 10/11 (API 29/30, z.B. Huawei P30) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+    <!-- ACCESS_COARSE_LOCATION war bis hierher nur die Legacy-Bluetooth-Scan-Voraussetzung fuer
+         API 29/30 (auf API 31+ ersetzt sie BLUETOOTH_SCAN mit usesPermissionFlags=
+         "neverForLocation" oben). Seit dem Stammdaten-Dialog (Owner-Anfrage 10.09.2026,
+         GeraeteStandortErmittlung fuer den Messort) wird sie ausserdem auf allen unterstuetzten
+         API-Leveln gebraucht - deshalb OHNE maxSdkVersion-Deckel. ACCESS_FINE_LOCATION bleibt
+         weiterhin auf API 29/30 begrenzt: Fuer ein Freitextfeld im Bericht reicht die grobe
+         Ortung, eine praezisere Anfrage auf neueren Geraeten waere unbegruendet. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Ab Android 12 (API 31+) moderne Bluetooth-Berechtigungen -->

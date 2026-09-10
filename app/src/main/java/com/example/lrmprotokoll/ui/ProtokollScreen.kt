@@ -76,7 +76,7 @@ fun ProtokollScreen(
             if (alsGesamtbericht) {
                 val datei = withContext(Dispatchers.IO) {
                     val bericht = ermittleGesamtbericht(db, von, bis)
-                    val stammdaten = GesamtberichtStammdaten.ausEinstellungen(container.settingsManager)
+                    val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
                     gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
                 }
                 gesamtberichtExport.teilen(datei)
