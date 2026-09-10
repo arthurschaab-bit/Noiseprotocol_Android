@@ -23,6 +23,16 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# CI-Fund 10.09.2026 (2. Iteration, PR #132): connectedDebugAndroidTest deinstalliert App- und
+# Test-APK am Ende des Laufs (Unified Test Platform, AGP 9) - `pm list instrumentation` faende
+# danach nichts mehr. Fuer den Rest hier braucht es beide APKs wieder installiert; installDebug/
+# installDebugAndroidTest sind reine `adb install`-Wrapper ohne die UTP-Deinstallation.
+./gradlew installDebug installDebugAndroidTest --no-daemon --stacktrace
+if [ $? -ne 0 ]; then
+  timeout 10s adb logcat -d > logcat-failure.txt
+  exit 1
+fi
+
 APP_ID="com.example.lrmprotokoll"
 RUNNER=$(adb shell pm list instrumentation | grep "target=$APP_ID" | sed -E 's/instrumentation:([^ ]+) .*/\1/' | tr -d '\r')
 if [ -z "$RUNNER" ]; then
