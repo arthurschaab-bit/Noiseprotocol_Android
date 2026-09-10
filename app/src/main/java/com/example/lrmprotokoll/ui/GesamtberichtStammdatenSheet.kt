@@ -294,7 +294,11 @@ fun GesamtberichtStammdatenSheet(
             )
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                OutlinedButton(onClick = { standortErmitteln() }, enabled = !standortLaedt) {
+                OutlinedButton(
+                    onClick = { standortErmitteln() },
+                    enabled = !standortLaedt,
+                    modifier = Modifier.testTag("button_standort_ermitteln"),
+                ) {
                     Text(if (standortLaedt) "Ermittle …" else "Standort ermitteln")
                 }
                 if (standortLaedt) {
@@ -339,7 +343,11 @@ fun GesamtberichtStammdatenSheet(
             )
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                OutlinedButton(onClick = { wetterAbrufen() }, enabled = !wetterLaedt) {
+                OutlinedButton(
+                    onClick = { wetterAbrufen() },
+                    enabled = !wetterLaedt,
+                    modifier = Modifier.testTag("button_wetter_abrufen"),
+                ) {
                     Text(if (wetterLaedt) "Rufe ab …" else "Wetter automatisch abrufen")
                 }
                 if (wetterLaedt) {

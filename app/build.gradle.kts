@@ -197,6 +197,10 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.navigation:navigation-testing:2.7.7")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Fuer Berechtigungs-Regressionstests (#129): der einzige Weg, den echten System-
+    // Berechtigungsdialog im Emulator zu bedienen (Allow/Deny antippen), siehe
+    // BerechtigungsTestHelfer.kt. Reines Testdependency, nicht Teil der App.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
 
 // Testluecken-Auftrag Stufe 1: Kover misst die Line-Coverage, damit die weiteren Stufen gegen

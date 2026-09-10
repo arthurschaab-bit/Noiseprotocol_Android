@@ -97,7 +97,28 @@ If no Android SDK is present (cloud sandboxes):
    any plan contradiction or open decision encountered.*
 5. Short summary to the owner: done / not done / noticed.
 
-## 8. Which agent does what (owner's convention)
+## 8a. Clarify before implementing (owner instruction, 10.09.2026)
+
+- Before building anything non-trivial, clarify open questions with the owner **in detail
+  first** — do not guess at intent and implement something that might not match what the owner
+  actually pictured. This generalizes section 2's rule for open decisions in the BLE plan
+  (§13) to the whole project, not just that plan.
+- If something genuinely cannot be decided yet (e.g. still under investigation, waiting on
+  something else to resolve), do not silently guess and move on. Instead agree with the owner
+  on a concrete checkpoint/milestone at which to come back and ask again — an open question
+  should have an owner and a point where it gets revisited, not drift unaddressed.
+
+## 8b. Emulator/instrumented tests for classes of bugs already hit once
+
+- When a bug like #129 (`android.permission.CAMERA` declared in the manifest but not granted
+  at runtime, silently breaking an implicit camera intent) ships and gets fixed, consider
+  whether an instrumented test on the emulator (`connectedAndroidTest`) could have caught it
+  and would catch a recurrence — not just a Robolectric/JVM unit test of the surrounding logic.
+  Propose the test approach and get the owner's sign-off on it (per 8a) before writing it,
+  since the right level of investment (a narrow regression test for this one bug vs. a broader
+  test-strategy change) is itself a decision worth clarifying first.
+
+## 9. Which agent does what (owner's convention)
 
 - **Codex:** implementation of well-specified, hardware-free milestones (M1, B-11, later
   M4/M7/M7b), automatic PR review.
