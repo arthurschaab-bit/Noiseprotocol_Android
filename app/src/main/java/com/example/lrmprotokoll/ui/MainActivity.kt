@@ -398,6 +398,23 @@ fun NoiseProtocolApp(
     fotoSheetFuerSession?.let { id ->
         FotoDokumentationSheet(sessionId = id, onFertig = { fotoSheetFuerSession = null })
     }
+
+    // Owner-Anfrage 10.09.2026: Gesamtbericht-Stammdaten (Geraet, Messaufbau, Randbedingungen)
+    // nicht mehr fest in den Einstellungen, sondern beim Messbeginn abfragen - dieselbe
+    // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
+    // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
+    var stammdatenSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var zuletztGefragteStammdatenSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
+        val id = offeneSession?.id
+        if (settingsManager.stammdatenAbfrageAktiv && id != null && id != zuletztGefragteStammdatenSession) {
+            zuletztGefragteStammdatenSession = id
+            stammdatenSheetFuerSession = id
+        }
+    }
+    stammdatenSheetFuerSession?.let { id ->
+        GesamtberichtStammdatenSheet(sessionId = id, onFertig = { stammdatenSheetFuerSession = null })
+    }
     val classifier = remember { NoiseClassifier(context) }
 
     var reportTargetRecords by remember { mutableStateOf<List<NoiseRecord>?>(null) }

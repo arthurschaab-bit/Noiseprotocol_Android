@@ -111,20 +111,10 @@ fun SettingsScreen(
     var fotoDriveUpload by remember { mutableStateOf(settings.fotoDokuDriveUpload) }
     var showWohnraumDialog by remember { mutableStateOf(false) }
 
-    // Gesamtbericht: Stammdaten (Geräte-/Messaufbau-/Randbedingungsangaben, Owner-Anfrage 09.09.2026)
-    var berichtGeraetHersteller by remember { mutableStateOf(settings.berichtGeraetHersteller) }
-    var berichtGeraetTyp by remember { mutableStateOf(settings.berichtGeraetTyp) }
-    var berichtGeraetGenauigkeitsklasse by remember { mutableStateOf(settings.berichtGeraetGenauigkeitsklasse) }
-    var berichtGeraetSeriennummer by remember { mutableStateOf(settings.berichtGeraetSeriennummer) }
-    var berichtGeraetKalibrierung by remember { mutableStateOf(settings.berichtGeraetKalibrierung) }
-    var berichtMessort by remember { mutableStateOf(settings.berichtMessort) }
-    var berichtMikrofonposition by remember { mutableStateOf(settings.berichtMikrofonposition) }
-    var berichtMikrofonhoehe by remember { mutableStateOf(settings.berichtMikrofonhoehe) }
-    var berichtEntfernungZurQuelle by remember { mutableStateOf(settings.berichtEntfernungZurQuelle) }
-    var berichtInnenAussen by remember { mutableStateOf(settings.berichtInnenAussen) }
-    var berichtFensterzustand by remember { mutableStateOf(settings.berichtFensterzustand) }
-    var berichtWetter by remember { mutableStateOf(settings.berichtWetter) }
-    var berichtDatenqualitaetHinweis by remember { mutableStateOf(settings.berichtDatenqualitaetHinweis) }
+    // Gesamtbericht: Stammdaten-Abfrage bei Messbeginn (Owner-Anfrage 10.09.2026) - die Felder
+    // selbst liegen jetzt in GesamtberichtStammdatenSheet/StammdatenVerlaufEntity, hier bleibt nur
+    // der Ein/Aus-Schalter.
+    var stammdatenAbfrageAktiv by remember { mutableStateOf(settings.stammdatenAbfrageAktiv) }
 
     // F1 Schwellenwert-Assistent (PROMPT_M10_FUNKTIONEN.md): Live-Mikrofonpegel neben dem
     // Schwellen-Slider - null, solange die Überwachung nicht läuft.
@@ -1466,134 +1456,32 @@ fun SettingsScreen(
                 }
             }
 
-            // Owner-Anfrage 09.09.2026: Stammdaten fuer den Gesamtbericht ("die identische
-            // Berichtsform ... die ganzen Settings sollen vom Nutzer ausgefuellt werden") - reiner
-            // Freitext statt Enums/Zahlenfelder, weil die Formulierungen je nach Geraet/Aufbau/
-            // Rechtsfall stark variieren und die App keine dieser Angaben selbst pruefen kann.
+            // Owner-Anfrage 10.09.2026: Die Berichtsangaben (Gerät, Messaufbau, Randbedingungen)
+            // sollen nicht mehr als fixer Wert in den Einstellungen stehen ("nicht hardcoded"),
+            // sondern bei jedem Messbeginn ueber GesamtberichtStammdatenSheet erfasst werden - die
+            // zuletzt verwendeten Werte dienen dort als Vorschlag. Hier bleibt nur noch der
+            // Ein/Aus-Schalter, analog zur Fotodokumentation oben.
             SettingsSectionCard(
                 title = "Berichtsangaben (Gerät, Messaufbau, Randbedingungen)",
-                summary = if (berichtGeraetTyp.isBlank() && berichtMessort.isBlank()) {
-                    "Noch nicht ausgefüllt"
-                } else {
-                    "Für den Gesamtbericht hinterlegt"
-                },
+                summary = if (stammdatenAbfrageAktiv) "Aktiv" else "Deaktiviert",
                 expanded = expBericht,
                 onToggle = { expBericht = !expBericht }
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Beim Start eines Messvorgangs nach Berichtsangaben fragen")
+                    Switch(checked = stammdatenAbfrageAktiv, onCheckedChange = {
+                        stammdatenAbfrageAktiv = it
+                        settings.stammdatenAbfrageAktiv = it
+                    })
+                }
                 Text(
-                    "Diese Angaben erscheinen im Gesamtbericht (Zeitraumbericht → \"Vollständiger " +
-                        "Gesamtbericht\"). Ein leeres Feld zeigt dort \"nicht angegeben\" statt eines " +
-                        "erfundenen Werts.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text("Messgerät", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = berichtGeraetHersteller,
-                    onValueChange = { berichtGeraetHersteller = it; settings.berichtGeraetHersteller = it },
-                    label = { Text("Hersteller") },
-                    modifier = Modifier.testTag("input_bericht_hersteller").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtGeraetTyp,
-                    onValueChange = { berichtGeraetTyp = it; settings.berichtGeraetTyp = it },
-                    label = { Text("Typ") },
-                    modifier = Modifier.testTag("input_bericht_typ").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtGeraetGenauigkeitsklasse,
-                    onValueChange = { berichtGeraetGenauigkeitsklasse = it; settings.berichtGeraetGenauigkeitsklasse = it },
-                    label = { Text("Genauigkeitsklasse") },
-                    modifier = Modifier.testTag("input_bericht_genauigkeitsklasse").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtGeraetSeriennummer,
-                    onValueChange = { berichtGeraetSeriennummer = it; settings.berichtGeraetSeriennummer = it },
-                    label = { Text("Seriennummer") },
-                    modifier = Modifier.testTag("input_bericht_seriennummer").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtGeraetKalibrierung,
-                    onValueChange = { berichtGeraetKalibrierung = it; settings.berichtGeraetKalibrierung = it },
-                    label = { Text("Kalibrierung") },
-                    placeholder = { Text("z. B. 94 dB(A) mit Kalibrator XY; vor Messung protokolliert") },
-                    modifier = Modifier.testTag("input_bericht_kalibrierung").fillMaxWidth(),
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Messaufbau", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = berichtMessort,
-                    onValueChange = { berichtMessort = it; settings.berichtMessort = it },
-                    label = { Text("Genauer Messort") },
-                    modifier = Modifier.testTag("input_bericht_messort").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtMikrofonposition,
-                    onValueChange = { berichtMikrofonposition = it; settings.berichtMikrofonposition = it },
-                    label = { Text("Mikrofonposition") },
-                    modifier = Modifier.testTag("input_bericht_mikrofonposition").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtMikrofonhoehe,
-                    onValueChange = { berichtMikrofonhoehe = it; settings.berichtMikrofonhoehe = it },
-                    label = { Text("Mikrofonhöhe") },
-                    modifier = Modifier.testTag("input_bericht_mikrofonhoehe").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtEntfernungZurQuelle,
-                    onValueChange = { berichtEntfernungZurQuelle = it; settings.berichtEntfernungZurQuelle = it },
-                    label = { Text("Entfernung Mikrofon–Quelle") },
-                    modifier = Modifier.testTag("input_bericht_entfernung").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtInnenAussen,
-                    onValueChange = { berichtInnenAussen = it; settings.berichtInnenAussen = it },
-                    label = { Text("Innen-/Außenmessung") },
-                    placeholder = { Text("z. B. Außen") },
-                    modifier = Modifier.testTag("input_bericht_innen_aussen").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtFensterzustand,
-                    onValueChange = { berichtFensterzustand = it; settings.berichtFensterzustand = it },
-                    label = { Text("Fenster (nur bei Innenraummessung)") },
-                    placeholder = { Text("z. B. geschlossen") },
-                    modifier = Modifier.testTag("input_bericht_fensterzustand").fillMaxWidth(),
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Randbedingungen", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = berichtWetter,
-                    onValueChange = { berichtWetter = it; settings.berichtWetter = it },
-                    label = { Text("Wetter") },
-                    modifier = Modifier.testTag("input_bericht_wetter").fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = berichtDatenqualitaetHinweis,
-                    onValueChange = { berichtDatenqualitaetHinweis = it; settings.berichtDatenqualitaetHinweis = it },
-                    label = { Text("Hinweis zur Datenqualität (optional)") },
-                    placeholder = { Text("z. B. bekannte Ursache einer Messlücke") },
-                    modifier = Modifier.testTag("input_bericht_datenqualitaet").fillMaxWidth(),
-                )
-                Text(
-                    "Die Datenverfügbarkeit selbst berechnet der Bericht automatisch aus den " +
-                        "erfassten Verbindungsausfällen - dieses Feld ist nur für zusätzlichen Kontext.",
+                    "Gerät, Messaufbau und Randbedingungen werden jetzt beim Messbeginn abgefragt " +
+                        "(Vorschlag aus den zuletzt verwendeten Angaben) statt hier fest hinterlegt zu " +
+                        "sein - so passen sie zu jeder einzelnen Messung.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -1,16 +1,20 @@
 package com.example.lrmprotokoll.report
 
 import com.example.lrmprotokoll.data.AppDatabase
-import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.data.StammdatenVerlaufDao
+import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.messreihe.berechneDatenverfuegbarkeitProzent
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * Frei ausfuellbare Geraete-/Messaufbau-/Randbedingungsangaben aus den Einstellungen
- * ([SettingsManager], Abschnitt "Gesamtbericht: Stammdaten") - ein Snapshot zum
- * Berichtszeitpunkt, kein zeitraumabhaengiger Verlauf (siehe KDoc dort).
+ * Frei ausfuellbare Geraete-/Messaufbau-/Randbedingungsangaben - seit Owner-Anfrage 10.09.2026 am
+ * Messbeginn erfasst (siehe `GesamtberichtStammdatenSheet`) statt fest in den Einstellungen
+ * hinterlegt: [ausVerlauf] liest dafuer den zuletzt gespeicherten Eintrag aus
+ * [StammdatenVerlaufDao]. Das bleibt weiterhin EIN Snapshot zum Berichtszeitpunkt (die neuesten
+ * Stammdaten zum Zeitpunkt des Exports), keine zeitraumgenaue Zuordnung je Session/Tag - siehe
+ * [ermittleGesamtbericht]s KDoc zur selben Einschraenkung bei den Messwerten.
  *
  * Ein leeres Feld bleibt ein leerer String, wird NICHT hier durch "nicht angegeben" ersetzt -
  * diese Entscheidung trifft [GesamtberichtExport] beim Zeichnen, damit [GesamtberichtStammdaten]
@@ -33,22 +37,45 @@ data class GesamtberichtStammdaten(
     val datenqualitaetHinweis: String,
 ) {
     companion object {
-        fun ausEinstellungen(settings: SettingsManager) = GesamtberichtStammdaten(
-            geraetHersteller = settings.berichtGeraetHersteller,
-            geraetTyp = settings.berichtGeraetTyp,
-            geraetGenauigkeitsklasse = settings.berichtGeraetGenauigkeitsklasse,
-            geraetSeriennummer = settings.berichtGeraetSeriennummer,
-            geraetKalibrierung = settings.berichtGeraetKalibrierung,
-            messort = settings.berichtMessort,
-            mikrofonposition = settings.berichtMikrofonposition,
-            mikrofonhoehe = settings.berichtMikrofonhoehe,
-            entfernungZurQuelle = settings.berichtEntfernungZurQuelle,
-            innenAussen = settings.berichtInnenAussen,
-            fensterzustand = settings.berichtFensterzustand,
-            wetter = settings.berichtWetter,
-            datenqualitaetHinweis = settings.berichtDatenqualitaetHinweis,
+        /** Alle Felder leer, solange noch nie ein Stammdaten-Dialog bestaetigt wurde. */
+        fun leer() = GesamtberichtStammdaten("", "", "", "", "", "", "", "", "", "", "", "", "")
+
+        fun ausEntity(eintrag: StammdatenVerlaufEntity) = GesamtberichtStammdaten(
+            geraetHersteller = eintrag.geraetHersteller,
+            geraetTyp = eintrag.geraetTyp,
+            geraetGenauigkeitsklasse = eintrag.geraetGenauigkeitsklasse,
+            geraetSeriennummer = eintrag.geraetSeriennummer,
+            geraetKalibrierung = eintrag.geraetKalibrierung,
+            messort = eintrag.messort,
+            mikrofonposition = eintrag.mikrofonposition,
+            mikrofonhoehe = eintrag.mikrofonhoehe,
+            entfernungZurQuelle = eintrag.entfernungZurQuelle,
+            innenAussen = eintrag.innenAussen,
+            fensterzustand = eintrag.fensterzustand,
+            wetter = eintrag.wetter,
+            datenqualitaetHinweis = eintrag.datenqualitaetHinweis,
         )
+
+        suspend fun ausVerlauf(dao: StammdatenVerlaufDao): GesamtberichtStammdaten =
+            dao.letzte(1).firstOrNull()?.let { ausEntity(it) } ?: leer()
     }
+
+    fun zuEntity(erstelltAm: Long) = StammdatenVerlaufEntity(
+        erstelltAm = erstelltAm,
+        geraetHersteller = geraetHersteller,
+        geraetTyp = geraetTyp,
+        geraetGenauigkeitsklasse = geraetGenauigkeitsklasse,
+        geraetSeriennummer = geraetSeriennummer,
+        geraetKalibrierung = geraetKalibrierung,
+        messort = messort,
+        mikrofonposition = mikrofonposition,
+        mikrofonhoehe = mikrofonhoehe,
+        entfernungZurQuelle = entfernungZurQuelle,
+        innenAussen = innenAussen,
+        fensterzustand = fensterzustand,
+        wetter = wetter,
+        datenqualitaetHinweis = datenqualitaetHinweis,
+    )
 }
 
 /** Ein [PeriodenBericht] fuer genau einen Kalendertag, plus die daraus abgeleitete Datenverfuegbarkeit. */
