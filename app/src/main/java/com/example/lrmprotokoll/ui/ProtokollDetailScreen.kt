@@ -63,7 +63,14 @@ fun ProtokollDetailScreen(
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
     val export = remember { MessreiheExport(context) }
-    val classifier = remember { NoiseClassifier(context) }
+    // Lazy statt sofort per remember: NoiseClassifier laedt im init-Block synchron das ~4 MB
+    // YAMNet-Modell (MediaPipe AudioClassifier.createFromOptions) und wuerde damit bei JEDER
+    // Komposition dieses Screens den Main-Thread blockieren, obwohl Klassifizierung nur bei
+    // explizitem "jetzt klassifizieren"-Klick gebraucht wird (siehe classifier.value weiter
+    // unten, dort bereits in withContext(Dispatchers.IO)). Auf einem ausgelasteten CI-Emulator
+    // hat genau das den instrumentierten Detail-Screen-Test sporadisch ueber den 20s-Timeout
+    // von wartetBisAngezeigt laufen lassen.
+    val classifier = remember { lazy { NoiseClassifier(context) } }
     val supervisor = container.connectionSupervisor
     val connectionState by supervisor.state.collectAsState()
 
@@ -381,7 +388,7 @@ fun ProtokollDetailScreen(
                                             try {
                                                 val file = File(record.filePath)
                                                 val detected = if (file.exists() && file.isFile) {
-                                                    withContext(Dispatchers.IO) { classifier.classify(file) }
+                                                    withContext(Dispatchers.IO) { classifier.value.classify(file) }
                                                 } else {
                                                     null
                                                 }
