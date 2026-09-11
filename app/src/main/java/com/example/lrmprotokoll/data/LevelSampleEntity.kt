@@ -20,8 +20,16 @@ import androidx.room.PrimaryKey
  * [com.example.lrmprotokoll.meter.MeterFrame.modeAssumptionConfirmed]) liefert aktuell einen
  * gesicherten A-bewerteten Wert. Die CSV-Spalten heissen deshalb bewusst `LAeq_dB`, nicht
  * `LAeq_dBA`, obwohl Plan 8.4.2 dort `LAeq_dBA` als Beispiel zeigt - eine bewusste Abweichung.
+ *
+ * Index auf [at] seit Schema 19 (Prüfprotokoll-Anhang C-4): Grundlage für den 30-Tage-Nachhol-
+ * Sync in [com.example.lrmprotokoll.drive.DriveSyncCoordinator] (Owner-Entscheidung vom
+ * 11.09.2026, "Sync soll die letzten 30 Tage prüfen und syncen") - der fragt [at]-Bereiche für
+ * bis zu 29 zusätzliche Tage pro Zyklus ab. Seit derselben Korrekturliste C-4 ruft
+ * [com.example.lrmprotokoll.drive.DriveSyncCoordinator.syncEinenZyklus] außerdem
+ * [com.example.lrmprotokoll.data.LevelSampleDao.loescheVor] mit einer 30-Tage-Frist auf, die
+ * Tabelle wächst also nicht mehr unbegrenzt.
  */
-@Entity(tableName = "level_samples")
+@Entity(tableName = "level_samples", indices = [androidx.room.Index(value = ["at"])])
 data class LevelSampleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val at: Long,          // epoch millis

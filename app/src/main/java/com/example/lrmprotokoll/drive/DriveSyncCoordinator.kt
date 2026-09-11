@@ -89,6 +89,21 @@ class DriveSyncCoordinator(
         val von = heute.atStartOfDay(zone).toInstant()
         val datumSchluessel = DriveAblage.tagesordner(jetzt, zone)
 
+        // Praefprotokoll-Anhang (Owner-Entscheidung vom 11.09.2026: "Sync soll die letzten 30
+        // Tage pruefen und syncen") - siehe holeVersaeumteTageNach()-KDoc. Best-effort, VOR dem
+        // eigentlichen Sync fuer HEUTE: ein Fehlschlag beim Nachholen darf den Sync fuer heute
+        // nie verhindern.
+        holeVersaeumteTageNach(ordnerId, heute, jetzt)
+
+        // Praefprotokoll-Befund 03 / Korrekturliste C-4 (Owner-Entscheidung vom 11.09.2026:
+        // "loescheVor() verdrahten"): ohne das waechst level_samples unbegrenzt. Exakt 30 Tage,
+        // weil holeVersaeumteTageNach() oben bis zu 29 Tage zurueck liest (tagOffset 1..29) - eine
+        // kuerzere Frist wuerde Rohwerte loeschen, bevor der Nachholsync sie je sehen kann.
+        // runCatching wie bei holeVersaeumteTageNach: ein Fehlschlag hier darf weder den
+        // Nachholsync noch den Sync fuer heute verhindern.
+        runCatching { levelSampleDao.loescheVor(jetzt.minus(Duration.ofDays(30)).toEpochMilli()) }
+            .onFailure { Log.w(TAG, "Puffer-Bereinigung (loescheVor) fehlgeschlagen: ${it.message}") }
+
         val samples = levelSampleDao.zwischen(von.toEpochMilli(), jetzt.toEpochMilli())
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
             .map {
@@ -249,6 +264,76 @@ class DriveSyncCoordinator(
             },
             onFailure = { fehler -> behandleFehlschlag(datumSchluessel, registry, jetzt, fehler) },
         )
+    }
+
+    /**
+     * Holt Tage der letzten 30 Tage nach, die noch nicht (vollstaendig) synchronisiert sind
+     * (Prüfprotokoll-Anhang, Owner-Entscheidung vom 11.09.2026: "Sync soll die letzten 30 Tage
+     * prüfen und syncen"). Vorher schaute [syncEinenZyklus] ausschließlich auf `[heute 00:00,
+     * jetzt)` - blieb die App über Mitternacht offline, wurden gestrige Rohwerte nie hochgeladen.
+     * Möglich wird das Nachholen, WEIL [syncEinenZyklus] [LevelSampleDao.loescheVor] erst mit
+     * einer 30-Tage-Frist aufruft (Befund 03 / Korrekturliste C-4) - eine Frist von genau 29
+     * Tagen oder weniger würde Rohwerte löschen, bevor dieses Nachholen sie je sehen könnte.
+     *
+     * Bewusst NICHT Teil des regulären, gut getesteten Pfads für HEUTE - eine separate Methode
+     * hält das Risiko für den bestehenden, produktiven Ablauf bei null. Jeder Tag wird einzeln
+     * mit `runCatching` abgesichert: ein Fehlschlag bei einem Tag (z. B. HTTP 429) darf weder die
+     * übrigen 28 Tage noch den Sync für heute verhindern.
+     *
+     * [heute] wird ausgeschlossen (`tagOffset in 1..29`) - der bleibt beim bestehenden,
+     * unveränderten Codepfad in [syncEinenZyklus] darunter.
+     */
+    private suspend fun holeVersaeumteTageNach(ordnerId: String, heute: java.time.LocalDate, jetzt: Instant) {
+        for (tagOffset in 1..29) {
+            val tag = heute.minusDays(tagOffset.toLong())
+            val tagVon = tag.atStartOfDay(zone).toInstant()
+            val tagBis = tag.plusDays(1).atStartOfDay(zone).toInstant()
+            val tagesSchluessel = DriveAblage.tagesordner(tagVon, zone)
+
+            runCatching {
+                val samples = levelSampleDao.zwischen(tagVon.toEpochMilli(), tagBis.toEpochMilli())
+                if (samples.isEmpty()) return@runCatching
+
+                val ereignisse = noiseDao.zwischenZeitpunkt(tagVon.toEpochMilli(), tagBis.toEpochMilli())
+                    .map {
+                        ProtokollEreignis(
+                            at = Instant.ofEpochMilli(it.timestamp),
+                            pegelDb = it.calibratedDbA ?: it.dbValue,
+                            klassifikation = it.detectedLabel ?: it.label,
+                            notes = it.notes,
+                            weighting = it.meterWeighting,
+                        )
+                    }
+                val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
+                val zeilen = PegelAggregator.aggregiere(samples, ereignisse, tagVon, tagBis, fensterDauer)
+                if (zeilen.isEmpty()) return@runCatching
+
+                val registry = dailyFileDao.byDate(tagesSchluessel)
+                if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
+                    return@runCatching // dieser Tag ist bereits vollstaendig synchronisiert
+                }
+
+                val dateiName = "laermprotokoll_$tagesSchluessel.csv"
+                val inhalt = DriveCsv.schreibe(zeilen, zone).toByteArray(Charsets.UTF_8)
+                val messOrdner = ordnerbaum.ordnerFuer(ordnerId, tagesSchluessel, DriveKategorie.SCHALLMESSUNG)
+                    .getOrElse { ordnerId }
+
+                schreibeDatei(registry?.fileId, dateiName, messOrdner, inhalt).onSuccess { fileId ->
+                    dailyFileDao.upsert(
+                        DriveDailyFileEntity(
+                            date = tagesSchluessel, fileId = fileId, lastSyncedAt = jetzt.toEpochMilli(),
+                            lastRowCount = zeilen.size, state = DriveSyncState.SYNCED,
+                        )
+                    )
+                    diagnosticsReporter?.breadcrumb(
+                        "DriveSync",
+                        "Versäumten Tag nachgeholt: $tagesSchluessel (${zeilen.size} Zeilen)",
+                    )
+                }.getOrThrow()
+            }.onFailure { fehler ->
+                Log.w(TAG, "Nachholen von $tagesSchluessel fehlgeschlagen: ${fehler.message}")
+            }
+        }
     }
 
     /**
