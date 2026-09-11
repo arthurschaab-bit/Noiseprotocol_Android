@@ -76,8 +76,18 @@ If no Android SDK is present (cloud sandboxes):
   Migration tests are the proof. `fallbackToDestructiveMigration()` is forbidden.
 - **Do not touch:** `.idea/`, `manifest_error.txt`, `gradle/wrapper/*`, `app/schemas/*.json`
   contents (only rename per plan when a class moves), unless the task explicitly says so.
-- **Crypto/BLE security code (M6):** implement exactly as the plan specifies; flag any
-  deviation explicitly in the PR — the owner reviews these parts personally.
+- **Crypto/BLE-Sicherheitscode (M6, Owner-Klarstellung 10.09.2026):** Es gibt in diesem Repo
+  keine selbstgeschriebene Kryptographie — alle Verschlüsselung läuft über
+  `androidx.security.crypto` (Tink) mit Schlüsseln im Android Keystore (`SettingsManager.kt`);
+  BLE-Sicherheit ist App-Logik (Geräte-Pinning, Stream-Plausibilisierung — `GeraetePinning.kt`,
+  `ConnectionSupervisor.kt`), keine Kryptographie. Änderungen an diesem Code werden deshalb
+  nicht als "Crypto-Review", sondern anhand von `docs/CHECKLISTE_M6_SICHERHEITSREVIEW.md`
+  geprüft (Teil 1: korrekte Keystore/EncryptedSharedPreferences-Nutzung, Teil 2: Plausibilität
+  der BLE-Sicherheitslogik gegen das Bedrohungsmodell aus Plan Abschnitt 6) — das kann der
+  Owner ohne Krypto-Hintergrundwissen selbst durchgehen. Jede Abweichung vom Plan explizit im
+  PR flaggen. Sollte künftig tatsächlich eine neue kryptographische Primitive nötig werden
+  (nicht nur ein Aufruf von Keystore/Tink), ist das kein Fall für diese Checkliste, sondern ein
+  offener Punkt für den Owner (Abschnitt 8a) — niemals selbst entscheiden oder implementieren.
 
 ## 6. Verification — non-negotiable
 
@@ -97,7 +107,28 @@ If no Android SDK is present (cloud sandboxes):
    any plan contradiction or open decision encountered.*
 5. Short summary to the owner: done / not done / noticed.
 
-## 8. Which agent does what (owner's convention)
+## 8a. Clarify before implementing (owner instruction, 10.09.2026)
+
+- Before building anything non-trivial, clarify open questions with the owner **in detail
+  first** — do not guess at intent and implement something that might not match what the owner
+  actually pictured. This generalizes section 2's rule for open decisions in the BLE plan
+  (§13) to the whole project, not just that plan.
+- If something genuinely cannot be decided yet (e.g. still under investigation, waiting on
+  something else to resolve), do not silently guess and move on. Instead agree with the owner
+  on a concrete checkpoint/milestone at which to come back and ask again — an open question
+  should have an owner and a point where it gets revisited, not drift unaddressed.
+
+## 8b. Emulator/instrumented tests for classes of bugs already hit once
+
+- When a bug like #129 (`android.permission.CAMERA` declared in the manifest but not granted
+  at runtime, silently breaking an implicit camera intent) ships and gets fixed, consider
+  whether an instrumented test on the emulator (`connectedAndroidTest`) could have caught it
+  and would catch a recurrence — not just a Robolectric/JVM unit test of the surrounding logic.
+  Propose the test approach and get the owner's sign-off on it (per 8a) before writing it,
+  since the right level of investment (a narrow regression test for this one bug vs. a broader
+  test-strategy change) is itself a decision worth clarifying first.
+
+## 9. Which agent does what (owner's convention)
 
 - **Codex:** implementation of well-specified, hardware-free milestones (M1, B-11, later
   M4/M7/M7b), automatic PR review.

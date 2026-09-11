@@ -60,7 +60,7 @@ jobs:
             adb wait-for-device
             adb shell input keyevent 82 || true
             adb logcat -c
-            ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace || (timeout 10s adb logcat -d > logcat-failure.txt && exit 1)
+            bash .github/scripts/run-instrumented-tests.sh ${{ matrix.api-level }}
 
       - name: Testbericht in die Zusammenfassung schreiben
         if: always()

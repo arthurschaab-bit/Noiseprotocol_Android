@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -192,7 +193,7 @@ fun FotoDokumentationSheet(
                                 berechtigungsLauncher.launch(Manifest.permission.CAMERA)
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("foto_aufnahme_${kategorie.name}"),
                     ) {
                         Text("${kategorie.anzeigename} ($anzahl/$maximum)")
                     }
