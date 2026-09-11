@@ -268,10 +268,17 @@ mit Owner-Rückfragen, [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) nennt den aktu
 - **`./gradlew generiereKennzahlen`** schreibt [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) aus den
   tatsächlichen Testergebnissen und Quelldateien — nicht von Hand pflegen; Anlass waren veraltete,
   von Hand gepflegte Zahlen (Testanzahl, Kadenz-Toleranz) in diesem README.
-- **Weiterhin offen** (siehe [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) und die Korrekturliste im
-  Prüfprotokoll-Artefakt): `RetentionCoordinator`/`schliesseVerwaisteSessions()` auf gebatchte
-  Queries statt Volltabellen-Laden umstellen, und ob der eingecheckte Debug-Keystore/die
-  OAuth-Client-ID rotiert werden müssen.
+- **Schema 20: Indizes auf `measurements(sessionId, timestamp)` und `measurements(timestamp)`**
+  (C-4-Rest, Owner-Entscheidung „just do it"). `MeasurementRecorder.schliesseVerwaisteSessions()`
+  rief vorher `MeasurementDao.fuerSession()` einmal PRO verwaister Session auf, nur um deren
+  letzten Zeitstempel zu bilden — neue `letzteZeitstempelJeSession()` holt das für alle
+  betroffenen Sessions in einer gruppierten Query statt N Einzelabfragen mit vollem Spaltenabzug.
+- **Sicherheitsfrage weiterhin offen**: das Repository ist öffentlich, `app/debug.keystore` ist
+  eingecheckt (bewusst, für eine über alle Baumaschinen stabile OAuth-SHA-1, siehe Kommentar in
+  `app/build.gradle.kts`). Rotieren allein reicht nicht — die alte SHA-1 muss zusätzlich in der
+  Google Cloud Console entfernt werden, sonst funktioniert der geleakte Schlüssel dort weiter.
+  Ob zusätzlich die Git-Historie bereinigt werden muss, ist eine Entscheidung des Owners, keine
+  Codeänderung.
 
 ---
 
