@@ -1,12 +1,16 @@
 package com.example.lrmprotokoll.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
 import org.junit.After
 import org.junit.Rule
@@ -46,6 +50,18 @@ class GesamtberichtStammdatenSheetPermissionInstrumentedTest {
     fun ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand() {
         composeRule.setContent { GesamtberichtStammdatenSheet(sessionId = sessionId, onFertig = {}) }
         composeRule.waitForIdle()
+
+        // CI-Fund 10.09.2026 (4. Iteration, PR #132): `adb shell dumpsys package` bestaetigte
+        // granted=false unmittelbar VOR diesem Testlauf, aber der echte Systemdialog erschien
+        // im Logcat trotzdem nie - deutet auf einen Widerspruch zwischen der Aussensicht (dumpsys)
+        // und dem, was der App-Prozess selbst per checkSelfPermission() sieht. Diese Zeile
+        // schreibt die In-Prozess-Sicht explizit ins Logcat, um den naechsten CI-Fehlschlag
+        // definitiv zu klaeren statt weiter von aussen zu vermuten.
+        val gewaehrtLautProzess = ContextCompat.checkSelfPermission(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        Log.i("StandortPermissionDiag", "checkSelfPermission(ACCESS_COARSE_LOCATION) vor Klick: gewaehrt=$gewaehrtLautProzess")
 
         composeRule.onNodeWithTag("button_standort_ermitteln").performClick()
         // Der eigentliche #129-Nachweis: ohne dass der Button tatsaechlich den echten
