@@ -88,7 +88,9 @@ class SicherungManagerTest {
         )
 
         val quellSettings = neueSettings()
-        quellSettings.ntfyTopic = "sicherung-test-topic"
+        // Nicht ntfyTopic: seit Befund 05/C-6 bewusst nicht Teil der Sicherung (siehe
+        // SicherungEinstellungenTest.ntfyGeheimnisseWerdenNichtInDieSicherungAufgenommen).
+        quellSettings.driveFolderName = "Sicherung-Test-Ordner"
 
         val zielDatei = File(context.cacheDir, "sicherung_${System.nanoTime()}.zip")
         val erstellErgebnis = SicherungManager.erstelleSicherung(context, Uri.fromFile(zielDatei), quellSettings)
@@ -108,7 +110,7 @@ class SicherungManagerTest {
         // Nicht ueber container.database (by lazy, veraltet) - siehe Klassen-KDoc.
         val wiederhergestellteDao = AppDatabase.getDatabase(context).noiseDao()
         assertTrue(wiederhergestellteDao.getAlleAktiven().any { it.timestamp == eindeutigerZeitstempel })
-        assertEquals("sicherung-test-topic", zielSettings.ntfyTopic)
+        assertEquals("Sicherung-Test-Ordner", zielSettings.driveFolderName)
     }
 
     /**

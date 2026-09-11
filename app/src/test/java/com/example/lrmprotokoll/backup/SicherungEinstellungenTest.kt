@@ -31,9 +31,6 @@ class SicherungEinstellungenTest {
         quelle.aiMode = "ONLINE"
         quelle.alarmierungAktiv = true
         quelle.karenzzeitSekunden = 120
-        quelle.ntfyServer = "https://ntfy.example.org"
-        quelle.ntfyTopic = "mein-topic"
-        quelle.heartbeatUrl = "https://heartbeat.example.org/ping"
         quelle.driveFolderName = "Lärmprotokoll-Sicherung"
         quelle.appLanguage = "en"
         quelle.autoRetentionEnabled = true
@@ -52,9 +49,6 @@ class SicherungEinstellungenTest {
         assertEquals("ONLINE", ziel.aiMode)
         assertEquals(true, ziel.alarmierungAktiv)
         assertEquals(120, ziel.karenzzeitSekunden)
-        assertEquals("https://ntfy.example.org", ziel.ntfyServer)
-        assertEquals("mein-topic", ziel.ntfyTopic)
-        assertEquals("https://heartbeat.example.org/ping", ziel.heartbeatUrl)
         assertEquals("Lärmprotokoll-Sicherung", ziel.driveFolderName)
         assertEquals("en", ziel.appLanguage)
         assertEquals(true, ziel.autoRetentionEnabled)
@@ -88,5 +82,42 @@ class SicherungEinstellungenTest {
 
         assertNotEquals(true, json.has("meterDeviceAddress"))
         assertNotEquals(true, json.has("googleAccountEmail"))
+    }
+
+    @Test
+    fun ntfyGeheimnisseWerdenNichtInDieSicherungAufgenommen() {
+        // Praeprotokoll-Befund 05 / Korrekturliste C-6: ntfy-Topic, ntfy-Server und die
+        // Heartbeat-URL sind die einzige Zugangskontrolle bzw. ein faelschbares Geheimnis (siehe
+        // NtfyAlertChannel-KDoc) und liegen deshalb in EncryptedSharedPreferences - eine Aufnahme
+        // hier wuerde sie ueber die automatische Drive-Sicherung im Klartext in die Cloud
+        // spiegeln und die M6-Verschluesselung gegenstandslos machen.
+        val quelle = neueSettings()
+        quelle.ntfyServer = "https://ntfy.example.org"
+        quelle.ntfyTopic = "geheimes-topic"
+        quelle.heartbeatUrl = "https://heartbeat.example.org/ping/abc123"
+
+        val json = buildEinstellungenJson(quelle)
+
+        assertNotEquals(true, json.has("ntfyServer"))
+        assertNotEquals(true, json.has("ntfyTopic"))
+        assertNotEquals(true, json.has("heartbeatUrl"))
+    }
+
+    @Test
+    fun wiederherstellungIgnoriertNtfyGeheimnisseAusAelteremSicherungsformat() {
+        // Gegenprobe zu wendeEinstellungenAn: eine Sicherung aus der Zeit VOR der Korrektur kann
+        // diese Schluessel noch enthalten - sie duerfen beim Einspielen nicht ploetzlich wieder
+        // im Klartext-Zielsettings landen.
+        val ziel = neueSettings()
+        ziel.ntfyTopic = "bereits-konfiguriertes-topic"
+
+        val altesJson = org.json.JSONObject()
+        altesJson.put("ntfyServer", "https://alt.example.org")
+        altesJson.put("ntfyTopic", "altes-topic-aus-backup")
+        altesJson.put("heartbeatUrl", "https://alt.example.org/ping")
+
+        wendeEinstellungenAn(altesJson, ziel)
+
+        assertEquals("bereits-konfiguriertes-topic", ziel.ntfyTopic)
     }
 }
