@@ -236,6 +236,10 @@ class AppContainer(
             measurementDao = database.measurementDao(),
             connectionEventDao = database.connectionEventDao(),
             scope = connectionSupervisorScope,
+            // Praefprotokoll-Befund 01 / Owner-Entscheidung 11.09.2026: erst dadurch bekommt
+            // eine reine Mikrofon-Session ueberhaupt Ausfallbaender/eine ehrliche
+            // Datenverfuegbarkeit statt strukturell immer 100%.
+            mikrofonAktiv = com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv,
         )
     }
 
