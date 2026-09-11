@@ -108,7 +108,14 @@ interface ConnectionEventDao {
 @Dao
 interface MinuteAggregateDao {
 
-    @Insert
+    /**
+     * REPLACE statt der bisherigen Default-Strategie ABORT (Prüfprotokoll-Anhang, Schema 19):
+     * mit dem neuen eindeutigen Index auf (sessionId, minuteStart) würfe ein zweiter
+     * Retention-Lauf über dieselbe Minute sonst eine SQLiteConstraintException statt sie -
+     * deterministisch, da dieselben Rohwerte immer dasselbe Aggregat ergeben - einfach zu
+     * ersetzen.
+     */
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insertAll(aggregate: List<MinuteAggregateEntity>)
 
     @Query("SELECT * FROM minute_aggregates WHERE sessionId = :sessionId ORDER BY minuteStart")

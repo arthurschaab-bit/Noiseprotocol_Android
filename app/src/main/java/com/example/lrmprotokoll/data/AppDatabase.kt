@@ -386,9 +386,42 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
     }
 }
 
+/**
+ * Migration 18 -> 19 (Prüfprotokoll-Anhang, Owner-Entscheidungen vom 11.09.2026), zwei rein
+ * additive, voneinander unabhängige Änderungen in einer Migration:
+ *
+ * 1. Eindeutiger Index auf `minute_aggregates(sessionId, minuteStart)` ("repariere es" - ein
+ *    wiederholter Retention-Lauf konnte dieselbe Minute doppelt einfügen, siehe
+ *    [MinuteAggregateEntity]-KDoc). Bestehende Zeilen können zu diesem Zeitpunkt bereits
+ *    Duplikate enthalten - `CREATE UNIQUE INDEX` würde darauf mit einem Konstraintfehler
+ *    scheitern und die gesamte Migration (und damit den App-Start) zum Absturz bringen. Deshalb
+ *    erst die duplizierten (sessionId, minuteStart)-Kombinationen auf die jeweils zuletzt
+ *    eingefügte Zeile (höchste `id`) reduzieren, DANN den Index anlegen - ein Datenverlust nur an
+ *    den Duplikaten selbst, die per Definition identische Werte trugen (deterministische
+ *    Berechnung aus denselben Rohwerten).
+ * 2. Index auf `level_samples(at)` ("Sync soll die letzten 30 Tage prüfen und syncen" - Grundlage
+ *    für den neuen Nachhol-Sync in [com.example.lrmprotokoll.drive.DriveSyncCoordinator]).
+ */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "DELETE FROM `minute_aggregates` WHERE `id` NOT IN (" +
+                "SELECT MAX(`id`) FROM `minute_aggregates` GROUP BY `sessionId`, `minuteStart`)"
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_minute_aggregates_sessionId_minuteStart` " +
+                "ON `minute_aggregates` (`sessionId`, `minuteStart`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_level_samples_at` ON `level_samples` (`at`)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
+    MIGRATION_18_19,
 )
 
 @Database(
@@ -399,7 +432,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

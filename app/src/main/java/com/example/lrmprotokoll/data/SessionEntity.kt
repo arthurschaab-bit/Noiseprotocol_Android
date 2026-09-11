@@ -108,8 +108,20 @@ object ConnectionEventType {
  * [weighting], [timeWeighting] und [range] werden von [com.example.lrmprotokoll.messreihe.RetentionCoordinator]
  * je Minute nur übernommen, wenn ALLE verdichteten Rohwerte übereinstimmen - sonst `null`, damit
  * ein Wechsel innerhalb einer Minute nicht als ein einzelner, falscher Wert verschwindet.
+ *
+ * Eindeutiger Index auf ([sessionId], [minuteStart]) seit Schema 19 (Prüfprotokoll-Anhang,
+ * Owner-Entscheidung vom 11.09.2026: "repariere es") - vorher konnte ein wiederholter
+ * Retention-Lauf (Retry nach Teilfehlschlag, ein versehentlicher Doppelaufruf) dieselbe Minute
+ * ein zweites Mal einfügen; das KDoc von [com.example.lrmprotokoll.messreihe.RetentionCoordinator]
+ * nannte das "reparierbar", ohne dass etwas repariert hätte. [MinuteAggregateDao.insertAll]
+ * nutzt jetzt `OnConflictStrategy.REPLACE`, damit ein zweiter Lauf über dieselbe Minute sie
+ * ersetzt statt zu duplizieren - deterministisch idempotent, weil dieselben Rohwerte immer
+ * dasselbe Aggregat ergeben.
  */
-@Entity(tableName = "minute_aggregates")
+@Entity(
+    tableName = "minute_aggregates",
+    indices = [androidx.room.Index(value = ["sessionId", "minuteStart"], unique = true)],
+)
 data class MinuteAggregateEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: Long,
