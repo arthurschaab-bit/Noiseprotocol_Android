@@ -1254,11 +1254,30 @@ die Gradle-Property `debugStoreFile` hereingereicht (`app/build.gradle.kts`,
 eigenes, pro Maschine neu erzeugtes `~/.android/debug.keystore` zurück - der Build bricht nicht,
 nur die SHA-1-Stabilität fehlt dann wieder.
 
-**Owner-Korrektur zu 4.5:** Der eigene Schwellenwert fürs Messgerät (`meterDbThreshold`) ist
-entfallen. Bei bestehender Messgerät-Verbindung wird jetzt durchgehend aufgezeichnet statt erst ab
-Pegelüberschreitung - "es soll immer aufgezeichnet werden bei einer Verbindung". Die
-Mikrofon-Schwelle (`dbThreshold`) bleibt unverändert als Fallback, solange kein Messgerät verbunden
-ist. Siehe `MeterTriggerSource.auswerten()`.
+**Owner-Korrektur zu 4.5** (überholt, siehe Korrektur direkt darunter): Der eigene Schwellenwert
+fürs Messgerät (`meterDbThreshold`) ist entfallen. Bei bestehender Messgerät-Verbindung wird
+jetzt durchgehend aufgezeichnet statt erst ab Pegelüberschreitung - "es soll immer aufgezeichnet
+werden bei einer Verbindung". Die Mikrofon-Schwelle (`dbThreshold`) bleibt unverändert als
+Fallback, solange kein Messgerät verbunden ist. Siehe `MeterTriggerSource.auswerten()`.
+
+**Korrektur (11.09.2026, Prüfprotokoll C-3 + direkte Owner-Rückfrage danach):** Die Entscheidung
+"kein Schwellwert fürs Messgerät" oben gilt nicht mehr. C-3 hat `meterDbThreshold`/
+`meterQuietHoursThreshold` als eigene, echte Einstellung samt Settings-UI wieder eingeführt, und
+`MeterTriggerSource.auswerten()` prüft in den Zweigen `PCE_323`/`AUTO` weiterhin
+`letzterMeterFrame.level > meterSchwelle`, bevor ein Ereignis entsteht. Auf direkte Rückfrage
+("Fehler oder Absicht?") die Owner-Antwort: **Absicht, aktueller Code-Stand ist korrekt, kein
+Fix nötig.**
+
+Grund für die Verwirrung, festgehalten, damit sie sich nicht wiederholt — "Aufzeichnung" meint
+hier zwei verschiedene, unabhängig voneinander korrekte Mechanismen:
+- **Kontinuierliche Pegelaufzeichnung** (`measurements`-Tabelle, `MeasurementRecorder.onFrame()`):
+  läuft ohne Schwellwert, sobald das Messgerät verbunden ist und Frames liefert - "dBA/dBC vom
+  Messgerät sollen sobald die Bluetoothverbindung steht aufgezeichnet werden" (Owner, 11.09.2026).
+- **Ereignis-Trigger** (`NoiseRecord`-Tabelle, separat von `measurements`, via
+  `AudioRecordingService.pruefeSchwellenwertUndTrigger()` → `MeterTriggerSource.auswerten()`):
+  eigene, schwellwertbasierte Entscheidung, ob ein Ereignis (mit oder ohne Mikrofon-WAV) entsteht
+  - Meter-Pfad `meterDbThreshold`, Mikrofon-Audio `dbThreshold`/`quietHoursThreshold` ("Audio vom
+  Mikrofon erst wenn Grenzwerte überschritten wurden", Owner, 11.09.2026).
 
 **Geräteetest-Rückmeldungen (laufend):** Text auf keiner Seite markier-/kopierbar (u.a.
 Diagnose-Log) - behoben durch `SelectionContainer` um den gesamten `NavHost` in `MainActivity`.
