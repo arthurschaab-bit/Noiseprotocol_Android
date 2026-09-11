@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -63,7 +64,16 @@ class GesamtberichtStammdatenSheetPermissionInstrumentedTest {
         ) == PackageManager.PERMISSION_GRANTED
         Log.i("StandortPermissionDiag", "checkSelfPermission(ACCESS_COARSE_LOCATION) vor Klick: gewaehrt=$gewaehrtLautProzess")
 
-        composeRule.onNodeWithTag("button_standort_ermitteln").performClick()
+        // CI-Fund 10.09.2026 (5. Iteration, PR #132): performClick() simuliert einen ECHTEN
+        // Touch an der Bildschirmposition des Knotens - liegt diese ausserhalb des sichtbaren
+        // Scroll-Ausschnitts (Column mit .verticalScroll(...).heightIn(max = 560.dp), der Button
+        // steht nach 5 Textfeldern weit unten), trifft der Klick ins Leere: kein Fehler, aber
+        // standortErmitteln() wird nie aufgerufen (bestaetigt per Debug-Logging in
+        // GesamtberichtStammdatenSheet.kt - keine der dortigen Log-Zeilen erschien je). Foto-/
+        // Video-Sheet sind kurz genug, dass ihre Buttons ohne Scrollen sichtbar sind - deshalb
+        // fiel das dort nie auf. performScrollTo() bringt den Knoten zuerst in den sichtbaren
+        // Bereich.
+        composeRule.onNodeWithTag("button_standort_ermitteln").performScrollTo().performClick()
         // Der eigentliche #129-Nachweis: ohne dass der Button tatsaechlich den echten
         // Systemdialog ausloest, kommt dieser Aufruf nie durch.
         BerechtigungsTestHelfer.erlaubeSystemdialog()
@@ -79,7 +89,7 @@ class GesamtberichtStammdatenSheetPermissionInstrumentedTest {
         composeRule.setContent { GesamtberichtStammdatenSheet(sessionId = sessionId, onFertig = {}) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("button_standort_ermitteln").performClick()
+        composeRule.onNodeWithTag("button_standort_ermitteln").performScrollTo().performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText("Ermittle …").fetchSemanticsNodes().isEmpty()
