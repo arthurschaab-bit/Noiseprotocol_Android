@@ -2,7 +2,6 @@ package com.example.lrmprotokoll.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -122,15 +121,10 @@ fun GesamtberichtStammdatenSheet(
     LaunchedEffect(sessionId) {
         val letzte = withContext(Dispatchers.IO) { container.database.stammdatenVerlaufDao().letzte(10) }
         verlauf = letzte
-        Log.i("StandortBerechtigungDiag", "LaunchedEffect(sessionId) abgeschlossen, verlauf.size=${letzte.size}")
         letzte.firstOrNull()?.let { uebernehmen(it) }
     }
 
-    // TEMPORAERES Debug-Logging fuer PR #132 (CI-Fund: der echte Berechtigungsdialog erscheint
-    // fuer diesen Screen nie, obwohl checkSelfPermission() sowohl von aussen (dumpsys) als auch
-    // im Prozess selbst DENIED zurueckgibt) - wird entfernt, sobald die Ursache geklaert ist.
     val standortBerechtigungsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { erlaubt ->
-        Log.i("StandortBerechtigungDiag", "Launcher-Callback erreicht, erlaubt=$erlaubt, pendingAktion!=null=${pendingAktion != null}")
         val aktion = pendingAktion
         pendingAktion = null
         if (erlaubt && aktion != null) {
@@ -143,21 +137,17 @@ fun GesamtberichtStammdatenSheet(
     }
 
     fun mitStandortBerechtigung(aktion: () -> Unit) {
-        val gewaehrt = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        Log.i("StandortBerechtigungDiag", "mitStandortBerechtigung() aufgerufen, checkSelfPermission gewaehrt=$gewaehrt")
-        if (gewaehrt) {
+        ) {
             aktion()
         } else {
             pendingAktion = aktion
-            Log.i("StandortBerechtigungDiag", "Rufe standortBerechtigungsLauncher.launch(ACCESS_COARSE_LOCATION) auf")
             standortBerechtigungsLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-            Log.i("StandortBerechtigungDiag", "launch(...) ist zurueckgekehrt (kein Absturz)")
         }
     }
 
     fun standortErmitteln() {
-        Log.i("StandortBerechtigungDiag", "standortErmitteln() aufgerufen")
         mitStandortBerechtigung {
             standortLaedt = true
             scope.launch {
