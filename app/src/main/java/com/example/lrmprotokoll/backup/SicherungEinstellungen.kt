@@ -16,6 +16,16 @@ import org.json.JSONObject
  * Filter-Laufzeitzustände (ephemer) sowie [SettingsManager.letzteDiagnoseId] (Diagnose-Breadcrumb,
  * keine Einstellung) und [SettingsManager.monitoringWasActive]/-AudioMonitoringWasActive
  * (Dienst-Neustart-Buchführung, nach einer Wiederherstellung ohnehin ungültig).
+ *
+ * Ebenfalls bewusst NICHT enthalten: [SettingsManager.ntfyServer], [SettingsManager.ntfyTopic]
+ * und [SettingsManager.heartbeatUrl] (Owner-Entscheidung nach Prüfprotokoll-Befund 05, C-6,
+ * Kommentar vom 11.09.2026: "raus aus dem Backup mit diesen Daten, die gehören nicht in die
+ * Cloud"). Diese drei Werte liegen in [SettingsManager] absichtlich in
+ * `EncryptedSharedPreferences` (M6, Plan Abschnitt 6) - eine Aufnahme hier würde sie über die
+ * automatische Drive-Sicherung ([com.example.lrmprotokoll.drive.DriveDatenbankSicherung]) im
+ * Klartext-JSON alle 30 Minuten in die Cloud spiegeln und die Verschlüsselung damit
+ * gegenstandslos machen. Nach einer Wiederherstellung müssen ntfy-Topic/-Server und die
+ * Heartbeat-URL deshalb erneut in den Einstellungen eingetragen werden.
  */
 internal fun buildEinstellungenJson(settings: SettingsManager): JSONObject {
     val json = JSONObject()
@@ -31,9 +41,7 @@ internal fun buildEinstellungenJson(settings: SettingsManager): JSONObject {
     json.put("alarmierungAktiv", settings.alarmierungAktiv)
     json.put("karenzzeitSekunden", settings.karenzzeitSekunden)
     json.put("ntfyAktiv", settings.ntfyAktiv)
-    json.put("ntfyServer", settings.ntfyServer)
-    json.put("ntfyTopic", settings.ntfyTopic)
-    json.put("heartbeatUrl", settings.heartbeatUrl)
+    // ntfyServer/ntfyTopic/heartbeatUrl bewusst NICHT hier - siehe Klassen-KDoc (Befund 05, C-6).
     json.put("entwarnungUeberNtfy", settings.entwarnungUeberNtfy)
     json.put("entwarnungUeberMeldung", settings.entwarnungUeberMeldung)
     json.put("alarmTonAktiv", settings.alarmTonAktiv)
@@ -79,9 +87,9 @@ internal fun wendeEinstellungenAn(json: JSONObject, settings: SettingsManager) {
     if (json.has("alarmierungAktiv")) settings.alarmierungAktiv = json.getBoolean("alarmierungAktiv")
     if (json.has("karenzzeitSekunden")) settings.karenzzeitSekunden = json.getInt("karenzzeitSekunden")
     if (json.has("ntfyAktiv")) settings.ntfyAktiv = json.getBoolean("ntfyAktiv")
-    if (json.has("ntfyServer")) settings.ntfyServer = json.getString("ntfyServer")
-    if (json.has("ntfyTopic")) settings.ntfyTopic = json.getString("ntfyTopic")
-    if (json.has("heartbeatUrl")) settings.heartbeatUrl = json.getString("heartbeatUrl")
+    // ntfyServer/ntfyTopic/heartbeatUrl bewusst NICHT hier - siehe Klassen-KDoc (Befund 05, C-6).
+    // Eine Sicherung aus einer aelteren Version kann diese Schluessel noch enthalten (vor der
+    // Korrektur geschrieben) - sie werden dann einfach ignoriert, wie bei jedem entfallenen Feld.
     if (json.has("entwarnungUeberNtfy")) settings.entwarnungUeberNtfy = json.getBoolean("entwarnungUeberNtfy")
     if (json.has("entwarnungUeberMeldung")) settings.entwarnungUeberMeldung = json.getBoolean("entwarnungUeberMeldung")
     if (json.has("alarmTonAktiv")) settings.alarmTonAktiv = json.getBoolean("alarmTonAktiv")

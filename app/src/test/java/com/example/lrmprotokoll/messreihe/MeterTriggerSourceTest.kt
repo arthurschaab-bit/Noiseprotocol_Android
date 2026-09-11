@@ -21,7 +21,7 @@ class MeterTriggerSourceTest {
     @Test
     fun ohneMessgeraetFaelltAufMikrofonZurueck() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = null, mikrofonDb = 65.0, activeSchwelle = 60f,
+            letzterMeterFrame = null, mikrofonDb = 65.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertTrue(ergebnis.ausgeloest)
         assertEquals(65.0, ergebnis.pegel, 0.0001)
@@ -32,7 +32,7 @@ class MeterTriggerSourceTest {
     @Test
     fun ohneMessgeraetUnterhalbDerMikrofonSchwelleLoestNichtAus() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = null, mikrofonDb = 10.0, activeSchwelle = 60f,
+            letzterMeterFrame = null, mikrofonDb = 10.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertFalse(ergebnis.ausgeloest)
     }
@@ -40,7 +40,7 @@ class MeterTriggerSourceTest {
     @Test
     fun mitMessgeraetLoestUeberSchwelleAus() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0), mikrofonDb = 0.0, activeSchwelle = 60f,
+            letzterMeterFrame = frame(70.0), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertTrue(ergebnis.ausgeloest)
         assertEquals(70.0, ergebnis.pegel, 0.0001)
@@ -51,7 +51,7 @@ class MeterTriggerSourceTest {
     @Test
     fun mitMessgeraetUnterSchwelleLoestNichtAus() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(40.0), mikrofonDb = 0.0, activeSchwelle = 60f,
+            letzterMeterFrame = frame(40.0), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertFalse(ergebnis.ausgeloest)
     }
@@ -59,7 +59,7 @@ class MeterTriggerSourceTest {
     @Test
     fun triggerQuellePce323IgnoriertMikrofon() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = null, mikrofonDb = 85.0, activeSchwelle = 60f, triggerQuelle = "PCE_323"
+            letzterMeterFrame = null, mikrofonDb = 85.0, mikrofonSchwelle = 60f, meterSchwelle = 60f, triggerQuelle = "PCE_323"
         )
         assertFalse("Wenn nur PCE-323 ausgewählt ist, darf Mikrofon nicht auslösen", ergebnis.ausgeloest)
     }
@@ -67,7 +67,7 @@ class MeterTriggerSourceTest {
     @Test
     fun triggerQuelleMikrofonIgnoriertMessgeraet() {
         val ergebnis = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(85.0), mikrofonDb = 40.0, activeSchwelle = 60f, triggerQuelle = "MIKROFON"
+            letzterMeterFrame = frame(85.0), mikrofonDb = 40.0, mikrofonSchwelle = 60f, meterSchwelle = 60f, triggerQuelle = "MIKROFON"
         )
         assertFalse("Wenn nur Mikrofon gewählt ist und unter Schwelle liegt, löst es nicht aus", ergebnis.ausgeloest)
     }
@@ -75,10 +75,10 @@ class MeterTriggerSourceTest {
     @Test
     fun weightingWirdNurBeiBestaetigterBewertungDurchgereicht() {
         val unbestaetigt = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0, bestaetigt = false), mikrofonDb = 0.0, activeSchwelle = 60f,
+            letzterMeterFrame = frame(70.0, bestaetigt = false), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         val bestaetigt = MeterTriggerSource.auswerten(
-            letzterMeterFrame = frame(70.0, bestaetigt = true), mikrofonDb = 0.0, activeSchwelle = 60f,
+            letzterMeterFrame = frame(70.0, bestaetigt = true), mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertNull("Unbestaetigte Bewertung darf nicht als Tatsache durchgereicht werden", unbestaetigt.meterWeighting)
         assertEquals("A", bestaetigt.meterWeighting)
@@ -88,8 +88,46 @@ class MeterTriggerSourceTest {
     fun fehlendeWeightingBleibtNullAuchBeiBestaetigterMessung() {
         val ergebnis = MeterTriggerSource.auswerten(
             letzterMeterFrame = frame(70.0, weighting = null, bestaetigt = true),
-            mikrofonDb = 0.0, activeSchwelle = 60f,
+            mikrofonDb = 0.0, mikrofonSchwelle = 60f, meterSchwelle = 60f,
         )
         assertNull(ergebnis.meterWeighting)
+    }
+
+    // ---------------------------------------------------------------- Getrennte Schwellwerte (Befund 02 / C-3)
+
+    @Test
+    fun messgeraetWertetGegenDieMessgeraetSchwelleAusNichtGegenDieMikrofonschwelle() {
+        // 55 dBA liegt unter der Messgeraet-Schwelle (60), aber ueber der (hier absichtlich viel
+        // niedrigeren) Mikrofon-Schwelle - vor der Trennung haette EIN gemeinsamer Wert hier
+        // faelschlich ausgeloest.
+        val ergebnis = MeterTriggerSource.auswerten(
+            letzterMeterFrame = frame(55.0), mikrofonDb = 0.0,
+            mikrofonSchwelle = 30f, meterSchwelle = 60f,
+        )
+        assertFalse("55 dBA liegt unter der Messgeraet-Schwelle 60", ergebnis.ausgeloest)
+    }
+
+    @Test
+    fun mikrofonWertetGegenDieMikrofonSchwelleAusNichtGegenDieMessgeraetschwelle() {
+        // Spiegelbildlich: 65 (Mikrofon-Rohwert) liegt ueber der Mikrofon-Schwelle (60), aber
+        // unter der (hier absichtlich viel hoeheren) Messgeraet-Schwelle.
+        val ergebnis = MeterTriggerSource.auswerten(
+            letzterMeterFrame = null, mikrofonDb = 65.0,
+            mikrofonSchwelle = 60f, meterSchwelle = 90f,
+        )
+        assertTrue("65 liegt ueber der Mikrofon-Schwelle 60", ergebnis.ausgeloest)
+    }
+
+    @Test
+    fun autoModusMitVerbundenemMessgeraetIgnoriertDieMikrofonschwelleVollstaendig() {
+        // "AUTO" mit verbundenem Messgeraet wertet NUR den Messgeraet-Pegel gegen die
+        // Messgeraet-Schwelle aus - eine (hier absichtlich sehr niedrige) Mikrofon-Schwelle darf
+        // keine Rolle spielen, auch wenn der (ungenutzte) Mikrofon-Rohwert theoretisch darueber
+        // laege.
+        val ergebnis = MeterTriggerSource.auswerten(
+            letzterMeterFrame = frame(40.0), mikrofonDb = 90.0,
+            mikrofonSchwelle = 10f, meterSchwelle = 60f,
+        )
+        assertFalse("40 dBA liegt unter der Messgeraet-Schwelle 60 - der hohe Mikrofonwert darf nicht zaehlen", ergebnis.ausgeloest)
     }
 }

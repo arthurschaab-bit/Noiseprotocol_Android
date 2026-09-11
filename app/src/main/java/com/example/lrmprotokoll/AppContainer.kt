@@ -226,6 +226,40 @@ class AppContainer(
         com.example.lrmprotokoll.video.VideoTonMitschnitt()
     }
 
+    /**
+     * App-weiter Scope fuer den ABSCHLUSS einer Videobeweis-Aufnahme (Praefprotokoll-Frage 8 /
+     * Owner-Entscheidung vom 11.09.2026: "Korrigiere das und dokumentiere es nach").
+     *
+     * Vorher lief `VideoAufnahmeScreen`s `VideoRecordEvent.Finalize`-Callback auf dem
+     * `rememberCoroutineScope()` des Screens - verliess der Nutzer den Screen, BEVOR CameraX das
+     * Finalize-Ereignis lieferte (der Callback kommt asynchron, ohne garantierte Frist), wurde
+     * die Compose-Coroutine mit dem Screen abgebrochen: `beendeAufnahme()` lief nie zu Ende,
+     * `videoTonMitschnitt.beende()` wurde nie aufgerufen (die PCM-Senke schrieb unbemerkt weiter),
+     * `tonGemuxt` blieb fuer immer `false`, und die tote `BeweisVideoDao.ungemuxte()`-Abfrage
+     * (fuer genau diesen Fall gedacht) wurde nie aufgerufen, um es zu reparieren.
+     *
+     * Dasselbe Muster wie [connectionSupervisorScope]/[com.example.lrmprotokoll.drive.DriveSyncCoordinator]:
+     * eine Aufgabe, die eine geschlossene UI ueberleben muss, gehoert nicht an einen
+     * Compose-Scope. Anders als bei jenen kein eigener Coordinator-Typ - der Abschluss ist ein
+     * einziger, bereits vorhandener Suspend-Aufruf ([com.example.lrmprotokoll.ui.beendeAufnahme]),
+     * der nur den richtigen Scope braucht, keine eigene Zustandsmaschine.
+     */
+    val videobeweisAbschlussScope: CoroutineScope by lazy {
+        val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+            Log.e("AppContainer", "Unerwarteter Fehler beim Abschluss einer Videobeweis-Aufnahme", throwable)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.VIDEO_MUX_FAILED,
+                component = "AppContainer",
+                operation = "videobeweisAbschlussScope",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                handled = false,
+                cause = throwable,
+                message = "Unerwarteter Fehler beim Abschluss einer Videobeweis-Aufnahme",
+            )
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+    }
+
     // ---------------------------------------------------------------- M4: Messreihe
 
     val measurementRecorder: MeasurementRecorder by lazy {
@@ -236,6 +270,10 @@ class AppContainer(
             measurementDao = database.measurementDao(),
             connectionEventDao = database.connectionEventDao(),
             scope = connectionSupervisorScope,
+            // Praefprotokoll-Befund 01 / Owner-Entscheidung 11.09.2026: erst dadurch bekommt
+            // eine reine Mikrofon-Session ueberhaupt Ausfallbaender/eine ehrliche
+            // Datenverfuegbarkeit statt strukturell immer 100%.
+            mikrofonAktiv = com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv,
         )
     }
 

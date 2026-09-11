@@ -206,6 +206,7 @@
     <string name="settings_mode_pro">Pro Mode</string>
     <string name="settings_section_thresholds">Thresholds &amp; Audio</string>
     <string name="settings_threshold_day">Day Threshold: %1$.1f dB(A)</string>
+    <string name="settings_meter_threshold_day">Meter Threshold (Day): %1$.1f dB(A)</string>
     <string name="settings_threshold_current_level">Current level (microphone): %1$.1f dB</string>
     <string name="settings_threshold_no_live_level">Start monitoring to see the current level</string>
     <string name="settings_threshold_use_current">Use current level</string>
@@ -232,6 +233,7 @@
     <string name="settings_quiet_hours_title">Quiet Hours</string>
     <string name="settings_quiet_hours_desc">Uses a separate threshold during night/quiet hours</string>
     <string name="settings_quiet_hours_threshold">Night Threshold: %1$.1f dB(A)</string>
+    <string name="settings_meter_threshold_quiet">Meter Threshold (Night): %1$.1f dB(A)</string>
     <string name="settings_quiet_hours_start">Start: %1$d:00</string>
     <string name="settings_quiet_hours_end">End: %1$d:00</string>
     <string name="settings_cleanup_title">Auto-Retention / Storage Cleanup</string>

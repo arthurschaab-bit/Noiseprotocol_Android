@@ -78,4 +78,30 @@ class AlertMessagesTest {
         assertEquals("Lärmprotokoll: Verbindung wieder da", AlertMessages.titel(AlertKind.RESOLVED))
         assertEquals("Lärmprotokoll: Test", AlertMessages.titel(AlertKind.TEST))
     }
+
+    @Test
+    fun zustandsAnzeigeGestehtEinDassSentKeineZustellungBelegt() {
+        // Praefprotokoll-Befund 04 / Korrekturliste C-5, Owner-Entscheidung (c): "SENT" darf im
+        // Diagnose-Screen nicht als Zustellbestaetigung missverstanden werden koennen.
+        val text = AlertMessages.zustandsAnzeige(com.example.lrmprotokoll.data.DeliveryState.SENT)
+        assertTrue(text.contains("Gesendet"))
+        assertTrue(
+            "Der Text muss das Eingestaendnis selbst enthalten, nicht nur \"Gesendet\"",
+            text.contains("weiß die App nicht"),
+        )
+    }
+
+    @Test
+    fun zustandsAnzeigeKenntFailedUndPending() {
+        assertEquals(
+            "Fehlgeschlagen – kein Kanal hat den Alarm angenommen",
+            AlertMessages.zustandsAnzeige(com.example.lrmprotokoll.data.DeliveryState.FAILED),
+        )
+        assertEquals("Ausstehend", AlertMessages.zustandsAnzeige(com.example.lrmprotokoll.data.DeliveryState.PENDING))
+    }
+
+    @Test
+    fun zustandsAnzeigeFaelltAufDenRohwertZurueckBeiUnbekanntemZustand() {
+        assertEquals("UNBEKANNT", AlertMessages.zustandsAnzeige("UNBEKANNT"))
+    }
 }

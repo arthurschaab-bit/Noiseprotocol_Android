@@ -57,8 +57,20 @@ data class SessionEntity(
  * `MeterFrame.modeAssumptionConfirmed`-KDoc): Ein erfundener oder angenommener Wert wäre hier
  * eine gespeicherte Tatsachenbehauptung, die es nicht gibt. Jede Stelle, die diese Spalten liest,
  * MUSS `null` als "unbekannt" behandeln, nicht als Fehler.
+ *
+ * Indizes seit Schema 20 (Praefprotokoll-Anhang C-4-Rest): `(sessionId, timestamp)` fuer
+ * [com.example.lrmprotokoll.data.MeasurementDao.fuerSession]/`fuerSessionAbFlow`/
+ * `letzteZeitstempelJeSession`, `timestamp` allein fuer [com.example.lrmprotokoll.data.MeasurementDao.aelterAls]/
+ * `loescheAelterAls`/`zwischen` - ohne sie war jede dieser Abfragen ein Table-Scan ueber die per
+ * C-4 jetzt bewusst lange aufbewahrten Rohwerte (90 Tage, [com.example.lrmprotokoll.messreihe.RetentionCoordinator]).
  */
-@Entity(tableName = "measurements")
+@Entity(
+    tableName = "measurements",
+    indices = [
+        androidx.room.Index(value = ["sessionId", "timestamp"]),
+        androidx.room.Index(value = ["timestamp"]),
+    ],
+)
 data class MeasurementEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: Long,
@@ -108,8 +120,20 @@ object ConnectionEventType {
  * [weighting], [timeWeighting] und [range] werden von [com.example.lrmprotokoll.messreihe.RetentionCoordinator]
  * je Minute nur übernommen, wenn ALLE verdichteten Rohwerte übereinstimmen - sonst `null`, damit
  * ein Wechsel innerhalb einer Minute nicht als ein einzelner, falscher Wert verschwindet.
+ *
+ * Eindeutiger Index auf ([sessionId], [minuteStart]) seit Schema 19 (Prüfprotokoll-Anhang,
+ * Owner-Entscheidung vom 11.09.2026: "repariere es") - vorher konnte ein wiederholter
+ * Retention-Lauf (Retry nach Teilfehlschlag, ein versehentlicher Doppelaufruf) dieselbe Minute
+ * ein zweites Mal einfügen; das KDoc von [com.example.lrmprotokoll.messreihe.RetentionCoordinator]
+ * nannte das "reparierbar", ohne dass etwas repariert hätte. [MinuteAggregateDao.insertAll]
+ * nutzt jetzt `OnConflictStrategy.REPLACE`, damit ein zweiter Lauf über dieselbe Minute sie
+ * ersetzt statt zu duplizieren - deterministisch idempotent, weil dieselben Rohwerte immer
+ * dasselbe Aggregat ergeben.
  */
-@Entity(tableName = "minute_aggregates")
+@Entity(
+    tableName = "minute_aggregates",
+    indices = [androidx.room.Index(value = ["sessionId", "minuteStart"], unique = true)],
+)
 data class MinuteAggregateEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: Long,

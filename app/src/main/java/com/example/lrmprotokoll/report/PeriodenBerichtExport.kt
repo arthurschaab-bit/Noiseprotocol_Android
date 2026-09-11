@@ -60,7 +60,7 @@ class PeriodenBerichtExport(private val context: Context) {
 
             zeile("Kennwerte", kopfPaint, 22f)
             listOfNotNull(
-                kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
+                kennwerte.leqDb?.let { "${leqBezeichnung(bericht.nurMikrofon)}: ${formatiereDb(it)} dB" },
                 kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
                 kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
                 kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },

@@ -29,7 +29,7 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **M7c** UI-Harmonisierung & Entkopplung (Startseite, 4 Tabs, stabile Sortierung) | ✅ abgeschlossen (PR #53) |
 | **M8** Härtung — Release-Build (R8/Minify) & Herstellerhinweis (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung) | ✅ hardwarefreier Teil abgeschlossen — Chaos-Checkliste/24h-Dauerlauf brauchen ein Gerät, siehe Gerätetest-Zeile unten |
 | **Diagnose & Observability** (Sentry, DiagnosticsReporter, Redactor, Support-Paket) | ✅ abgeschlossen |
-| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, 784 JVM-/Robolectric-Tests, 34 Emulator-Tests) | ✅ vollständig grün & aktiv |
+| **CI-Qualitäts-Gates** (Android Lint 0 Fehler, JVM-/Robolectric- & Emulator-Tests — aktuelle Anzahl in [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md), automatisch generiert statt von Hand gepflegt) | ✅ vollständig grün & aktiv |
 | **Gerätetests & Härtung** (PCE-323 Kopplung, Google Drive, Xiaomi Pad 6 Härtung) | ✅ erfolgreich durchgeführt & umgesetzt |
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
@@ -207,6 +207,82 @@ ein reiner Textbericht ohne Diagramm/Grafik und ohne neuen Bibliotheks-Dependenc
 (`android.graphics.pdf.PdfDocument` aus dem SDK) — passend zum durchgängig minimalen
 Abhängigkeits-Stil des Projekts.
 
+**Für das Prüfprotokoll vom 11.09.2026 entschieden und umgesetzt** (kritische Doku-vs-Code-Prüfung
+mit Owner-Rückfragen, [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) nennt den aktuellen Teststand):
+
+- **LAeq/LMax nur für das Messgerät.** Ein reiner Mikrofonlauf heißt jetzt überall — auch in den
+  PDF-Exporten, vorher nur auf den Bildschirmen — ehrlich „Mittelwert"/„Höchstwert" statt „LAeq"/
+  „LMax" (`leqBezeichnung`/`lmaxBezeichnung`, `ReportManager.kt`). Zusätzlich rechnet
+  `AkustischeKennwerte` den Leq jetzt zeitgewichtet (Gewicht je Messwert = Zeitabstand zum
+  nächsten, gekappt auf 5 s gegen alte Ausfälle) statt über die reine Sample-Anzahl zu mitteln.
+- **Der Mikrofon-Pegel wird jetzt Fast-zeitgewichtet berechnet** (IEC 61672 „Fast", Tau=125 ms,
+  `FastPegelSchaetzer`) statt über die vorherige `max(rmsDb, peakDb − 6 dB)`-Heuristik, deren
+  Herkunft sich mangels Git-Historie nicht rekonstruieren ließ. Mittelt im Leistungs-, nicht im
+  dB-Bereich — akustisch das, was ein „Fast"-Schallpegelmesser tut. Bleibt unkalibriert (siehe
+  unten), nur die zeitliche Mittelung folgt jetzt einem dokumentierten Prinzip statt einer
+  unerklärten Konstante.
+- **Mikrofon-Sessions bekommen jetzt eigene Ausfallbänder.** `MeasurementRecorder` beobachtet den
+  tatsächlichen Mikrofonzustand (`AudioRecordingService.audioAufnahmeAktiv`) und schreibt bei
+  einem Aussetzer ein `ConnectionEventEntity` wie beim Messgerät — die „Datenverfügbarkeit" im
+  Gesamtbericht ist für Mikrofonläufe damit nicht mehr strukturell immer 100 %.
+- **Eigener Schwellwert fürs Messgerät** (`meterDbThreshold`/`meterQuietHoursThreshold`,
+  Default identisch mit dem Mikrofonwert, um das bisherige Auslöseverhalten nicht stillschweigend
+  zu verschieben) — `MeterTriggerSource.auswerten()` wertet Mikrofon und Messgerät jetzt gegen
+  getrennte Schwellen aus.
+- **ntfy-Topic/-Server und die Heartbeat-URL sind nicht mehr Teil der Sicherung** (weder der
+  manuellen SAF- noch der automatischen Drive-Sicherung) — sie gehören in
+  `EncryptedSharedPreferences` und nicht in eine Cloud-Kopie. Nach einer Wiederherstellung müssen
+  sie erneut eingetragen werden.
+- **„SENT" in der Alarm-Historie ist jetzt ein offenes Eingeständnis statt einer vorgetäuschten
+  Zustellbestätigung**, statt auf Pro-Kanal-Retry umzustellen: „Gesendet – ob er dich erreicht
+  hat, weiß die App nicht" (`AlertMessages.zustandsAnzeige`).
+- **Der Videobeweis-Abschluss läuft jetzt auf einem app-weiten Scope** statt auf dem
+  `rememberCoroutineScope()` des Aufnahme-Screens — verließ man den Screen, bevor CameraX das
+  `Finalize`-Ereignis lieferte, blieb `tonGemuxt` vorher für immer `false`.
+- **Videoaufnahme verlangt jetzt laufendes Mikrofon als Voraussetzung**, keine Kann-Eigenschaft
+  mehr — „sobald das Video läuft, immer und synchron auch Audio". Der Tonmitschnitt trägt
+  außerdem Lücken (Doze, ein Aussetzer der Aufnahmeschleife) jetzt als Stille nach, statt die
+  Tonspur unbemerkt zu verkürzen und den Ton danach dem Bild voraus laufen zu lassen.
+- **Drive-Sync prüft jetzt auch die letzten 30 Tage nach**, nicht nur `[heute 00:00, jetzt)` — war
+  die App über Mitternacht offline, werden die versäumten Tage im nächsten Zyklus nachgeholt
+  (`DriveSyncCoordinator.holeVersaeumteTageNach`).
+- **Schema 19:** eindeutiger Index auf `minute_aggregates(sessionId, minuteStart)` (ein
+  wiederholter Retention-Lauf konnte dieselbe Minute doppelt einfügen) sowie ein Index auf
+  `level_samples(at)` als Grundlage für den 30-Tage-Nachholsync.
+- **`LevelSampleDao.loescheVor()` wird jetzt produktiv aufgerufen** (`DriveSyncCoordinator.
+  syncEinenZyklus`, Frist exakt 30 Tage) — vorher nur von Test-Fakes implementiert, `level_samples`
+  wuchs unbegrenzt. Die 30-Tage-Frist ist bewusst genau einen Tag länger als das 29-Tage-Fenster
+  von `holeVersaeumteTageNach`, damit die Löschung dem Nachholsync nie zuvorkommt.
+- **`ACTION_STOP_AUDIO_RECORDING` schließt jetzt eine laufende Mikrofon-Session** korrekt ab,
+  statt sie für immer offen zu lassen (nie eine laufende Messgerät-Session, siehe
+  `MeasurementRecorder.laufendeSessionIstMikrofon`).
+- **Der Foreground-Service-Typ wird nachträglich aktualisiert**, wenn das Messgerät erst nach dem
+  ersten Start gepaart wird, statt dauerhaft nur als `microphone` deklariert zu bleiben.
+- **`NoiseClassifier.aktuelleKonfiguration()`** liest jetzt über eine direkte, nicht-suspend
+  Room-Query statt über `runBlocking { Flow.first() }`; der Aufruf aus „Neu bewerten"
+  (`MainActivity.kt`) läuft jetzt explizit auf `Dispatchers.IO` statt den Main-Thread zu blockieren.
+- **Ein neuer Gradle-Check (`checkUnusedDaoMethods`, Teil von `./gradlew test`)** findet
+  DAO-Methoden, die deklariert, aber nirgends in `app/src/main` aufgerufen werden — Anlass war
+  `LevelSampleDao.loescheVor()`, das nur von Test-Fakes implementiert wurde, nie produktiv
+  aufgerufen.
+- **`./gradlew generiereKennzahlen`** schreibt [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) aus den
+  tatsächlichen Testergebnissen und Quelldateien — nicht von Hand pflegen; Anlass waren veraltete,
+  von Hand gepflegte Zahlen (Testanzahl, Kadenz-Toleranz) in diesem README.
+- **Schema 20: Indizes auf `measurements(sessionId, timestamp)` und `measurements(timestamp)`**
+  (C-4-Rest, Owner-Entscheidung „just do it"). `MeasurementRecorder.schliesseVerwaisteSessions()`
+  rief vorher `MeasurementDao.fuerSession()` einmal PRO verwaister Session auf, nur um deren
+  letzten Zeitstempel zu bilden — neue `letzteZeitstempelJeSession()` holt das für alle
+  betroffenen Sessions in einer gruppierten Query statt N Einzelabfragen mit vollem Spaltenabzug.
+- **Debug-Keystore rotiert und aus dem Repository entfernt** (C-6-Rest, Owner-Entscheidung nach
+  bestätigt öffentlichem Repository: „Keystore jetzt im Code rotieren"). `app/debug.keystore` ist
+  gelöscht; `signingConfigs.debug` liest den Pfad jetzt über die Gradle-Property `debugStoreFile`,
+  genau wie `signingConfigs.release` es schon tat — ohne die Property fällt AGP sauber auf sein
+  eigenes `~/.android/debug.keystore` zurück, der Build bricht nicht. **Weiterhin offen, außerhalb
+  des Codes:** die alte SHA-1 muss in der Google Cloud Console entfernt und durch die des neuen
+  Keystores ersetzt werden (sonst bleibt der geleakte Schlüssel dort gültig), und ob zusätzlich
+  die Git-Historie bereinigt werden muss (die alte Datei bleibt in vergangenen Commits sichtbar)
+  ist eine noch nicht getroffene Owner-Entscheidung.
+
 ---
 
 ## Regeln, die man kennen muss
@@ -226,8 +302,10 @@ vom 04.09.2026:
 
 ## Bekannte Einschränkungen
 
-- **Der Mikrofon-Pegelwert ist unkalibriert.** `20·log10(rms/32767) + 100` ist dBFS plus
-  willkürlicher Offset, ohne A-Bewertung und geräteabhängig. Genau deshalb das PCE-323.
+- **Der Mikrofon-Pegelwert ist unkalibriert.** `10·log10(leistung) + 100` (Fast-zeitgewichtet,
+  `FastPegelSchaetzer`, Tau=125 ms) ist dBFS plus willkürlicher Offset, ohne A-Bewertung und
+  geräteabhängig — nur die zeitliche Mittelung folgt jetzt IEC 61672 „Fast". Genau deshalb das
+  PCE-323.
 - **`applicationId` ist `com.example.lrmprotokoll`** (B-6). Im Play Store unzulässig, aber nach
   Veröffentlichung nie wieder änderbar — bewusst vertagt, weil eine Änderung bestehende Aufnahmen
   auf dem Gerät unerreichbar macht.

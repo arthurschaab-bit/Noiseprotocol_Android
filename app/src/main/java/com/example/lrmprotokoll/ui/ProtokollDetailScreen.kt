@@ -33,6 +33,8 @@ import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.report.MessreiheExport
+import com.example.lrmprotokoll.report.leqBezeichnung
+import com.example.lrmprotokoll.report.lmaxBezeichnung
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.NoiseHeaderCard
 import com.example.lrmprotokoll.ui.components.StatusPill
@@ -255,12 +257,12 @@ fun ProtokollDetailScreen(
                     ) {
                         SummaryMetricItem(stringResource(R.string.stat_duration), dauerText, modifier = Modifier.weight(1f))
                         SummaryMetricItem(
-                            if (session?.deviceAddress?.isBlank() == true) "📈 Mittelwert" else "📈 LAeq",
+                            "📈 ${leqBezeichnung(session?.deviceAddress?.isBlank() == true)}",
                             kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
                             modifier = Modifier.weight(1f)
                         )
                         SummaryMetricItem(
-                            if (session?.deviceAddress?.isBlank() == true) "⚡ Höchstwert" else "⚡ LMax",
+                            "⚡ ${lmaxBezeichnung(session?.deviceAddress?.isBlank() == true)}",
                             kennwerte?.maxDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
                             modifier = Modifier.weight(1f)
                         )

@@ -105,7 +105,7 @@ class BleMeterTransport(
             gattQueue.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
-        @Suppress("DEPRECATION") // Zwei-Parameter-Variante noetig, da minSdk 31 < 33
+        @Suppress("DEPRECATION") // Zwei-Parameter-Variante noetig, da minSdk 29 < 33
         override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             @Suppress("DEPRECATION")
             if (characteristic.uuid != Pce323Profile.NOTIFY_CHARACTERISTIC_UUID) return
@@ -174,7 +174,7 @@ class BleMeterTransport(
 
             _state.value = ConnectionState.SUBSCRIBING
             gatt?.setCharacteristicNotification(notifyCharacteristic, true)
-            @Suppress("DEPRECATION") // Zwei-Parameter-writeDescriptor noetig, da minSdk 31 < 33
+            @Suppress("DEPRECATION") // Zwei-Parameter-writeDescriptor noetig, da minSdk 29 < 33
             val subscribed = gattQueue.execute {
                 cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 gatt?.writeDescriptor(cccd) ?: false

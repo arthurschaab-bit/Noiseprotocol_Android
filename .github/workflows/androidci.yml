@@ -36,8 +36,27 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Debug-Keystore aus Secret wiederherstellen
+        if: env.DEBUG_KEYSTORE_BASE64 != ''
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > debug.keystore
+
+      # Pruefprotokoll C-6-Rest: nur mit dem Secret ist die Debug-SHA-1 ueber CI-Laeufe hinweg
+      # stabil und passt zur in der Google Cloud Console registrierten Android-OAuth-Client-SHA-1.
+      # Fehlt das Secret (z.B. auf einem Fork), faellt AGP sauber auf sein eigenes
+      # ~/.android/debug.keystore zurueck (siehe debugStoreFile in app/build.gradle.kts).
       - name: Build Debug & Test APKs
-        run: ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace
+        run: |
+          if [ -f "debug.keystore" ]; then
+            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PdebugStoreFile=$(pwd)/debug.keystore
+          else
+            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace
+          fi
+
+      - name: Debug-Keystore-Kopie löschen
+        if: always()
+        run: rm -f debug.keystore
 
       - name: Run Android Lint
         run: ./gradlew lintDebug --no-daemon --stacktrace

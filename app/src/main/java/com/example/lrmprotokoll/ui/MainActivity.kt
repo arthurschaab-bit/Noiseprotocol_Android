@@ -76,9 +76,11 @@ import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import com.example.lrmprotokoll.ui.theme.statusColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -626,10 +628,17 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showOverflowMenu = false
                                     scope.launch {
+                                        // Praefprotokoll-Anhang (Owner-Entscheidung 11.09.2026,
+                                        // "korrigiere"): aktuelleKonfiguration() liest synchron
+                                        // aus Room - auf Dispatchers.IO statt auf dem
+                                        // Main-Thread dieses scope.launch (rememberCoroutineScope).
+                                        val konfiguration = withContext(Dispatchers.IO) {
+                                            classifier.value.aktuelleKonfiguration()
+                                        }
                                         val count = bewerteAlleNeu(
                                             noiseDao = dao,
                                             rohdatenDao = rohdatenDao,
-                                            konfiguration = classifier.value.aktuelleKonfiguration(),
+                                            konfiguration = konfiguration,
                                         )
                                         val msg = if (count > 0) {
                                             context.getString(R.string.ai_reevaluated_count, count)

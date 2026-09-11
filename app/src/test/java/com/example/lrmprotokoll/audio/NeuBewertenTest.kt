@@ -49,6 +49,7 @@ class NeuBewertenTest {
         override suspend fun setDetectedLabel(id: Long, label: String?) { gesetzteLabels[id] = label }
         override suspend fun getCalibratedDbA(id: Long): Double? = calibratedDbAWerte[id]
         override fun getAllReferences(): Flow<List<ReferenceSound>> = flowOf(emptyList())
+        override fun getAllReferencesBlocking(): List<ReferenceSound> = emptyList()
         override suspend fun insertReference(sound: ReferenceSound) {}
         override suspend fun deleteReference(id: Long) {}
     }

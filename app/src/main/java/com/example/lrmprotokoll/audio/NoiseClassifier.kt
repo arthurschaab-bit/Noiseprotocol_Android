@@ -15,8 +15,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.CRC32
 import kotlin.math.roundToInt
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 private const val TAG = "NoiseClassifier"
 private const val MODEL_ASSET = "yamnet.tflite"
@@ -259,8 +257,15 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
      * beide Pfade unbemerkt auseinanderlaufen (z.B. unterschiedliche Referenzmuster-Stichproben).
      */
     internal fun aktuelleKonfiguration(): AbleitungsKonfiguration {
+        // Direkte, nicht-suspend Query statt runBlocking { getAllReferences().first() }
+        // (Prüfprotokoll-Anhang, Owner-Entscheidung vom 11.09.2026: "korrigiere") - diese Funktion
+        // ist selbst nicht suspend (ihre Aufrufer classify()/klassifiziereMitRohdaten() sind es
+        // ebenfalls nicht), runBlocking wickelte eine synchrone Wartezeit unnoetig in einen
+        // eigenen Coroutine-Kontext ein. Blockiert weiterhin den aufrufenden Thread - siehe
+        // NoiseDao.getAllReferencesBlocking()-KDoc: der eigentliche Fix fuer den Aufruf vom
+        // Main-Thread aus (MainActivity.kt "Neu bewerten") ist dort, nicht hier.
         val referenzen = try {
-            runBlocking { container.database.noiseDao().getAllReferences().first() }
+            container.database.noiseDao().getAllReferencesBlocking()
         } catch (e: Throwable) {
             Log.e(TAG, "Error checking references: ${e.message}", e)
             emptyList()

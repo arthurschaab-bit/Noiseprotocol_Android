@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
+import java.time.Duration
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -40,17 +41,36 @@ object AkustischeKennwerte {
     )
 
     /**
+     * Obergrenze fuer die Zeitgewichtung eines einzelnen Messwerts in [gewichteterLeq]
+     * (Praefprotokoll-Befund 01 / Korrekturliste C-2). Ohne Deckel wuerde ein Verbindungsausfall
+     * zwischen zwei Messwerten dem VOR dem Ausfall liegenden, laengst veralteten Pegel die
+     * gesamte Ausfalldauer als Gewicht zuschreiben und ihn so kuenstlich dominieren lassen - 5 s
+     * ist grosszuegig ueber jeder real vorkommenden Kadenz (Messgeraet ~515 ms, Mikrofon nach
+     * Ausduennung hoechstens 1 s, siehe [MeasurementRecorder.mikrofonIntervall]) und trifft
+     * trotzdem verlaesslich jede laengere Unterbrechung.
+     */
+    private val STANDARD_MAX_GEWICHTUNGSLUECKE: Duration = Duration.ofSeconds(5)
+
+    /**
      * [ueberschreitungsSchwelleDb] ist optional, weil Kennwerte oft ohne eine konkrete Schwelle
      * gebraucht werden (z. B. fuer die Protokollansicht) - `null` liefert einfach 0 ms zurueck,
      * statt eine willkuerliche Schwelle anzunehmen.
+     *
+     * [maxGewichtungsluecke] siehe [STANDARD_MAX_GEWICHTUNGSLUECKE] - als Parameter statt
+     * Konstante, damit Tests eine kleinere Grenze setzen koennen, ohne echte Sekunden warten zu
+     * muessen.
      */
-    fun berechne(messwerte: List<MeasurementEntity>, ueberschreitungsSchwelleDb: Double? = null): Kennwerte {
+    fun berechne(
+        messwerte: List<MeasurementEntity>,
+        ueberschreitungsSchwelleDb: Double? = null,
+        maxGewichtungsluecke: Duration = STANDARD_MAX_GEWICHTUNGSLUECKE,
+    ): Kennwerte {
         if (messwerte.isEmpty()) return LEER
 
         val nachZeitSortiert = messwerte.sortedBy { it.timestamp }
         val pegel = nachZeitSortiert.map { it.levelDb }
 
-        val leq = 10.0 * log10(pegel.sumOf { 10.0.pow(it / 10.0) } / pegel.size)
+        val leq = gewichteterLeq(nachZeitSortiert, maxGewichtungsluecke)
         val nachPegelSortiert = pegel.sorted()
 
         return Kennwerte(
@@ -68,29 +88,78 @@ object AkustischeKennwerte {
 
     /**
      * Schneller Pfad fuer Anzeigen, die nur LAeq und Max brauchen (PROMPT_M9A.md Aufgabe 1: das
-     * Live-Cockpit zeigt beide Werte, aber keine Perzentile) - ein einziger Durchlauf ohne die
-     * beiden Sortierungen aus [berechne]. minDb/L10/L50/L90/Ueberschreitungsdauer bleiben
-     * bewusst `null` bzw. 0 statt sie halbherzig mitzuberechnen - wer sie braucht (z. B. die
-     * Protokoll-Detailansicht), ruft weiterhin [berechne] auf.
+     * Live-Cockpit zeigt beide Werte, aber keine Perzentile) - ohne die beiden WERT-Sortierungen
+     * aus [berechne] (fuer die Perzentile), die diese Funktion bewusst vermeidet.
+     * minDb/L10/L50/L90/Ueberschreitungsdauer bleiben bewusst `null` bzw. 0 statt sie halbherzig
+     * mitzuberechnen - wer sie braucht (z. B. die Protokoll-Detailansicht), ruft weiterhin
+     * [berechne] auf.
+     *
+     * Seit der Zeitgewichtung (Befund 01 / C-2) braucht [gewichteterLeq] die Werte chronologisch
+     * sortiert - eine zusaetzliche ZEIT-Sortierung, aber eine billige (Room liefert `messwerte`
+     * bei allen Aufrufern bereits `ORDER BY timestamp`; dies ist nur eine Absicherung gegen einen
+     * kuenftigen Aufrufer, der das nicht mehr garantiert).
      */
-    fun leqUndMax(messwerte: List<MeasurementEntity>): Kennwerte {
+    fun leqUndMax(
+        messwerte: List<MeasurementEntity>,
+        maxGewichtungsluecke: Duration = STANDARD_MAX_GEWICHTUNGSLUECKE,
+    ): Kennwerte {
         if (messwerte.isEmpty()) return LEER
-        var energetischeSumme = 0.0
-        var max = messwerte[0].levelDb
-        for (m in messwerte) {
-            energetischeSumme += 10.0.pow(m.levelDb / 10.0)
+        val nachZeitSortiert = if (messwerte.size > 1) messwerte.sortedBy { it.timestamp } else messwerte
+        var max = nachZeitSortiert[0].levelDb
+        for (m in nachZeitSortiert) {
             if (m.levelDb > max) max = m.levelDb
         }
         return Kennwerte(
-            leqDb = 10.0 * log10(energetischeSumme / messwerte.size),
+            leqDb = gewichteterLeq(nachZeitSortiert, maxGewichtungsluecke),
             maxDb = max,
             minDb = null,
             l10Db = null,
             l50Db = null,
             l90Db = null,
             ueberschreitungsdauerMs = 0L,
-            sampleCount = messwerte.size,
+            sampleCount = nachZeitSortiert.size,
         )
+    }
+
+    /**
+     * Energetischer Mittelwert, gewichtet mit der Zeit, die jeder Messwert repraesentiert - der
+     * Zeitabstand zum jeweils NAECHSTEN Messwert, gekappt auf [maxLuecke]. Vorher (bis Befund 01
+     * / C-2) wurde ungewichtet ueber die Sample-ANZAHL gemittelt - das ist nur dann ein echtes
+     * Leq, wenn alle Werte exakt aequidistant eintreffen, was weder beim Messgeraet (~515 ms,
+     * aber nie exakt) noch erst recht beim ausgeduennten Mikrofonwert (hoechstens 1/s) der Fall
+     * ist. [ueberschreitungsdauer] rechnet in derselben Datei bereits mit echten Zeitabstaenden -
+     * dieselbe Ueberlegung galt vorher nur nicht auch fuer den Leq selbst.
+     *
+     * Erwartet [nachZeitSortiert] chronologisch aufsteigend sortiert (Aufrufer-Pflicht, hier
+     * nicht erneut geprueft - beide Aufrufer sortieren bereits selbst).
+     *
+     * Der LETZTE Messwert hat keine bekannte Nachfolgeluecke; er bekommt dieselbe Luecke wie der
+     * Wert davor zugeschrieben (bei nur einem Messwert insgesamt: Gewicht spielt keine Rolle,
+     * der Leq ist schlicht dieser eine Wert).
+     */
+    private fun gewichteterLeq(nachZeitSortiert: List<MeasurementEntity>, maxLuecke: Duration): Double {
+        if (nachZeitSortiert.size == 1) return nachZeitSortiert[0].levelDb
+
+        val maxLueckeMs = maxLuecke.toMillis()
+        var gewichteteSumme = 0.0
+        var gesamtgewicht = 0.0
+        for (i in nachZeitSortiert.indices) {
+            val luecke = if (i < nachZeitSortiert.size - 1) {
+                nachZeitSortiert[i + 1].timestamp - nachZeitSortiert[i].timestamp
+            } else {
+                nachZeitSortiert[i].timestamp - nachZeitSortiert[i - 1].timestamp
+            }.coerceAtLeast(0L)
+            val gewicht = luecke.coerceAtMost(maxLueckeMs).toDouble()
+            gewichteteSumme += gewicht * 10.0.pow(nachZeitSortiert[i].levelDb / 10.0)
+            gesamtgewicht += gewicht
+        }
+        if (gesamtgewicht <= 0.0) {
+            // Alle Luecken waren 0 (mehrere Messwerte mit identischem oder ruecklaeufigem
+            // Zeitstempel) - Ruecksturz auf den einfachen energetischen Mittelwert statt einer
+            // Division durch 0.
+            return 10.0 * log10(nachZeitSortiert.sumOf { 10.0.pow(it.levelDb / 10.0) } / nachZeitSortiert.size)
+        }
+        return 10.0 * log10(gewichteteSumme / gesamtgewicht)
     }
 
     /** LN = "wird N % der Zeit ueberschritten" - L10 also der HOHE Pegel (90. Perzentil), L90

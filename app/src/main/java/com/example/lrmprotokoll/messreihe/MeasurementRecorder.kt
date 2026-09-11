@@ -57,6 +57,15 @@ class MeasurementRecorder(
     private val flushInterval: Duration = Duration.ofSeconds(5),
     private val flushBatchSize: Int = 50,
     private val mikrofonIntervall: Duration = Duration.ofSeconds(1),
+    /**
+     * Ob das Mikrofon gerade tatsaechlich aufzeichnet (Praefprotokoll-Befund 01/03 /
+     * Korrekturliste C-... : "Ohne je gelieferte Daten gibt es keine Messgeraet-Session", aber
+     * bislang gab es fuer eine LAUFENDE Mikrofon-Session gar keine Ausfallerkennung - siehe
+     * [onMikrofonZustand]). `null` (Default) haelt bestehende Aufrufer/Tests unveraendert: ohne
+     * diesen Fluss bleibt eine Mikrofon-Session so wie vor dieser Korrektur, ohne
+     * [ConnectionEventEntity]/[Ausfallband].
+     */
+    private val mikrofonAktiv: Flow<Boolean>? = null,
 ) {
 
     private val pufferMutex = Mutex()
@@ -89,6 +98,11 @@ class MeasurementRecorder(
     /** Zeitpunkt des zuletzt uebernommenen Mikrofon-Pegels - Grundlage der Ausduennung. */
     @Volatile private var letzterMikrofonWertMs: Long = 0
 
+    // Fuer onMikrofonZustand() - dasselbe Muster wie warJemalsVerbunden/zuletztImAusfall bei
+    // onState(), nur fuer den Mikrofon-Pfad statt fuer eine BLE-Verbindung.
+    private var warMikrofonJeAktiv = false
+    private var zuletztMikrofonImAusfall = false
+
     @Volatile private var aktiveSessionId: Long? = null
 
     /** Ob die laufende Session ein reiner Mikrofonlauf ist - kein Messgeraet, Messwerte nur ueber
@@ -106,6 +120,16 @@ class MeasurementRecorder(
     /** Die laufende Session-ID, falls [start] bereits eine Session eroeffnet hat - fuer
      * Aufrufer, die Messwerte einer Session zuordnen wollen, ohne selbst Buch zu fuehren. */
     val laufendeSessionId: Long? get() = aktiveSessionId
+
+    /**
+     * Ob die laufende Session (falls es ueberhaupt eine gibt) ein reiner Mikrofonlauf ist -
+     * fuer Aufrufer, die vor einem gezielten [stop] wissen muessen, WELCHE Art Session gerade
+     * offen ist (Prüfprotokoll-Anhang, Owner-Entscheidung vom 11.09.2026: "korrigiere es" - siehe
+     * [com.example.lrmprotokoll.audio.AudioRecordingService]s `ACTION_STOP_AUDIO_RECORDING`, das
+     * gezielt nur eine Mikrofon-Session, nie versehentlich eine laufende Messgeraet-Session
+     * beenden darf).
+     */
+    val laufendeSessionIstMikrofon: Boolean get() = aktiveSessionIstMikrofon
 
     /**
      * Beginnt, [device] zu beobachten. Ein zweiter Aufruf, waehrend die Beobachtung laeuft, ist
@@ -171,6 +195,13 @@ class MeasurementRecorder(
      * Messwerte kommen stattdessen ueber [mikrofonPegel] von aussen herein; gestartet wird hier
      * nur der periodische Flush, damit sie waehrend der laufenden Messung sichtbar werden und
      * nicht erst beim Sitzungsende im Puffer stehen.
+     *
+     * Ist [mikrofonAktiv] gesetzt, laeuft zusaetzlich ein dritter Collector
+     * ([onMikrofonZustand]) - das ist die einzige Quelle fuer [ConnectionEventEntity]/
+     * [Ausfallband] einer Mikrofon-Session (Praefprotokoll-Befund 01, Owner-Entscheidung vom
+     * 11.09.2026: "Natuerlich ist 100% Datenverfuegbarkeit das Ziel" - ohne diesen Collector war
+     * die berichtete Datenverfuegbarkeit eines Mikrofonlaufs strukturell IMMER 100%, weil
+     * [onState] fuer eine Mikrofon-Session nie ein Ereignis schreibt).
      */
     fun starteMikrofonMessung() {
         if (mikrofonJob?.isActive == true || aktiveSessionId != null) return
@@ -193,9 +224,16 @@ class MeasurementRecorder(
                 )
                 aktiveSessionIstMikrofon = true
             }
-            while (isActive) {
-                delay(flushInterval.toMillis())
-                pufferMutex.withLock { flushOhneSperre() }
+            warMikrofonJeAktiv = false
+            zuletztMikrofonImAusfall = false
+            coroutineScope {
+                launch {
+                    while (isActive) {
+                        delay(flushInterval.toMillis())
+                        pufferMutex.withLock { flushOhneSperre() }
+                    }
+                }
+                mikrofonAktiv?.let { fluss -> launch { fluss.collect { onMikrofonZustand(it) } } }
             }
         }
     }
@@ -333,13 +371,25 @@ class MeasurementRecorder(
             Log.e(TAG, "Verwaiste Sessions konnten nicht gelesen werden", e)
             return
         }
-        for (session in offene) {
-            // Eine aktive Session (z.B. die gerade eroeffnete Mikrofon-Session) darf niemals
-            // geschlossen werden.
-            if (session.id == aktiveSessionId) continue
+        val zuSchliessen = offene.filter { it.id != aktiveSessionId }
+        if (zuSchliessen.isEmpty()) return
+
+        // Praefprotokoll-Anhang C-4-Rest (Owner-Entscheidung vom 11.09.2026: "just do it"): EINE
+        // Query fuer alle betroffenen Sessions statt fuerSession() (voller Spaltenabzug, alle
+        // Messwerte der Session) einmal pro Session. Ein Fehlschlag hier darf das Schliessen nicht
+        // komplett verhindern - jede Session faellt dann einzeln auf ihre Startzeit zurueck, wie
+        // eine Session ganz ohne Messwerte es ohnehin schon tut.
+        val letzteZeitstempel = try {
+            measurementDao.letzteZeitstempelJeSession(zuSchliessen.map { it.id })
+                .associate { it.sessionId to it.letzterZeitstempel }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Letzte Messwert-Zeitstempel fuer verwaiste Sessions konnten nicht gelesen werden", e)
+            emptyMap()
+        }
+
+        for (session in zuSchliessen) {
             try {
-                val letzterMesswert = measurementDao.fuerSession(session.id).maxOfOrNull { it.timestamp }
-                sessionDao.update(session.copy(endedAt = letzterMesswert ?: session.startedAt))
+                sessionDao.update(session.copy(endedAt = letzteZeitstempel[session.id] ?: session.startedAt))
             } catch (e: Throwable) {
                 Log.e(TAG, "Verwaiste Session ${session.id} konnte nicht geschlossen werden", e)
             }
@@ -473,6 +523,37 @@ class MeasurementRecorder(
             // SCANNING, CONNECTING, DISCOVERING, SUBSCRIBING, IDLE: reine Zwischen-/Ruhezustaende,
             // erzeugen kein eigenes Ereignis.
             else -> Unit
+        }
+    }
+
+    /**
+     * Schreibt [ConnectionEventEntity]-Zeilen fuer eine Mikrofon-Session, wenn das Mikrofon
+     * unerwartet aufhoert bzw. wieder aufzeichnet (Praefprotokoll-Befund 01/Korrekturliste,
+     * Owner-Entscheidung vom 11.09.2026). Nutzt bewusst dieselben Ereignistypen
+     * ([ConnectionEventType.DISCONNECTED]/[ConnectionEventType.RECOVERED]) wie [onState] fuer
+     * das Messgeraet: [leiteAusfallbaenderAb] unterscheidet ohnehin nur nach `type`, nicht nach
+     * Geraeteart - eine neue Ereignisart haette keinen Mehrwert gehabt, aber jede Konsumentenstelle
+     * (Protokollansicht, Datenverfuegbarkeit) haette sie zusaetzlich kennen muessen.
+     *
+     * Derselbe De-Dup-Schutz wie bei [onState]: `false` direkt nach dem Start ist der
+     * Ausgangszustand, kein Ausfall (sonst begaenne jede Mikrofon-Session mit einem sofortigen,
+     * falschen Ausfallband) - erst NACH dem ersten `true` zaehlt ein folgendes `false` als echter
+     * Ausfall, und eine zusammenhaengende Ausfallperiode erzeugt genau ein Ereignis, nicht eines
+     * je Zwischenaufruf.
+     */
+    private suspend fun onMikrofonZustand(aktiv: Boolean) {
+        val sessionId = aktiveSessionId ?: return
+        if (!aktiveSessionIstMikrofon) return
+
+        if (aktiv) {
+            warMikrofonJeAktiv = true
+            if (zuletztMikrofonImAusfall) {
+                zuletztMikrofonImAusfall = false
+                protokolliere(sessionId, ConnectionEventType.RECOVERED, reason = null)
+            }
+        } else if (warMikrofonJeAktiv && !zuletztMikrofonImAusfall) {
+            zuletztMikrofonImAusfall = true
+            protokolliere(sessionId, ConnectionEventType.DISCONNECTED, reason = "Mikrofon-Aufzeichnung unerwartet inaktiv")
         }
     }
 

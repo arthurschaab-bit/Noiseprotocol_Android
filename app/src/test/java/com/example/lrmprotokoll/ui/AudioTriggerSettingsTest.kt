@@ -58,7 +58,7 @@ class AudioTriggerSettingsTest {
         val mitMeter = MeterTriggerSource.auswerten(
             letzterMeterFrame = frame(72.0),
             mikrofonDb = 35.0,
-            activeSchwelle = 65f,
+            mikrofonSchwelle = 65f, meterSchwelle = 65f,
             triggerQuelle = settings.audioTriggerQuelle
         )
         assertTrue("Mit PCE-323 über Schwelle muss AUTO auslösen", mitMeter.ausgeloest)
@@ -69,7 +69,7 @@ class AudioTriggerSettingsTest {
         val ohneMeter = MeterTriggerSource.auswerten(
             letzterMeterFrame = null,
             mikrofonDb = 68.0,
-            activeSchwelle = 65f,
+            mikrofonSchwelle = 65f, meterSchwelle = 65f,
             triggerQuelle = settings.audioTriggerQuelle
         )
         assertTrue("Ohne Messgerät muss AUTO auf Mikrofon zurückgreifen und auslösen", ohneMeter.ausgeloest)
@@ -86,7 +86,7 @@ class AudioTriggerSettingsTest {
         val pceModusOhneMeter = MeterTriggerSource.auswerten(
             letzterMeterFrame = null,
             mikrofonDb = 90.0,
-            activeSchwelle = 65f,
+            mikrofonSchwelle = 65f, meterSchwelle = 65f,
             triggerQuelle = settings.audioTriggerQuelle
         )
         assertFalse(pceModusOhneMeter.ausgeloest)
@@ -96,7 +96,7 @@ class AudioTriggerSettingsTest {
         val micModus = MeterTriggerSource.auswerten(
             letzterMeterFrame = frame(95.0),
             mikrofonDb = 40.0,
-            activeSchwelle = 65f,
+            mikrofonSchwelle = 65f, meterSchwelle = 65f,
             triggerQuelle = settings.audioTriggerQuelle
         )
         assertFalse(micModus.ausgeloest)

@@ -416,14 +416,25 @@ private suspend fun starteAufnahme(
         return
     }
 
+    // Praefprotokoll-Frage 9, Owner-Entscheidung vom 11.09.2026: "sobald das Video laeuft,
+    // IMMER und synchron auch Audio" - vorher lief eine Videoaufnahme still, WENN das Mikrofon
+    // gerade nicht lief, ohne Warnung. Jetzt ist laufendes Mikrofon eine Voraussetzung fuer den
+    // Videostart, keine Kann-Eigenschaft - mit der vom AudioRecord tatsaechlich ausgehandelten
+    // Rate, nicht der eingestellten.
+    if (mikrofonFormat == null) {
+        onShowSnackbar("Videobeweis braucht laufende Mikrofonaufzeichnung für den Ton – bitte zuerst die Mikrofon-Aufnahme starten")
+        return
+    }
+
     val jetzt = System.currentTimeMillis()
     val videoDatei = File(verzeichnis, Videospeicher.dateiname(jetzt))
     val pcmDatei = File(verzeichnis, Videospeicher.tondateiname(jetzt))
 
-    // Ton nur, wenn das Mikrofon tatsaechlich laeuft - und mit der vom AudioRecord ausgehandelten
-    // Rate, nicht mit der eingestellten.
-    val tonLaeuft = mikrofonFormat != null &&
-        mitschnitt.starte(pcmDatei, mikrofonFormat.abtastrate, mikrofonFormat.kanaele)
+    val tonLaeuft = mitschnitt.starte(pcmDatei, mikrofonFormat.abtastrate, mikrofonFormat.kanaele)
+    if (!tonLaeuft) {
+        onShowSnackbar("Tonmitschnitt konnte nicht gestartet werden – Videobeweis abgebrochen")
+        return
+    }
 
     val videoId = withContext(Dispatchers.IO) {
         dao.insert(
@@ -460,7 +471,13 @@ private suspend fun starteAufnahme(
                     videoEchtGestartetAm = System.currentTimeMillis()
                 }
                 if (ereignis is VideoRecordEvent.Finalize) {
-                    scope.launch {
+                    // NICHT auf `scope` (rememberCoroutineScope des Screens) - CameraX liefert
+                    // dieses Ereignis asynchron und ohne garantierte Frist. Verlaesst der Nutzer
+                    // den Screen vorher, wuerde `scope` abgebrochen und beendeAufnahme() nie zu
+                    // Ende laufen: Ton-Mitschnitt liefe unbemerkt weiter, tonGemuxt bliebe fuer
+                    // immer false (Praefprotokoll-Frage 8). container.videobeweisAbschlussScope
+                    // ist app-weit und ueberlebt genau das (siehe dessen KDoc).
+                    container.videobeweisAbschlussScope.launch {
                         beendeAufnahme(
                             context = context,
                             container = container,

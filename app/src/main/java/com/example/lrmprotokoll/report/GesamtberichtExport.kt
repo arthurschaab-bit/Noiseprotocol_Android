@@ -102,7 +102,7 @@ class GesamtberichtExport(private val context: Context) {
             // ---- Kernergebnisse ----
             abschnitt("Kernergebnisse (Gesamtzeitraum)")
             listOfNotNull(
-                kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
+                kennwerte.leqDb?.let { "${leqBezeichnung(gesamt.nurMikrofon)}: ${formatiereDb(it)} dB" },
                 kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
                 kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
                 kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
@@ -136,7 +136,7 @@ class GesamtberichtExport(private val context: Context) {
             if (bericht.tage.isEmpty()) {
                 zeile("Keine Messtage in diesem Zeitraum.")
             } else {
-                zeichneTagesuebersicht(lauf, canvasGeber, bericht.tage)
+                zeichneTagesuebersicht(lauf, canvasGeber, bericht.tage, gesamt.nurMikrofon)
             }
 
             // ---- Tagesseiten ----
@@ -175,15 +175,19 @@ class GesamtberichtExport(private val context: Context) {
     }
 
     private val tabellenSpalten = listOf(90f, 70f, 70f, 90f, 70f)
-    private val tabellenTitel = listOf("Tag", "LAeq", "Max", "Verfügbarkeit", "Ausfälle")
     private val tabellenZeilenHoehe = 16f
 
     private fun zeichneTagesuebersicht(
         lauf: Seitenlauf,
         canvasGeber: () -> Canvas?,
         tage: List<GesamtberichtTag>,
+        nurMikrofon: Boolean,
     ) {
         val x = Seitenlauf.RAND_LINKS
+        // "LAeq"/"Max" nur, wenn ueber den GESAMTEN Zeitraum kein Messgeraet lief - Befund 01 /
+        // Korrekturliste C-2. Ein gemischter Zeitraum behaelt "LAeq"/"Max" (siehe
+        // PeriodenBericht.nurMikrofon-KDoc: keine getrennten Kennwerte je Quelle je Zeile).
+        val tabellenTitel = listOf("Tag", leqBezeichnung(nurMikrofon), lmaxBezeichnung(nurMikrofon), "Verfügbarkeit", "Ausfälle")
         var kopfY = lauf.platziere(tabellenZeilenHoehe)
         canvasGeber()?.let { BerichtLayout.tabellenKopf(it, x, kopfY, tabellenSpalten, tabellenTitel, tabellenZeilenHoehe) }
         var letzteSeite = lauf.seitenNummer
@@ -224,7 +228,7 @@ class GesamtberichtExport(private val context: Context) {
         val kennwerte = tag.bericht.kennwerte
         val zy = lauf.platziere(16f)
         val kennwertZeile = listOfNotNull(
-            kennwerte.leqDb?.let { "LAeq ${formatiereDb(it)} dB" },
+            kennwerte.leqDb?.let { "${leqBezeichnung(tag.bericht.nurMikrofon)} ${formatiereDb(it)} dB" },
             kennwerte.maxDb?.let { "Max ${formatiereDb(it)} dB" },
             kennwerte.minDb?.let { "Min ${formatiereDb(it)} dB" },
         ).joinToString("  ·  ").ifEmpty { "Keine Messwerte" } +

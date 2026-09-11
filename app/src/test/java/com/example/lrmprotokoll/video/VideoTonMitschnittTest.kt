@@ -127,6 +127,73 @@ class VideoTonMitschnittTest {
         assertFalse("Eine verwaiste PCM-Datei waere reiner Speicherverbrauch", ziel.exists())
     }
 
+    // ---------------------------------------------------------------- Luecken-Stille (Praefprotokoll-Frage 9)
+
+    @Test
+    fun eineLueckeZwischenZweiBloeckenWirdAlsStilleAufgefuellt() {
+        // 1000 Hz, mono: 2 Bytes/Frame, 2000 Bytes/Sekunde - bewusst runde Zahlen.
+        val ziel = ordner.newFile("ton.pcm")
+        mitschnitt.starte(ziel, abtastrate = 1_000, kanaele = 1)
+
+        mitschnitt.schreibe(block(2), 2, jetzt = 0)
+        // 1 Sekunde spaeter erst der naechste Block - eine Luecke von (2000 - 2) Bytes erwartet.
+        mitschnitt.schreibe(block(2), 2, jetzt = 1_000)
+        val ergebnis = mitschnitt.beende()!!
+
+        assertEquals(
+            "2 (Block 1) + 1998 (nachgetragene Stille) + 2 (Block 2)",
+            2_002L, ziel.length(),
+        )
+        assertEquals(2_002L, ergebnis.bytes)
+    }
+
+    @Test
+    fun eineLueckeUnterhalbDerToleranzWirdNichtAufgefuellt() {
+        // Derselbe Aufbau, aber nur 50 ms Abstand - normaler Jitter zwischen zwei
+        // AudioRecord.read()-Aufrufen, keine echte Unterbrechung.
+        val ziel = ordner.newFile("ton.pcm")
+        mitschnitt.starte(ziel, abtastrate = 1_000, kanaele = 1)
+
+        mitschnitt.schreibe(block(2), 2, jetzt = 0)
+        mitschnitt.schreibe(block(2), 2, jetzt = 50)
+        mitschnitt.beende()
+
+        assertEquals("Keine Stille - nur die zwei echten Bloecke", 4L, ziel.length())
+    }
+
+    @Test
+    fun eineSehrGrosseLueckeWirdInBegrenztenPuffernNachgetragen() {
+        // 100 kHz, mono: 200'000 Bytes/Sekunde - die Luecke ueberschreitet damit den internen
+        // 64-KB-Schreibpuffer und muss in mehreren Haeppchen nachgetragen werden.
+        val ziel = ordner.newFile("ton.pcm")
+        mitschnitt.starte(ziel, abtastrate = 100_000, kanaele = 1)
+
+        mitschnitt.schreibe(block(2), 2, jetzt = 0)
+        mitschnitt.schreibe(block(2), 2, jetzt = 1_000)
+        val ergebnis = mitschnitt.beende()!!
+
+        assertEquals(200_002L, ziel.length())
+        assertEquals(200_002L, ergebnis.bytes)
+    }
+
+    @Test
+    fun stilleWirdAufGanzeFramesGerundetBeiStereo() {
+        // 2 Kanaele: 4 Bytes/Frame. Eine krumme Millisekundenzahl darf keinen Kanaltausch
+        // erzeugen - die nachgetragene Stille muss ein Vielfaches von 4 sein.
+        val ziel = ordner.newFile("ton.pcm")
+        mitschnitt.starte(ziel, abtastrate = 1_000, kanaele = 2)
+
+        mitschnitt.schreibe(block(4), 4, jetzt = 0)
+        mitschnitt.schreibe(block(4), 4, jetzt = 777)
+        mitschnitt.beende()
+
+        val gesamtlaenge = ziel.length()
+        assertEquals(
+            "Gesamtlaenge (abzueglich der zwei echten 4-Byte-Bloecke) muss durch die Framegroesse (4) teilbar sein",
+            0L, (gesamtlaenge - 8) % 4,
+        )
+    }
+
     @Test
     fun einNichtAnlegbaresZielFuehrtZuEinemSauberenNein() {
         // Der Aufrufer nimmt das Video dann stumm auf, statt abzustuerzen.

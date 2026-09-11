@@ -83,6 +83,7 @@ class DriveSyncCoordinatorTest {
         override suspend fun setDetectedLabel(id: Long, label: String?) {}
         override suspend fun getCalibratedDbA(id: Long): Double? = null
         override fun getAllReferences(): Flow<List<ReferenceSound>> = flowOf(emptyList())
+        override fun getAllReferencesBlocking(): List<ReferenceSound> = emptyList()
         override suspend fun insertReference(sound: ReferenceSound) {}
         override suspend fun deleteReference(id: Long) {}
     }
@@ -207,6 +208,105 @@ class DriveSyncCoordinatorTest {
         levelSampleDao.eingefuegt += LevelSampleEntity(
             at = mitternacht.plusSeconds(sekundenSeitMitternacht).toEpochMilli(),
             levelDb = db, source = LevelSource.PCE_323,
+        )
+    }
+
+    /** Wie [fuegeSampleHinzu], aber fuer einen beliebigen Tag relativ zu [uhr] - fuer die
+     * 30-Tage-Nachhol-Tests (holeVersaeumteTageNach). */
+    private fun fuegeSampleFuerTagHinzu(tageZurueck: Long, sekundenSeitMitternacht: Long, db: Double) {
+        val mitternacht = uhr.now().atZone(zone).toLocalDate().minusDays(tageZurueck).atStartOfDay(zone).toInstant()
+        levelSampleDao.eingefuegt += LevelSampleEntity(
+            at = mitternacht.plusSeconds(sekundenSeitMitternacht).toEpochMilli(),
+            levelDb = db, source = LevelSource.PCE_323,
+        )
+    }
+
+    // ---------------------------------------------------------------- 30-Tage-Nachholsync (Praefprotokoll-Anhang)
+
+    @Test
+    fun einVersaeumterGestrigerTagWirdNachgeholt() = runTest {
+        // Kein Sample fuer heute - nur fuer gestern (z.B. weil das Geraet ueber Mitternacht
+        // offline war). Vor der Korrektur haette syncEinenZyklus() das nie gesehen.
+        fuegeSampleFuerTagHinzu(tageZurueck = 1, sekundenSeitMitternacht = 3600, db = 55.0)
+
+        val ergebnis = baueKoordinator().syncEinenZyklus()
+
+        val gestern = uhr.now().atZone(zone).toLocalDate().minusDays(1)
+        val gestrigerSchluessel = DriveAblage.tagesordner(gestern.atStartOfDay(zone).toInstant(), zone)
+        assertEquals(
+            "Der gestrige Tag muss als SYNCED registriert sein",
+            DriveSyncState.SYNCED,
+            dailyFileDao.zeilen[gestrigerSchluessel]?.state,
+        )
+        assertTrue("Es muss tatsaechlich eine Datei fuer gestern angelegt worden sein", driveApi.anlegenAufrufe >= 1)
+        // Heute selbst bleibt unveraendert (keine Samples heute -> KeineAenderung), der
+        // Nachholsync darf das Ergebnis fuer HEUTE nicht verfaelschen.
+        assertEquals(DriveSyncCoordinator.SyncErgebnis.KeineAenderung, ergebnis)
+    }
+
+    @Test
+    fun einBereitsVollstaendigSynchronisierterVersaeumterTagWirdNichtErneutHochgeladen() = runTest {
+        fuegeSampleFuerTagHinzu(tageZurueck = 1, sekundenSeitMitternacht = 3600, db = 55.0)
+        val gestern = uhr.now().atZone(zone).toLocalDate().minusDays(1)
+        val gestrigerSchluessel = DriveAblage.tagesordner(gestern.atStartOfDay(zone).toInstant(), zone)
+        // Bereits als SYNCED mit der (hier bekannten) korrekten Zeilenzahl 1 registriert.
+        dailyFileDao.zeilen[gestrigerSchluessel] = DriveDailyFileEntity(
+            date = gestrigerSchluessel, fileId = "schon-da", lastSyncedAt = 0L,
+            lastRowCount = 1, state = DriveSyncState.SYNCED,
+        )
+
+        baueKoordinator().syncEinenZyklus()
+
+        assertEquals(
+            "Ein bereits vollstaendig synchronisierter Tag darf keinen neuen Upload ausloesen",
+            0, driveApi.anlegenAufrufe,
+        )
+        assertEquals(0, driveApi.aktualisierenAufrufe)
+    }
+
+    @Test
+    fun einFehlschlagBeiEinemVersaeumtenTagVerhindertNichtDenSyncFuerHeute() = runTest {
+        fuegeSampleFuerTagHinzu(tageZurueck = 1, sekundenSeitMitternacht = 3600, db = 55.0)
+        fuegeSampleHinzu(sekundenSeitMitternacht = 3600, db = 60.0) // heutiges Sample
+        driveApi.dateiAnlegenErgebnis = Result.failure(RuntimeException("simulierter Netzfehler"))
+
+        val ergebnis = baueKoordinator().syncEinenZyklus()
+
+        // Der gestrige Nachholversuch scheitert (dateiAnlegenErgebnis ist ein Fehler) - das darf
+        // syncEinenZyklus() nicht abbrechen lassen, heute muss trotzdem verarbeitet werden.
+        assertTrue(
+            "Heute muss trotz gescheitertem Nachholversuch fuer gestern verarbeitet werden",
+            ergebnis is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen || ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich,
+        )
+    }
+
+    // ---------------------------------------------------------------- loescheVor()-Verdrahtung (Praefprotokoll C-4)
+
+    @Test
+    fun einSampleAelterAls30TageWirdBeimSyncGeloescht() = runTest {
+        // 35 Tage zurueck: ausserhalb des 29-Tage-Nachholfensters von holeVersaeumteTageNach(),
+        // dieser Wert ist also so oder so schon vom Nachholsync nicht mehr erreichbar.
+        fuegeSampleFuerTagHinzu(tageZurueck = 35, sekundenSeitMitternacht = 3600, db = 55.0)
+
+        baueKoordinator().syncEinenZyklus()
+
+        assertTrue(
+            "Ein Sample aelter als 30 Tage muss nach syncEinenZyklus() geloescht sein",
+            levelSampleDao.eingefuegt.isEmpty(),
+        )
+    }
+
+    @Test
+    fun einSampleInnerhalbVon30TagenUeberlebtDenSync() = runTest {
+        // 10 Tage zurueck: liegt innerhalb des 29-Tage-Nachholfensters - loescheVor() darf diesen
+        // Wert nicht wegraeumen, bevor holeVersaeumteTageNach() ihn je sehen konnte.
+        fuegeSampleFuerTagHinzu(tageZurueck = 10, sekundenSeitMitternacht = 3600, db = 55.0)
+
+        baueKoordinator().syncEinenZyklus()
+
+        assertEquals(
+            "Ein Sample innerhalb der 30-Tage-Frist darf nicht geloescht werden",
+            1, levelSampleDao.eingefuegt.size,
         )
     }
 

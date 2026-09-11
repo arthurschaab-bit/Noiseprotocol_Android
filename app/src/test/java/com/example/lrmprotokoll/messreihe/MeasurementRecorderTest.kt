@@ -5,6 +5,7 @@ import com.example.lrmprotokoll.data.ConnectionEventDao
 import com.example.lrmprotokoll.data.ConnectionEventEntity
 import com.example.lrmprotokoll.data.ConnectionEventType
 import com.example.lrmprotokoll.data.MeasurementDao
+import com.example.lrmprotokoll.data.SessionLetzterZeitstempel
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MeasurementFlags
 import com.example.lrmprotokoll.data.SessionDao
@@ -67,6 +68,10 @@ class MeasurementRecorderTest {
         override suspend fun aelterAls(grenze: Long) = geschrieben.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { geschrieben.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = geschrieben.size
+        override suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>) = geschrieben
+            .filter { it.sessionId in sessionIds }
+            .groupBy { it.sessionId }
+            .map { (sessionId, werte) -> SessionLetzterZeitstempel(sessionId, werte.maxOf { it.timestamp }) }
     }
 
     private class FakeConnectionEventDao : ConnectionEventDao {
@@ -435,10 +440,14 @@ class MeasurementRecorderTest {
 
     // --- Verwaiste Sessions (Prozesstod zwischen start() und stop()) ---
 
-    private fun TestScope.recorderMit(sessionDao: FakeSessionDao, measurementDao: FakeMeasurementDao) =
+    private fun TestScope.recorderMit(
+        sessionDao: FakeSessionDao,
+        measurementDao: FakeMeasurementDao,
+        mikrofonAktiv: kotlinx.coroutines.flow.Flow<Boolean>? = null,
+    ) =
         MeasurementRecorder(
             zustaende, frames, sessionDao, measurementDao, connectionEventDao,
-            scope = backgroundScope, now = uhr,
+            scope = backgroundScope, now = uhr, mikrofonAktiv = mikrofonAktiv,
         )
 
     private fun offeneSession(id: Long = 0, startedAt: Long) = SessionEntity(
@@ -493,6 +502,30 @@ class MeasurementRecorderTest {
         ids.forEach { id ->
             assertNotNull("Session $id muss geschlossen worden sein", sessionDao.zeilen[id]?.endedAt)
         }
+    }
+
+    @Test
+    fun mehrereVerwaisteSessionsBekommenJeweilsIhrenEigenenLetztenZeitstempel() = runTest(UnconfinedTestDispatcher()) {
+        // Praefprotokoll-Anhang C-4-Rest: die gebatchte Abfrage gruppiert nach sessionId - dieser
+        // Test ist der eigentliche Beweis, dass dabei kein Zeitstempel der falschen Session
+        // zugeordnet wird, nicht bloss dass ueberhaupt irgendein endedAt gesetzt wird.
+        val sessionDao = FakeSessionDao()
+        val measurementDao = FakeMeasurementDao()
+        val a = sessionDao.insert(offeneSession(startedAt = 100L))
+        val b = sessionDao.insert(offeneSession(startedAt = 200L))
+        measurementDao.insertAll(
+            listOf(
+                MeasurementEntity(sessionId = a, timestamp = 1_000L, levelDb = 60.0, weighting = null, flags = 0),
+                MeasurementEntity(sessionId = a, timestamp = 3_000L, levelDb = 61.0, weighting = null, flags = 0),
+                MeasurementEntity(sessionId = b, timestamp = 5_000L, levelDb = 62.0, weighting = null, flags = 0),
+            )
+        )
+
+        recorderMit(sessionDao, measurementDao).start(device)
+        runCurrent()
+
+        assertEquals("Session A muss ihren eigenen letzten Zeitstempel bekommen", 3_000L, sessionDao.zeilen[a]?.endedAt)
+        assertEquals("Session B muss ihren eigenen letzten Zeitstempel bekommen", 5_000L, sessionDao.zeilen[b]?.endedAt)
     }
 
     @Test
@@ -686,6 +719,120 @@ class MeasurementRecorderTest {
         )
         val offene = sessionDao.zeilen.values.single { it.endedAt == null }
         assertEquals("Und zwar die des Messgeraets", "AA:BB:CC:DD:EE:FF", offene.deviceAddress)
+    }
+
+    // ------------------------------------------------------------------
+    // Ausfallbaender fuer die Mikrofon-Session (Praefprotokoll-Befund 01 / Owner-Entscheidung
+    // vom 11.09.2026: "Natuerlich ist 100% Datenverfuegbarkeit das Ziel")
+    // ------------------------------------------------------------------
+
+    @Test
+    fun anfaenglichesFalseVorDemErstenTrueIstKeinAusfall() = runTest(UnconfinedTestDispatcher()) {
+        val mikrofonAktiv = MutableStateFlow(false)
+        val recorder = recorderMit(sessionDao, measurementDao, mikrofonAktiv)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        assertTrue(
+            "Der Startzustand (Mikrofon noch nicht gestartet) ist kein Ausfall",
+            connectionEventDao.geschrieben.isEmpty(),
+        )
+    }
+
+    @Test
+    fun mikrofonAusfallNachLaufendemBetriebErzeugtEinDisconnectedEreignis() = runTest(UnconfinedTestDispatcher()) {
+        val mikrofonAktiv = MutableStateFlow(false)
+        val recorder = recorderMit(sessionDao, measurementDao, mikrofonAktiv)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+        val sessionId = recorder.laufendeSessionId
+
+        mikrofonAktiv.value = true // Mikrofon-Monitoring startet
+        runCurrent()
+        mikrofonAktiv.value = false // ... und faellt unerwartet aus
+        runCurrent()
+
+        assertEquals(listOf(ConnectionEventType.DISCONNECTED), connectionEventDao.geschrieben.map { it.type })
+        assertEquals(sessionId, connectionEventDao.geschrieben.single().sessionId)
+    }
+
+    @Test
+    fun mikrofonErholungNachAusfallErzeugtEinRecoveredEreignis() = runTest(UnconfinedTestDispatcher()) {
+        val mikrofonAktiv = MutableStateFlow(false)
+        val recorder = recorderMit(sessionDao, measurementDao, mikrofonAktiv)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        mikrofonAktiv.value = true
+        runCurrent()
+        mikrofonAktiv.value = false
+        runCurrent()
+        mikrofonAktiv.value = true
+        runCurrent()
+
+        assertEquals(
+            listOf(ConnectionEventType.DISCONNECTED, ConnectionEventType.RECOVERED),
+            connectionEventDao.geschrieben.map { it.type },
+        )
+    }
+
+    @Test
+    fun eineZusammenhaengendeMikrofonAusfallperiodeErzeugtNurEinEreignis() = runTest(UnconfinedTestDispatcher()) {
+        // Derselbe De-Dup-Schutz wie beim Messgeraet (onState) - kein Ereignis je Zwischenaufruf
+        // innerhalb EINER zusammenhaengenden Ausfallperiode.
+        val mikrofonAktiv = MutableStateFlow(false)
+        val recorder = recorderMit(sessionDao, measurementDao, mikrofonAktiv)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        mikrofonAktiv.value = true
+        runCurrent()
+        mikrofonAktiv.value = false
+        runCurrent()
+        mikrofonAktiv.value = false
+        runCurrent()
+
+        assertEquals(1, connectionEventDao.geschrieben.size)
+    }
+
+    @Test
+    fun laufendeSessionIstMikrofonZeigtDieRichtigeArtDerOffenenSessionAn() = runTest(UnconfinedTestDispatcher()) {
+        // Grundlage fuer AudioRecordingServices ACTION_STOP_AUDIO_RECORDING (Praefprotokoll-
+        // Anhang): das darf NUR eine Mikrofon-Session beenden, nie eine laufende
+        // Messgeraet-Session.
+        val recorder = recorderMit(sessionDao, measurementDao)
+        assertTrue(
+            "Ohne jede Session ist es definitiv kein Mikrofonlauf",
+            !recorder.laufendeSessionIstMikrofon,
+        )
+
+        recorder.starteMikrofonMessung()
+        runCurrent()
+        assertTrue(recorder.laufendeSessionIstMikrofon)
+
+        recorder.stop()
+        runCurrent()
+
+        recorder.start(device)
+        zustaende.value = ConnectionState.STREAMING
+        runCurrent()
+        assertTrue(
+            "Eine Messgeraet-Session ist kein Mikrofonlauf",
+            !recorder.laufendeSessionIstMikrofon,
+        )
+    }
+
+    @Test
+    fun ohneMikrofonAktivFlussBleibtDasVerhaltenWieVorDerKorrektur() = runTest(UnconfinedTestDispatcher()) {
+        // mikrofonAktiv = null (Default, kein Fluss uebergeben) - bestehende Aufrufer/Tests
+        // duerfen sich durch diese Korrektur nicht veraendern.
+        val recorder = recorderMit(sessionDao, measurementDao)
+        recorder.starteMikrofonMessung()
+        runCurrent()
+        recorder.mikrofonPegel(58.0)
+        runCurrent()
+
+        assertTrue(connectionEventDao.geschrieben.isEmpty())
     }
 
     @Test

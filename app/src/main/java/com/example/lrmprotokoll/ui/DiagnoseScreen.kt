@@ -386,7 +386,8 @@ fun DiagnoseScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Status: ${alarm.deliveryState} · Versuche: ${alarm.attempts} · Empfänger: ${alarm.recipients}" +
+                            text = "Status: ${com.example.lrmprotokoll.alert.AlertMessages.zustandsAnzeige(alarm.deliveryState)} · " +
+                                "Versuche: ${alarm.attempts} · Empfänger: ${alarm.recipients}" +
                                 (if (alarm.resolvedAt != null) " · Entwarnt: ${formatierer.format(alarm.resolvedAt)}" else ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

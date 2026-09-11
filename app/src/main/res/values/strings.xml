@@ -206,6 +206,7 @@
     <string name="settings_mode_pro">Pro-Modus</string>
     <string name="settings_section_thresholds">Schwellenwerte &amp; Audio</string>
     <string name="settings_threshold_day">Aufnahme-Schwellenwert (Tag): %1$.1f dB(A)</string>
+    <string name="settings_meter_threshold_day">Schwellenwert Messgerät (Tag): %1$.1f dB(A)</string>
     <string name="settings_threshold_current_level">Aktueller Pegel (Mikrofon): %1$.1f dB</string>
     <string name="settings_threshold_no_live_level">Überwachung starten, um den aktuellen Pegel zu sehen</string>
     <string name="settings_threshold_use_current">Auf aktuellen Pegel</string>
@@ -232,6 +233,7 @@
     <string name="settings_quiet_hours_title">Ruhezeiten berücksichtigen</string>
     <string name="settings_quiet_hours_desc">Verwendet in den Ruhezeiten einen separaten Schwellenwert</string>
     <string name="settings_quiet_hours_threshold">Ruhezeit-Schwellenwert (Nacht): %1$.1f dB(A)</string>
+    <string name="settings_meter_threshold_quiet">Schwellenwert Messgerät (Nacht): %1$.1f dB(A)</string>
     <string name="settings_quiet_hours_start">Start: %1$d:00 Uhr</string>
     <string name="settings_quiet_hours_end">Ende: %1$d:00 Uhr</string>
     <string name="settings_cleanup_title">Automatische Bereinigung</string>

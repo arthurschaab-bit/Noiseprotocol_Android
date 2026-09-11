@@ -90,7 +90,20 @@ interface MeasurementDao {
 
     @Query("SELECT COUNT(*) FROM measurements")
     suspend fun anzahl(): Int
+
+    /**
+     * Praefprotokoll C-4-Rest (Owner-Entscheidung vom 11.09.2026: "just do it"): der letzte
+     * Messwert-Zeitstempel je Session aus [sessionIds] in EINER Query, statt [fuerSession] pro
+     * Session einzeln aufzurufen und dabei jeweils alle Spalten aller Messwerte dieser Session zu
+     * laden, nur um das Maximum von einer einzigen Spalte zu bilden. Siehe
+     * [com.example.lrmprotokoll.messreihe.MeasurementRecorder.schliesseVerwaisteSessions].
+     */
+    @Query("SELECT sessionId, MAX(timestamp) AS letzterZeitstempel FROM measurements WHERE sessionId IN (:sessionIds) GROUP BY sessionId")
+    suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>): List<SessionLetzterZeitstempel>
 }
+
+/** Ergebniszeile von [MeasurementDao.letzteZeitstempelJeSession]. */
+data class SessionLetzterZeitstempel(val sessionId: Long, val letzterZeitstempel: Long)
 
 @Dao
 interface ConnectionEventDao {
@@ -108,7 +121,14 @@ interface ConnectionEventDao {
 @Dao
 interface MinuteAggregateDao {
 
-    @Insert
+    /**
+     * REPLACE statt der bisherigen Default-Strategie ABORT (Prüfprotokoll-Anhang, Schema 19):
+     * mit dem neuen eindeutigen Index auf (sessionId, minuteStart) würfe ein zweiter
+     * Retention-Lauf über dieselbe Minute sonst eine SQLiteConstraintException statt sie -
+     * deterministisch, da dieselben Rohwerte immer dasselbe Aggregat ergeben - einfach zu
+     * ersetzen.
+     */
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insertAll(aggregate: List<MinuteAggregateEntity>)
 
     @Query("SELECT * FROM minute_aggregates WHERE sessionId = :sessionId ORDER BY minuteStart")

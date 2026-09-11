@@ -130,6 +130,12 @@ class AudioRecordingService : LifecycleService() {
     @Volatile private var aktiveKanalzahl: Int? = null
     @Volatile private var aktiveAgcAktiv: Boolean? = null
 
+    // Praefprotokoll-Befund 01 / Korrekturliste C-1: Fast-zeitgewichteter Pegel statt der
+    // vorherigen max(rmsDb, peakDb-6dB)-Heuristik ohne rekonstruierbare Herkunft. Zustandsbehaftet
+    // (haelt die laufende Mittelung), daher ein Feld statt eines lokalen Werts - reset() bei
+    // jedem Start einer neuen Mikrofon-Ueberwachung, siehe FastPegelSchaetzer-KDoc.
+    private val fastPegelSchaetzer = FastPegelSchaetzer()
+
     private lateinit var settingsManager: SettingsManager
     private lateinit var connectionSupervisor: ConnectionSupervisor
     private lateinit var alarmCoordinator: AlarmCoordinator
@@ -214,6 +220,7 @@ class AudioRecordingService : LifecycleService() {
             Log.w("AudioRecordingService", "Bluetooth Berechtigung fehlt - Meter-Monitoring wird übersprungen")
             return
         }
+        aktualisiereForegroundServiceTypeFallsNoetig()
         val device = BoundDevice(address, settingsManager.meterDeviceName ?: address)
         connectionSupervisor.start(device)
 
@@ -309,6 +316,15 @@ class AudioRecordingService : LifecycleService() {
             audioSollIstFehlerGemeldet = false
             stillerAusfallHinweis = null
             settingsManager.audioMonitoringWasActive = false
+            // Praefprotokoll-Anhang, Owner-Entscheidung vom 11.09.2026 ("korrigiere es"): eine
+            // Mikrofon-Session muss hier geschlossen werden, sonst bleibt sie fuer immer offen
+            // (kein weiterer Aufrufer ruft je stop() dafuer auf) und ein Neustart der
+            // Ueberwachung schreibt in dieselbe, angeblich "laufende" Session weiter. NUR fuer
+            // eine Mikrofon-Session - eine laufende Messgeraet-Session (BLE laeuft unabhaengig
+            // von dieser rein Audio-bezogenen Aktion weiter) darf hier nicht mitbeendet werden.
+            if (measurementRecorder.laufendeSessionIstMikrofon) {
+                measurementRecorder.stop()
+            }
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "Audio-Aufnahme explizit gestoppt (Hintergrund-Dienst bleibt aktiv)",
@@ -359,14 +375,11 @@ class AudioRecordingService : LifecycleService() {
         return START_STICKY
     }
 
-    private fun startForegroundService() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "Lärm-Monitoring Dienst",
-            NotificationManager.IMPORTANCE_LOW
-        )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    /** Der zuletzt tatsaechlich an [startForeground] uebergebene Typ-Bitmask - Grundlage fuer
+     * [aktualisiereForegroundServiceTypeFallsNoetig] (Praefprotokoll-Anhang). */
+    private var aktiverForegroundServiceType = 0
 
+    private fun berechneForegroundServiceType(): Int {
         val hasBluetoothConnect = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasConnectPermission(this)
         val hasRecordAudio = ActivityCompat.checkSelfPermission(
             this, Manifest.permission.RECORD_AUDIO
@@ -377,13 +390,25 @@ class AudioRecordingService : LifecycleService() {
         if (hasBluetoothConnect && settingsManager.meterDeviceAddress != null) {
             serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         }
+        return serviceType
+    }
 
+    private fun startForegroundService() {
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Lärm-Monitoring Dienst",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+
+        val serviceType = berechneForegroundServiceType()
         try {
             if (serviceType != 0) {
                 startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value), serviceType)
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value))
             }
+            aktiverForegroundServiceType = serviceType
             diagnosticsReporter.breadcrumb("AudioService", "Foreground-Service erfolgreich gestartet (types=$serviceType)")
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Foreground Service konnte nicht mit Typen gestartet werden", e)
@@ -400,6 +425,45 @@ class AudioRecordingService : LifecycleService() {
                 Log.e("AudioRecordingService", "Fallback startForeground fehlgeschlagen", fallbackEx)
                 stopSelf()
             }
+        }
+    }
+
+    /**
+     * Holt den Foreground-Service-Typ nach, wenn sich das Messgeraet ERST NACH dem ersten Start
+     * gepaart hat (Prüfprotokoll-Anhang, Owner-Entscheidung vom 11.09.2026: "korrigiere").
+     *
+     * [startForegroundService] setzt den Typ bislang nur EINMAL, beim ersten `onStartCommand`.
+     * Startete die Ueberwachung ohne gepaartes Messgeraet (der haeufige Fall - siehe README
+     * "Ohne je bestandene Verbindung gibt es keinen Alarm"), lief die BLE-Verbindung danach
+     * dauerhaft unter einem Dienst, der sich selbst nur als `microphone` deklariert hatte, nie
+     * als `connectedDevice` - erneutes `startForeground()` mit aktualisierter Typ-Bitmask ist der
+     * dokumentierte Weg, einen laufenden Foreground Service um einen Typ zu erweitern.
+     *
+     * No-Op, wenn sich nichts geaendert hat oder der Dienst noch gar nicht im Vordergrund laeuft
+     * (dann uebernimmt [startForegroundService] selbst die korrekte Erstberechnung).
+     */
+    private fun aktualisiereForegroundServiceTypeFallsNoetig() {
+        if (!isForegroundActive) return
+        val serviceType = berechneForegroundServiceType()
+        if (serviceType == aktiverForegroundServiceType || serviceType == 0) return
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value), serviceType)
+            aktiverForegroundServiceType = serviceType
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "Foreground-Service-Typ nachtraeglich aktualisiert (types=$serviceType)",
+            )
+        } catch (e: Throwable) {
+            // Ein gescheitertes Nachtragen darf den laufenden Dienst nicht stoppen - er laeuft
+            // bereits erfolgreich mit dem alten Typ weiter, nur eben ohne die Aktualisierung.
+            Log.e("AudioRecordingService", "Foreground-Service-Typ konnte nicht aktualisiert werden", e)
+            diagnosticsReporter.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_FOREGROUND_SERVICE_FAILED,
+                component = "AudioRecordingService",
+                operation = "aktualisiereForegroundServiceTypeFallsNoetig",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                cause = e,
+            )
         }
     }
 
@@ -548,6 +612,7 @@ class AudioRecordingService : LifecycleService() {
             aktiveAufnahmequelle = audioSource
             aktiveAbtastrate = audioRecord.sampleRate
             aktiveKanalzahl = if (channelConfig == AudioFormat.CHANNEL_IN_MONO) 1 else 2
+            fastPegelSchaetzer.reset()
             aktiveAgcAktiv = deaktiviereAudioEffekteUndMeldeAgcZustand(audioRecord.audioSessionId)
             _laufendesFormat.value = Aufnahmeformat(audioRecord.sampleRate, aktiveKanalzahl ?: 1)
             _audioAufnahmeAktiv.value = true
@@ -614,7 +679,7 @@ class AudioRecordingService : LifecycleService() {
                         continue
                     }
 
-                    val currentDb = calculateDb(buffer, readSize)
+                    val currentDb = fastPegelSchaetzer.naechsterBlock(buffer, readSize, audioRecord.sampleRate)
                     letzterMikrofonDb = currentDb
                     _currentMicDb.value = currentDb
                     if (settingsManager.driveSyncEnabled) {
@@ -731,11 +796,17 @@ class AudioRecordingService : LifecycleService() {
             if (start <= end) (hour >= start && hour < end) else (hour >= start || hour < end)
         } else false
 
-        val activeSchwelle = if (isQuiet) settingsManager.quietHoursThreshold else settingsManager.dbThreshold
+        // Getrennte Schwellwerte fuer Mikrofon und Messgeraet (Praefprotokoll-Befund 02 /
+        // Korrekturliste C-3): "60" bedeutet auf dem unkalibrierten Mikrofonwert und dem
+        // kalibrierten dBA-Wert nichts Vergleichbares - jede Quelle bekommt ihre eigene,
+        // jeweils um dieselbe Ruhezeit-Logik ergaenzte Schwelle.
+        val mikrofonSchwelle = if (isQuiet) settingsManager.quietHoursThreshold else settingsManager.dbThreshold
+        val meterSchwelle = if (isQuiet) settingsManager.meterQuietHoursThreshold else settingsManager.meterDbThreshold
         val auswertung = com.example.lrmprotokoll.messreihe.MeterTriggerSource.auswerten(
             letzterMeterFrame = meterFrame ?: letzterMeterFrame,
             mikrofonDb = mikrofonDb ?: letzterMikrofonDb,
-            activeSchwelle = activeSchwelle,
+            mikrofonSchwelle = mikrofonSchwelle,
+            meterSchwelle = meterSchwelle,
             triggerQuelle = settingsManager.audioTriggerQuelle,
         )
 
@@ -873,23 +944,6 @@ class AudioRecordingService : LifecycleService() {
             ),
         )
         updateNotification(connectionSupervisor.state.value)
-    }
-
-    private fun calculateDb(buffer: ShortArray, readSize: Int): Double {
-        if (readSize <= 0) return 0.0
-        var sum = 0.0
-        var maxAmp = 0
-        for (i in 0 until readSize) {
-            val sample = buffer[i].toDouble()
-            sum += sample * sample
-            val abs = Math.abs(buffer[i].toInt())
-            if (abs > maxAmp) maxAmp = abs
-        }
-        val rms = Math.sqrt(sum / readSize)
-        val rmsDb = if (rms > 0) 20 * Math.log10(rms / 32767.0) + 100.0 else 0.0
-        val peakDb = if (maxAmp > 0) 20 * Math.log10(maxAmp / 32767.0) + 100.0 else 0.0
-        val db = Math.max(rmsDb, peakDb - 6.0)
-        return if (db < 0) 0.0 else db
     }
 
     private fun writeToRollingBuffer(data: ByteArray, size: Int) {

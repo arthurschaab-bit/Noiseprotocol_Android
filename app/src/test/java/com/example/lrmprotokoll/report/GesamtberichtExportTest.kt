@@ -23,7 +23,7 @@ class GesamtberichtExportTest {
         bericht = PeriodenBericht(
             von = von, bis = bis, sessionCount = 0,
             chartSpalten = emptyList(), kennwerte = leereKennwerte(),
-            ausfallbaender = emptyList(), events = emptyList(),
+            ausfallbaender = emptyList(), events = emptyList(), nurMikrofon = false,
         ),
         datenverfuegbarkeitProzent = datenverfuegbarkeitProzent,
     )
@@ -34,6 +34,7 @@ class GesamtberichtExportTest {
             gesamt = PeriodenBericht(
                 von = 0L, bis = 0L, sessionCount = 0, chartSpalten = emptyList(),
                 kennwerte = leereKennwerte(), ausfallbaender = emptyList(), events = emptyList(),
+                nurMikrofon = false,
             ),
             tage = emptyList(),
         )

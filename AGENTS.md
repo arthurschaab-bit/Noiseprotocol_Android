@@ -37,7 +37,7 @@ Docs are in German. Keep them in German. Code identifiers are English, UI string
 
 ## 3. Stack
 
-Kotlin 2.2 · Jetpack Compose · Room 2.8, **schema version 17** (KSP, exported schemas in
+Kotlin 2.2 · Jetpack Compose · Room 2.8, **schema version 19** (KSP, exported schemas in
 `app/schemas/`) · Navigation-Compose · MediaPipe Tasks Audio for YAMNet (replaced TFLite Task
 Audio, see B-11) · CameraX for the video evidence (M11 B) · Robolectric for JVM tests.
 **Hand-written fakes only** — no Mockito, no MockK anywhere in this repository.
