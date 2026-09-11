@@ -71,6 +71,23 @@ class SettingsManager(
         get() = prefs.getFloat("db_threshold", 60.0f)
         set(value) = prefs.edit().putFloat("db_threshold", value).apply()
 
+    /**
+     * Eigener Schwellwert fuer das Messgeraet, getrennt von [dbThreshold] (Praefprotokoll-Befund
+     * 02 / Korrekturliste C-3, Owner-Entscheidung vom 11.09.2026: "Einen eigenen Schwellwert
+     * fuers Messgeraet waere gut... Diese Schwellwerte muessen natuerlich ueberall passen").
+     * Vorher wurde [dbThreshold] unveraendert auch fuer PCE-323-Frames verwendet, obwohl "60" auf
+     * dem unkalibrierten Mikrofonwert (dBFS + Offset) und auf dem kalibrierten dBA-Wert nichts
+     * Vergleichbares bedeutet (README "Bekannte Einschraenkungen").
+     *
+     * Default bewusst identisch mit [dbThreshold] (60.0f): Bestandsinstallationen, die noch nie
+     * einen eigenen Wert gesetzt haben, behalten damit exakt das bisherige Ausloeseverhalten bei
+     * PCE-323-Frames - eine Aenderung des Defaults haette die Empfindlichkeit bestehender
+     * Installationen stillschweigend verschoben.
+     */
+    var meterDbThreshold: Float
+        get() = prefs.getFloat("meter_db_threshold", 60.0f)
+        set(value) = prefs.edit().putFloat("meter_db_threshold", value).apply()
+
     var preRollSeconds: Int
         get() = prefs.getInt("pre_roll", 2)
         set(value) = prefs.edit().putInt("pre_roll", value).apply()
@@ -548,6 +565,13 @@ class SettingsManager(
     var quietHoursThreshold: Float
         get() = prefs.getFloat("quiet_hours_threshold", 45.0f)
         set(value) = prefs.edit().putFloat("quiet_hours_threshold", value).apply()
+
+    /** Ruhezeit-Variante von [meterDbThreshold] - dieselbe Trennung wie bei
+     * [quietHoursThreshold]/[dbThreshold] fuers Mikrofon, jetzt auch fuers Messgeraet
+     * (Befund 02 / C-3). Default identisch mit [quietHoursThreshold] aus demselben Grund. */
+    var meterQuietHoursThreshold: Float
+        get() = prefs.getFloat("meter_quiet_hours_threshold", 45.0f)
+        set(value) = prefs.edit().putFloat("meter_quiet_hours_threshold", value).apply()
 
     /** Letzte erzeugte oder empfangene Diagnose-ID fuer die UI. */
     var letzteDiagnoseId: String?

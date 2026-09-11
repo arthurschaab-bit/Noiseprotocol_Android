@@ -123,6 +123,10 @@ fun SettingsScreen(
 
     // Aufnahme-Parameter
     var dbThreshold by remember { mutableFloatStateOf(settings.dbThreshold) }
+    // Praefprotokoll Frage 4 / Korrekturliste C-3: eigener Schwellwert fuer das Messgeraet,
+    // getrennt vom Mikrofonwert - "60 dB" bedeutet auf dem unkalibrierten Mikrofon und dem
+    // kalibrierten PCE-323-Wert nichts Vergleichbares.
+    var meterDbThreshold by remember { mutableFloatStateOf(settings.meterDbThreshold) }
     var recordWavAudio by remember { mutableStateOf(settings.recordWavAudio) }
     var audioTriggerQuelle by remember { mutableStateOf(settings.audioTriggerQuelle) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
@@ -140,6 +144,7 @@ fun SettingsScreen(
     var quietHoursStartHour by remember { mutableFloatStateOf(settings.quietHoursStartHour.toFloat()) }
     var quietHoursEndHour by remember { mutableFloatStateOf(settings.quietHoursEndHour.toFloat()) }
     var quietHoursThreshold by remember { mutableFloatStateOf(settings.quietHoursThreshold) }
+    var meterQuietHoursThreshold by remember { mutableFloatStateOf(settings.meterQuietHoursThreshold) }
 
     // F5: Auto-Bereinigung & Speicherplatz
     var autoRetentionEnabled by remember { mutableStateOf(settings.autoRetentionEnabled) }
@@ -544,6 +549,16 @@ fun SettingsScreen(
                         Text(stringResource(R.string.settings_threshold_use_current_plus_5))
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(stringResource(R.string.settings_meter_threshold_day, meterDbThreshold), fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = meterDbThreshold,
+                    onValueChange = { meterDbThreshold = it },
+                    onValueChangeFinished = { settings.meterDbThreshold = meterDbThreshold },
+                    valueRange = 30f..100f,
+                    modifier = Modifier.testTag("slider_meter_db_threshold"),
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -964,6 +979,16 @@ fun SettingsScreen(
                         onValueChange = { quietHoursThreshold = it },
                         onValueChangeFinished = { settings.quietHoursThreshold = quietHoursThreshold },
                         valueRange = 25f..80f
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_meter_threshold_quiet, meterQuietHoursThreshold))
+                    Slider(
+                        value = meterQuietHoursThreshold,
+                        onValueChange = { meterQuietHoursThreshold = it },
+                        onValueChangeFinished = { settings.meterQuietHoursThreshold = meterQuietHoursThreshold },
+                        valueRange = 25f..80f,
+                        modifier = Modifier.testTag("slider_meter_quiet_hours_threshold"),
                     )
 
                     OutlinedButton(
