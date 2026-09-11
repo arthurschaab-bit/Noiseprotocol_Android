@@ -460,7 +460,13 @@ private suspend fun starteAufnahme(
                     videoEchtGestartetAm = System.currentTimeMillis()
                 }
                 if (ereignis is VideoRecordEvent.Finalize) {
-                    scope.launch {
+                    // NICHT auf `scope` (rememberCoroutineScope des Screens) - CameraX liefert
+                    // dieses Ereignis asynchron und ohne garantierte Frist. Verlaesst der Nutzer
+                    // den Screen vorher, wuerde `scope` abgebrochen und beendeAufnahme() nie zu
+                    // Ende laufen: Ton-Mitschnitt liefe unbemerkt weiter, tonGemuxt bliebe fuer
+                    // immer false (Praefprotokoll-Frage 8). container.videobeweisAbschlussScope
+                    // ist app-weit und ueberlebt genau das (siehe dessen KDoc).
+                    container.videobeweisAbschlussScope.launch {
                         beendeAufnahme(
                             context = context,
                             container = container,
