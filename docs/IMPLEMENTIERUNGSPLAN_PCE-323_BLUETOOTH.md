@@ -37,7 +37,8 @@ Kein DI-Framework, kein Modulschnitt, keine Tests außer den generierten Platzha
 
 ### 0.2 Die entscheidende Erkenntnis für dieses Vorhaben
 
-Die heutige Pegelberechnung in `AudioRecordingService.calculateDb()` lautet:
+Die Pegelberechnung in `AudioRecordingService` lautete bei Abfassung dieses Plans (Stand
+2026-08-16):
 
 ```kotlin
 val db = 20 * Math.log10(rms / 32767.0) + 100.0
@@ -46,6 +47,13 @@ val db = 20 * Math.log10(rms / 32767.0) + 100.0
 Das ist **dBFS plus ein willkürlicher Offset von 100** — kein Schalldruckpegel, keine
 A-Bewertung, keine Kalibrierung, geräteabhängig. Für ein Lärmprotokoll mit Beweisanspruch ist
 dieser Wert nicht verwertbar.
+
+**Update (Prüfprotokoll C-1, 11.09.2026):** Diese konkrete Formel existiert so nicht mehr —
+ersetzt durch `FastPegelSchaetzer` (IEC 61672 „Fast", Tau=125 ms, mittelt im Leistungs- statt im
+dB-Bereich, siehe `audio/FastPegelSchaetzer.kt`). Die Kernaussage dieses Abschnitts bleibt davon
+unberührt: Auch die neue Formel liefert keinen kalibrierten Schalldruckpegel und keine
+A-Bewertung — nur eine sauber zeitgewichtete Variante desselben unkalibrierten Mikrofonwerts.
+Der Grund für das PCE-323-Vorhaben besteht unverändert.
 
 **Genau hier liegt der Wert des PCE-323**: klassenzertifizierte, A-bewertete Pegel (Klasse 2).
 Das Vorhaben ist damit nicht „ein zweiter Sensor", sondern die **Ablösung der unkalibrierten
@@ -1233,15 +1241,43 @@ der Google Cloud Console, die kein Agent selbst anlegen kann (braucht Browser-Zu
 Google-Konto). Der Owner hat sie inzwischen eingerichtet und eingetragen
 (`GoogleClientConfig.SERVER_CLIENT_ID`) - damit für die Android-Client-ID (zweite, separate
 Client-ID vom Typ „Android", nicht im Code) ein über alle Baumaschinen stabiler SHA-1-
-Fingerabdruck registriert werden kann, ist der Debug-Signierschlüssel jetzt als
-`app/debug.keystore` fest eingecheckt statt pro Maschine zufällig neu erzeugt zu werden (siehe
-`app/build.gradle.kts`, `signingConfigs.debug`).
+Fingerabdruck registriert werden kann, brauchte der Debug-Signierschlüssel einen Weg, um über
+alle Baumaschinen gleich zu bleiben.
 
-**Owner-Korrektur zu 4.5:** Der eigene Schwellenwert fürs Messgerät (`meterDbThreshold`) ist
-entfallen. Bei bestehender Messgerät-Verbindung wird jetzt durchgehend aufgezeichnet statt erst ab
-Pegelüberschreitung - "es soll immer aufgezeichnet werden bei einer Verbindung". Die
-Mikrofon-Schwelle (`dbThreshold`) bleibt unverändert als Fallback, solange kein Messgerät verbunden
-ist. Siehe `MeterTriggerSource.auswerten()`.
+**Korrektur (Prüfprotokoll C-6, 11.09.2026):** Der ursprünglich dafür fest als
+`app/debug.keystore` eingecheckte Schlüssel wurde geleakt, nachdem das Repository öffentlich
+wurde. Er ist rotiert, aus dem Repository entfernt und durch die neue SHA-1 in der Google Cloud
+Console ersetzt. Der neue Keystore liegt **nicht** mehr im Repository, sondern wird extern über
+die Gradle-Property `debugStoreFile` hereingereicht (`app/build.gradle.kts`,
+`signingConfigs.debug`) - lokal per `-PdebugStoreFile=...`, in CI über das Repository-Secret
+`DEBUG_KEYSTORE_BASE64` (`androidci.yml`). Ohne das Secret/die Property fällt AGP sauber auf sein
+eigenes, pro Maschine neu erzeugtes `~/.android/debug.keystore` zurück - der Build bricht nicht,
+nur die SHA-1-Stabilität fehlt dann wieder.
+
+**Owner-Korrektur zu 4.5** (überholt, siehe Korrektur direkt darunter): Der eigene Schwellenwert
+fürs Messgerät (`meterDbThreshold`) ist entfallen. Bei bestehender Messgerät-Verbindung wird
+jetzt durchgehend aufgezeichnet statt erst ab Pegelüberschreitung - "es soll immer aufgezeichnet
+werden bei einer Verbindung". Die Mikrofon-Schwelle (`dbThreshold`) bleibt unverändert als
+Fallback, solange kein Messgerät verbunden ist. Siehe `MeterTriggerSource.auswerten()`.
+
+**Korrektur (11.09.2026, Prüfprotokoll C-3 + direkte Owner-Rückfrage danach):** Die Entscheidung
+"kein Schwellwert fürs Messgerät" oben gilt nicht mehr. C-3 hat `meterDbThreshold`/
+`meterQuietHoursThreshold` als eigene, echte Einstellung samt Settings-UI wieder eingeführt, und
+`MeterTriggerSource.auswerten()` prüft in den Zweigen `PCE_323`/`AUTO` weiterhin
+`letzterMeterFrame.level > meterSchwelle`, bevor ein Ereignis entsteht. Auf direkte Rückfrage
+("Fehler oder Absicht?") die Owner-Antwort: **Absicht, aktueller Code-Stand ist korrekt, kein
+Fix nötig.**
+
+Grund für die Verwirrung, festgehalten, damit sie sich nicht wiederholt — "Aufzeichnung" meint
+hier zwei verschiedene, unabhängig voneinander korrekte Mechanismen:
+- **Kontinuierliche Pegelaufzeichnung** (`measurements`-Tabelle, `MeasurementRecorder.onFrame()`):
+  läuft ohne Schwellwert, sobald das Messgerät verbunden ist und Frames liefert - "dBA/dBC vom
+  Messgerät sollen sobald die Bluetoothverbindung steht aufgezeichnet werden" (Owner, 11.09.2026).
+- **Ereignis-Trigger** (`NoiseRecord`-Tabelle, separat von `measurements`, via
+  `AudioRecordingService.pruefeSchwellenwertUndTrigger()` → `MeterTriggerSource.auswerten()`):
+  eigene, schwellwertbasierte Entscheidung, ob ein Ereignis (mit oder ohne Mikrofon-WAV) entsteht
+  - Meter-Pfad `meterDbThreshold`, Mikrofon-Audio `dbThreshold`/`quietHoursThreshold` ("Audio vom
+  Mikrofon erst wenn Grenzwerte überschritten wurden", Owner, 11.09.2026).
 
 **Geräteetest-Rückmeldungen (laufend):** Text auf keiner Seite markier-/kopierbar (u.a.
 Diagnose-Log) - behoben durch `SelectionContainer` um den gesamten `NavHost` in `MainActivity`.

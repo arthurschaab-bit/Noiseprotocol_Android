@@ -277,11 +277,13 @@ mit Owner-Rückfragen, [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) nennt den aktu
   bestätigt öffentlichem Repository: „Keystore jetzt im Code rotieren"). `app/debug.keystore` ist
   gelöscht; `signingConfigs.debug` liest den Pfad jetzt über die Gradle-Property `debugStoreFile`,
   genau wie `signingConfigs.release` es schon tat — ohne die Property fällt AGP sauber auf sein
-  eigenes `~/.android/debug.keystore` zurück, der Build bricht nicht. **Weiterhin offen, außerhalb
-  des Codes:** die alte SHA-1 muss in der Google Cloud Console entfernt und durch die des neuen
-  Keystores ersetzt werden (sonst bleibt der geleakte Schlüssel dort gültig), und ob zusätzlich
-  die Git-Historie bereinigt werden muss (die alte Datei bleibt in vergangenen Commits sichtbar)
-  ist eine noch nicht getroffene Owner-Entscheidung.
+  eigenes `~/.android/debug.keystore` zurück, der Build bricht nicht. **Vollständig
+  abgeschlossen:** die alte SHA-1 ist in der Google Cloud Console entfernt und durch die des
+  neuen Keystores ersetzt, der neue Keystore liegt als `DEBUG_KEYSTORE_BASE64`-Repository-Secret
+  vor und wird in `androidci.yml` verwendet. Owner-Entscheidung zur Git-Historie: keine
+  Bereinigung (kein BFG/`git filter-repo`) — die `git rm`-Löschung genügt, der Schlüssel selbst
+  ist überall ungültig, die alte Datei bleibt nur noch als historischer, inaktiver Datensatz in
+  vergangenen Commits sichtbar.
 
 ---
 
@@ -469,9 +471,13 @@ ein gleichzeitiger Lauf (ein neuer Push bricht einen laufenden ab):
      Zusammenfassungsseite des Laufs (`GITHUB_STEP_SUMMARY`), nicht nur im Artefakt.
    - **Artefakte** (jeweils mit `if: always()` — werden auch bei fehlgeschlagenem Build/Test
      hochgeladen, soweit vorhanden): `lint-reports` (7 Tage), `unit-test-reports` (7 Tage) und
-     **`app-debug-apk` (14 Tage)** — die fertig gebaute, mit dem fest eingecheckten
-     `app/debug.keystore` signierte Debug-APK aus `app/build/outputs/apk/debug/*.apk`. Das ist
-     der einzige Weg, eine PR-Fassung auf einem Telefon auszuprobieren, ohne selbst zu bauen —
+     **`app-debug-apk` (14 Tage)** — die fertig gebaute Debug-APK aus
+     `app/build/outputs/apk/debug/*.apk`, signiert mit dem Schlüssel aus dem
+     `DEBUG_KEYSTORE_BASE64`-Repository-Secret (siehe C-6 in der Prüfprotokoll-Historie) — ohne
+     das Secret fällt AGP auf sein eigenes, pro Laufumgebung neu erzeugtes
+     `~/.android/debug.keystore` zurück, dann ist die Signatur zwischen zwei Läufen nicht mehr
+     stabil (siehe `signingConfigs.debug` in `app/build.gradle.kts`). Das ist der einzige Weg,
+     eine PR-Fassung auf einem Telefon auszuprobieren, ohne selbst zu bauen —
      siehe [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) für den genauen Weg vom PR bis
      zur installierten APK (Artefakte hängen an der **Übersichtsseite des Laufs**, nicht an der
      Job-Seite mit dem Protokoll — das ist die übliche Stolperstelle).
