@@ -118,8 +118,8 @@ class MeterScreenInstrumentedTest {
         }
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
-        repeat(3) { runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick() } }
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick()
+        repeat(3) { runCatching { composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick() } }
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText("errorCode=6", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
@@ -134,11 +134,11 @@ class MeterScreenInstrumentedTest {
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
         composeRule.setContent { MeterScreen(onBack = {}) }
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick()
         composeRule.waitUntil(5_000L) {
             runCatching { composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").fetchSemanticsNode() }.isSuccess
         }
-        composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").performClick()
+        composeRule.onNodeWithTag("card_ble_device_BB:BB:BB:BB:BB:BB").performScrollTo().performClick()
         composeRule.onNodeWithTag("dialog_spoofing_dismiss").assertIsDisplayed().performClick()
         assertEquals("AA:AA:AA:AA:AA:AA", settings.meterDeviceAddress)
         composeRule.waitUntil(timeoutMillis = 5_000L) {
@@ -154,11 +154,11 @@ class MeterScreenInstrumentedTest {
         settings.meterDeviceAddress = "AA:AA:AA:AA:AA:AA"
         settings.meterDeviceName = "PCE-323 Test"
         composeRule.setContent { MeterScreen(onBack = {}) }
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick()
         composeRule.waitUntil(5_000L) {
             runCatching { composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").fetchSemanticsNode() }.isSuccess
         }
-        composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").performClick()
+        composeRule.onNodeWithTag("card_ble_device_CC:CC:CC:CC:CC:CC").performScrollTo().performClick()
         composeRule.onNodeWithTag("dialog_spoofing_confirm").assertIsDisplayed().performClick()
         composeRule.waitUntil(5_000L) { settings.meterDeviceAddress == "CC:CC:CC:CC:CC:CC" }
         assertEquals("CC:CC:CC:CC:CC:CC", settings.meterDeviceAddress)
@@ -189,7 +189,7 @@ class MeterScreenInstrumentedTest {
         }
 
         composeRule.setContent { MeterScreen(onBack = {}) }
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick()
         composeRule.waitUntil(5_000L) { fakeScanVollstaendig.get() }
         composeRule.waitForIdle()
         composeRule.waitUntil(5_000L) {
