@@ -199,6 +199,96 @@ dependencies {
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
 
+// Praefprotokoll Frage 5 (Owner-Entscheidung vom 11.09.2026: "Pruefe das selber und ueberlege
+// dir ein Verfahren, das kuenftig abzufangen und setze es um"). Der konkrete Anlass:
+// LevelSampleDao.loescheVor() hatte ausformuliertes KDoc ("ohne sie waechst die Tabelle
+// unbegrenzt"), wurde aber in app/src/main nirgends aufgerufen - nur vier Test-Fakes
+// implementierten sie, die Suite pruefte also ein Verhalten, das es in Produktion nicht gab.
+//
+// Heuristik, kein vollstaendiger Analyzer: eine DAO-Methode gilt als "unbenutzt", wenn ihr Name
+// als Aufruf ".methodName(" in KEINER main-Quelldatei ausser der eigenen Deklaration vorkommt.
+// Das uebersieht absichtlich zwei Faelle, die false positives waeren: (1) generische, mehrfach
+// gleichnamig auftretende CRUD-Namen (insert/insertAll/update/delete) - ausgeschlossen, weil ein
+// Treffer auf EINER anderen DAO deren eigenen, gleichnamigen Aufruf faelschlich als Beleg fuer
+// DIESE Methode werten wuerde; (2) Aufrufe ueber eine Interface-Referenz statt den konkreten
+// Klassennamen. Beides sind akzeptierte false negatives (der Check uebersieht dann seltener einen
+// echten Fall) - ein false positive (ein tatsaechlich benutztes Feld faelschlich als tot melden
+// und damit den Build grundlos rot machen) waere der schlimmere Fehler fuer ein CI-Gate.
+val checkUnusedDaoMethods = tasks.register("checkUnusedDaoMethods") {
+    group = "verification"
+    description = "Findet DAO-Methoden, die deklariert, aber nirgends in app/src/main aufgerufen werden (Praefprotokoll Frage 5)."
+    doLast {
+        val ignorierteNamen = setOf("insert", "insertAll", "update", "delete", "get")
+
+        // Bereits bekannter, bewusst NICHT hier stillschweigend behobener Bestand zum Zeitpunkt
+        // der Einfuehrung dieses Checks (Praefprotokoll Frage 5) - dieser Check soll KUENFTIGE
+        // Faelle abfangen (Owner-Wortlaut), nicht rueckwirkend jeden bereits bestehenden Fund
+        // ungefragt selbst reparieren. Jeder Eintrag ist "Datei:Methode()", damit ein gleich
+        // benannter, aber ECHTER kuenftiger Fund in einer ANDEREN Datei nicht mit ausgeblendet
+        // wird. Siehe Korrekturliste (Praefprotokoll-Artefakt) C-4 fuer loescheVor().
+        val bekannterBestand = setOf(
+            // loescheVor() ist NICHT mehr hier gelistet - seit C-4 (Owner-Entscheidung vom
+            // 11.09.2026: "loescheVor() verdrahten") wird es aus DriveSyncCoordinator aufgerufen,
+            // der Check findet den Aufruf jetzt selbst.
+            "com/example/lrmprotokoll/data/LevelSampleDao.kt:anzahl",       // nur fuer Tests/Diagnose gedacht, nie produktiv gebraucht
+            "com/example/lrmprotokoll/data/SessionDao.kt:anzahl",           // dito
+            "com/example/lrmprotokoll/data/DriveDailyFileDao.kt:letzterFehlschlag", // fuer eine noch nicht gebaute Fehler-UI vorbereitet
+            "com/example/lrmprotokoll/data/AlertDao.kt:fehlgeschlagene",    // C-5 (Befund 04) - Retry-Verdrahtung noch offen
+            "com/example/lrmprotokoll/data/NoiseDao.kt:restoreMultiple",    // Mehrfachauswahl im Papierkorb noch nicht gebaut
+            "com/example/lrmprotokoll/data/NoiseDao.kt:deleteMultiple",     // dito
+            "com/example/lrmprotokoll/data/NoiseDao.kt:setNotes",           // Notizfeld-UI noch nicht gebaut
+        )
+
+        val methodRegex = Regex("""(?:suspend\s+)?fun\s+(\w+)\s*\(""")
+
+        val mainDir = file("src/main/java")
+        val alleKtDateien = mainDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        val inhalte = alleKtDateien.associateWith { it.readText() }
+        val daoDateien = alleKtDateien.filter { inhalte.getValue(it).contains("@Dao") }
+
+        val unbenutzt = mutableListOf<String>()
+        for (daoDatei in daoDateien) {
+            val eigenerInhalt = inhalte.getValue(daoDatei)
+            for (treffer in methodRegex.findAll(eigenerInhalt)) {
+                val name = treffer.groupValues[1]
+                if (name in ignorierteNamen) continue
+                val relativerPfad = daoDatei.relativeTo(mainDir).path.replace('\\', '/')
+                if ("$relativerPfad:$name" in bekannterBestand) continue
+                val aufrufMuster = ".$name("
+                val irgendwoAufgerufen = inhalte.any { (andereDatei, andererInhalt) ->
+                    andereDatei != daoDatei && andererInhalt.contains(aufrufMuster)
+                }
+                if (!irgendwoAufgerufen) {
+                    unbenutzt += "$relativerPfad: $name()"
+                }
+            }
+        }
+
+        if (unbenutzt.isNotEmpty()) {
+            throw GradleException(
+                "checkUnusedDaoMethods: NEUE DAO-Methode(n) deklariert, aber nirgends in " +
+                    "app/src/main aufgerufen - entweder verdrahten, entfernen, oder falls bewusst " +
+                    "fuer spaeter vorbereitet, mit Begruendung zu bekannterBestand hinzufuegen " +
+                    "(Ausnahmen fuer generische CRUD-Namen: $ignorierteNamen):\n" +
+                    unbenutzt.joinToString("\n") { "  - $it" },
+            )
+        } else {
+            logger.lifecycle("checkUnusedDaoMethods: keine NEUEN unbenutzten DAO-Methoden gefunden (${bekannterBestand.size} bekannte, dokumentierte Ausnahmen).")
+        }
+    }
+}
+
+// In denselben Lauf wie die JVM-Tests gehaengt, damit ein neuer, unbenutzter DAO-Zugriff CI
+// genauso zuverlaessig rot macht wie ein fehlgeschlagener Test - ohne eine zusaetzliche,
+// leicht vergessene Zeile in androidci.yml. tasks.matching{}.configureEach{} statt
+// tasks.named("test") - die von AGP/Kotlin erzeugte Aggregat-Task "test" existiert zum
+// Zeitpunkt dieser Zeile in der Konfigurationsphase noch nicht (tasks.named() wirft dann
+// "Task with name 'test' not found"); die Lazy-API konfiguriert sie, sobald sie entsteht,
+// unabhaengig vom genauen Erzeugungszeitpunkt.
+tasks.matching { it.name == "test" }.configureEach {
+    dependsOn(checkUnusedDaoMethods)
+}
+
 // Testluecken-Auftrag Stufe 1: Kover misst die Line-Coverage, damit die weiteren Stufen gegen
 // eine echte Zahl arbeiten koennen statt zu schaetzen. HTML fuers Durchklicken lokal, XML als
 // maschinenlesbare Grundlage fuer den CI-Summary-Schritt (siehe androidci.yml).
