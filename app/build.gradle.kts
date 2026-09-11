@@ -12,6 +12,12 @@ plugins {
 
 val releaseStoreFile = (findProperty("releaseStoreFile") as String?)?.let { file(it) }
 
+// Praefprotokoll C-6-Rest (Owner-Entscheidung vom 11.09.2026, nachdem das Repository bestaetigt
+// oeffentlich wurde: "Keystore jetzt im Code rotieren"): derselbe Aussen-Mechanismus wie bei
+// releaseStoreFile darunter - der Dateipfad kommt ueber eine Gradle-Property herein, nicht mehr
+// als eingecheckte Datei im Repository.
+val debugStoreFile = (findProperty("debugStoreFile") as String?)?.let { file(it) }
+
 android {
     namespace = "com.example.lrmprotokoll"
     compileSdk = 36
@@ -33,20 +39,31 @@ android {
     }
 
     signingConfigs {
-        // Fest eingecheckter Debug-Keystore statt des von AGP pro Maschine automatisch neu
-        // erzeugten ~/.android/debug.keystore: die Google-Cloud-Console-Registrierung der
-        // Android-OAuth-Client-ID (siehe GoogleClientConfig.kt) braucht einen SHA-1-
-        // Fingerabdruck, der ueber alle Baumaschinen hinweg (lokal, diese Sandbox, GitHub
-        // Actions) STABIL bleibt - sonst funktioniert "Mit Google verbinden" nur zufaellig auf
-        // genau der Maschine, die den zuletzt registrierten Fingerabdruck erzeugt hat. Passwort/
-        // Alias/Schluesselpasswort sind die von der Android-Tooling selbst verwendeten,
-        // oeffentlich bekannten Standardwerte fuer Debug-Keystores - kein Geheimnis, das hier
-        // preisgegeben wuerde.
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        // Praefprotokoll C-6-Rest: der frueher hier eingecheckte app/debug.keystore ist durch
+        // die oeffentliche Sichtbarkeit des Repositories unwiderruflich geleakt (bleibt auch in
+        // der Git-Historie stehen, das ist eine separate, noch offene Entscheidung). Rotieren im
+        // Code loest das nur zur Haelfte: die ALTE SHA-1 bleibt in der Google-Cloud-Console-
+        // Registrierung der Android-OAuth-Client-ID (siehe GoogleClientConfig.kt) gueltig, bis
+        // sie dort manuell entfernt und durch die NEUE ersetzt wird - das ist Owner-Aufgabe
+        // ausserhalb dieses Repositories.
+        //
+        // Derselbe Aussen-Mechanismus wie beim Release-Keystore darunter: der Dateipfad kommt
+        // ueber debugStoreFile (Gradle-Property) herein, kein Keystore mehr im Repository.
+        // storePassword/keyAlias/keyPassword bleiben die von der Android-Tooling selbst
+        // verwendeten, oeffentlich bekannten Standardwerte fuer Debug-Keystores - kein Geheimnis,
+        // aber ueberschreibbar per Env-Var, falls der neue Keystore andere Werte bekommen soll.
+        // OHNE debugStoreFile faellt AGP auf sein eigenes, automatisch verwaltetes
+        // ~/.android/debug.keystore pro Maschine zurueck: der Build bricht nicht, aber die
+        // SHA-1-Stabilitaet ueber Baumaschinen hinweg (der urspruengliche Grund fuer den fest
+        // eingecheckten Keystore) fehlt dann wieder, bis der neue Keystore als Secret hinterlegt
+        // ist (CI) bzw. lokal verteilt wurde (andere Entwickler).
+        if (debugStoreFile != null) {
+            getByName("debug") {
+                storeFile = debugStoreFile
+                storePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
+            }
         }
         if (releaseStoreFile != null) {
             create("release") {

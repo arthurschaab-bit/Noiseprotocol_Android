@@ -10,3 +10,9 @@
 .cxx
 local.properties
 /.kotlin
+
+# Praefprotokoll C-6-Rest: der Debug-Keystore lebt seit der oeffentlichen Exponierung des
+# Repositories nicht mehr im Repository selbst - siehe Kommentar bei debugStoreFile in
+# app/build.gradle.kts. Dieser Eintrag verhindert, dass eine lokal an den alten Pfad kopierte
+# Datei aus Versehen erneut eingecheckt wird.
+/app/debug.keystore
