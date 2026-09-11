@@ -122,6 +122,7 @@ fun GesamtberichtStammdatenSheet(
     LaunchedEffect(sessionId) {
         val letzte = withContext(Dispatchers.IO) { container.database.stammdatenVerlaufDao().letzte(10) }
         verlauf = letzte
+        Log.i("StandortBerechtigungDiag", "LaunchedEffect(sessionId) abgeschlossen, verlauf.size=${letzte.size}")
         letzte.firstOrNull()?.let { uebernehmen(it) }
     }
 
