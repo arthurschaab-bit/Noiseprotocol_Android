@@ -273,12 +273,15 @@ mit Owner-Rückfragen, [`docs/KENNZAHLEN.md`](docs/KENNZAHLEN.md) nennt den aktu
   rief vorher `MeasurementDao.fuerSession()` einmal PRO verwaister Session auf, nur um deren
   letzten Zeitstempel zu bilden — neue `letzteZeitstempelJeSession()` holt das für alle
   betroffenen Sessions in einer gruppierten Query statt N Einzelabfragen mit vollem Spaltenabzug.
-- **Sicherheitsfrage weiterhin offen**: das Repository ist öffentlich, `app/debug.keystore` ist
-  eingecheckt (bewusst, für eine über alle Baumaschinen stabile OAuth-SHA-1, siehe Kommentar in
-  `app/build.gradle.kts`). Rotieren allein reicht nicht — die alte SHA-1 muss zusätzlich in der
-  Google Cloud Console entfernt werden, sonst funktioniert der geleakte Schlüssel dort weiter.
-  Ob zusätzlich die Git-Historie bereinigt werden muss, ist eine Entscheidung des Owners, keine
-  Codeänderung.
+- **Debug-Keystore rotiert und aus dem Repository entfernt** (C-6-Rest, Owner-Entscheidung nach
+  bestätigt öffentlichem Repository: „Keystore jetzt im Code rotieren"). `app/debug.keystore` ist
+  gelöscht; `signingConfigs.debug` liest den Pfad jetzt über die Gradle-Property `debugStoreFile`,
+  genau wie `signingConfigs.release` es schon tat — ohne die Property fällt AGP sauber auf sein
+  eigenes `~/.android/debug.keystore` zurück, der Build bricht nicht. **Weiterhin offen, außerhalb
+  des Codes:** die alte SHA-1 muss in der Google Cloud Console entfernt und durch die des neuen
+  Keystores ersetzt werden (sonst bleibt der geleakte Schlüssel dort gültig), und ob zusätzlich
+  die Git-Historie bereinigt werden muss (die alte Datei bleibt in vergangenen Commits sichtbar)
+  ist eine noch nicht getroffene Owner-Entscheidung.
 
 ---
 
