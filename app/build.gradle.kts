@@ -1,3 +1,5 @@
+import java.util.Date
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -287,6 +289,103 @@ val checkUnusedDaoMethods = tasks.register("checkUnusedDaoMethods") {
 // unabhaengig vom genauen Erzeugungszeitpunkt.
 tasks.matching { it.name == "test" }.configureEach {
     dependsOn(checkUnusedDaoMethods)
+}
+
+// Praefprotokoll Frage 10 (Owner-Entscheidung vom 11.09.2026: "Baue etwas, das es aus dem Code
+// automatisch generiert wird"). Der Anlass: README.md pflegte Testzahlen/Konstanten von Hand
+// (u.a. "784 JVM-Tests" waehrend tatsaechlich 835 liefen, ±20% Kadenz-Toleranz in der Doku
+// gegen 0.5 im tatsaechlich verwendeten AppContainer-Default) - eine von Hand gepflegte Zahl
+// kann veralten, ohne dass es auffaellt. docs/KENNZAHLEN.md wird deshalb NICHT von Hand
+// geschrieben, sondern bei jedem Lauf aus den tatsaechlichen Quellen neu erzeugt:
+// JVM-Testergebnisse aus den XML-Berichten von `test`, instrumentierte Tests durch Zaehlen der
+// @Test-Annotationen im Quellcode (nicht ausgefuehrt - dieselbe verifizierte Grenze wie in
+// TESTEN_EINES_PR.md: kein durchgereichter Bluetooth-/Kamera-Adapter in dieser Umgebung),
+// Schema-Version/Schwellwert-Defaults/Kadenz-Toleranz per Textsuche aus den Dateien, die sie
+// tatsaechlich definieren. Bewusst simple Regex-Textsuche statt AGP-API-Zugriff auf die eigene
+// Konfiguration (z.B. android.defaultConfig.minSdk) - robuster gegen AGP-Versionswechsel, auf
+// Kosten davon, dass eine Umformatierung der Quellzeilen (z.B. "minSdk=29" ohne Leerzeichen)
+// das jeweilige Muster verfehlen wuerde; ein Fehlschlag zeigt sich dann als "?" im generierten
+// Dokument, nicht als falscher Wert.
+val generiereKennzahlen = tasks.register("generiereKennzahlen") {
+    group = "documentation"
+    description = "Schreibt docs/KENNZAHLEN.md aus tatsaechlich gemessenen/gelesenen Werten (Praefprotokoll Frage 10)."
+    dependsOn("test")
+    doLast {
+        fun ersteZahl(text: String, muster: String): String =
+            Regex(muster).find(text)?.groupValues?.get(1) ?: "?"
+
+        var jvmTests = 0
+        var jvmFailures = 0
+        var jvmErrors = 0
+        var jvmDateien = 0
+        val testResultsDir = file("build/test-results/testDebugUnitTest")
+        testResultsDir.listFiles { f -> f.extension == "xml" }?.forEach { xmlFile ->
+            jvmDateien++
+            val text = xmlFile.readText()
+            jvmTests += ersteZahl(text, """tests="(\d+)"""").toIntOrNull() ?: 0
+            jvmFailures += ersteZahl(text, """failures="(\d+)"""").toIntOrNull() ?: 0
+            jvmErrors += ersteZahl(text, """errors="(\d+)"""").toIntOrNull() ?: 0
+        }
+
+        val androidTestRoot = file("src/androidTest/java")
+        var androidTests = 0
+        var androidTestDateien = 0
+        androidTestRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { datei ->
+            androidTestDateien++
+            androidTests += Regex("""@Test\b""").findAll(datei.readText()).count()
+        }
+
+        val appDatabaseText = file("src/main/java/com/example/lrmprotokoll/data/AppDatabase.kt").readText()
+        val schemaVersion = ersteZahl(appDatabaseText, """version\s*=\s*(\d+),""")
+
+        val appContainerText = file("src/main/java/com/example/lrmprotokoll/AppContainer.kt").readText()
+        val kadenzToleranz = ersteZahl(appContainerText, """cadenceTolerance\s*=\s*([\d.]+),""")
+
+        val settingsManagerText = file("src/main/java/com/example/lrmprotokoll/data/SettingsManager.kt").readText()
+        val dbThresholdDefault = ersteZahl(settingsManagerText, """"db_threshold",\s*([\d.]+)f\)""")
+        val meterDbThresholdDefault = ersteZahl(settingsManagerText, """"meter_db_threshold",\s*([\d.]+)f\)""")
+
+        val buildFileText = buildFile.readText()
+        val minSdk = ersteZahl(buildFileText, """minSdk\s*=\s*(\d+)""")
+        val compileSdk = ersteZahl(buildFileText, """compileSdk\s*=\s*(\d+)""")
+
+        val zeitstempel = Date().toString()
+        val inhalt = buildString {
+            appendLine("# Kennzahlen (automatisch generiert)")
+            appendLine()
+            appendLine("**Nicht von Hand pflegen und nicht von Hand editieren.** Diese Datei entsteht durch")
+            appendLine("`./gradlew generiereKennzahlen` aus den tatsächlichen Quellen (Testergebnisse, Quellcode) -")
+            appendLine("siehe Kommentar über der Gradle-Task in `app/build.gradle.kts` (Prüfprotokoll Frage 10,")
+            appendLine("Owner-Entscheidung vom 11.09.2026: „Baue etwas, das es aus dem Code automatisch generiert")
+            appendLine("wird“, Anlass: veraltete Testzahlen und ein falscher Kadenz-Toleranz-Wert in README.md).")
+            appendLine()
+            appendLine("Generiert am: $zeitstempel")
+            appendLine()
+            appendLine("## Tests")
+            appendLine("- JVM-/Robolectric-Tests: **$jvmTests** (aus $jvmDateien XML-Berichten unter `build/test-results/testDebugUnitTest`) · $jvmFailures Failures, $jvmErrors Errors")
+            appendLine("- Instrumentierte Tests (Emulator): **$androidTests** `@Test`-Annotationen in $androidTestDateien Dateien unter `src/androidTest`")
+            appendLine("  - Gezählt aus dem Quellcode, NICHT hier ausgeführt (kein durchgereichter Bluetooth-/Kamera-Adapter in dieser Umgebung, siehe `docs/TESTEN_EINES_PR.md`).")
+            appendLine()
+            appendLine("## Datenbank")
+            appendLine("- Room-Schemaversion: **$schemaVersion** (`AppDatabase.kt`)")
+            appendLine()
+            appendLine("## BLE / Kadenz")
+            appendLine("- Tatsächlich verwendete Kadenz-Toleranz (`AppContainer.cadenceTolerance`): **±${(kadenzToleranz.toDoubleOrNull()?.times(100))?.let { "%.0f".format(it) } ?: "?"}%**")
+            appendLine("  - Der `ConnectionSupervisor`-Klassen-Default (nur in Tests aktiv) ist ±20% - siehe dessen KDoc.")
+            appendLine()
+            appendLine("## Schwellwerte (Trigger-Defaults)")
+            appendLine("- Mikrofon-Schwelle (`db_threshold`): **$dbThresholdDefault dB**")
+            appendLine("- Messgerät-Schwelle (`meter_db_threshold`): **$meterDbThresholdDefault dBA**")
+            appendLine()
+            appendLine("## Build")
+            appendLine("- minSdk: **$minSdk** · compileSdk: **$compileSdk**")
+        }
+        file("$rootDir/docs/KENNZAHLEN.md").apply {
+            parentFile.mkdirs()
+            writeText(inhalt)
+        }
+        logger.lifecycle("generiereKennzahlen: docs/KENNZAHLEN.md geschrieben ($jvmTests JVM-Tests, $androidTests instrumentierte Tests gezaehlt).")
+    }
 }
 
 // Testluecken-Auftrag Stufe 1: Kover misst die Line-Coverage, damit die weiteren Stufen gegen
