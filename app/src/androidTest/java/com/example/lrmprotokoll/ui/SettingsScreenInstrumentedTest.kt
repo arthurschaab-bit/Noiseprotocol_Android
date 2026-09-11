@@ -83,7 +83,7 @@ class SettingsScreenInstrumentedTest {
 
         composeRule.onNodeWithTag("btn_settings_mode_pro").performClick()
         val secThresholds = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
-        composeRule.onNodeWithText(secThresholds, substring = true).performClick()
+        composeRule.onNodeWithText(secThresholds, substring = true).performScrollTo().performClick()
         composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_16k), substring = true)
             .performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_44k), substring = true)
@@ -106,7 +106,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}) }
             composeRule.waitForIdle()
             val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
-            composeRule.onNodeWithText(sectionTitle, substring = true).performClick()
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
 
             val slider = composeRule.onNodeWithTag("slider_db_threshold").performScrollTo().assertIsDisplayed()
             slider.performTouchInput { swipeLeft() }

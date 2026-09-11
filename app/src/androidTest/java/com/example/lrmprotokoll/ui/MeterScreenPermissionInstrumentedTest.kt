@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
@@ -64,7 +65,7 @@ class MeterScreenPermissionInstrumentedTest {
         composeRule.setContent { MeterScreen(onBack = {}) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().performClick()
         // Der eigentliche #129-Nachweis: ohne dass der Button tatsaechlich den echten
         // Systemdialog ausloest, kommt dieser Aufruf nie durch.
         repeat(2) { BerechtigungsTestHelfer.erlaubeFallsVorhanden() }
