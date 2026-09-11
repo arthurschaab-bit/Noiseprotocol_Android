@@ -83,6 +83,7 @@ class DriveSyncCoordinatorTest {
         override suspend fun setDetectedLabel(id: Long, label: String?) {}
         override suspend fun getCalibratedDbA(id: Long): Double? = null
         override fun getAllReferences(): Flow<List<ReferenceSound>> = flowOf(emptyList())
+        override fun getAllReferencesBlocking(): List<ReferenceSound> = emptyList()
         override suspend fun insertReference(sound: ReferenceSound) {}
         override suspend fun deleteReference(id: Long) {}
     }

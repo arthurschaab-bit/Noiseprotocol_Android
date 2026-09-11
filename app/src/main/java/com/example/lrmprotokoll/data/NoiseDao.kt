@@ -87,6 +87,21 @@ interface NoiseDao {
     @Query("SELECT * FROM reference_sounds")
     fun getAllReferences(): Flow<List<ReferenceSound>>
 
+    /**
+     * Wie [getAllReferences], aber direkt statt als [Flow] (Prüfprotokoll-Anhang, Owner-
+     * Entscheidung vom 11.09.2026: "korrigiere"). Für
+     * [com.example.lrmprotokoll.audio.NoiseClassifier.aktuelleKonfiguration] gedacht, dessen
+     * Aufrufer allesamt synchrone, nicht-suspend Funktionen sind (der Klassifikationspfad ist
+     * kein Coroutine-Kontext) - vorher wurde dafür `runBlocking { getAllReferences().first() }`
+     * verwendet, was auf dem Thread, von dem aus es aufgerufen wird (u.a. dem Main-Thread bei
+     * "Neu bewerten" in MainActivity.kt), blockierte. Eine direkte, nicht-suspend Query ist hier
+     * die richtige Werkzeugwahl statt eines `Flow` plus `runBlocking`-Umwegs - der eigentliche
+     * Fix ist trotzdem am Aufrufer: dieser blockiert weiterhin den Thread, von dem aus er
+     * aufgerufen wird, MainActivity.kt ruft ihn deshalb jetzt auf Dispatchers.IO auf.
+     */
+    @Query("SELECT * FROM reference_sounds")
+    fun getAllReferencesBlocking(): List<ReferenceSound>
+
     @Insert
     suspend fun insertReference(sound: ReferenceSound)
 
