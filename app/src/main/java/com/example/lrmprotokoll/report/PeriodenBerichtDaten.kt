@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.report
 
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
@@ -21,6 +22,14 @@ data class PeriodenBericht(
     val kennwerte: AkustischeKennwerte.Kennwerte,
     val ausfallbaender: List<Ausfallband>,
     val events: List<NoiseRecord>,
+    /**
+     * `true`, wenn JEDE Session im Zeitraum ein reiner Mikrofonlauf war
+     * ([com.example.lrmprotokoll.data.SessionEntity.deviceAddress] leer) - Grundlage für
+     * [com.example.lrmprotokoll.report.leqBezeichnung] in den Exporten (Befund 01 / C-2). `false`
+     * bei mindestens einer Messgerät-Session ODER wenn der Zeitraum gar keine Session enthält
+     * (dann sind [kennwerte] ohnehin leer, die Bezeichnung ist irrelevant).
+     */
+    val nurMikrofon: Boolean,
 )
 
 /**
@@ -62,5 +71,14 @@ suspend fun ermittlePeriodenBericht(db: AppDatabase, von: Long, bis: Long): Peri
         kennwerte = AkustischeKennwerte.berechne(messwerte),
         ausfallbaender = ausfallbaender,
         events = events,
+        nurMikrofon = nurMikrofonSessions(sessions),
     )
 }
+
+/**
+ * `true`, wenn [sessions] nicht leer ist und JEDE Session darin ein reiner Mikrofonlauf war
+ * (leere [SessionEntity.deviceAddress]). Als eigenständige Funktion testbar ohne Room/Robolectric
+ * (Befund 01 / Korrekturliste C-2) - siehe [PeriodenBericht.nurMikrofon] für die Verwendung.
+ */
+internal fun nurMikrofonSessions(sessions: List<SessionEntity>): Boolean =
+    sessions.isNotEmpty() && sessions.all { it.deviceAddress.isBlank() }

@@ -33,6 +33,8 @@ import com.example.lrmprotokoll.report.GesamtberichtStammdaten
 import com.example.lrmprotokoll.report.PeriodenBerichtExport
 import com.example.lrmprotokoll.report.ermittleGesamtbericht
 import com.example.lrmprotokoll.report.ermittlePeriodenBericht
+import com.example.lrmprotokoll.report.leqBezeichnung
+import com.example.lrmprotokoll.report.lmaxBezeichnung
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -427,8 +429,8 @@ private fun ModernSessionCard(
                 // Ein reiner Mikrofonlauf hat kein LAeq - dieselbe Rechnung, aber ohne
                 // A-Bewertung und ohne Kalibrierung.
                 val ohneMessgeraet = session.deviceAddress.isBlank()
-                MetricColumn(label = if (ohneMessgeraet) "Mittelwert" else "LAeq", value = laeqStr)
-                MetricColumn(label = if (ohneMessgeraet) "Höchstwert" else "LMax", value = lmaxStr)
+                MetricColumn(label = leqBezeichnung(ohneMessgeraet), value = laeqStr)
+                MetricColumn(label = lmaxBezeichnung(ohneMessgeraet), value = lmaxStr)
                 MetricColumn(label = stringResource(R.string.protocol_metric_events), value = eventCount.toString())
             }
 

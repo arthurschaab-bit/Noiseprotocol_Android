@@ -85,8 +85,11 @@ class MessreiheExport(private val context: Context) {
             y = lauf.platziere(24f)
             canvasGeber()?.drawText("Kennwerte", x, y + 14f, kopfPaint)
 
+            // Ein reiner Mikrofonlauf (leere deviceAddress, siehe SessionEntity-KDoc) bekommt
+            // "Mittelwert" statt "LAeq" - Befund 01 / Korrekturliste C-2.
+            val nurMikrofon = session.deviceAddress.isBlank()
             val kennwertZeilen = listOfNotNull(
-                kennwerte.leqDb?.let { "LAeq: ${formatiereDb(it)} dB" },
+                kennwerte.leqDb?.let { "${leqBezeichnung(nurMikrofon)}: ${formatiereDb(it)} dB" },
                 kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
                 kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
                 kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },

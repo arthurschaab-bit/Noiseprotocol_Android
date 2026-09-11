@@ -2,8 +2,12 @@ package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
+import java.time.Duration
+import kotlin.math.log10
+import kotlin.math.pow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,6 +104,90 @@ class AkustischeKennwerteTest {
         val werte = listOf(messwert(3_000, 30.0), messwert(0, 40.0), messwert(1_000, 70.0))
         val k = AkustischeKennwerte.berechne(werte, ueberschreitungsSchwelleDb = 60.0)
         assertEquals(2_000L, k.ueberschreitungsdauerMs)
+    }
+
+    // ---------------------------------------------------------------- Zeitgewichtung (Befund 01 / C-2)
+
+    /** Energetischer Mittelwert OHNE Zeitgewichtung - die Formel, die vor der Korrektur galt.
+     * Fuer den Vergleich, nicht fuer die Produktionslogik. */
+    private fun naivesLeq(werte: List<MeasurementEntity>) =
+        10.0 * log10(werte.sumOf { 10.0.pow(it.levelDb / 10.0) } / werte.size)
+
+    @Test
+    fun zeitgewichtungLaesstKurzenLautenAusreisserWenigerDominieren() {
+        // Ein 90-dB-Ausreisser, der nur 100 ms lang war, gefolgt von 40 dB ueber satte 10 s
+        // (zwei Messwerte im Abstand von 5 s, dem Standard-Kappungswert - siehe naechster Test).
+        // Die alte, ungewichtete Formel behandelte alle drei Messwerte gleich - der kurze
+        // Ausreisser dominierte das Ergebnis, obwohl er kaum einen Bruchteil der Zeit ausmachte.
+        val werte = listOf(
+            messwert(0, 90.0),
+            messwert(100, 40.0),
+            messwert(5_100, 40.0),
+        )
+        val gewichtet = AkustischeKennwerte.berechne(werte).leqDb!!
+        val naiv = naivesLeq(werte)
+
+        assertTrue(
+            "Naiv (ungewichtet) muss vom kurzen 90-dB-Ausreisser dominiert werden, war $naiv",
+            naiv > 80.0,
+        )
+        assertTrue(
+            "Zeitgewichtet muss deutlich niedriger liegen als naiv (90 dB dauerte nur 100 ms von 5100 ms) - " +
+                "gewichtet=$gewichtet, naiv=$naiv",
+            gewichtet < naiv - 10.0,
+        )
+        assertTrue("Zeitgewichtet muss klar naeher an 40 dB liegen als an 90 dB, war $gewichtet", gewichtet < 75.0)
+    }
+
+    @Test
+    fun zeitgewichtungKapptSehrGrosseLueckenAufDenselbenWertUnabhaengigVonIhrerGroesse() {
+        // Eine Luecke von genau 5 s (Standard-Kappung) und eine 100x groessere Luecke muessen
+        // nach der Kappung dasselbe Gewicht haben - sonst wuerde ein alter Ausfall (z.B. eine
+        // ganze Nacht ohne Frame) den zuletzt bekannten Pegel absurd dominieren lassen.
+        fun mitLuecke(luecke: Long) = listOf(
+            messwert(0, 40.0),
+            messwert(500, 90.0),
+            messwert(500 + luecke, 40.0),
+        )
+
+        val amKappungswert = AkustischeKennwerte.berechne(mitLuecke(5_000)).leqDb!!
+        val weitUeberKappungswert = AkustischeKennwerte.berechne(mitLuecke(500_000)).leqDb!!
+
+        assertEquals(
+            "Nach der Kappung auf 5 s duerfen eine 5-s- und eine 500-s-Luecke keinen " +
+                "unterschiedlichen Leq mehr ergeben",
+            amKappungswert, weitUeberKappungswert, 0.0000001,
+        )
+    }
+
+    @Test
+    fun maxGewichtungslueckeParameterWirdTatsaechlichVerwendet() {
+        val werte = listOf(messwert(0, 40.0), messwert(500, 90.0), messwert(500_500, 40.0))
+
+        val mitStandardkappung = AkustischeKennwerte.berechne(werte).leqDb!!
+        val mitKleinererKappung = AkustischeKennwerte.berechne(
+            werte, maxGewichtungsluecke = Duration.ofMillis(50),
+        ).leqDb!!
+
+        assertNotEquals(
+            "Ein anderer maxGewichtungsluecke-Wert muss auch ein anderes Ergebnis liefern - " +
+                "sonst wird der Parameter nicht wirklich verwendet",
+            mitStandardkappung, mitKleinererKappung,
+        )
+    }
+
+    @Test
+    fun leqUndMaxGewichtetAuchBeiUnsortierterEingabeKorrektAufBasisDerZeit() {
+        // Dieselben, absichtlich UNGLEICHEN Zeitabstaende wie oben, aber diesmal ueber
+        // leqUndMax() und in vertauschter Reihenfolge eingespeist - muss trotzdem exakt das
+        // Ergebnis liefern, das berechne() fuer die (richtig sortierte) Liste liefert.
+        val sortiert = listOf(messwert(0, 90.0), messwert(100, 40.0), messwert(5_100, 40.0))
+        val unsortiert = listOf(sortiert[2], sortiert[0], sortiert[1])
+
+        val erwartet = AkustischeKennwerte.berechne(sortiert).leqDb!!
+        val tatsaechlich = AkustischeKennwerte.leqUndMax(unsortiert).leqDb!!
+
+        assertEquals(erwartet, tatsaechlich, 0.0000001)
     }
 
     @Test

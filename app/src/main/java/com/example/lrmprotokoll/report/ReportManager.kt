@@ -26,6 +26,30 @@ internal fun pegelEinheit(meterWeighting: String?): String = when (meterWeightin
 }
 
 /**
+ * Bezeichnung fuer den energetischen Pegelmittelwert (Prüfprotokoll-Befund 01 / Korrekturliste
+ * C-2, Owner-Entscheidung vom 11.09.2026: "Leq für einen Mikrofonwert ist nicht sinnvoll").
+ *
+ * Dasselbe Prinzip wie [pegelEinheit]: "LAeq" ist eine kalibrierte, A-bewertete Größe - für einen
+ * reinen Mikrofonlauf (unkalibriert, siehe README "Bekannte Einschränkungen") wäre sie eine
+ * vorgetäuschte Genauigkeit. Die Bildschirme (ProtokollScreen, ProtokollDetailScreen) nannten das
+ * schon vor dieser Korrektur ehrlich "Mittelwert"/"Höchstwert" - diese Funktionen zentralisieren
+ * genau diese bereits etablierte Unterscheidung, damit die PDF-Exporte (die bislang
+ * unbedingt "LAeq"/"LMax" schrieben) und die Bildschirme dieselbe Bezeichnung verwenden, statt
+ * eine dritte, neu erfundene ("Stichproben-Leq") einzuführen.
+ *
+ * [nurMikrofon] entscheidet je nach Aufrufer unterschiedlich granular: pro Session
+ * ([com.example.lrmprotokoll.data.SessionEntity.deviceAddress] leer) oder - bei über mehrere
+ * Sessions gepoolten Kennwerten ([PeriodenBericht]) - "wirklich JEDE Session im Zeitraum war ein
+ * Mikrofonlauf". Ein gemischter Zeitraum (mindestens eine Messgerät-Session) bekommt weiterhin
+ * "LAeq"/"LMax" - das bleibt eine bekannte, dokumentierte Vereinfachung (siehe [PeriodenBericht]),
+ * kein Anspruch auf getrennte Kennwerte je Quelle innerhalb eines Zeitraums.
+ */
+internal fun leqBezeichnung(nurMikrofon: Boolean): String = if (nurMikrofon) "Mittelwert" else "LAeq"
+
+/** Analog zu [leqBezeichnung] für den Spitzenwert. */
+internal fun lmaxBezeichnung(nurMikrofon: Boolean): String = if (nurMikrofon) "Höchstwert" else "LMax"
+
+/**
  * PROMPT_M9_UX.md Aufgabe 9: ehrlicher Kopf-Hinweis, solange die Frequenzbewertung fuer
  * mindestens einen kalibrierten Wert im Bericht unbestaetigt war ([NoiseRecord.meterWeighting]
  * `null` trotz gesetztem [NoiseRecord.calibratedDbA] - das passiert bei Datensaetzen, die
