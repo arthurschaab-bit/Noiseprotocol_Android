@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.MeasurementDao
+import com.example.lrmprotokoll.data.SessionLetzterZeitstempel
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateDao
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
@@ -31,6 +32,10 @@ class RetentionCoordinatorTest {
         override suspend fun aelterAls(grenze: Long) = zeilen.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = zeilen.size
+        override suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>) = zeilen
+            .filter { it.sessionId in sessionIds }
+            .groupBy { it.sessionId }
+            .map { (sessionId, werte) -> SessionLetzterZeitstempel(sessionId, werte.maxOf { it.timestamp }) }
     }
 
     private class FakeMinuteAggregateDao : MinuteAggregateDao {

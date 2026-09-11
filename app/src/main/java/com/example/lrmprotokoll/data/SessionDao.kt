@@ -90,7 +90,20 @@ interface MeasurementDao {
 
     @Query("SELECT COUNT(*) FROM measurements")
     suspend fun anzahl(): Int
+
+    /**
+     * Praefprotokoll C-4-Rest (Owner-Entscheidung vom 11.09.2026: "just do it"): der letzte
+     * Messwert-Zeitstempel je Session aus [sessionIds] in EINER Query, statt [fuerSession] pro
+     * Session einzeln aufzurufen und dabei jeweils alle Spalten aller Messwerte dieser Session zu
+     * laden, nur um das Maximum von einer einzigen Spalte zu bilden. Siehe
+     * [com.example.lrmprotokoll.messreihe.MeasurementRecorder.schliesseVerwaisteSessions].
+     */
+    @Query("SELECT sessionId, MAX(timestamp) AS letzterZeitstempel FROM measurements WHERE sessionId IN (:sessionIds) GROUP BY sessionId")
+    suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>): List<SessionLetzterZeitstempel>
 }
+
+/** Ergebniszeile von [MeasurementDao.letzteZeitstempelJeSession]. */
+data class SessionLetzterZeitstempel(val sessionId: Long, val letzterZeitstempel: Long)
 
 @Dao
 interface ConnectionEventDao {

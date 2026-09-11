@@ -8,6 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.MeasurementDao
+import com.example.lrmprotokoll.data.SessionLetzterZeitstempel
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateDao
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
@@ -49,6 +50,7 @@ class RetentionWorkerTest {
             error("Simulierter DB-Fehler fuer den Retry-Test")
         override suspend fun loescheAelterAls(grenze: Long) {}
         override suspend fun anzahl(): Int = 0
+        override suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>) = emptyList<SessionLetzterZeitstempel>()
     }
 
     private class LeererMinuteAggregateDao : MinuteAggregateDao {

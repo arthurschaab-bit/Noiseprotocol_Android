@@ -57,8 +57,20 @@ data class SessionEntity(
  * `MeterFrame.modeAssumptionConfirmed`-KDoc): Ein erfundener oder angenommener Wert wäre hier
  * eine gespeicherte Tatsachenbehauptung, die es nicht gibt. Jede Stelle, die diese Spalten liest,
  * MUSS `null` als "unbekannt" behandeln, nicht als Fehler.
+ *
+ * Indizes seit Schema 20 (Praefprotokoll-Anhang C-4-Rest): `(sessionId, timestamp)` fuer
+ * [com.example.lrmprotokoll.data.MeasurementDao.fuerSession]/`fuerSessionAbFlow`/
+ * `letzteZeitstempelJeSession`, `timestamp` allein fuer [com.example.lrmprotokoll.data.MeasurementDao.aelterAls]/
+ * `loescheAelterAls`/`zwischen` - ohne sie war jede dieser Abfragen ein Table-Scan ueber die per
+ * C-4 jetzt bewusst lange aufbewahrten Rohwerte (90 Tage, [com.example.lrmprotokoll.messreihe.RetentionCoordinator]).
  */
-@Entity(tableName = "measurements")
+@Entity(
+    tableName = "measurements",
+    indices = [
+        androidx.room.Index(value = ["sessionId", "timestamp"]),
+        androidx.room.Index(value = ["timestamp"]),
+    ],
+)
 data class MeasurementEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: Long,

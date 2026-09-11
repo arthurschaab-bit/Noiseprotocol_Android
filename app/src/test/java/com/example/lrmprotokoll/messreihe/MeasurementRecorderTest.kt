@@ -5,6 +5,7 @@ import com.example.lrmprotokoll.data.ConnectionEventDao
 import com.example.lrmprotokoll.data.ConnectionEventEntity
 import com.example.lrmprotokoll.data.ConnectionEventType
 import com.example.lrmprotokoll.data.MeasurementDao
+import com.example.lrmprotokoll.data.SessionLetzterZeitstempel
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MeasurementFlags
 import com.example.lrmprotokoll.data.SessionDao
@@ -67,6 +68,10 @@ class MeasurementRecorderTest {
         override suspend fun aelterAls(grenze: Long) = geschrieben.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { geschrieben.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = geschrieben.size
+        override suspend fun letzteZeitstempelJeSession(sessionIds: List<Long>) = geschrieben
+            .filter { it.sessionId in sessionIds }
+            .groupBy { it.sessionId }
+            .map { (sessionId, werte) -> SessionLetzterZeitstempel(sessionId, werte.maxOf { it.timestamp }) }
     }
 
     private class FakeConnectionEventDao : ConnectionEventDao {
@@ -497,6 +502,30 @@ class MeasurementRecorderTest {
         ids.forEach { id ->
             assertNotNull("Session $id muss geschlossen worden sein", sessionDao.zeilen[id]?.endedAt)
         }
+    }
+
+    @Test
+    fun mehrereVerwaisteSessionsBekommenJeweilsIhrenEigenenLetztenZeitstempel() = runTest(UnconfinedTestDispatcher()) {
+        // Praefprotokoll-Anhang C-4-Rest: die gebatchte Abfrage gruppiert nach sessionId - dieser
+        // Test ist der eigentliche Beweis, dass dabei kein Zeitstempel der falschen Session
+        // zugeordnet wird, nicht bloss dass ueberhaupt irgendein endedAt gesetzt wird.
+        val sessionDao = FakeSessionDao()
+        val measurementDao = FakeMeasurementDao()
+        val a = sessionDao.insert(offeneSession(startedAt = 100L))
+        val b = sessionDao.insert(offeneSession(startedAt = 200L))
+        measurementDao.insertAll(
+            listOf(
+                MeasurementEntity(sessionId = a, timestamp = 1_000L, levelDb = 60.0, weighting = null, flags = 0),
+                MeasurementEntity(sessionId = a, timestamp = 3_000L, levelDb = 61.0, weighting = null, flags = 0),
+                MeasurementEntity(sessionId = b, timestamp = 5_000L, levelDb = 62.0, weighting = null, flags = 0),
+            )
+        )
+
+        recorderMit(sessionDao, measurementDao).start(device)
+        runCurrent()
+
+        assertEquals("Session A muss ihren eigenen letzten Zeitstempel bekommen", 3_000L, sessionDao.zeilen[a]?.endedAt)
+        assertEquals("Session B muss ihren eigenen letzten Zeitstempel bekommen", 5_000L, sessionDao.zeilen[b]?.endedAt)
     }
 
     @Test

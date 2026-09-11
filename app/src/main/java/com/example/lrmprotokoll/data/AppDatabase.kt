@@ -418,10 +418,28 @@ val MIGRATION_18_19 = object : Migration(18, 19) {
     }
 }
 
+/**
+ * Praefprotokoll-Anhang C-4-Rest (Owner-Entscheidung vom 11.09.2026: "just do it"): Indizes auf
+ * `measurements`, ohne die sowohl [com.example.lrmprotokoll.messreihe.RetentionCoordinator] als
+ * auch [com.example.lrmprotokoll.messreihe.MeasurementRecorder.schliesseVerwaisteSessions] Table-Scans
+ * ueber die per C-4 jetzt bewusst 90 Tage aufbewahrten Rohwerte waeren.
+ */
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_measurements_sessionId_timestamp` " +
+                "ON `measurements` (`sessionId`, `timestamp`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_measurements_timestamp` ON `measurements` (`timestamp`)"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-    MIGRATION_18_19,
+    MIGRATION_18_19, MIGRATION_19_20,
 )
 
 @Database(
@@ -432,7 +450,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

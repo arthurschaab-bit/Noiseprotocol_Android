@@ -371,13 +371,25 @@ class MeasurementRecorder(
             Log.e(TAG, "Verwaiste Sessions konnten nicht gelesen werden", e)
             return
         }
-        for (session in offene) {
-            // Eine aktive Session (z.B. die gerade eroeffnete Mikrofon-Session) darf niemals
-            // geschlossen werden.
-            if (session.id == aktiveSessionId) continue
+        val zuSchliessen = offene.filter { it.id != aktiveSessionId }
+        if (zuSchliessen.isEmpty()) return
+
+        // Praefprotokoll-Anhang C-4-Rest (Owner-Entscheidung vom 11.09.2026: "just do it"): EINE
+        // Query fuer alle betroffenen Sessions statt fuerSession() (voller Spaltenabzug, alle
+        // Messwerte der Session) einmal pro Session. Ein Fehlschlag hier darf das Schliessen nicht
+        // komplett verhindern - jede Session faellt dann einzeln auf ihre Startzeit zurueck, wie
+        // eine Session ganz ohne Messwerte es ohnehin schon tut.
+        val letzteZeitstempel = try {
+            measurementDao.letzteZeitstempelJeSession(zuSchliessen.map { it.id })
+                .associate { it.sessionId to it.letzterZeitstempel }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Letzte Messwert-Zeitstempel fuer verwaiste Sessions konnten nicht gelesen werden", e)
+            emptyMap()
+        }
+
+        for (session in zuSchliessen) {
             try {
-                val letzterMesswert = measurementDao.fuerSession(session.id).maxOfOrNull { it.timestamp }
-                sessionDao.update(session.copy(endedAt = letzterMesswert ?: session.startedAt))
+                sessionDao.update(session.copy(endedAt = letzteZeitstempel[session.id] ?: session.startedAt))
             } catch (e: Throwable) {
                 Log.e(TAG, "Verwaiste Session ${session.id} konnte nicht geschlossen werden", e)
             }
