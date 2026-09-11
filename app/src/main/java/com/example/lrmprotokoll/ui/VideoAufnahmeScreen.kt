@@ -416,14 +416,25 @@ private suspend fun starteAufnahme(
         return
     }
 
+    // Praefprotokoll-Frage 9, Owner-Entscheidung vom 11.09.2026: "sobald das Video laeuft,
+    // IMMER und synchron auch Audio" - vorher lief eine Videoaufnahme still, WENN das Mikrofon
+    // gerade nicht lief, ohne Warnung. Jetzt ist laufendes Mikrofon eine Voraussetzung fuer den
+    // Videostart, keine Kann-Eigenschaft - mit der vom AudioRecord tatsaechlich ausgehandelten
+    // Rate, nicht der eingestellten.
+    if (mikrofonFormat == null) {
+        onShowSnackbar("Videobeweis braucht laufende Mikrofonaufzeichnung für den Ton – bitte zuerst die Mikrofon-Aufnahme starten")
+        return
+    }
+
     val jetzt = System.currentTimeMillis()
     val videoDatei = File(verzeichnis, Videospeicher.dateiname(jetzt))
     val pcmDatei = File(verzeichnis, Videospeicher.tondateiname(jetzt))
 
-    // Ton nur, wenn das Mikrofon tatsaechlich laeuft - und mit der vom AudioRecord ausgehandelten
-    // Rate, nicht mit der eingestellten.
-    val tonLaeuft = mikrofonFormat != null &&
-        mitschnitt.starte(pcmDatei, mikrofonFormat.abtastrate, mikrofonFormat.kanaele)
+    val tonLaeuft = mitschnitt.starte(pcmDatei, mikrofonFormat.abtastrate, mikrofonFormat.kanaele)
+    if (!tonLaeuft) {
+        onShowSnackbar("Tonmitschnitt konnte nicht gestartet werden – Videobeweis abgebrochen")
+        return
+    }
 
     val videoId = withContext(Dispatchers.IO) {
         dao.insert(
