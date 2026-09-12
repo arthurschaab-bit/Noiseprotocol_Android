@@ -1152,6 +1152,8 @@ fun SettingsScreen(
                     lastSuccessAt = settings.driveSyncLastSuccessAt,
                     lastMessage = driveEinrichtungsErgebnis,
                     latestDailyFile = latestDailyFile,
+                    datenbankSicherungAktiv = settings.datenbankSicherungDriveUpload,
+                    datenbankSicherungLastSuccessAt = settings.datenbankSicherungLastSuccessAt,
                     isSyncing = isSyncing,
                     onToggleSync = {
                         driveSyncAktiv = it
@@ -1344,8 +1346,21 @@ fun SettingsScreen(
                                 }
                                 driveWiederherstellungLaeuft = false
                                 if (ergebnis.erfolg) {
+                                    container.diagnosticsReporter.breadcrumb(
+                                        "Sicherung", "Von Drive wiederhergestellt – App wird neu gestartet",
+                                    )
                                     SicherungManager.starteNeustart(context)
                                 } else {
+                                    // Bugfix (Owner-Meldung 12.09.2026, "Einspielen geht nicht,
+                                    // dazu kein Log"): ging bisher nur an die fluechtige Snackbar,
+                                    // nie ins Diagnoseprotokoll/Support-Bundle.
+                                    container.diagnosticsReporter.report(
+                                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_RESTORE_FAILED,
+                                        component = "SettingsScreen",
+                                        operation = "vonDriveWiederherstellen",
+                                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                        message = ergebnis.nachricht,
+                                    )
                                     onShowSnackbar?.invoke(ergebnis.nachricht)
                                 }
                             }
@@ -1377,8 +1392,21 @@ fun SettingsScreen(
                                 val ergebnis = SicherungManager.spieleSicherungEin(context, uri, settings)
                                 sicherungLaeuft = false
                                 if (ergebnis.erfolg) {
+                                    container.diagnosticsReporter.breadcrumb(
+                                        "Sicherung", "Lokale Sicherung eingespielt – App wird neu gestartet",
+                                    )
                                     SicherungManager.starteNeustart(context)
                                 } else {
+                                    // Bugfix (Owner-Meldung 12.09.2026, "Einspielen geht nicht,
+                                    // dazu kein Log"): ging bisher nur an die fluechtige Snackbar,
+                                    // nie ins Diagnoseprotokoll/Support-Bundle.
+                                    container.diagnosticsReporter.report(
+                                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_RESTORE_FAILED,
+                                        component = "SettingsScreen",
+                                        operation = "lokaleWiederherstellung",
+                                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                        message = ergebnis.nachricht,
+                                    )
                                     onShowSnackbar?.invoke(ergebnis.nachricht)
                                 }
                             }
