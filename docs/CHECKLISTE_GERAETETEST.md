@@ -256,6 +256,15 @@ automatisch neu gestartet wird. Siehe README, Abschnitt „Bekannte Einschränku
 | Einen Filter aktivieren, z.B. „nur Favoriten" | Nur Sessions mit mindestens einem passenden Ereignis bleiben sichtbar | |
 | Bestehenden "nur mit Ereignissen"-Filter (Trichter-Symbol) antippen | Blendet jetzt tatsächlich Sessions ohne Ereignisse aus (vorher wirkungslos) | |
 
+### F11 — PCE-323-Mikrofon-Fallback erkennbar (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Messung mit PCE-323 starten, dann Gerät ausschalten/außer Reichweite bringen | Cockpit-Zahl bleibt sichtbar (Mikrofonwert), Einheit wechselt auf „dB (Mikrofon-Fallback)", zusätzlicher roter Hinweistext erscheint | |
+| PCE-323 wieder in Reichweite/einschalten | Anzeige wechselt zurück auf den kalibrierten Wert samt Bewertung (z.B. „dB(A)"), Hinweistext verschwindet | |
+| Reiner Mikrofonlauf (nie ein Messgerät gepinnt) | Anzeige bleibt wie bisher ohne die neue Kennzeichnung | |
+| Zeitraum-/Gesamtbericht über einen Zeitraum mit sowohl PCE- als auch reinen Mikrofon-Sessions exportieren | Pegelverlauf-Diagramm zeigt nur die PCE-Werte; Mikrofon-Zeiträume erscheinen als Lücke. Kennwerte (LAeq/Max/Min) und Ereignisliste enthalten weiterhin beide Quellen | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
