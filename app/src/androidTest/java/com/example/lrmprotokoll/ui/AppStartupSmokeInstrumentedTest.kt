@@ -67,14 +67,18 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.onAllNodesWithText(protocolLabel, substring = true).onFirst().assertIsDisplayed()
 
         // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion) - kein eigener Bottom-Nav-Tab
-        // mehr, sondern über das Drei-Punkt-Menü auf dem Start-Screen (Layout-Umbau 12.09.2026).
-        composeRule.onAllNodesWithText(startLabel).onFirst().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("btn_overflow_menu").performClick()
+        // mehr, sondern über das Drei-Punkt-Menü (Layout-Umbau 12.09.2026). Genutzt wird hier das
+        // Menü von Daten (wir sind bereits dort) statt eines Umwegs über Start, um den ohnehin
+        // bereits verifizierten Startscreen nicht durch zusätzliche Navigationsschritte zu belasten.
+        composeRule.onNodeWithTag("btn_daten_menu").performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel, substring = true).onFirst().assertIsDisplayed()
+        // Diagnose-Sektion haengt an SettingsTab.START, Daten-Menue oeffnet aber mit tab=DATEN -
+        // erst per Umschalter zu Start wechseln.
+        composeRule.onNodeWithTag("settings_tab_start").performClick()
+        composeRule.waitForIdle()
         composeRule.onAllNodesWithText(diagSection, substring = true).onFirst().assertExists()
 
         // 4. Navigation zurück zum Startscreen
