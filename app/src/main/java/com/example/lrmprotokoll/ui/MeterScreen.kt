@@ -94,7 +94,6 @@ const val METER_DISCONNECT_CONFIRM_DIALOG_TAG = "meter_disconnect_confirm_dialog
 @Composable
 fun MeterScreen(
     onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -254,14 +253,8 @@ fun MeterScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.nav_meter)) },
                 navigationIcon = {
-                    if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")) {
-                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
-                        }
-                    } else {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                        }
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {

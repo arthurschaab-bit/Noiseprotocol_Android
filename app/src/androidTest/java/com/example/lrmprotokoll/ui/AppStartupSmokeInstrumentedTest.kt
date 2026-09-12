@@ -21,8 +21,11 @@ import org.junit.runner.RunWith
  *
  * Stellt sicher, dass:
  * 1. Der Application-Kontext und alle Provider (Sentry, Room, Diagnostics) ohne Absturz initialisieren.
- * 2. Die MainActivity mit NavHost, Theme und 4-Tab Navigation sauber gerendert wird.
- * 3. Alle Hauptscreens (Start inkl. PCE-323 Steuerung, Protokoll, Diagnose, Einstellungen) fehlerfrei geladen werden können.
+ * 2. Die MainActivity mit NavHost, Theme und den 3 Hauptreitern (Start/Daten/Bericht) sauber
+ *    gerendert wird (Layout-Umbau 12.09.2026 - Einstellungen hängt seither nicht mehr an einem
+ *    eigenen Bottom-Nav-Tab, sondern am Drei-Punkt-Menü des Start-Screens).
+ * 3. Alle Hauptscreens (Start inkl. PCE-323 Steuerung, Daten, Einstellungen inkl. Diagnose-
+ *    Sektion) fehlerfrei geladen werden können.
  */
 @RunWith(AndroidJUnit4::class)
 class AppStartupSmokeInstrumentedTest {
@@ -42,9 +45,8 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
 
         val appName = composeRule.activity.getString(R.string.app_name)
-        val protocolLabel = composeRule.activity.getString(R.string.nav_protocol)
+        val protocolLabel = composeRule.activity.getString(R.string.nav_data)
         val settingsLabel = composeRule.activity.getString(R.string.nav_settings)
-        val startLabel = composeRule.activity.getString(R.string.nav_start)
         val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)
 
         // 1. Startscreen (Home) ist geladen. Eindeutiger Tag statt Text-Suche, da "appName" auch
@@ -63,14 +65,25 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(protocolLabel, substring = true).onFirst().assertIsDisplayed()
 
-        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
+        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion) - kein eigener Bottom-Nav-Tab
+        // mehr, sondern über das Drei-Punkt-Menü (Layout-Umbau 12.09.2026). Genutzt wird hier das
+        // Menü von Daten (wir sind bereits dort) statt eines Umwegs über Start, um den ohnehin
+        // bereits verifizierten Startscreen nicht durch zusätzliche Navigationsschritte zu belasten.
+        composeRule.onNodeWithTag("btn_daten_menu").performClick()
+        composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel, substring = true).onFirst().assertIsDisplayed()
+        // Diagnose-Sektion haengt an SettingsTab.START, Daten-Menue oeffnet aber mit tab=DATEN -
+        // erst per Umschalter zu Start wechseln.
+        composeRule.onNodeWithTag("settings_tab_start").performClick()
+        composeRule.waitForIdle()
         composeRule.onAllNodesWithText(diagSection, substring = true).onFirst().assertExists()
 
-        // 4. Navigation zurück zum Startscreen
-        composeRule.onAllNodesWithText(startLabel).onFirst().performClick()
+        // 4. Navigation zurück zum Startscreen - ueber Tag statt Text, da der Settings-
+        // Umschalter (Schritt 3) ebenfalls einen Button mit Text "Start" zeigt und
+        // onAllNodesWithText(...).onFirst() sonst diesen statt des Bottom-Nav-Eintrags treffen kann.
+        composeRule.onNodeWithTag("nav_item_main").performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
     }

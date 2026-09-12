@@ -24,12 +24,16 @@ import org.junit.runner.RunWith
  *
  * Verifiziert auf dem Android-Emulator (API 34 ATD):
  * 1. Leerzustand bei leerer Datenbank (Hinweistext & Titel).
- * 2. Navigation: Back-Button vs. Drawer-Button.
+ * 2. Navigation: Back-Button.
  * 3. Session-Liste: Anzeige aktiver und abgeschlossener Sessions mit Badges und Gerätenamen.
  * 4. Klick-Interaktion: Öffnen einer Session ruft Callback mit passender ID auf.
  * 5. Suchleiste: Filterung nach Gerätename, Anzeige bei keinen Treffern & Leeren per Clear-Button.
  * 6. Floating Action Button: Start einer neuen Messung.
- * 7. TopAppBar-Aktionen: Filter-Icon Toggle & Zeitraum-Dialog (Öffnen, Presets, Abbrechen).
+ * 7. TopAppBar-Aktionen: Filter-Icon Toggle.
+ *
+ * Der Zeitraum-/Gesamtbericht-Dialog ist seit dem Layout-Umbau (Owner-Vorgabe 12.09.2026) Teil
+ * des Bericht-Tabs, nicht mehr von Daten (ehemals Protokoll) aus erreichbar - siehe
+ * [BerichtScreenAndroidTest].
  */
 @RunWith(AndroidJUnit4::class)
 class ProtokollScreenAndroidTest {
@@ -67,7 +71,7 @@ class ProtokollScreenAndroidTest {
         composeRule.waitForIdle()
 
         // 1. Titel "Protokoll" in TopAppBar sichtbar
-        val protocolTitle = composeRule.activity.getString(R.string.nav_protocol)
+        val protocolTitle = composeRule.activity.getString(R.string.nav_data)
         composeRule.onNodeWithText(protocolTitle).assertIsDisplayed()
 
         // 2. Leerzustandstext sichtbar
@@ -77,27 +81,6 @@ class ProtokollScreenAndroidTest {
         // 3. Zurück-Button klickbar
         composeRule.onNodeWithTag("btn_protokoll_back").assertIsDisplayed().performClick()
         assertTrue("onBack muss nach Klick auf btn_protokoll_back aufgerufen werden", backed)
-    }
-
-    @Test
-    fun protokollScreen_navigation_drawerButtonWirdVerwendetWennVorhanden() {
-        var drawerOpened = false
-
-        composeRule.setContent {
-            LaermprotokollTheme {
-                ProtokollScreen(
-                    onBack = {},
-                    onOpenDrawer = { drawerOpened = true },
-                    onOpenSession = {}
-                )
-            }
-        }
-        composeRule.waitForIdle()
-
-        // Drawer-Button muss sichtbar sein, Back-Button nicht
-        composeRule.onNodeWithTag("btn_navigation_drawer").assertIsDisplayed().performClick()
-        assertTrue("onOpenDrawer muss aufgerufen werden", drawerOpened)
-        composeRule.onNodeWithTag("btn_protokoll_back").assertDoesNotExist()
     }
 
     @Test
@@ -278,38 +261,5 @@ class ProtokollScreenAndroidTest {
         // Zweiter Klick toggelt zurück
         composeRule.onNodeWithTag("btn_filter_events").performClick()
         composeRule.waitForIdle()
-    }
-
-    @Test
-    fun protokollScreen_zeitraumberichtDialog_oeffnetUndSchliesstPerAbbrechen() {
-        composeRule.setContent {
-            LaermprotokollTheme {
-                ProtokollScreen(
-                    onBack = {},
-                    onOpenSession = {}
-                )
-            }
-        }
-        composeRule.waitForIdle()
-
-        // Klick auf Zeitraum-Aktion
-        composeRule.onNodeWithTag("btn_period_report").assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-
-        // Dialog-Titel & Presets müssen sichtbar sein
-        val dialogTitle = composeRule.activity.getString(R.string.period_report_dialog_title)
-        composeRule.onNodeWithText(dialogTitle).assertIsDisplayed()
-
-        composeRule.onNodeWithTag("btn_period_preset_7d").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_period_preset_30d").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_period_preset_month").assertIsDisplayed()
-
-        // Klick auf "Abbrechen"
-        composeRule.onNodeWithTag("btn_period_dialog_cancel").assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-
-        // Dialog muss geschlossen sein
-        composeRule.onNodeWithTag("btn_period_dialog_cancel").assertDoesNotExist()
-        composeRule.onNodeWithText(dialogTitle).assertDoesNotExist()
     }
 }

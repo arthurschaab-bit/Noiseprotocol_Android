@@ -66,32 +66,13 @@ class MeterScreenAndroidTest {
     }
 
     @Test
-    fun topAppBarOeffnetDrawerWennKonfiguriert() {
-        var drawerOpened = false
-
-        composeRule.setContent {
-            LaermprotokollTheme {
-                MeterScreen(
-                    onBack = {},
-                    onOpenDrawer = { drawerOpened = true }
-                )
-            }
-        }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("btn_navigation_drawer").assertIsDisplayed().performClick()
-        assertTrue("Drawer-Callback sollte aufgerufen worden sein", drawerOpened)
-    }
-
-    @Test
-    fun topAppBarNavigiertZurueckOhneDrawer() {
+    fun topAppBarNavigiertZurueck() {
         var backClicked = false
 
         composeRule.setContent {
             LaermprotokollTheme {
                 MeterScreen(
                     onBack = { backClicked = true },
-                    onOpenDrawer = null
                 )
             }
         }

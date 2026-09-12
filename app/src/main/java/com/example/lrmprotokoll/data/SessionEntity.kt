@@ -42,6 +42,12 @@ data class SessionEntity(
     val weighting: String?,
     val timeWeighting: String?,
     val range: String? = null,
+    /**
+     * SHA-256 der Rohdaten-Zeitreihe dieser Session (Bericht-Umbau, Revisionssicherheit), hex,
+     * kleingeschrieben - berechnet am Sessionende, analog [DokumentationsFotoEntity.pruefsumme].
+     * `null`, solange die Session noch laeuft oder fuer Altsessions vor Einfuehrung dieser Spalte.
+     */
+    val rohdatenPruefsumme: String? = null,
 )
 
 /**
@@ -88,6 +94,24 @@ object MeasurementFlags {
     const val HOLD_MAX = 1
     const val HOLD_MIN = 1 shl 1
     const val LARGE_JUMP = 1 shl 2
+
+    /**
+     * Bericht-Umbau, Anti-Null-Regel: ein Rohwert < 30.0 dB(A) oder ein Bluetooth-/
+     * Verbindungs-Timeout darf nicht als echte 0.0-dB-Messung in die energetische
+     * LAeq-Berechnung einfliessen - dieses Flag markiert die Zeile stattdessen als Messluecke.
+     * Der Zaehler der real gemessenen Sekunden (N_valid) waechst bei einer so markierten Zeile
+     * nicht mit; [levelDb] bleibt trotzdem gefuellt (der zuletzt bekannte bzw. der fehlerhafte
+     * Rohwert), damit nichts stillschweigend verworfen wird - nur die Kennwertberechnung muss
+     * dieses Flag beachten.
+     */
+    const val GAP = 1 shl 3
+
+    /**
+     * Nur zusammen mit [GAP] aussagekraeftig: gesetzt = SENSOR_ERROR (Rohwert < 30.0 dB(A),
+     * physikalisch unplausibel), nicht gesetzt = TIMEOUT (Bluetooth-/Verbindungsausfall). Zwei
+     * Ursachen reichen fuer ein einzelnes Zusatz-Bit statt eines eigenen String-Feldes.
+     */
+    const val GAP_REASON_SENSOR_ERROR = 1 shl 4
 }
 
 /**
