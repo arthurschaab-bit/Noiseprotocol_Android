@@ -182,7 +182,15 @@ class MessreiheExport(private val context: Context) {
             val by = lauf.platziere(hoehe + 30f)
             canvasGeber()?.let { c ->
                 c.drawBitmap(bild, null, RectF(x, by, x + breite, by + hoehe), null)
-                c.drawText("$kategorie · $zeitpunkt", x, by + hoehe + 12f, kleinPaint)
+                // Owner-Feature-Auftrag 12.09.2026: ein aus der Galerie nachtraeglich
+                // hinzugefuegtes Foto muss im Bericht als solches erkennbar bleiben - anders als
+                // ein Kamerafoto belegt es nicht, dass es zum Messzeitpunkt selbst entstand.
+                val beschriftung = if (foto.nachtraeglichHinzugefuegt) {
+                    "$kategorie · $zeitpunkt · nachträglich hinzugefügt"
+                } else {
+                    "$kategorie · $zeitpunkt"
+                }
+                c.drawText(beschriftung, x, by + hoehe + 12f, kleinPaint)
                 foto.notiz?.let { notiz -> c.drawText(notiz, x, by + hoehe + 24f, kleinPaint) }
             }
             bild.recycle()

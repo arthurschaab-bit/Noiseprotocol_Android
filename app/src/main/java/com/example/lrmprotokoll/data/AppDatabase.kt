@@ -436,10 +436,25 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
     }
 }
 
+/**
+ * Owner-Feature-Auftrag 12.09.2026: neue Spalte `nachtraeglichHinzugefuegt` auf
+ * `dokumentationsfotos`, damit ein spaeter aus der Foto-Galerie importiertes Foto von einem zum
+ * Messzeitpunkt aufgenommenen Kamerafoto unterscheidbar bleibt (siehe
+ * [DokumentationsFotoEntity]-KDoc). Rein additiv, bestehende Zeilen bekommen `false`
+ * (0) - sie sind ausnahmslos ueber die Kamera waehrend einer Messung entstanden.
+ */
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `dokumentationsfotos` ADD COLUMN `nachtraeglichHinzugefuegt` INTEGER NOT NULL DEFAULT 0"
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-    MIGRATION_18_19, MIGRATION_19_20,
+    MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
 )
 
 @Database(
@@ -450,7 +465,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

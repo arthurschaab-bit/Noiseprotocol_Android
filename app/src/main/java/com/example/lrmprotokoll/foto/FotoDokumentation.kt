@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.foto
 
 import android.content.Context
+import android.net.Uri
 import com.example.lrmprotokoll.data.DokumentationsFotoDao
 import com.example.lrmprotokoll.data.DokumentationsFotoEntity
 import com.example.lrmprotokoll.data.FotoKategorie
@@ -65,6 +66,7 @@ class FotoDokumentation(
         kategorie: FotoKategorie,
         notiz: String? = null,
         jetzt: Long = System.currentTimeMillis(),
+        nachtraeglichHinzugefuegt: Boolean = false,
     ): Long? {
         return try {
             if (dao.anzahlFuerKategorie(sessionId, kategorie.name) >= settings.fotoDokuMaxProKategorie) {
@@ -93,14 +95,16 @@ class FotoDokumentation(
                     aufgenommenAm = jetzt,
                     notiz = notiz?.takeIf { it.isNotBlank() },
                     pruefsumme = Bildverarbeitung.pruefsumme(ziel),
+                    nachtraeglichHinzugefuegt = nachtraeglichHinzugefuegt,
                 )
             )
             diagnostics.breadcrumb(
-                "FotoDoku", "Foto aufgenommen",
+                "FotoDoku", if (nachtraeglichHinzugefuegt) "Foto aus Galerie uebernommen" else "Foto aufgenommen",
                 data = mapOf(
                     "kategorie" to kategorie.name,
                     "sessionId" to sessionId,
                     "groesseBytes" to ziel.length(),
+                    "nachtraeglichHinzugefuegt" to nachtraeglichHinzugefuegt,
                 ),
             )
             id
@@ -111,6 +115,66 @@ class FotoDokumentation(
             )
             null
         }
+    }
+
+    /**
+     * Owner-Feature-Auftrag 12.09.2026: uebernimmt ein aus der Foto-Galerie des Handys
+     * ausgewaehltes Bild - dieselbe Aufbereitung (verkleinern, EXIF-Drehung, Standortdaten
+     * entfernen, Pruefsumme) wie bei einem Kamerafoto, aber mit
+     * [DokumentationsFotoEntity.nachtraeglichHinzugefuegt] = `true`, da nicht sichergestellt
+     * werden kann, dass es zum Messzeitpunkt selbst entstanden ist. Eigene Methode statt eines
+     * Aufrufer-Parameters an [uebernehmeAufnahme]: so kann kein Aufrufer versehentlich ein
+     * Galerie-Foto als Live-Aufnahme markieren.
+     *
+     * [galerieDatei] ist bereits eine lokale Kopie (siehe [importiereAusGalerie]) - Zugriff auf
+     * `content://`-Uris ueber einen `File`-Pfad ist nicht garantiert moeglich.
+     */
+    suspend fun uebernehmeGalerieFoto(
+        galerieDatei: File,
+        sessionId: Long,
+        kategorie: FotoKategorie,
+        notiz: String? = null,
+        jetzt: Long = System.currentTimeMillis(),
+    ): Long? = uebernehmeAufnahme(galerieDatei, sessionId, kategorie, notiz, jetzt, nachtraeglichHinzugefuegt = true)
+
+    /**
+     * Kopiert [quelle] (eine `content://`-Uri aus dem System-Fotopicker,
+     * `ActivityResultContracts.PickMultipleVisualMedia`) in eine lokale Datei und uebergibt sie
+     * an [uebernehmeGalerieFoto]. Derselbe Robustheitsvertrag wie die uebrige Klasse: wirft nie,
+     * liefert bei jedem Fehlschlag (nicht lesbare Uri, IO-Fehler) `null` statt die Messung zu
+     * gefaehrden.
+     */
+    suspend fun importiereAusGalerie(
+        quelle: Uri,
+        sessionId: Long,
+        kategorie: FotoKategorie,
+        notiz: String? = null,
+        jetzt: Long = System.currentTimeMillis(),
+    ): Long? {
+        val tempDatei = try {
+            File.createTempFile("galerie_import_", ".tmp", context.cacheDir).also { temp ->
+                context.contentResolver.openInputStream(quelle)?.use { eingabe ->
+                    temp.outputStream().use { ausgabe -> eingabe.copyTo(ausgabe) }
+                } ?: run {
+                    temp.delete()
+                    diagnostics.breadcrumb(
+                        "FotoDoku", "Galerie-Uri konnte nicht geoeffnet werden",
+                        data = mapOf("kategorie" to kategorie.name),
+                    )
+                    return null
+                }
+            }
+        } catch (e: Throwable) {
+            diagnostics.breadcrumb(
+                "FotoDoku", "Galerie-Foto konnte nicht kopiert werden",
+                data = mapOf("kategorie" to kategorie.name, "fehler" to e.javaClass.simpleName),
+            )
+            return null
+        }
+
+        val id = uebernehmeGalerieFoto(tempDatei, sessionId, kategorie, notiz, jetzt)
+        runCatching { if (tempDatei.exists()) tempDatei.delete() }
+        return id
     }
 
     /** Haelt fest, dass eine Kategorie uebersprungen wurde - besonders relevant bei "PFLICHT". */
