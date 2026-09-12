@@ -7,8 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -22,9 +20,10 @@ import org.junit.runner.RunWith
 /**
  * Instrumentierte UI-Tests für die Hauptnavigation und die [AppNavigationBar] gemäß Testplan.
  *
- * Prüft alle 4 Navigationsleisten-Ziele ("Start", "Protokoll", "Diagnose", "Einstellungen"),
- * schnelles Umschalten, sowie den Regressionsfall, dass die Leiste auf allen Hauptseiten und
- * Unterseiten sichtbar und erreichbar bleibt.
+ * Prüft alle 3 Navigationsleisten-Ziele ("Start", "Daten", "Bericht") des Layout-Umbaus
+ * (Owner-Vorgabe 12.09.2026: Einstellungen hängt seit dem Umbau nicht mehr an der Bottom-Nav,
+ * sondern am Drei-Punkt-Menü jedes Hauptreiters), schnelles Umschalten, sowie den
+ * Regressionsfall, dass die Leiste auf allen Hauptseiten sichtbar und erreichbar bleibt.
  */
 @RunWith(AndroidJUnit4::class)
 class AppNavigationBarInstrumentedTest {
@@ -45,27 +44,27 @@ class AppNavigationBarInstrumentedTest {
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToSettings = { currentRoute = "settings" },
+                onNavigateToBericht = { currentRoute = "bericht" },
             )
         }
         composeRule.waitForIdle()
 
         val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
-        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
-        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        val dataLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
+        val reportLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_report)
 
         // 1. Start ist initial aktiv
         composeRule.onNodeWithText(startLabel).assertIsDisplayed().assertIsSelected()
 
-        // 2. Zu "Protokoll" navigieren
-        composeRule.onNodeWithText(protocolLabel).assertIsDisplayed().performClick()
+        // 2. Zu "Daten" navigieren
+        composeRule.onNodeWithText(dataLabel).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(protocolLabel).assertIsSelected()
+        composeRule.onNodeWithText(dataLabel).assertIsSelected()
 
-        // 3. Zu "Einstellungen" navigieren
-        composeRule.onNodeWithText(settingsLabel).assertIsDisplayed().performClick()
+        // 3. Zu "Bericht" navigieren
+        composeRule.onNodeWithText(reportLabel).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(settingsLabel).assertIsSelected()
+        composeRule.onNodeWithText(reportLabel).assertIsSelected()
 
         // 4. Zurück zu "Start"
         composeRule.onNodeWithText(startLabel).performClick()
@@ -81,17 +80,17 @@ class AppNavigationBarInstrumentedTest {
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToSettings = { currentRoute = "settings" },
+                onNavigateToBericht = { currentRoute = "bericht" },
             )
         }
         composeRule.waitForIdle()
 
         val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
-        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val dataLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
 
-        // Mehrfach hintereinander schnell "Protokoll" und "Start" antippen
+        // Mehrfach hintereinander schnell "Daten" und "Start" antippen
         repeat(3) {
-            composeRule.onNodeWithText(protocolLabel).performClick()
+            composeRule.onNodeWithText(dataLabel).performClick()
             composeRule.onNodeWithText(startLabel).performClick()
         }
         composeRule.waitForIdle()
@@ -101,11 +100,11 @@ class AppNavigationBarInstrumentedTest {
 
     @Test
     fun navigationsleisteBleibtAufJederSeiteSichtbar() {
-        val routes = listOf("main", "protokoll", "settings")
+        val routes = listOf("main", "protokoll", "bericht")
         val startLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
-        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
-        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
-        val labels = listOf(startLabel, protocolLabel, settingsLabel)
+        val dataLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
+        val reportLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_report)
+        val labels = listOf(startLabel, dataLabel, reportLabel)
 
         var currentRoute by mutableStateOf("main")
         composeRule.setContent {
@@ -113,7 +112,7 @@ class AppNavigationBarInstrumentedTest {
                 currentRoute = currentRoute,
                 onNavigateToStart = { currentRoute = "main" },
                 onNavigateToProtokoll = { currentRoute = "protokoll" },
-                onNavigateToSettings = { currentRoute = "settings" },
+                onNavigateToBericht = { currentRoute = "bericht" },
             )
         }
         composeRule.waitForIdle()

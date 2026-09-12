@@ -11,7 +11,8 @@
     <!-- Navigation & Tabs -->
     <string name="nav_start">Home</string>
     <string name="nav_meter">Sound Meter</string>
-    <string name="nav_protocol">Log</string>
+    <string name="nav_data">Data</string>
+    <string name="nav_report">Report</string>
     <string name="nav_diagnose">Diagnostics</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_trash">Trash</string>
@@ -436,6 +437,10 @@
     <string name="no_audio_event_desc">Level Only (No Audio File)</string>
     <string name="label_ai_prefix">AI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
+    <string name="settings_open_meter">Pair measuring device</string>
+    <string name="settings_open_trash">Open trash</string>
+    <string name="bericht_intro_title">Create reports</string>
+    <string name="bericht_intro_desc">Period report or full report with reference data, metrics, and photos – as PDF.</string>
     <string name="period_report_action">Create period report</string>
     <string name="period_report_dialog_title">Period Report</string>
     <string name="period_report_preset_7_days">Last 7 days</string>

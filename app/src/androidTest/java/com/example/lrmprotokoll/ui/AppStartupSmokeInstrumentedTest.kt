@@ -42,7 +42,7 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
 
         val appName = composeRule.activity.getString(R.string.app_name)
-        val protocolLabel = composeRule.activity.getString(R.string.nav_protocol)
+        val protocolLabel = composeRule.activity.getString(R.string.nav_data)
         val settingsLabel = composeRule.activity.getString(R.string.nav_settings)
         val startLabel = composeRule.activity.getString(R.string.nav_start)
         val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)

@@ -71,19 +71,39 @@ import com.example.lrmprotokoll.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+/**
+ * Die drei inhaltlich getrennten Einstellungsseiten (Layout-Umbau, Owner-Vorgabe 12.09.2026):
+ * jeder Hauptreiter (Start/Daten/Bericht) hat sein eigenes Drei-Punkt-Menue, das hierher
+ * verzweigt - [routeArg] ist der Navigation-Compose-Query-Parameter dafuer.
+ */
+enum class SettingsTab(val routeArg: String) {
+    START("start"),
+    DATEN("daten"),
+    BERICHT("bericht");
+
+    companion object {
+        fun vonRouteArg(arg: String?): SettingsTab = entries.firstOrNull { it.routeArg == arg } ?: START
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
+    initialTab: SettingsTab = SettingsTab.START,
     /** Fuehrt zum In-App-Erklaerungsbildschirm der Laermerkennung. */
     onOpenKiErklaerung: (() -> Unit)? = null,
     onOpenDriveUploads: (() -> Unit)? = null,
     onShowSnackbar: ((String) -> Unit)? = null,
     /** Fuehrt zum Diagnose-Bildschirm. */
     onNavigateToDiagnose: (() -> Unit)? = null,
+    /** Fuehrt zur Messgeraet-Kopplung (ehemals nur ueber den Drawer erreichbar). */
+    onNavigateToMeter: (() -> Unit)? = null,
+    /** Fuehrt zum Papierkorb (ehemals nur ueber den Drawer erreichbar). */
+    onNavigateToTrash: (() -> Unit)? = null,
     onShowOnboarding: (() -> Unit)? = null
 ) {
+    var selectedTab by remember { mutableStateOf(initialTab) }
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val settings = container.settingsManager
@@ -338,14 +358,8 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.nav_settings)) },
                 navigationIcon = {
-                    if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")) {
-                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
-                        }
-                    } else {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                        }
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
@@ -365,6 +379,30 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Umschalter zwischen den drei inhaltlich getrennten Einstellungsseiten - jeder
+            // Hauptreiter hat sein eigenes Drei-Punkt-Menue hierher, kann von hier aus aber auch
+            // zu den anderen beiden wechseln (Owner-Vorgabe 12.09.2026).
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = selectedTab == SettingsTab.START,
+                    onClick = { selectedTab = SettingsTab.START },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                    modifier = Modifier.testTag("settings_tab_start"),
+                ) { Text(stringResource(R.string.nav_start)) }
+                SegmentedButton(
+                    selected = selectedTab == SettingsTab.DATEN,
+                    onClick = { selectedTab = SettingsTab.DATEN },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                    modifier = Modifier.testTag("settings_tab_daten"),
+                ) { Text(stringResource(R.string.nav_data)) }
+                SegmentedButton(
+                    selected = selectedTab == SettingsTab.BERICHT,
+                    onClick = { selectedTab = SettingsTab.BERICHT },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                    modifier = Modifier.testTag("settings_tab_bericht"),
+                ) { Text(stringResource(R.string.nav_report)) }
+            }
+
             // Modus-Umschalter: Lite vs. Pro
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -477,7 +515,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_section_thresholds),
                 summary = "${String.format(Locale.getDefault(), "%.1f", dbThreshold)} dB Schwelle · ${if (recordWavAudio) "WAV-Audio aktiv" else "Reine Pegelmessung (Kein Audio)"}",
                 expanded = expAufnahme,
-                onToggle = { expAufnahme = !expAufnahme }
+                onToggle = { expAufnahme = !expAufnahme },
+                zeigen = selectedTab == SettingsTab.START,
             ) {
                 Text(stringResource(R.string.settings_threshold_day, dbThreshold), fontWeight = FontWeight.SemiBold)
 
@@ -637,6 +676,18 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                if (onNavigateToMeter != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onNavigateToMeter,
+                        modifier = Modifier.fillMaxWidth().testTag("btn_open_meter"),
+                    ) {
+                        Icon(AppIcons.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_open_meter))
+                    }
+                }
+
                 if (isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(stringResource(R.string.settings_pre_roll, preRoll.toInt()))
@@ -680,7 +731,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_alerting_title),
                 summary = if (alarmierungAktiv) "Aktiv${if (isProMode) " (Karenzzeit ${karenzzeit.toInt()}s)" else ""}" else "Deaktiviert",
                 expanded = expAlarm,
-                onToggle = { expAlarm = !expAlarm }
+                onToggle = { expAlarm = !expAlarm },
+                zeigen = selectedTab == SettingsTab.START,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
@@ -825,7 +877,8 @@ fun SettingsScreen(
                     else -> "Deaktiviert"
                 },
                 expanded = expKi,
-                onToggle = { expKi = !expKi }
+                onToggle = { expKi = !expKi },
+                zeigen = selectedTab == SettingsTab.START,
             ) {
                 Text(
                     text = "Wähle, wann die KI-Geräuschklassifikation (YAMNet) ausgeführt werden soll:",
@@ -955,7 +1008,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_quiet_hours_title),
                 summary = if (quietHoursEnabled) "Aktiv (${quietHoursStartHour.toInt()}:00 - ${quietHoursEndHour.toInt()}:00 Uhr · ${String.format(Locale.getDefault(), "%.1f", quietHoursThreshold)} dB)" else "Deaktiviert",
                 expanded = expRuhezeiten,
-                onToggle = { expRuhezeiten = !expRuhezeiten }
+                onToggle = { expRuhezeiten = !expRuhezeiten },
+                zeigen = selectedTab == SettingsTab.START,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -1029,7 +1083,8 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_cleanup_title),
                     summary = if (autoRetentionEnabled) "Auto-Bereinigung nach ${autoRetentionDays.toInt()} Tagen" else "Manuell",
                     expanded = expRetention,
-                    onToggle = { expRetention = !expRetention }
+                    onToggle = { expRetention = !expRetention },
+                    zeigen = selectedTab == SettingsTab.DATEN,
                 ) {
                     // PROMPT_M10_FUNKTIONEN.md F5: erst beim Aufklappen ermitteln, nicht bei
                     // jedem Öffnen der Einstellungen - das Zählen der Audiodateien ist Datei-I/O.
@@ -1131,7 +1186,8 @@ fun SettingsScreen(
                 title = "Google Drive Synchronisation",
                 summary = if (driveSyncAktiv && !googleAccountEmail.isNullOrBlank()) "Aktiv ($googleAccountEmail)" else if (!googleAccountEmail.isNullOrBlank()) "Verbunden (Pausiert)" else "Nicht verbunden",
                 expanded = expDrive,
-                onToggle = { expDrive = !expDrive }
+                onToggle = { expDrive = !expDrive },
+                zeigen = selectedTab == SettingsTab.DATEN,
             ) {
                 // Owner-Wunsch: eine Seite, die zeigt, was hochgeladen wurde und was gerade
                 // laeuft. Die Statuskarte darunter nennt nur den letzten Lauf als Ganzes.
@@ -1260,7 +1316,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_backup_title),
                 summary = stringResource(R.string.settings_backup_summary),
                 expanded = expSicherung,
-                onToggle = { expSicherung = !expSicherung }
+                onToggle = { expSicherung = !expSicherung },
+                zeigen = selectedTab == SettingsTab.DATEN,
             ) {
                 Text(
                     text = stringResource(R.string.settings_backup_desc),
@@ -1402,7 +1459,8 @@ fun SettingsScreen(
                 title = "Fotodokumentation",
                 summary = if (fotoDokuAktiv) "Aktiv" else "Deaktiviert",
                 expanded = expFoto,
-                onToggle = { expFoto = !expFoto }
+                onToggle = { expFoto = !expFoto },
+                zeigen = selectedTab == SettingsTab.BERICHT,
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1490,7 +1548,8 @@ fun SettingsScreen(
                 title = "Berichtsangaben (Gerät, Messaufbau, Randbedingungen)",
                 summary = if (stammdatenAbfrageAktiv) "Aktiv" else "Deaktiviert",
                 expanded = expBericht,
-                onToggle = { expBericht = !expBericht }
+                onToggle = { expBericht = !expBericht },
+                zeigen = selectedTab == SettingsTab.BERICHT,
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1521,7 +1580,8 @@ fun SettingsScreen(
                 title = "Speicherplatz",
                 summary = belegung?.let { "Belegt: ${formatiereBytes(it.gesamtBytes)}" } ?: "Belegung anzeigen und freigeben",
                 expanded = expSpeicher,
-                onToggle = { expSpeicher = !expSpeicher }
+                onToggle = { expSpeicher = !expSpeicher },
+                zeigen = selectedTab == SettingsTab.DATEN,
             ) {
                 // Erst beim Aufklappen ermitteln - das Zaehlen ist Datei-I/O.
                 LaunchedEffect(expSpeicher) {
@@ -1563,6 +1623,18 @@ fun SettingsScreen(
                     ) {
                         Text("Auf dem Gerät noch frei", style = MaterialTheme.typography.bodyMedium)
                         Text(formatiereBytes(aktuell.freiBytes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    if (onNavigateToTrash != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = onNavigateToTrash,
+                            modifier = Modifier.fillMaxWidth().testTag("btn_open_trash"),
+                        ) {
+                            Icon(AppIcons.Trash, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.settings_open_trash))
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -1689,7 +1761,8 @@ fun SettingsScreen(
                 summary = "Maximaldauer ${videoMaxDauer.toInt() / 60}:${String.format(java.util.Locale.GERMANY, "%02d", videoMaxDauer.toInt() % 60)} · " +
                     if (videoAufloesung == "FHD") "1080p" else "720p",
                 expanded = expVideo,
-                onToggle = { expVideo = !expVideo }
+                onToggle = { expVideo = !expVideo },
+                zeigen = selectedTab == SettingsTab.BERICHT,
             ) {
                 Text(
                     "Während einer laufenden Messung lässt sich im Cockpit ein Beweisvideo aufnehmen. " +
@@ -1758,7 +1831,8 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_section_diagnostics),
                 summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
                 expanded = expSystem,
-                onToggle = { expSystem = !expSystem }
+                onToggle = { expSystem = !expSystem },
+                zeigen = selectedTab == SettingsTab.START,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
@@ -1808,7 +1882,8 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_help_title),
                     summary = stringResource(R.string.settings_help_summary),
                     expanded = expHilfe,
-                    onToggle = { expHilfe = !expHilfe }
+                    onToggle = { expHilfe = !expHilfe },
+                    zeigen = selectedTab == SettingsTab.START,
                 ) {
                     OutlinedButton(
                         onClick = onShowOnboarding,
@@ -1830,8 +1905,13 @@ private fun SettingsSectionCard(
     summary: String,
     expanded: Boolean,
     onToggle: () -> Unit,
+    /** Steuert die Zuordnung zu einer der drei Einstellungsseiten ([SettingsTab]) - anders als
+     * [expanded] (Auf-/Zuklappen der Karte) blendet dies die ganze Karte aus, wenn eine andere
+     * Seite aktiv ist. */
+    zeigen: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    if (!zeigen) return
     com.example.lrmprotokoll.ui.components.NoiseCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.surface

@@ -56,7 +56,6 @@ const val DRIVE_UPLOAD_LISTE_TAG = "drive_upload_liste"
 @Composable
 fun DriveUploadScreen(
     onBack: () -> Unit,
-    onOpenDrawer: () -> Unit,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -79,11 +78,6 @@ fun DriveUploadScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menü")
                     }
                 },
             )

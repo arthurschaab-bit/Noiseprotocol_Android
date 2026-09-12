@@ -127,21 +127,14 @@ private val ABSCHNITTE = listOf(
 @Composable
 fun KiErklaerungScreen(
     onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Wie die Lärmerkennung arbeitet") },
                 navigationIcon = {
-                    if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menü")
-                        }
-                    } else {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
-                        }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
                     }
                 },
             )
