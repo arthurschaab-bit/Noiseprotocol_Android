@@ -21,8 +21,11 @@ import org.junit.runner.RunWith
  *
  * Stellt sicher, dass:
  * 1. Der Application-Kontext und alle Provider (Sentry, Room, Diagnostics) ohne Absturz initialisieren.
- * 2. Die MainActivity mit NavHost, Theme und 4-Tab Navigation sauber gerendert wird.
- * 3. Alle Hauptscreens (Start inkl. PCE-323 Steuerung, Protokoll, Diagnose, Einstellungen) fehlerfrei geladen werden können.
+ * 2. Die MainActivity mit NavHost, Theme und den 3 Hauptreitern (Start/Daten/Bericht) sauber
+ *    gerendert wird (Layout-Umbau 12.09.2026 - Einstellungen hängt seither nicht mehr an einem
+ *    eigenen Bottom-Nav-Tab, sondern am Drei-Punkt-Menü des Start-Screens).
+ * 3. Alle Hauptscreens (Start inkl. PCE-323 Steuerung, Daten, Einstellungen inkl. Diagnose-
+ *    Sektion) fehlerfrei geladen werden können.
  */
 @RunWith(AndroidJUnit4::class)
 class AppStartupSmokeInstrumentedTest {
@@ -63,7 +66,12 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(protocolLabel, substring = true).onFirst().assertIsDisplayed()
 
-        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion)
+        // 3. Navigation zu Einstellungen (inkl. Diagnose-Sektion) - kein eigener Bottom-Nav-Tab
+        // mehr, sondern über das Drei-Punkt-Menü auf dem Start-Screen (Layout-Umbau 12.09.2026).
+        composeRule.onAllNodesWithText(startLabel).onFirst().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("btn_overflow_menu").performClick()
+        composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(settingsLabel, substring = true).onFirst().assertIsDisplayed()
