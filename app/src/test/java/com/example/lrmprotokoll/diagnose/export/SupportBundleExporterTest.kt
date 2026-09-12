@@ -110,6 +110,36 @@ class SupportBundleExporterTest {
     }
 
     /**
+     * Bugfix (Owner-Feedback 12.09.2026): der bisherige Dateiname "support_bundle_<Millis>.zip"
+     * landete beim Teilen (kombiniert mit dem alten Klammer-Betreff) als viel zu langer,
+     * fehlerhaft wirkender Dateiname (".zip)") auf dem Geraet. Jetzt: kurzer, lesbarer Name mit
+     * Datum/Uhrzeit, und der Betreff enthaelt den Dateinamen nicht mehr doppelt in Klammern.
+     */
+    @Test
+    fun createBundleVerwendetLesbarenDateinamenMitZeitstempel() {
+        val reporter = CompositeDiagnosticsReporter(
+            sinks = emptyList(),
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
+        )
+        val exporter = SupportBundleExporter(context, reporter)
+
+        val zipFile = exporter.createBundle(emptyList())
+
+        assertTrue(zipFile.name.endsWith("_Noise_Protocol_Support_Bundle.zip"))
+        assertTrue(zipFile.name.matches(Regex("\\d{8}_\\d{6}_Noise_Protocol_Support_Bundle\\.zip")))
+        assertTrue(!zipFile.name.contains(" "))
+        assertTrue(!zipFile.name.contains("("))
+        assertTrue(!zipFile.name.contains(")"))
+
+        val shareIntent = exporter.createShareIntent(zipFile)
+        val subject = shareIntent.getStringExtra(android.content.Intent.EXTRA_SUBJECT)
+        assertNotNull(subject)
+        assertTrue(!subject!!.contains("("))
+        assertTrue(!subject.contains(")"))
+        assertTrue(!subject.contains(zipFile.name))
+    }
+
+    /**
      * KI-Umbau Etappe 1 (Nachtrag): ein `null`-Wert in `data` (z.B. "AGC-Zustand unbekannt") ist
      * selbst ein Diagnosewert und muss im Export als JSON-`null` erscheinen - nicht als
      * fehlender Schluessel, der spaeter mit "nie gemessen" verwechselt werden koennte.
