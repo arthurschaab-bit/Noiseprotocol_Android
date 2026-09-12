@@ -414,6 +414,8 @@ fun DiagnoseScreen(
                     lastSuccessAt = container.settingsManager.driveSyncLastSuccessAt,
                     lastMessage = driveMessage ?: container.settingsManager.driveSyncLastMessage,
                     latestDailyFile = syncHistorie.firstOrNull(),
+                    datenbankSicherungAktiv = container.settingsManager.datenbankSicherungDriveUpload,
+                    datenbankSicherungLastSuccessAt = container.settingsManager.datenbankSicherungLastSuccessAt,
                     isSyncing = isSyncing,
                     onToggleSync = { enabled ->
                         container.settingsManager.driveSyncEnabled = enabled

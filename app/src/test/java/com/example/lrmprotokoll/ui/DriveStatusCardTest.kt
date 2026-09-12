@@ -1,8 +1,10 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -167,5 +169,70 @@ class DriveStatusCardTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Wird hochgeladen…").assertIsDisplayed()
+    }
+
+    /**
+     * Owner-Meldung 12.09.2026 ("Sicherung läuft sporadisch, nicht täglich"): eigene Zeile fuer
+     * die Datenbank-Sicherung, getrennt vom allgemeinen Zeilen-/ZIP-Sync-Zeitstempel.
+     */
+    @Test
+    fun driveStatusCardZeigtNochKeineSicherungWennAktivAberNieHochgeladen() {
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        composeRule.setContent {
+            DriveStatusCard(
+                googleAccountEmail = "tester@gmail.com",
+                googleAccountName = null,
+                syncEnabled = true,
+                folderName = "Lärmprotokoll",
+                folderId = "folder_abc_123",
+                isFolderBlocked = false,
+                consecutiveFailures = 0,
+                lastSuccessAt = 1787376000000L,
+                lastMessage = null,
+                latestDailyFile = null,
+                datenbankSicherungAktiv = true,
+                datenbankSicherungLastSuccessAt = 0L,
+                isSyncing = false,
+                onToggleSync = {},
+                onSyncNow = {},
+                onConnectGoogle = {},
+                onDisconnectGoogle = {},
+                onUpdateFolderName = {}
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Letzte Datenbank-Sicherung: Noch keine Sicherung hochgeladen").assertIsDisplayed()
+    }
+
+    @Test
+    fun driveStatusCardZeigtKeineSicherungszeileWennDeaktiviert() {
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        composeRule.setContent {
+            DriveStatusCard(
+                googleAccountEmail = "tester@gmail.com",
+                googleAccountName = null,
+                syncEnabled = true,
+                folderName = "Lärmprotokoll",
+                folderId = "folder_abc_123",
+                isFolderBlocked = false,
+                consecutiveFailures = 0,
+                lastSuccessAt = 1787376000000L,
+                lastMessage = null,
+                latestDailyFile = null,
+                datenbankSicherungAktiv = false,
+                isSyncing = false,
+                onToggleSync = {},
+                onSyncNow = {},
+                onConnectGoogle = {},
+                onDisconnectGoogle = {},
+                onUpdateFolderName = {}
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText("Letzte Datenbank-Sicherung", substring = true).assertCountEquals(0)
     }
 }
