@@ -34,12 +34,13 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 | **UX Redesign (26-Punkte Designbrief)** (OLED Dark Mode, Live-Cockpit, Quick-Tagger, Zoom-Chart, Revisions-Audit) | ✅ abgeschlossen (PRs #58–#61) |
 | **Modernes App-Redesign (Designer-Canvas & Screenshots)** (Start/Cockpit Idle/Live, 3x3 Mark Noise Event Sheet, Modern Protocol List, Wohnraum-Grenzwerte & Pro/Lite-Modus) | ✅ vollständig umgesetzt |
 | **Mehrsprachigkeit & Lokalisierung (i18n)** (Deutsch, Englisch, In-App-Sprachauswahl & Android 13+ Per-App Language) | ✅ vollständig umgesetzt & getestet |
-| **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync) | ✅ umgesetzt — Fotos, EXIF-Drehung und PDF-Einbettung noch nicht am Gerät gesichtet |
+| **M11 Etappe A** Fotodokumentation (Messaufbau/Kalibrierung, Umfang konfigurierbar, Einbindung in Bericht und Drive-Sync, nachträglicher Import aus der Foto-Galerie mit Beweiskraft-Kennzeichnung) | ✅ umgesetzt — Fotos, EXIF-Drehung, PDF-Einbettung und der Galerie-Import noch nicht am Gerät gesichtet |
 | **Befunde aus dem Gerätetest 04.09.2026** (9 Punkte: Fehlalarm ohne Verbindung, Phantom- und Doppel-Sessions, Videoablauf, Mux-Endzustand, Drive-Ablage, Upload-Übersicht, ehrliche Mikrofon-Benennung) | ✅ umgesetzt (PRs #108–#110) — Kamera-, Drive- und Protokollverhalten am Gerät noch nachzuprüfen |
 | **Trigger-Härtung** (stiller Ausfall der Auslösung wird erkannt, Trigger-Quelle „Mikrofon" wählbar, verwaiste Sessions werden geschlossen) | ✅ umgesetzt (PRs #99, #100) |
 | **Drive-Ablagestruktur & Upload-Übersicht** (Tagesordner je Dateiart, Seite mit hochgeladen/läuft/offen/fehlgeschlagen) | ✅ umgesetzt — Ordneranlage nicht gegen echtes Drive geprüft |
 | **E8** Speicheranzeige & manuelles Aufräumen (nach Dateiart und Zeitraum, statt automatischer Frist für Videos) | ✅ umgesetzt |
 | **M11 Etappe B** Videobeweis (CameraX ohne Tonspur, Ton aus der laufenden Messung nachträglich eingemuxt, resumable Drive-Upload) | ⚠️ umgesetzt, **nicht am Gerät verifiziert** — Kamera, A/V-Synchronität und der echte Upload brauchen Hardware |
+| **Bugfixes 12.09.2026** (Huawei/EMUI-Button „Geschützte Apps prüfen" crashte, Aufnahme-Ausfall nach EBADF-Schreibfehler ohne automatischen Wiederanlauf, „+ Neue Messung" während laufender Messung sichtbar, Support-Bundle-Dateiname zu lang/falscher Dateityp) | ✅ behoben, unit-getestet — Huawei-Fix nur per simulierter `SecurityException` verifiziert, nicht erneut auf echtem Huawei-Gerät |
 
 **Gesamtfortschritt: Alle Meilensteine + Google Drive Ordner-Management + WAV-Sofortupload + Rohwert-CSV + Wohnraum-Presets + Pro/Lite-Modus + Modernes UI/UX-Redesign + Mehrsprachigkeit (i18n) vollständig umgesetzt, getestet und verifiziert.**
 
@@ -362,6 +363,16 @@ vom 04.09.2026:
   entschieden; der Schalter in den Einstellungen bleibt bestehen, wer widersprechen will, kann
   ihn weiterhin ausschalten. Fotos und Videos werden außerdem sofort nach Aufnahme/Mux
   hochgeladen statt erst im nächsten 30-Minuten-Zyklus (wie WAV schon vorher).
+- **Der automatische Wiederanlauf nach einem Audio-Schreibfehler ist nur aus dem
+  Diagnoseprotokoll rekonstruiert und per Unit-Test der Entscheidungslogik
+  (`AudioMonitoringRestartPolicy`) belegt, nicht durch einen erneuten Reallauf.** Anlass war ein
+  Support-Bundle vom 12.09.2026: ein Race Condition zwischen dem Mikrofon-Read-Loop und
+  `starteWavAufnahme()` führte zu „write failed: EBADF", der Dienst rief danach `stopSelf()` auf
+  und blieb bis zum nächsten manuellen App-Start stumm (`START_STICKY` startet einen Dienst nach
+  `stopSelf()` **nicht** automatisch neu — nur nach einem System-Kill). Behoben durch ein Lock um
+  den betroffenen Zustand und einen begrenzten automatischen Neustart statt `stopSelf()`; ob die
+  Race Condition damit tatsächlich verschwunden ist, zeigt sich erst über einen längeren
+  Beobachtungszeitraum am Gerät.
 - **Die neuen Compose-Screens aus M7 (Protokoll, Diagnose) und M7c (Live-Dashboard,
   NavigationBar, Pegelverlauf-Chart) sind mangels Emulator in dieser Entwicklungsumgebung nicht
   visuell geprüft** — wohl aber durch echte Compose-UI-Tests unter Robolectric gegen die

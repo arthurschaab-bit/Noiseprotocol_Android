@@ -216,6 +216,36 @@ Aufnahme-Bildschirm für Videos, Upload-Übersicht, Speicherplatz-Abschnitt in d
 Bildschirm „Wie die Lärmerkennung arbeitet". Alle sind kompiliert und lint-sauber, ihre Logik ist
 getestet — die Optik ist ungeprüft.
 
+### F7 — Huawei/EMUI-Fallback (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Auf einem Huawei-Gerät (EMUI): Einstellungen → „Geräte- & Alarm-Diagnose" → „Huawei / EMUI Geschützte Apps prüfen" antippen | Öffnet entweder den Huawei-eigenen Dialog oder (falls dessen Activity nicht exportiert ist) die App-Detailseite — **kein Absturz** | |
+
+Der Absturz (Huawei P30 / ELE-L29, Android 10) war eine ungefangene `SecurityException` beim
+Start einer nicht exportierten EMUI-Systemactivity. Der Fix ist nur über eine simulierte
+`SecurityException` in einem Robolectric-Test belegt, nicht erneut auf echter Huawei-Hardware.
+
+### F8 — Aufnahme-Selbstheilung nach Schreibfehler (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Über mehrere Stunden/Tage laufen lassen, insbesondere über Nacht | Kein stiller, mehrstündiger Aufnahme-Ausfall mehr wie am 11./12.09.2026 (0:10–3:51 Uhr) | |
+| Diagnoseprotokoll danach durchsehen | Kein `AUDIO_FILE_WRITE_FAILED` mehr, oder falls doch: unmittelbar gefolgt von einem automatischen Neustart des Mikrofon-Monitorings statt eines stillen Endes | |
+
+Root Cause war ein Race Condition zwischen dem Mikrofon-Read-Loop und `starteWavAufnahme()`
+(„write failed: EBADF") plus ein `stopSelf()`, das entgegen der bisherigen Annahme **nicht**
+automatisch neu gestartet wird. Siehe README, Abschnitt „Bekannte Einschränkungen".
+
+### F9 — Fotos nachträglich aus der Galerie hinzufügen (Feature 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Im Session-Detail „Aus Galerie" antippen, ein oder mehrere Fotos auswählen | System-Fotopicker öffnet sich **ohne** Berechtigungsdialog | |
+| Danach Kategorie wählen | Foto erscheint in der Liste, sichtbar als „nachträglich hinzugefügt" markiert | |
+| Session-PDF exportieren | Galerie-Foto erscheint im Fotoanhang, Bildunterschrift enthält „nachträglich hinzugefügt" | |
+| Import während eine Messung noch läuft | Funktioniert genau wie bei einer bereits beendeten Session | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
