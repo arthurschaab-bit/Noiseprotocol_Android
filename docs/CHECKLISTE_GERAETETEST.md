@@ -265,6 +265,32 @@ automatisch neu gestartet wird. Siehe README, Abschnitt „Bekannte Einschränku
 | Reiner Mikrofonlauf (nie ein Messgerät gepinnt) | Anzeige bleibt wie bisher ohne die neue Kennzeichnung | |
 | Zeitraum-/Gesamtbericht über einen Zeitraum mit sowohl PCE- als auch reinen Mikrofon-Sessions exportieren | Pegelverlauf-Diagramm zeigt nur die PCE-Werte; Mikrofon-Zeiträume erscheinen als Lücke. Kennwerte (LAeq/Max/Min) und Ereignisliste enthalten weiterhin beide Quellen | |
 
+### F12 — Datenbank-Sicherung: Sichtbarkeit & Wiederherstellungs-Diagnose (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Einstellungen → Sicherung ansehen, nachdem mindestens ein Sync-Zyklus mit aktivierter Datenbank-Sicherung erfolgreich lief | Eigene Zeile „Letzte Datenbank-Sicherung: <Datum>" unter dem allgemeinen Sync-Status | |
+| Gerät mehrere Tage ohne (passendes) Netz lassen, z.B. bei aktiviertem „Nur über WLAN" | Zeile wird nach >26h rot/fett hervorgehoben | |
+| „Von Drive wiederherstellen" ohne vorhandenes Backup auslösen (z.B. leerer/falscher Ordner) | Fehlschlag erscheint jetzt zusätzlich im Diagnoseprotokoll/Support-Bundle (`BACKUP_RESTORE_FAILED`), nicht mehr nur als Snackbar | |
+| Lokale Wiederherstellung aus einer beschädigten/inkompatiblen ZIP-Datei | Ebenfalls im Diagnoseprotokoll sichtbar | |
+| Erfolgreiche Wiederherstellung (lokal oder Drive) | Breadcrumb „… wiederhergestellt – App wird neu gestartet" erscheint im Diagnoseprotokoll VOR dem Neustart | |
+
+Auslöser war ein Support-Bundle vom 12.09.2026 (Pixel 9 Pro), das nur 4 Diagnose-Einträge über
+~19 Minuten enthielt: ein erfolgreicher
+Sicherungs-Upload, danach zwei Prozess-Exits. Ohne diesen Fix ließ sich ein danach gemeldeter
+Restore-Versuch nur indirekt über den Exit-Grund deuten (`REASON_EXIT_SELF`, mangels eigenem
+Fall im Code als „CODE_1" geloggt und identisch mit dem Pfad, den `SicherungManager.starteNeustart()`
+nach einer **erfolgreichen** Wiederherstellung auslöst) – ein eindeutiger Log-Eintrag fehlte.
+
+Für die eigentliche Meldung „Sicherung läuft sporadisch, nicht täglich" gibt es **keinen
+bestätigten Fix**, nur bessere Sichtbarkeit (eigener Zeitstempel + Alterswarnung ab 26h). Die
+Taktung selbst (opportunistischer 30-Minuten-`PeriodicWorkRequest`, siehe `DriveSyncPlanung`)
+wurde bewusst nicht angetastet – Owner-Rückfrage vom 12.09.2026 ergab, dass dafür aktuell nur
+Sichtbarkeit gewünscht ist, keine architektonische Garantie (z.B. Mindest-Backoff/Foreground-
+Service). Die zugrunde liegende Ursache (Doze/Akku-Optimierung, WLAN-only-Einschränkung ohne
+WLAN-Kontakt über mehrere Tage, oder etwas anderes) lässt sich mit dem hier verfügbaren, sehr
+kurzen Bundle nicht nachweisen – dafür wird echte Mehrtages-Nutzung auf einem Gerät gebraucht.
+
 ---
 
 ## Was zurückgemeldet werden sollte

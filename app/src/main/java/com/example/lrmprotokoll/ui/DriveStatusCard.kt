@@ -27,6 +27,15 @@ const val DRIVE_CONNECT_BUTTON_TAG = "drive_connect_button"
 const val DRIVE_DISCONNECT_BUTTON_TAG = "drive_disconnect_button"
 
 /**
+ * Ab welcher Luecke seit der letzten erfolgreichen Datenbank-Sicherung gewarnt wird - etwas mehr
+ * als 24h, um dem opportunistischen 30-Minuten-Takt (Netz-/Doze-Verzoegerungen sind normal, siehe
+ * [com.example.lrmprotokoll.drive.DriveSyncPlanung]) etwas Spielraum ueber einen Kalendertag
+ * hinaus zu geben, bevor die Anzeige tatsaechlich Alarm schlaegt (Owner-Meldung 12.09.2026,
+ * "Sicherung läuft sporadisch, nicht täglich").
+ */
+private const val BACKUP_STALE_THRESHOLD_MS = 26L * 60 * 60 * 1000
+
+/**
  * Dedizierte, übersichtliche Status- und Steuerkarte für Google Drive.
  * Vollständig im OLED-Dark-Theme gehalten mit Pop-up für exakte Ordnerauswahl.
  */
@@ -52,6 +61,9 @@ fun DriveStatusCard(
     onSelectFolder: ((DriveDatei) -> Unit)? = null,
     onCreateFolder: (suspend (String) -> Result<DriveDatei>)? = null,
     onRenameFolder: (suspend (String, String) -> Result<Unit>)? = null,
+    /** Ob die automatische Datenbank-Sicherung ([datenbankSicherungLastSuccessAt]) aktiviert ist. */
+    datenbankSicherungAktiv: Boolean = false,
+    datenbankSicherungLastSuccessAt: Long = 0L,
     modifier: Modifier = Modifier,
 ) {
     val isConnected = !googleAccountEmail.isNullOrBlank() && !folderId.isNullOrBlank()
@@ -227,6 +239,23 @@ fun DriveStatusCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = if (hasError) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+
+        if (datenbankSicherungAktiv) {
+            val backupIstVeraltet = datenbankSicherungLastSuccessAt == 0L ||
+                System.currentTimeMillis() - datenbankSicherungLastSuccessAt > BACKUP_STALE_THRESHOLD_MS
+            val backupText = if (datenbankSicherungLastSuccessAt > 0L) {
+                dateFormat.format(Date(datenbankSicherungLastSuccessAt))
+            } else {
+                "Noch keine Sicherung hochgeladen"
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Letzte Datenbank-Sicherung: $backupText",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (backupIstVeraltet) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (backupIstVeraltet) FontWeight.Bold else FontWeight.Normal
             )
         }
 
