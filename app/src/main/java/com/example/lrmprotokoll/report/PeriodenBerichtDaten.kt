@@ -46,6 +46,7 @@ suspend fun ermittlePeriodenBericht(db: AppDatabase, von: Long, bis: Long): Peri
     val sessions = db.sessionDao().zwischen(von, bis)
     val messwerte = db.measurementDao().zwischen(von, bis)
     val events = db.noiseDao().zwischenZeitpunkt(von, bis)
+    val nurMikrofon = nurMikrofonSessions(sessions)
 
     val ausfallbaender = sessions
         .flatMap { session ->
@@ -63,15 +64,32 @@ suspend fun ermittlePeriodenBericht(db: AppDatabase, von: Long, bis: Long): Peri
         }
         .sortedBy { it.von }
 
+    // Bugfix (Owner-Feedback 12.09.2026, "im Gesamtbericht keine Schallwerte mischen"): Kennwerte
+    // und Ereignisliste duerfen weiterhin ueber alle Sessions des Zeitraums gerechnet werden (das
+    // war schon so und bleibt es - eine reine Mikrofon-Session zaehlt dort weiterhin mit, nur mit
+    // "Mittelwert" statt "LAeq" bezeichnet). Das PEGELVERLAUF-DIAGRAMM soll aber nicht kalibrierte
+    // dBA-Werte und unkalibrierte Mikrofonwerte im selben Graphen mischen: enthaelt der Zeitraum
+    // BEIDE Session-Arten, zeigt das Diagramm nur die kalibrierten Messgeraet-Werte: Mikrofon-
+    // Zeitraeume bleiben darin schlicht eine Luecke (kein zusaetzliches Ausfallband noetig -
+    // downsampleMesswerteFuerChart erzeugt ohnehin keinen Punkt, wo keine Messwerte hineingegeben
+    // werden). Ist der GESAMTE Zeitraum ein reiner Mikrofonlauf, gibt es nichts zu mischen - dann
+    // bleiben die Mikrofonwerte im Diagramm wie bisher die einzige Quelle.
+    val mikrofonSessionIds = sessions.filter { it.deviceAddress.isBlank() }.mapTo(mutableSetOf()) { it.id }
+    val chartMesswerte = if (nurMikrofon || mikrofonSessionIds.isEmpty()) {
+        messwerte
+    } else {
+        messwerte.filter { it.sessionId !in mikrofonSessionIds }
+    }
+
     return PeriodenBericht(
         von = von,
         bis = bis,
         sessionCount = sessions.size,
-        chartSpalten = downsampleMesswerteFuerChart(messwerte, von, bis),
+        chartSpalten = downsampleMesswerteFuerChart(chartMesswerte, von, bis),
         kennwerte = AkustischeKennwerte.berechne(messwerte),
         ausfallbaender = ausfallbaender,
         events = events,
-        nurMikrofon = nurMikrofonSessions(sessions),
+        nurMikrofon = nurMikrofon,
     )
 }
 
