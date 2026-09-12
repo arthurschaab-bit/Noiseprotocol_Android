@@ -56,6 +56,13 @@ data class DokumentationsFotoEntity(
     val driveFileId: String? = null,
     /** SHA-256 der Bilddatei, hex, kleingeschrieben. */
     val pruefsumme: String? = null,
+    /**
+     * Freitext-Geometrieangabe (Bericht-Umbau, z. B. "SO-Balkon, 140 cm, Freifeld" oder
+     * "Innenraum, Schlafzimmer, gekippt") - Pflicht-Metadatum laut Berichtsvorgabe, hier aber
+     * bewusst nullable: Fotos aus der Zeit vor dieser Spalte haben keine Geometrieangabe, und ein
+     * erfundener Wert waere schlechter als ein sichtbar fehlender.
+     */
+    val geometrieTag: String? = null,
 )
 
 @Dao

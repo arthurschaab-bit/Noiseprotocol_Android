@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.room)
     alias(libs.plugins.kover)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.chaquopy)
 }
 
 val releaseStoreFile = (findProperty("releaseStoreFile") as String?)?.let { file(it) }
@@ -36,6 +37,15 @@ android {
 
         buildConfigField("boolean", "DIAGNOSTICS_REMOTE_ENABLED", "true")
         buildConfigField("String", "SENTRY_DSN", "\"\"")
+
+        // Chaquopy (High-End-Bericht, Schritt 1): Python-Distributionen und alle pip-Pakete
+        // werden pro ABI als native Bibliotheken mitgeliefert - deshalb hier explizit auf die
+        // beiden Ziel-ABIs eingeschraenkt, statt (Chaquopy-Default) alle vier zu bauen. armeabi-v7a
+        // und x86 sind fuer PCE-323-taugliche Geraete (minSdk 29, BLE) nicht relevant und wuerden
+        // die APK-Groesse durch NumPy/Matplotlib/ReportLab pro zusaetzlicher ABI weiter aufblaehen.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -129,6 +139,20 @@ android {
 
 room {
     schemaDirectory("$projectDir/schemas")
+}
+
+// Chaquopy (High-End-Bericht, Schritt 1): embedded CPython fuer gesamtbericht_generator.py
+// (Schritt 4, noch nicht Teil dieses Auftrags). numpy/matplotlib/reportlab werden hier nur
+// deklariert - das eigentliche Python-Modul kommt mit Schritt 3/4 nach src/main/python/.
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pip {
+            install("numpy")
+            install("matplotlib")
+            install("reportlab")
+        }
+    }
 }
 
 dependencies {
@@ -263,6 +287,8 @@ val checkUnusedDaoMethods =
                     "com/example/lrmprotokoll/data/NoiseDao.kt:restoreMultiple", // Mehrfachauswahl im Papierkorb noch nicht gebaut
                     "com/example/lrmprotokoll/data/NoiseDao.kt:deleteMultiple", // dito
                     "com/example/lrmprotokoll/data/NoiseDao.kt:setNotes", // Notizfeld-UI noch nicht gebaut
+                    "com/example/lrmprotokoll/data/ReportConfigEntity.kt:getFlow", // Bericht-Einstellungen-UI fuer die § 287 ZPO-Parameter (Schritt 3) noch nicht gebaut
+                    "com/example/lrmprotokoll/data/ReportConfigEntity.kt:speichere", // dito
                 )
 
             val methodRegex = Regex("""(?:suspend\s+)?fun\s+(\w+)\s*\(""")
