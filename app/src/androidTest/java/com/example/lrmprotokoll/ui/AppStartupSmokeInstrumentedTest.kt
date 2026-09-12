@@ -47,7 +47,6 @@ class AppStartupSmokeInstrumentedTest {
         val appName = composeRule.activity.getString(R.string.app_name)
         val protocolLabel = composeRule.activity.getString(R.string.nav_data)
         val settingsLabel = composeRule.activity.getString(R.string.nav_settings)
-        val startLabel = composeRule.activity.getString(R.string.nav_start)
         val diagSection = composeRule.activity.getString(R.string.settings_section_diagnostics)
 
         // 1. Startscreen (Home) ist geladen. Eindeutiger Tag statt Text-Suche, da "appName" auch
@@ -81,8 +80,10 @@ class AppStartupSmokeInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(diagSection, substring = true).onFirst().assertExists()
 
-        // 4. Navigation zurück zum Startscreen
-        composeRule.onAllNodesWithText(startLabel).onFirst().performClick()
+        // 4. Navigation zurück zum Startscreen - ueber Tag statt Text, da der Settings-
+        // Umschalter (Schritt 3) ebenfalls einen Button mit Text "Start" zeigt und
+        // onAllNodesWithText(...).onFirst() sonst diesen statt des Bottom-Nav-Eintrags treffen kann.
+        composeRule.onNodeWithTag("nav_item_main").performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(appName, substring = true).onFirst().assertIsDisplayed()
     }
