@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 21,
-    "identityHash": "1dd3c67a6f22ed4be20b0f74ebdc7742",
+    "version": 22,
+    "identityHash": "f036b50937ac152354f0315c7da869bd",
     "entities": [
       {
         "tableName": "noise_records",
@@ -303,7 +303,7 @@
       },
       {
         "tableName": "sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `deviceAddress` TEXT NOT NULL, `deviceName` TEXT NOT NULL, `weighting` TEXT, `timeWeighting` TEXT, `range` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `deviceAddress` TEXT NOT NULL, `deviceName` TEXT NOT NULL, `weighting` TEXT, `timeWeighting` TEXT, `range` TEXT, `rohdatenPruefsumme` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -347,6 +347,11 @@
           {
             "fieldPath": "range",
             "columnName": "range",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rohdatenPruefsumme",
+            "columnName": "rohdatenPruefsumme",
             "affinity": "TEXT"
           }
         ],
@@ -710,7 +715,7 @@
       },
       {
         "tableName": "dokumentationsfotos",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `kategorie` TEXT NOT NULL, `dateiPfad` TEXT NOT NULL, `aufgenommenAm` INTEGER NOT NULL, `notiz` TEXT, `driveFileId` TEXT, `pruefsumme` TEXT, `nachtraeglichHinzugefuegt` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `kategorie` TEXT NOT NULL, `dateiPfad` TEXT NOT NULL, `aufgenommenAm` INTEGER NOT NULL, `notiz` TEXT, `driveFileId` TEXT, `pruefsumme` TEXT, `nachtraeglichHinzugefuegt` INTEGER NOT NULL, `geometrieTag` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -762,6 +767,11 @@
             "columnName": "nachtraeglichHinzugefuegt",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "geometrieTag",
+            "columnName": "geometrieTag",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -959,11 +969,77 @@
             "id"
           ]
         }
+      },
+      {
+        "tableName": "report_config",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `schaetzpegelTeilerfassungDb` REAL NOT NULL, `schaetzpegelMessfensterAbbruchDb` REAL NOT NULL, `tierSchwelleVollmessungProzent` REAL NOT NULL, `tierSchwelleTeilerfassungProzent` REAL NOT NULL, `adresse` TEXT NOT NULL, `gebietseinstufung` TEXT NOT NULL, `hardwareId` TEXT NOT NULL, `geraeteUnsicherheitDb` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "schaetzpegelTeilerfassungDb",
+            "columnName": "schaetzpegelTeilerfassungDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "schaetzpegelMessfensterAbbruchDb",
+            "columnName": "schaetzpegelMessfensterAbbruchDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tierSchwelleVollmessungProzent",
+            "columnName": "tierSchwelleVollmessungProzent",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tierSchwelleTeilerfassungProzent",
+            "columnName": "tierSchwelleTeilerfassungProzent",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adresse",
+            "columnName": "adresse",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gebietseinstufung",
+            "columnName": "gebietseinstufung",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardwareId",
+            "columnName": "hardwareId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geraeteUnsicherheitDb",
+            "columnName": "geraeteUnsicherheitDb",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1dd3c67a6f22ed4be20b0f74ebdc7742')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f036b50937ac152354f0315c7da869bd')"
     ]
   }
 }

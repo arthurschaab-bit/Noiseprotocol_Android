@@ -216,6 +216,55 @@ Aufnahme-Bildschirm für Videos, Upload-Übersicht, Speicherplatz-Abschnitt in d
 Bildschirm „Wie die Lärmerkennung arbeitet". Alle sind kompiliert und lint-sauber, ihre Logik ist
 getestet — die Optik ist ungeprüft.
 
+### F7 — Huawei/EMUI-Fallback (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Auf einem Huawei-Gerät (EMUI): Einstellungen → „Geräte- & Alarm-Diagnose" → „Huawei / EMUI Geschützte Apps prüfen" antippen | Öffnet entweder den Huawei-eigenen Dialog oder (falls dessen Activity nicht exportiert ist) die App-Detailseite — **kein Absturz** | |
+
+Der Absturz (Huawei P30 / ELE-L29, Android 10) war eine ungefangene `SecurityException` beim
+Start einer nicht exportierten EMUI-Systemactivity. Der Fix ist nur über eine simulierte
+`SecurityException` in einem Robolectric-Test belegt, nicht erneut auf echter Huawei-Hardware.
+
+### F8 — Aufnahme-Selbstheilung nach Schreibfehler (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Über mehrere Stunden/Tage laufen lassen, insbesondere über Nacht | Kein stiller, mehrstündiger Aufnahme-Ausfall mehr wie am 11./12.09.2026 (0:10–3:51 Uhr) | |
+| Diagnoseprotokoll danach durchsehen | Kein `AUDIO_FILE_WRITE_FAILED` mehr, oder falls doch: unmittelbar gefolgt von einem automatischen Neustart des Mikrofon-Monitorings statt eines stillen Endes | |
+
+Root Cause war ein Race Condition zwischen dem Mikrofon-Read-Loop und `starteWavAufnahme()`
+(„write failed: EBADF") plus ein `stopSelf()`, das entgegen der bisherigen Annahme **nicht**
+automatisch neu gestartet wird. Siehe README, Abschnitt „Bekannte Einschränkungen".
+
+### F9 — Fotos nachträglich aus der Galerie hinzufügen (Feature 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Im Session-Detail „Aus Galerie" antippen, ein oder mehrere Fotos auswählen | System-Fotopicker öffnet sich **ohne** Berechtigungsdialog | |
+| Danach Kategorie wählen | Foto erscheint in der Liste, sichtbar als „nachträglich hinzugefügt" markiert | |
+| Session-PDF exportieren | Galerie-Foto erscheint im Fotoanhang, Bildunterschrift enthält „nachträglich hinzugefügt" | |
+| Import während eine Messung noch läuft | Funktioniert genau wie bei einer bereits beendeten Session | |
+
+### F10 — Protokollreiter: Tagesgruppierung & erweiterter Filter (Feature 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Protokollreiter mit Sessions an mehreren Tagen öffnen | Sessions erscheinen unter Tages-Kopfzeilen, neuester Tag oben | |
+| Auf eine Tages-Kopfzeile tippen | Klappt die Sessions dieses Tages ein/aus | |
+| Neuen Filter-Button (Schraubenschlüssel-Symbol) antippen | Panel mit dB-Regler, Geräuschtyp-Textfeld und Chips (Favoriten/Ruhezeiten/Messgerät/kalibriert) öffnet sich | |
+| Einen Filter aktivieren, z.B. „nur Favoriten" | Nur Sessions mit mindestens einem passenden Ereignis bleiben sichtbar | |
+| Bestehenden "nur mit Ereignissen"-Filter (Trichter-Symbol) antippen | Blendet jetzt tatsächlich Sessions ohne Ereignisse aus (vorher wirkungslos) | |
+
+### F11 — PCE-323-Mikrofon-Fallback erkennbar (Bugfix 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Messung mit PCE-323 starten, dann Gerät ausschalten/außer Reichweite bringen | Cockpit-Zahl bleibt sichtbar (Mikrofonwert), Einheit wechselt auf „dB (Mikrofon-Fallback)", zusätzlicher roter Hinweistext erscheint | |
+| PCE-323 wieder in Reichweite/einschalten | Anzeige wechselt zurück auf den kalibrierten Wert samt Bewertung (z.B. „dB(A)"), Hinweistext verschwindet | |
+| Reiner Mikrofonlauf (nie ein Messgerät gepinnt) | Anzeige bleibt wie bisher ohne die neue Kennzeichnung | |
+| Zeitraum-/Gesamtbericht über einen Zeitraum mit sowohl PCE- als auch reinen Mikrofon-Sessions exportieren | Pegelverlauf-Diagramm zeigt nur die PCE-Werte; Mikrofon-Zeiträume erscheinen als Lücke. Kennwerte (LAeq/Max/Min) und Ereignisliste enthalten weiterhin beide Quellen | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

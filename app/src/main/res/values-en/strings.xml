@@ -103,6 +103,8 @@
     <string name="cockpit_lmax_label_mic">Maximum</string>
     <string name="cockpit_laeq_label">LAeq (Avg)</string>
     <string name="cockpit_lmax_label">LMax (Peak)</string>
+    <string name="cockpit_meter_fallback_unit">dB (microphone fallback)</string>
+    <string name="cockpit_meter_fallback_hint">Connection to the meter lost – showing uncalibrated microphone readings until the connection is restored.</string>
     <string name="cockpit_quick_event">Quick Event (Manual)</string>
     <string name="cockpit_tap_start_monitoring">Tap to start threshold monitoring</string>
     <string name="cockpit_monitoring_active">Active level monitoring</string>

@@ -660,9 +660,17 @@ class AudioRecordingService : LifecycleService() {
                         updateRollingBuffer()
                         writeToRollingBuffer(pcmBytes, pcmLen)
 
-                        activeWavRecorder?.let { rec ->
-                            rec.writeChunk(pcmBytes, pcmLen)
-                            if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
+                        // Bugfix (Support-Bundle-Auswertung 12.09.2026, Ausfall 0:10 Uhr): ohne
+                        // dieses Lock konnte starteWavAufnahme() den outputStream schliessen (Ende
+                        // der Zieldauer) waehrend genau dieser Read-Loop noch mitten in
+                        // rec.writeChunk() steckte - das ergab "write failed: EBADF (Bad file
+                        // descriptor)". Derselbe Lock in starteWavAufnahme() um das
+                        // Nullsetzen/Schliessen macht writeChunk() und Close gegenseitig atomar.
+                        synchronized(activeWavRecorderLock) {
+                            activeWavRecorder?.let { rec ->
+                                rec.writeChunk(pcmBytes, pcmLen)
+                                if (maxAmplitude > rec.maxAmplitude) rec.maxAmplitude = maxAmplitude.toDouble()
+                            }
                         }
                         videoTonMitschnitt.schreibe(pcmBytes, pcmLen, System.currentTimeMillis())
                     } catch (e: Throwable) {
@@ -728,12 +736,47 @@ class AudioRecordingService : LifecycleService() {
             audioRecord.release()
             NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
 
-            // Ein echter Read- oder Schreibfehler soll nicht zu einem "halb lebenden" Dienst
-            // fuehren. Durch START_STICKY + AudioStartPolicy wird der zuvor aktive Audiopfad beim
-            // Recreate wieder aufgenommen; das Diagnose-Bundle enthaelt gleichzeitig den exakten
-            // Grund.
+            // Bugfix (Support-Bundle-Auswertung 12.09.2026, Ausfall 0:10 Uhr bis 3:51 Uhr): ein
+            // echter Read- oder Schreibfehler rief hier bislang stopSelf() auf, in der Annahme,
+            // START_STICKY wuerde den Dienst danach neu starten. Das stimmt nicht - stopSelf()
+            // nimmt den Dienst explizit aus dem gestarteten Zustand heraus; START_STICKY greift
+            // nur, wenn das SYSTEM den Prozess killt (z.B. Speichermangel), nicht wenn der Dienst
+            // sich selbst beendet. Ergebnis war eine dauerhaft stumme Aufnahme bis zum naechsten
+            // manuellen App-Start. Stattdessen: Mikrofon-Pfad mit kurzer Wartezeit selbst neu
+            // starten (begrenzt auf MAX_AUDIO_MONITORING_RESTART_VERSUCHE, Fenster wird nach einer
+            // Minute ohne weiteren Fehler zurueckgesetzt) - der restliche Dienst (Messgeraet,
+            // Alarmierung, Drive-Sync) bleibt dabei durchgehend aktiv.
             if ((unerwarteterReadFehler != null || unerwarteterSchreibFehler != null) && settingsManager.audioMonitoringWasActive) {
-                stopSelf()
+                val entscheidung = entscheideUeberAudioMonitoringRestart(audioMonitoringRestartZustand, System.currentTimeMillis())
+                audioMonitoringRestartZustand = entscheidung.neuerZustand
+
+                if (entscheidung.neustartVersuchen) {
+                    diagnosticsReporter.breadcrumb(
+                        "AudioService",
+                        "Mikrofon-Monitoring wird nach Fehler automatisch neu gestartet " +
+                            "(Versuch ${audioMonitoringRestartZustand.versuche}/$MAX_AUDIO_MONITORING_RESTART_VERSUCHE)",
+                        data = mapOf(
+                            "readFehler" to unerwarteterReadFehler,
+                            "schreibFehler" to unerwarteterSchreibFehler?.javaClass?.simpleName,
+                        ),
+                    )
+                    delay(1000L)
+                    if (settingsManager.audioMonitoringWasActive) {
+                        isRunning = true
+                        _audioAufnahmeAktiv.value = false
+                        startMonitoring()
+                    }
+                } else {
+                    diagnosticsReporter.breadcrumb(
+                        "AudioService",
+                        "Mikrofon-Monitoring nach ${audioMonitoringRestartZustand.versuche} Fehlversuchen nicht automatisch " +
+                            "wiederhergestellt - Dienst bleibt aktiv, pruefeAudioSollIstAbweichung() meldet den Ausfall weiter",
+                        data = mapOf(
+                            "readFehler" to unerwarteterReadFehler,
+                            "schreibFehler" to unerwarteterSchreibFehler?.javaClass?.simpleName,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -1012,9 +1055,13 @@ class AudioRecordingService : LifecycleService() {
     }
 
     @Volatile private var activeWavRecorder: ActiveWavRecorder? = null
+    /** Schuetzt writeChunk() (Read-Loop) gegen das Nullsetzen+Schliessen in starteWavAufnahme(). */
+    private val activeWavRecorderLock = Any()
     private val triggerWachhund = TriggerWachhund()
     @Volatile private var wavOhneMikrofonGemeldet = false
     @Volatile private var stillerAusfallHinweis: String? = null
+
+    private var audioMonitoringRestartZustand = AudioMonitoringRestartZustand()
 
     private suspend fun starteWavAufnahme(
         initialAmplitude: Double,
@@ -1083,7 +1130,7 @@ class AudioRecordingService : LifecycleService() {
         val actualDurationMs = System.currentTimeMillis() - startWait
         val interrupted = actualDurationMs + 150L < durationMs
 
-        activeWavRecorder = null
+        synchronized(activeWavRecorderLock) { activeWavRecorder = null }
         try {
             fos.close()
             updateWavHeader(file, recorder.totalDataLen)

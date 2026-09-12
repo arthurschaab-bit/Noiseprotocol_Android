@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,6 +26,8 @@ import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.NoiseClassifier
+import com.example.lrmprotokoll.data.DokumentationsFotoEntity
+import com.example.lrmprotokoll.data.FotoKategorie
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
@@ -90,6 +95,10 @@ fun ProtokollDetailScreen(
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showAuditDetails by remember { mutableStateOf(false) }
     var beweisvideos by remember { mutableStateOf<List<com.example.lrmprotokoll.data.BeweisVideoEntity>>(emptyList()) }
+    var fotos by remember { mutableStateOf<List<DokumentationsFotoEntity>>(emptyList()) }
+    // Owner-Feature-Auftrag 12.09.2026: Kategoriewahl fuer einen Galerie-Import - eine Auswahl
+    // gilt fuer den ganzen (moeglicherweise mehrere Fotos umfassenden) Picker-Vorgang.
+    var zeigeGalerieKategorieDialog by remember { mutableStateOf(false) }
 
     // Live-Beobachtung der Session und zugehörigen Daten
     LaunchedEffect(sessionId) {
@@ -142,6 +151,12 @@ fun ProtokollDetailScreen(
             }
         }
 
+        launch {
+            db.dokumentationsFotoDao().fuerSessionFlow(sessionId).collectLatest { geladeneFotos ->
+                fotos = geladeneFotos
+            }
+        }
+
         val initialSession = db.sessionDao().byId(sessionId)
         if (initialSession != null) {
             session = initialSession
@@ -155,6 +170,36 @@ fun ProtokollDetailScreen(
         while (session != null && session?.endedAt == null) {
             jetzt = System.currentTimeMillis()
             delay(1000)
+        }
+    }
+
+    // Owner-Feature-Auftrag 12.09.2026: Fotos nachtraeglich aus der Foto-Galerie des Handys
+    // hinzufuegen - auch waehrend eine Messung noch laeuft (Owner-Entscheidung). Der System-
+    // Fotopicker (kein READ_MEDIA_IMAGES noetig) liefert erst die Uris, danach fragt der Dialog
+    // unten die Kategorie fuer den ganzen Auswahl-Vorgang ab.
+    var ausgewaehlteGalerieUris by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
+    val galeriePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            ausgewaehlteGalerieUris = uris
+            zeigeGalerieKategorieDialog = true
+        }
+    }
+
+    fun importiereGalerieFotos(kategorie: FotoKategorie) {
+        val uris = ausgewaehlteGalerieUris
+        ausgewaehlteGalerieUris = emptyList()
+        zeigeGalerieKategorieDialog = false
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                uris.forEach { uri ->
+                    container.fotoDokumentation.importiereAusGalerie(uri, sessionId, kategorie)
+                }
+            }
+            // Beweismaterial soll wie ein Kamerafoto sofort synchronisiert werden, nicht erst im
+            // naechsten Zyklus (siehe FotoDokumentationSheet).
+            com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(context)
         }
     }
 
@@ -224,7 +269,7 @@ fun ProtokollDetailScreen(
         // LazyColumn besitzt neben den Ereignissen einige feste/bedingte Kopf- und Auditzeilen.
         // Die exakte Zahl sorgt dafuer, dass der Fast-Scroller bis zum wirklichen Listenende
         // abbildet, ohne dafuer 20.000+ Eintraege zu materialisieren.
-        val fastScrollItemCount = 4 +
+        val fastScrollItemCount = 5 +
             (if (sessionRecords.isNotEmpty()) 1 + sessionRecords.size else 0) +
             (if (beweisvideos.isNotEmpty()) 1 else 0) +
             (if (ausfallbaender.isNotEmpty()) 1 + ausfallbaender.size else 0)
@@ -472,6 +517,83 @@ fun ProtokollDetailScreen(
                 }
             }
 
+            // 4c. FOTOS (inkl. nachträglich aus der Galerie hinzugefügte, Owner-Feature-Auftrag
+            // 12.09.2026 - immer als eigenes Item gerendert, auch ohne vorhandene Fotos, damit
+            // der "Aus Galerie"-Button jederzeit erreichbar ist).
+            item {
+                NoiseCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Fotos (${fotos.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            TextButton(
+                                onClick = {
+                                    galeriePicker.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.testTag("btn_foto_galerie_hinzufuegen"),
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Aus Galerie")
+                            }
+                        }
+                        if (fotos.isEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Noch keine Fotos für diese Session.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            fotos.forEach { foto ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = FotoKategorie.vonName(foto.kategorie).anzeigename,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                            if (foto.nachtraeglichHinzugefuegt) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                StatusPill(text = "nachträglich hinzugefügt", type = StatusPillType.NEUTRAL)
+                                            }
+                                        }
+                                        Text(
+                                            text = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
+                                                .format(Date(foto.aufgenommenAm)),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        foto.notiz?.let { notiz ->
+                                            Text(notiz, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                    IconButton(onClick = { scope.launch { container.fotoDokumentation.loesche(foto.id) } }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Foto löschen")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 5. REVISIONSSICHERE AUDIT-DETAILS (Aufklappbar für Techniker/Behörden)
             item {
                 NoiseCard(
@@ -565,6 +687,46 @@ fun ProtokollDetailScreen(
                 }
             }
         }
+    }
+
+    // Owner-Feature-Auftrag 12.09.2026: Kategoriewahl fuer einen Galerie-Import-Vorgang. Gilt
+    // fuer alle im Picker ausgewaehlten Fotos gemeinsam - eine erneute Auswahl je Einzelfoto
+    // waere bei "mehrere auf einmal" (Owner-Entscheidung) nur unnoetige Klickarbeit.
+    if (zeigeGalerieKategorieDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                zeigeGalerieKategorieDialog = false
+                ausgewaehlteGalerieUris = emptyList()
+            },
+            title = { Text("Kategorie wählen") },
+            text = {
+                Column {
+                    Text("${ausgewaehlteGalerieUris.size} Foto(s) aus der Galerie - welcher Kategorie zuordnen?")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FotoKategorie.entries.forEach { kategorie ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { importiereGalerieFotos(kategorie) }
+                                .padding(vertical = 10.dp)
+                                .testTag("galerie_kategorie_${kategorie.name}"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(kategorie.anzeigename, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = {
+                    zeigeGalerieKategorieDialog = false
+                    ausgewaehlteGalerieUris = emptyList()
+                }) {
+                    Text("Abbrechen")
+                }
+            },
+        )
     }
 }
 

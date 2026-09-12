@@ -131,6 +131,53 @@ class PeriodenBerichtDatenTest {
         assertTrue(bericht.ausfallbaender.isEmpty())
     }
 
+    /**
+     * Bugfix (Owner-Feedback 12.09.2026, "im Gesamtbericht keine Schallwerte mischen"): enthaelt
+     * ein Zeitraum sowohl eine Messgeraet- als auch eine reine Mikrofon-Session, darf das
+     * Pegelverlauf-Diagramm nicht beide Quellen im selben Graphen zeigen - kalibrierte dBA-Werte
+     * und unkalibrierte Mikrofonwerte sind nicht vergleichbar. Kennwerte (LAeq/Max/Min, weiterhin
+     * ueber ALLE Messwerte gerechnet, siehe [PeriodenBericht.nurMikrofon]) und die Ereignisliste
+     * sind davon bewusst NICHT betroffen - nur die Diagramm-Daten.
+     */
+    @Test
+    fun diagrammMischtKeineMessgeraetUndMikrofonwerteBeiGemischtemZeitraum() = runBlocking {
+        val basis = 3_250_000_000_000L
+        val von = basis
+        val bis = basis + 100_000
+
+        val meterSessionId = db.sessionDao().insert(
+            SessionEntity(
+                startedAt = von + 1_000, endedAt = von + 2_000,
+                deviceAddress = "EE:FF:00:11:22:33", deviceName = "PCE-323", weighting = "A", timeWeighting = "F",
+            )
+        )
+        val mikrofonSessionId = db.sessionDao().insert(
+            SessionEntity(
+                startedAt = von + 5_000, endedAt = von + 6_000,
+                deviceAddress = "", deviceName = "Smartphone-Mikrofon", weighting = null, timeWeighting = null,
+            )
+        )
+        db.measurementDao().insertAll(
+            listOf(
+                MeasurementEntity(sessionId = meterSessionId, timestamp = von + 1_500, levelDb = 60.0, weighting = "A", flags = 0),
+                MeasurementEntity(sessionId = mikrofonSessionId, timestamp = von + 5_500, levelDb = 90.0, weighting = null, flags = 0),
+            )
+        )
+
+        val bericht = ermittlePeriodenBericht(db, von, bis)
+
+        // Kennwerte bleiben bewusst UNVERAENDERT ueber beide Quellen gerechnet (Owner-Feedback:
+        // "ich meinte nicht in einem Diagramm darstellen" - nur das Diagramm soll nicht mischen).
+        assertTrue("Kennwerte bleiben ueber beide Quellen gerechnet", bericht.kennwerte.sampleCount >= 2)
+        assertEquals("Kennwerte-Max darf weiterhin den Mikrofonwert enthalten", 90.0, bericht.kennwerte.maxDb!!, 0.01)
+        val punkteImDiagramm = bericht.chartSpalten.sumOf { it.anzahl }
+        assertTrue(
+            "Diagramm darf den Mikrofon-Messwert (90 dB) nicht enthalten, wenn auch eine Messgeraet-Session im Zeitraum liegt",
+            bericht.chartSpalten.none { it.maxDb >= 90.0 },
+        )
+        assertTrue("Diagramm muss den kalibrierten Messwert weiterhin zeigen", punkteImDiagramm >= 1)
+    }
+
     @Test
     fun filtertEreignisseAufDenZeitraum() = runBlocking {
         val basis = 3_200_000_000_000L

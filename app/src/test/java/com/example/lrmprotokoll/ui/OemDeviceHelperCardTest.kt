@@ -2,9 +2,14 @@ package com.example.lrmprotokoll.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -22,6 +27,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.util.ReflectionHelpers
 
 /**
  * Testluecken-Auftrag Stufe 6: ersetzt den bisherigen reinen Render-Smoke-Test durch echte
@@ -119,6 +125,45 @@ class OemDeviceHelperCardTest {
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, gestarteteIntent.action)
+        assertEquals("package:${context.packageName}", gestarteteIntent.data.toString())
+    }
+
+    /**
+     * Bugfix (Geraetetest Huawei P30 / ELE-L29, EMUI auf Android 10): dort existiert die Ziel-
+     * Activity "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity" zwar, ist
+     * aber nicht exportiert - startActivity() wirft dann eine SecurityException statt einer
+     * ActivityNotFoundException. Der bisherige Code fing nur Letztere ab, der Klick auf
+     * "Huawei / EMUI Geschützte Apps prüfen" crashte die App. Regressionstest: simuliert die
+     * SecurityException und prueft, dass stattdessen der App-Detailseiten-Fallback startet.
+     */
+    private class SecurityExceptionWerfenderContext(base: Context) : ContextWrapper(base) {
+        override fun startActivity(intent: Intent) {
+            if (intent.component?.packageName == "com.huawei.systemmanager") {
+                throw SecurityException("Permission Denial: not exported from uid 10123")
+            }
+            super.startActivity(intent)
+        }
+    }
+
+    @Test
+    fun klickAufHuaweiButtonBeiSecurityExceptionCrashtNichtSondernFaelltAufAppDetailsZurueck() {
+        ReflectionHelpers.setStaticField(Build::class.java, "MANUFACTURER", "HUAWEI")
+        konfiguriereAlsOptimal()
+
+        composeRule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides SecurityExceptionWerfenderContext(LocalContext.current)
+            ) {
+                OemDeviceHelperCard()
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Prüfung nötig").assertIsDisplayed()
+        composeRule.onNodeWithText("Huawei / EMUI Geschützte Apps prüfen").assertIsDisplayed().performClick()
+
+        val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, gestarteteIntent.action)
         assertEquals("package:${context.packageName}", gestarteteIntent.data.toString())
     }
 }

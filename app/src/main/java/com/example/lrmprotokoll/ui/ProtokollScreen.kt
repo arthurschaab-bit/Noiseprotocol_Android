@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,11 +26,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
+import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
+import com.example.lrmprotokoll.messreihe.SessionFilterState
+import com.example.lrmprotokoll.messreihe.gruppiereSessionsNachTag
+import com.example.lrmprotokoll.messreihe.sessionPasstFilter
 import com.example.lrmprotokoll.report.leqBezeichnung
 import com.example.lrmprotokoll.report.lmaxBezeichnung
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.Duration
 import java.util.*
@@ -39,7 +47,7 @@ const val PROTOKOLL_SEARCH_BAR_TAG = "protokoll_search_bar"
 /**
  * Moderner Protokoll-History Screen nach Screen 4 des neuen Designs.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ProtokollScreen(
     onBack: () -> Unit,
@@ -52,18 +60,54 @@ fun ProtokollScreen(
     val sessions by container.database.sessionDao().alle().collectAsState(initial = emptyList())
     val db = container.database
 
+    // Bugfix (Owner-Feedback 12.09.2026): "+ Neue Messung" macht keinen Sinn, solange schon eine
+    // Messung laeuft - es gibt keine zweite, parallele Messung, der Button fuehrt nur zurueck ins
+    // Cockpit der bereits laufenden. Dieselbe Quelle wie die Mikrofon-Statusanzeige im Cockpit
+    // (MainActivity.kt).
+    val messungLaeuft by AudioRecordingService.laeuft.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
     var filterOnlyWithEvents by remember { mutableStateOf(false) }
     var zeigeMenue by remember { mutableStateOf(false) }
 
-    val filteredSessions = remember(sessions, searchQuery, filterOnlyWithEvents) {
+    // Owner-Feature-Auftrag 12.09.2026: nach Tagen gruppieren, nach denselben Kriterien wie die
+    // Startseite filterbar (SessionFilterState, auf Sessions statt Einzelereignisse angewendet).
+    var sessionFilter by remember { mutableStateOf(SessionFilterState()) }
+    var showSessionFilterPanel by remember { mutableStateOf(false) }
+    var sessionEvents by remember { mutableStateOf<Map<Long, List<NoiseRecord>>>(emptyMap()) }
+    val eingeklappteTage = remember { mutableStateListOf<String>() }
+
+    // Ereignisse je Session laden - dieselbe Abfrage, die auch ModernSessionCard fuer die
+    // Ereigniszahl je Karte nutzt, hier einmal fuer Filter/Gruppierung vorab.
+    LaunchedEffect(sessions) {
+        sessionEvents = if (sessions.isEmpty()) {
+            emptyMap()
+        } else {
+            withContext(Dispatchers.IO) {
+                sessions.associate { s ->
+                    s.id to db.noiseDao().zwischenZeitpunkt(s.startedAt, s.endedAt ?: System.currentTimeMillis())
+                }
+            }
+        }
+    }
+
+    val filteredSessions = remember(sessions, searchQuery, filterOnlyWithEvents, sessionFilter, sessionEvents) {
         sessions.filter { s ->
             val matchQuery = searchQuery.isBlank() ||
                     s.deviceName.contains(searchQuery, ignoreCase = true) ||
                     SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(s.startedAt).contains(searchQuery, ignoreCase = true)
-            matchQuery
+            if (!matchQuery) return@filter false
+
+            val ereignisse = sessionEvents[s.id] ?: emptyList()
+            // Bugfix nebenbei entdeckt: filterOnlyWithEvents stand schon im remember()-Schluessel,
+            // wurde im Filter selbst aber nie ausgewertet - der Button im TopAppBar tat bislang
+            // nichts.
+            if (filterOnlyWithEvents && ereignisse.isEmpty()) return@filter false
+
+            sessionPasstFilter(s, ereignisse, sessionFilter)
         }
     }
+    val gruppierteSessions = remember(filteredSessions) { gruppiereSessionsNachTag(filteredSessions) }
 
     Scaffold(
         topBar = {
@@ -88,6 +132,22 @@ fun ProtokollScreen(
                             tint = if (filterOnlyWithEvents) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    // Owner-Feature-Auftrag 12.09.2026: erweiterter Filter (dB-Bereich, Favoriten,
+                    // Ruhezeiten, Messgeraet/Mikrofon, kalibriert, Geraeuschtyp) - eigener Button,
+                    // um den bestehenden einfachen "nur mit Ereignissen"-Umschalter oben nicht zu
+                    // veraendern (Instrumented-Test klickt genau den).
+                    IconButton(
+                        onClick = { showSessionFilterPanel = !showSessionFilterPanel },
+                        modifier = Modifier.testTag("btn_session_filter_panel"),
+                    ) {
+                        BadgedBox(badge = { if (sessionFilter.istAktiv) Badge() }) {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = stringResource(R.string.filter_title),
+                                tint = if (sessionFilter.istAktiv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     if (onOpenSettings != null) {
                         Box {
                             IconButton(onClick = { zeigeMenue = true }, modifier = Modifier.testTag("btn_daten_menu")) {
@@ -109,7 +169,7 @@ fun ProtokollScreen(
             )
         },
         floatingActionButton = {
-            if (onStartNewMeasurement != null) {
+            if (onStartNewMeasurement != null && !messungLaeuft) {
                 ExtendedFloatingActionButton(
                     onClick = onStartNewMeasurement,
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -147,6 +207,74 @@ fun ProtokollScreen(
                     .fillMaxWidth()
                     .testTag(PROTOKOLL_SEARCH_BAR_TAG)
             )
+
+            AnimatedVisibility(visible = showSessionFilterPanel) {
+                Column(modifier = Modifier.padding(top = 12.dp).testTag("panel_session_filter")) {
+                    Text(
+                        text = stringResource(R.string.filter_level_range, sessionFilter.minDb.toInt(), sessionFilter.maxDb.toInt()),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    RangeSlider(
+                        value = sessionFilter.minDb..sessionFilter.maxDb,
+                        onValueChange = { range ->
+                            sessionFilter = sessionFilter.copy(minDb = range.start, maxDb = range.endInclusive)
+                        },
+                        valueRange = 0f..120f,
+                        modifier = Modifier.padding(horizontal = 4.dp).testTag("slider_session_filter_db"),
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = sessionFilter.labelQuery,
+                        onValueChange = { sessionFilter = sessionFilter.copy(labelQuery = it) },
+                        label = { Text("Geräuschtyp") },
+                        placeholder = { Text("z. B. Bohren") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("input_session_filter_label"),
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        FilterChip(
+                            selected = sessionFilter.onlyFavorites,
+                            onClick = { sessionFilter = sessionFilter.copy(onlyFavorites = !sessionFilter.onlyFavorites) },
+                            label = { Text(stringResource(R.string.filter_favorites)) },
+                            leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.testTag("chip_session_filter_favorites"),
+                        )
+                        FilterChip(
+                            selected = sessionFilter.onlyQuietHours,
+                            onClick = { sessionFilter = sessionFilter.copy(onlyQuietHours = !sessionFilter.onlyQuietHours) },
+                            label = { Text(stringResource(R.string.filter_quiet_hours)) },
+                            modifier = Modifier.testTag("chip_session_filter_quiet_hours"),
+                        )
+                        FilterChip(
+                            selected = sessionFilter.onlyMeter,
+                            onClick = { sessionFilter = sessionFilter.copy(onlyMeter = !sessionFilter.onlyMeter) },
+                            label = { Text(stringResource(R.string.filter_only_meter)) },
+                            modifier = Modifier.testTag("chip_session_filter_only_meter"),
+                        )
+                        FilterChip(
+                            selected = sessionFilter.onlyCalibrated,
+                            onClick = { sessionFilter = sessionFilter.copy(onlyCalibrated = !sessionFilter.onlyCalibrated) },
+                            label = { Text(stringResource(R.string.filter_only_calibrated)) },
+                            modifier = Modifier.testTag("chip_session_filter_only_calibrated"),
+                        )
+                        if (sessionFilter.istAktiv) {
+                            FilterChip(
+                                selected = true,
+                                onClick = { sessionFilter = SessionFilterState() },
+                                label = { Text(stringResource(R.string.filter_active_reset)) },
+                                leadingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.testTag("chip_session_filter_reset"),
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -189,12 +317,54 @@ fun ProtokollScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    items(filteredSessions, key = { it.id }) { session ->
-                        ModernSessionCard(
-                            session = session,
-                            db = db,
-                            onClick = { onOpenSession(session.id) }
-                        )
+                    // Owner-Feature-Auftrag 12.09.2026: Sessions nach Kalendertag gruppiert,
+                    // dieselbe Optik (einklappbare Kopfzeile mit Anzahl) wie die Tagesgruppen auf
+                    // der Startseite (MainActivity.kt, gruppiereNachTag).
+                    gruppierteSessions.forEach { (tag, sessionsDesTages) ->
+                        val eingeklappt = eingeklappteTage.contains(tag)
+                        item(key = "tag_$tag") {
+                            Surface(
+                                onClick = {
+                                    if (eingeklappt) eingeklappteTage.remove(tag) else eingeklappteTage.add(tag)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("protokoll_tagesheader_$tag"),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = MaterialTheme.shapes.small,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = if (eingeklappt) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                        contentDescription = null,
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = tag,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.protocol_records_count, sessionsDesTages.size),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        if (!eingeklappt) {
+                            items(sessionsDesTages, key = { it.id }) { session ->
+                                ModernSessionCard(
+                                    session = session,
+                                    db = db,
+                                    onClick = { onOpenSession(session.id) }
+                                )
+                            }
+                        }
                     }
 
                     item {

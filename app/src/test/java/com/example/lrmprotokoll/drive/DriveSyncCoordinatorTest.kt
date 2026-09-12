@@ -560,6 +560,53 @@ class DriveSyncCoordinatorTest {
         assertTrue(settings.driveSyncLastSuccessAt > 0)
     }
 
+    /**
+     * Bugfix (Owner-Meldung 12.09.2026, "WAV fehlt in Drive"): ein fehlgeschlagener WAV-ZIP-
+     * Upload landete bisher NUR in Logcat (Log.w), nie im Diagnoseprotokoll/Support-Bundle -
+     * anders als bei Fotos ([ladeFotosHoch]) oder der Datenbank-Sicherung. Genau das hat die
+     * Fehlersuche zum gemeldeten Fall verhindert. Dieser Test belegt, dass ein fehlgeschlagener
+     * WAV-Upload jetzt als [com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_UPLOAD_FAILED]
+     * im [com.example.lrmprotokoll.diagnose.DiagnosticsReporter] auftaucht.
+     */
+    @Test
+    fun fehlgeschlagenerWavUploadWirdImDiagnoseprotokollGemeldet() = runTest {
+        val tempWav = java.io.File.createTempFile("test_audio", ".wav").apply {
+            writeBytes(ByteArray(100) { 1 })
+            deleteOnExit()
+        }
+        val customNoiseDao = object : FakeNoiseDao() {
+            override suspend fun getAlleAktiven(): List<NoiseRecord> = listOf(
+                NoiseRecord(
+                    id = 1L,
+                    timestamp = uhr.now().toEpochMilli(),
+                    amplitude = 50.0,
+                    dbValue = 65.0,
+                    filePath = tempWav.absolutePath,
+                )
+            )
+        }
+        settings.driveUploadWav = true
+        driveApi.dateiAnlegenErgebnis = Result.failure(
+            DriveApiException("Kein Zugriffstoken verfügbar", httpCode = 401)
+        )
+        val reporter = com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
+            initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(appVersion = "1.0", buildType = "debug"),
+        )
+
+        val koordinator = DriveSyncCoordinator(
+            driveApi = driveApi, levelSampleDao = levelSampleDao, dailyFileDao = dailyFileDao,
+            noiseDao = customNoiseDao, settings = settings, now = uhr, zone = zone,
+            diagnosticsReporter = reporter,
+        )
+        koordinator.syncEinenZyklus()
+
+        val gemeldet = reporter.recentEvents().filter {
+            it.code == com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_UPLOAD_FAILED
+        }
+        assertTrue("Ein fehlgeschlagener WAV-Upload muss gemeldet werden", gemeldet.isNotEmpty())
+        assertEquals("DriveSyncCoordinator", gemeldet.single().component)
+    }
+
     // ------------------------------------------------------------------ M11 Etappe B: Videos
 
     private fun videoEintrag(
