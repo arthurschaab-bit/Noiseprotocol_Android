@@ -194,8 +194,19 @@ fun LiveCockpitCard(
 
     val istMikrofonMessung = letzteSession?.deviceAddress?.isBlank() == true
     val isCalibrated = dienstAktiv && verbindungszustand == ConnectionState.STREAMING && letzterFrame != null
+    // Bugfix (Owner-Feedback 12.09.2026): der Mikrofon-Fallback waehrend eines PCE-323-
+    // Verbindungsausfalls bleibt erlaubt ("kann passieren", der Trigger/die Aufnahme laufen
+    // unveraendert weiter) - er darf hier aber nicht wie ein echter kalibrierter Messwert
+    // aussehen. Nur bei einer echten Messgeraet-Session (kein reiner Mikrofonlauf) ist der
+    // Mikrofonwert ueberhaupt ein FALLBACK - bei einem reinen Mikrofonlauf ist er schon immer die
+    // normale, einzige Quelle und bleibt unveraendert ohne diese Kennzeichnung.
+    val istMeterFallback = dienstAktiv && !istMikrofonMessung && !isCalibrated
     val liveLevel = if (isCalibrated) letzterFrame?.level else if (dienstAktiv) micDb else null
-    val weightingText = if (isCalibrated) letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB" else "dB"
+    val weightingText = when {
+        isCalibrated -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
+        istMeterFallback -> stringResource(R.string.cockpit_meter_fallback_unit)
+        else -> "dB"
+    }
 
     val sessionStartTime = letzteSession?.startedAt
     val elapsedSeconds = if (dienstAktiv && sessionStartTime != null) ((jetzt - sessionStartTime) / 1000).coerceAtLeast(0) else 0L
@@ -378,6 +389,16 @@ fun LiveCockpitCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (istMeterFallback) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.cockpit_meter_fallback_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("cockpit_meter_fallback_hint"),
+                )
+            }
         }
 
         Card(

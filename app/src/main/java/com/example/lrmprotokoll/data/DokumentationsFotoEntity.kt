@@ -56,6 +56,15 @@ data class DokumentationsFotoEntity(
     val driveFileId: String? = null,
     /** SHA-256 der Bilddatei, hex, kleingeschrieben. */
     val pruefsumme: String? = null,
+    /**
+     * Owner-Feature-Auftrag 12.09.2026: `true`, wenn das Foto nicht waehrend der Messung
+     * (Kamera, [FotoDokumentation.uebernehmeAufnahme]) sondern nachtraeglich aus der Foto-Galerie
+     * des Handys importiert wurde ([FotoDokumentation.uebernehmeGalerieFoto]). Fuer die
+     * Beweiskraft relevant: anders als ein Live-Foto belegt ein Galerie-Foto nicht, dass es zum
+     * Messzeitpunkt selbst entstanden ist - deshalb wird es in Detailansicht und PDF-Bericht
+     * sichtbar so gekennzeichnet (Owner-Entscheidung, nicht optional).
+     */
+    val nachtraeglichHinzugefuegt: Boolean = false,
 )
 
 @Dao

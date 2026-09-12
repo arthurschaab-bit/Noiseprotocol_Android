@@ -32,6 +32,14 @@ const val OEM_BATTERY_OPTIMIZATION_BUTTON_TAG = "oem_battery_optimization_button
 const val OEM_EXACT_ALARM_BUTTON_TAG = "oem_exact_alarm_button"
 const val OEM_NOTIFICATION_SETTINGS_BUTTON_TAG = "oem_notification_settings_button"
 
+/** Fallback, wenn der herstellereigene "Geschuetzte Apps"-Intent nicht aufrufbar ist. */
+private fun starteAppDetailsFallback(context: Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:${context.packageName}")
+    }
+    context.startActivity(intent)
+}
+
 /**
  * Erkennt OEM-Besonderheiten (z.B. Xiaomi Pad 6 / HyperOS / MIUI, Tablets ohne Vibrationsmotor)
  * und bietet direkte One-Tap-Lösungen für Berechtigungen, Akku-Ausnahmen und Autostart.
@@ -247,10 +255,14 @@ fun OemDeviceHelperCard(
                                 // Package/Activity variiert zwischen ROM-Versionen und ist nicht
                                 // garantiert vorhanden - Fallback auf die App-Detailseite, kein
                                 // Absturz (PROMPT_M8.md Aufgabe 2).
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                context.startActivity(intent)
+                                starteAppDetailsFallback(context)
+                            } catch (_: SecurityException) {
+                                // Bugfix (Geraetetest Huawei P30/EMUI, Android 10): die Zielactivity
+                                // existiert dort, ist aber nicht exportiert - startActivity() wirft
+                                // dann keine ActivityNotFoundException, sondern eine
+                                // SecurityException ("not exported"). Ungefangen crashte das
+                                // bislang die App. Gleicher Fallback wie oben.
+                                starteAppDetailsFallback(context)
                             }
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)

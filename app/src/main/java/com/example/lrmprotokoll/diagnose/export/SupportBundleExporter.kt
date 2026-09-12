@@ -41,7 +41,14 @@ class SupportBundleExporter(
         bundleDir.listFiles()?.forEach { if (it.isFile && it.name.endsWith(".zip")) it.delete() }
 
         val timestamp = System.currentTimeMillis()
-        val zipFile = File(bundleDir, "support_bundle_$timestamp.zip")
+        // Bugfix (Owner-Feedback 12.09.2026): der bisherige technische Name
+        // "support_bundle_<Unix-Millis>.zip" landete beim Teilen (je nach Zielapp) zusammen mit
+        // dem alten EXTRA_SUBJECT als viel zu langer, kaum lesbarer Dateiname; manche Ziel-Apps
+        // uebernehmen den Klammerinhalt aus dem Subject inkl. schliessender Klammer als
+        // vermeintlichen Dateityp ("...zip)"). Fester, kurzer, lesbarer Name mit Datum/Uhrzeit.
+        val dateiStempel = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date(timestamp))
+        val zipFile = File(bundleDir, "${dateiStempel}_Noise_Protocol_Support_Bundle.zip")
 
         val breadcrumbs = reporter.recentBreadcrumbs()
 
@@ -78,7 +85,10 @@ class SupportBundleExporter(
         return Intent(Intent.ACTION_SEND).apply {
             type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, contentUri)
-            putExtra(Intent.EXTRA_SUBJECT, "Lärmprotokoll Support-Bundle (${zipFile.name})")
+            // Bugfix (Owner-Feedback 12.09.2026): kein Dateiname mehr in Klammern im Betreff -
+            // manche Ziel-Apps (Speichern/Teilen-Ziele) leiten daraus einen eigenen, dann doppelt
+            // verketteten und viel zu langen Dateinamen ab (siehe zipFile-Benennung oben).
+            putExtra(Intent.EXTRA_SUBJECT, "Lärmprotokoll Support-Bundle")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

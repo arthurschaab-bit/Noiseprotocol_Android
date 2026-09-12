@@ -172,6 +172,27 @@ class DriveSyncCoordinator(
                                 val err = uploadResult.exceptionOrNull()
                                 val httpCode = (err as? DriveApiException)?.httpCode
                                 Log.w(TAG, "ZIP-Upload fehlgeschlagen für $dateiName in $tagesSchluessel/WAV: ${err?.message}")
+                                // Bugfix (Owner-Meldung 12.09.2026, "WAV fehlt in Drive"): dieser
+                                // Pfad meldete Fehlschlaege bisher NUR per Log.w (Logcat) - anders
+                                // als ladeFotosHoch()/ladeDatenbankSicherungHoch() landete ein
+                                // fehlgeschlagener WAV-Upload nie im Diagnoseprotokoll/
+                                // Support-Bundle. Genau das hat die Fehlersuche zu diesem Fall
+                                // verhindert: das Support-Bundle zeigte "Kein Zugriffstoken
+                                // verfuegbar" nur fuer die Datenbank-Sicherung, obwohl derselbe
+                                // Tokenfehler vermutlich auch den WAV-Upload betraf.
+                                diagnosticsReporter?.report(
+                                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_UPLOAD_FAILED,
+                                    component = "DriveSyncCoordinator",
+                                    operation = "ladeWavZipsHoch",
+                                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                    cause = err,
+                                    details = mapOf(
+                                        "dateiName" to dateiName,
+                                        "tagesordner" to tagesSchluessel,
+                                        "httpCode" to httpCode,
+                                        "wavCount" to zipPackage.wavCount,
+                                    ),
+                                )
                                 if (httpCode == 403 || httpCode == 429) {
                                     Log.w(TAG, "Drive-Rate-Limit (HTTP $httpCode) beim ZIP-Upload erreicht – breche Batch ab")
                                     break
@@ -184,6 +205,11 @@ class DriveSyncCoordinator(
                                 zipPackagesUploadedCount++
                                 totalWavCountInZips += zipPackage.wavCount
                                 Log.i(TAG, "Stündliches ZIP-Archiv hochgeladen: $dateiName in $tagesSchluessel/WAV (${zipPackage.wavCount} WAVs)")
+                                diagnosticsReporter?.breadcrumb(
+                                    "DriveSync",
+                                    "Stündliches WAV-ZIP hochgeladen: $dateiName",
+                                    data = mapOf("tagesordner" to tagesSchluessel, "wavCount" to zipPackage.wavCount),
+                                )
                             }
                         } else if (!zipPackage.isClosedHour) {
                             // Laufende Stunde existiert bereits, hat aber eventuell neue WAVs erhalten -> Aktualisieren
@@ -202,6 +228,17 @@ class DriveSyncCoordinator(
                                         zipPackagesUploadedCount++
                                         totalWavCountInZips += zipPackage.wavCount
                                         Log.i(TAG, "Stündliches ZIP-Archiv aktualisiert: $dateiName in $tagesSchluessel/WAV")
+                                    } else {
+                                        val err = updateResult.exceptionOrNull()
+                                        Log.w(TAG, "ZIP-Aktualisierung fehlgeschlagen für $dateiName in $tagesSchluessel/WAV: ${err?.message}")
+                                        diagnosticsReporter?.report(
+                                            code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_UPLOAD_FAILED,
+                                            component = "DriveSyncCoordinator",
+                                            operation = "ladeWavZipsHoch.aktualisieren",
+                                            severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                            cause = err,
+                                            details = mapOf("dateiName" to dateiName, "tagesordner" to tagesSchluessel),
+                                        )
                                     }
                                 }
                             }
