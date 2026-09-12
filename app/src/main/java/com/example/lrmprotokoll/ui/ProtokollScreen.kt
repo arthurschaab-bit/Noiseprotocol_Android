@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
@@ -62,6 +63,12 @@ fun ProtokollScreen(
     val scope = rememberCoroutineScope()
     val periodenExport = remember { PeriodenBerichtExport(context) }
     val gesamtberichtExport = remember { GesamtberichtExport(context) }
+
+    // Bugfix (Owner-Feedback 12.09.2026): "+ Neue Messung" macht keinen Sinn, solange schon eine
+    // Messung laeuft - es gibt keine zweite, parallele Messung, der Button fuehrt nur zurueck ins
+    // Cockpit der bereits laufenden. Dieselbe Quelle wie die Mikrofon-Statusanzeige im Cockpit
+    // (MainActivity.kt).
+    val messungLaeuft by AudioRecordingService.laeuft.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var filterOnlyWithEvents by remember { mutableStateOf(false) }
@@ -142,7 +149,7 @@ fun ProtokollScreen(
             )
         },
         floatingActionButton = {
-            if (onStartNewMeasurement != null) {
+            if (onStartNewMeasurement != null && !messungLaeuft) {
                 ExtendedFloatingActionButton(
                     onClick = onStartNewMeasurement,
                     containerColor = MaterialTheme.colorScheme.primary,
