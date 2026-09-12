@@ -246,6 +246,16 @@ automatisch neu gestartet wird. Siehe README, Abschnitt „Bekannte Einschränku
 | Session-PDF exportieren | Galerie-Foto erscheint im Fotoanhang, Bildunterschrift enthält „nachträglich hinzugefügt" | |
 | Import während eine Messung noch läuft | Funktioniert genau wie bei einer bereits beendeten Session | |
 
+### F10 — Protokollreiter: Tagesgruppierung & erweiterter Filter (Feature 12.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Protokollreiter mit Sessions an mehreren Tagen öffnen | Sessions erscheinen unter Tages-Kopfzeilen, neuester Tag oben | |
+| Auf eine Tages-Kopfzeile tippen | Klappt die Sessions dieses Tages ein/aus | |
+| Neuen Filter-Button (Schraubenschlüssel-Symbol) antippen | Panel mit dB-Regler, Geräuschtyp-Textfeld und Chips (Favoriten/Ruhezeiten/Messgerät/kalibriert) öffnet sich | |
+| Einen Filter aktivieren, z.B. „nur Favoriten" | Nur Sessions mit mindestens einem passenden Ereignis bleiben sichtbar | |
+| Bestehenden "nur mit Ereignissen"-Filter (Trichter-Symbol) antippen | Blendet jetzt tatsächlich Sessions ohne Ereignisse aus (vorher wirkungslos) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
