@@ -34,15 +34,9 @@ import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.SessionFilterState
 import com.example.lrmprotokoll.messreihe.gruppiereSessionsNachTag
 import com.example.lrmprotokoll.messreihe.sessionPasstFilter
-import com.example.lrmprotokoll.report.GesamtberichtExport
-import com.example.lrmprotokoll.report.GesamtberichtStammdaten
-import com.example.lrmprotokoll.report.PeriodenBerichtExport
-import com.example.lrmprotokoll.report.ermittleGesamtbericht
-import com.example.lrmprotokoll.report.ermittlePeriodenBericht
 import com.example.lrmprotokoll.report.leqBezeichnung
 import com.example.lrmprotokoll.report.lmaxBezeichnung
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.Duration
@@ -57,17 +51,14 @@ const val PROTOKOLL_SEARCH_BAR_TAG = "protokoll_search_bar"
 @Composable
 fun ProtokollScreen(
     onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     onOpenSession: (Long) -> Unit,
-    onStartNewMeasurement: (() -> Unit)? = null
+    onStartNewMeasurement: (() -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val sessions by container.database.sessionDao().alle().collectAsState(initial = emptyList())
     val db = container.database
-    val scope = rememberCoroutineScope()
-    val periodenExport = remember { PeriodenBerichtExport(context) }
-    val gesamtberichtExport = remember { GesamtberichtExport(context) }
 
     // Bugfix (Owner-Feedback 12.09.2026): "+ Neue Messung" macht keinen Sinn, solange schon eine
     // Messung laeuft - es gibt keine zweite, parallele Messung, der Button fuehrt nur zurueck ins
@@ -77,8 +68,7 @@ fun ProtokollScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var filterOnlyWithEvents by remember { mutableStateOf(false) }
-    var zeigeZeitraumDialog by remember { mutableStateOf(false) }
-    var zeitraumWirdErstellt by remember { mutableStateOf(false) }
+    var zeigeMenue by remember { mutableStateOf(false) }
 
     // Owner-Feature-Auftrag 12.09.2026: nach Tagen gruppieren, nach denselben Kriterien wie die
     // Startseite filterbar (SessionFilterState, auf Sessions statt Einzelereignisse angewendet).
@@ -98,32 +88,6 @@ fun ProtokollScreen(
                     s.id to db.noiseDao().zwischenZeitpunkt(s.startedAt, s.endedAt ?: System.currentTimeMillis())
                 }
             }
-        }
-    }
-    // Owner-Anfrage 09.09.2026: derselbe Zeitraum-Dialog soll wahlweise den knappen
-    // Zeitraumbericht (bisher) oder den vollstaendigen Gesamtbericht mit Geraete-/
-    // Messaufbau-/Randbedingungsangaben aus den Einstellungen erzeugen.
-    var alsGesamtbericht by remember { mutableStateOf(false) }
-
-    fun erstelleUndTeileZeitraumbericht(von: Long, bis: Long) {
-        zeitraumWirdErstellt = true
-        scope.launch {
-            if (alsGesamtbericht) {
-                val datei = withContext(Dispatchers.IO) {
-                    val bericht = ermittleGesamtbericht(db, von, bis)
-                    val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
-                    gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
-                }
-                gesamtberichtExport.teilen(datei)
-            } else {
-                val datei = withContext(Dispatchers.IO) {
-                    val bericht = ermittlePeriodenBericht(db, von, bis)
-                    periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
-                }
-                periodenExport.teilen(datei)
-            }
-            zeitraumWirdErstellt = false
-            zeigeZeitraumDialog = false
         }
     }
 
@@ -150,29 +114,17 @@ fun ProtokollScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = stringResource(R.string.nav_protocol),
+                        text = stringResource(R.string.nav_data),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
-                    if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")) {
-                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
-                        }
-                    } else {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("btn_protokoll_back")) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                        }
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("btn_protokoll_back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
-                    IconButton(onClick = { zeigeZeitraumDialog = true }, modifier = Modifier.testTag("btn_period_report")) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = stringResource(R.string.period_report_action),
-                        )
-                    }
                     IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }, modifier = Modifier.testTag("btn_filter_events")) {
                         Icon(
                             imageVector = AppIcons.FilterList,
@@ -194,6 +146,23 @@ fun ProtokollScreen(
                                 contentDescription = stringResource(R.string.filter_title),
                                 tint = if (sessionFilter.istAktiv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                    if (onOpenSettings != null) {
+                        Box {
+                            IconButton(onClick = { zeigeMenue = true }, modifier = Modifier.testTag("btn_daten_menu")) {
+                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_menu))
+                            }
+                            DropdownMenu(expanded = zeigeMenue, onDismissRequest = { zeigeMenue = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.nav_settings)) },
+                                    onClick = {
+                                        zeigeMenue = false
+                                        onOpenSettings()
+                                    },
+                                    modifier = Modifier.testTag("menu_item_daten_settings"),
+                                )
+                            }
                         }
                     }
                 }
@@ -424,68 +393,6 @@ fun ProtokollScreen(
         }
     }
 
-    if (zeigeZeitraumDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!zeitraumWirdErstellt) zeigeZeitraumDialog = false },
-            title = { Text(stringResource(R.string.period_report_dialog_title)) },
-            text = {
-                if (zeitraumWirdErstellt) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(stringResource(R.string.period_report_generating))
-                    }
-                } else {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().testTag("switch_row_gesamtbericht"),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(stringResource(R.string.period_report_full_toggle))
-                                Text(
-                                    stringResource(R.string.period_report_full_toggle_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Switch(
-                                checked = alsGesamtbericht,
-                                onCheckedChange = { alsGesamtbericht = it },
-                                modifier = Modifier.testTag("switch_gesamtbericht"),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            erstelleUndTeileZeitraumbericht(bis - 7L * 24 * 60 * 60 * 1000, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_7d")) { Text(stringResource(R.string.period_report_preset_7_days)) }
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            erstelleUndTeileZeitraumbericht(bis - 30L * 24 * 60 * 60 * 1000, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_30d")) { Text(stringResource(R.string.period_report_preset_30_days)) }
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            val von = Calendar.getInstance().apply {
-                                set(Calendar.DAY_OF_MONTH, 1)
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }.timeInMillis
-                            erstelleUndTeileZeitraumbericht(von, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_month")) { Text(stringResource(R.string.period_report_preset_this_month)) }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { zeigeZeitraumDialog = false }, enabled = !zeitraumWirdErstellt, modifier = Modifier.testTag("btn_period_dialog_cancel")) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
-        )
-    }
 }
 
 @Composable

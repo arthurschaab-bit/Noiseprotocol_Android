@@ -81,7 +81,7 @@ class MainActivityNavigationAndroidTest {
         composeRule.waitForIdle()
         val startEntry = navController.currentBackStackEntry!!.id
         repeat(3) {
-            composeRule.onNodeWithTag("nav_item_settings").performClick()
+            composeRule.onNodeWithTag("nav_item_protokoll").performClick()
             composeRule.onNodeWithTag("nav_item_main").performClick()
             composeRule.waitForIdle()
             assertEquals(startEntry, navController.currentBackStackEntry!!.id)
@@ -106,7 +106,7 @@ class MainActivityNavigationAndroidTest {
         }
         setNavigationContent()
         repeat(3) {
-            composeRule.onNodeWithTag("nav_item_settings").performClick()
+            composeRule.onNodeWithTag("nav_item_protokoll").performClick()
             composeRule.onNodeWithTag("nav_item_main").performClick()
             composeRule.waitForIdle()
             composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
@@ -116,27 +116,16 @@ class MainActivityNavigationAndroidTest {
     }
 
     @Test
-    fun drawerLaesstSichOeffnenUndNavigiertZuAllenZielen() {
+    fun datenTabDreiPunktMenueNavigiertZuEinstellungen() {
+        // Layout-Umbau (Owner-Vorgabe 12.09.2026): der Navigations-Drawer ist entfallen,
+        // Einstellungen haengt jetzt am Drei-Punkt-Menue jedes Hauptreiters - hier am
+        // Daten-Tab (ehemals Protokoll) im vollen Navigationsgraphen geprueft, nicht nur isoliert
+        // an ProtokollScreen.
         setNavigationContent()
-        composeRule.onNodeWithTag("btn_navigation_drawer").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("app_drawer_sheet").assertIsDisplayed()
-        composeRule.onNodeWithTag("drawer_item_diagnose").performClick()
-        composeRule.onAllNodesWithText(composeRule.activity.getString(R.string.nav_diagnose)).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
-        composeRule.onNodeWithTag("drawer_item_settings").performClick()
+        composeRule.onNodeWithTag("nav_item_protokoll").performClick()
+        composeRule.onNodeWithTag("btn_daten_menu").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("menu_item_daten_settings").assertIsDisplayed().performClick()
         composeRule.onAllNodesWithText(composeRule.activity.getString(R.string.nav_settings)).onFirst().assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_navigation_drawer").performClick()
-        composeRule.onNodeWithTag("drawer_item_main").performClick()
-        // Eindeutiger Tag statt Text-Suche, da der App-Name auch im (immer komponierten, aber
-        // geschlossenen) Navigations-Drawer vorkommt.
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            try {
-                composeRule.onNodeWithTag("home_title").assertIsDisplayed()
-                true
-            } catch (e: AssertionError) {
-                false
-            }
-        }
     }
 
     @Test
@@ -165,8 +154,8 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("nav_item_main").assertIsDisplayed().assertIsSelected()
         composeRule.onNodeWithTag("nav_item_protokoll").performClick()
         composeRule.onNodeWithTag("nav_item_protokoll").assertIsSelected()
-        composeRule.onNodeWithTag("nav_item_settings").performClick()
-        composeRule.onNodeWithTag("nav_item_settings").assertIsSelected()
+        composeRule.onNodeWithTag("nav_item_bericht").performClick()
+        composeRule.onNodeWithTag("nav_item_bericht").assertIsSelected()
         repeat(3) {
             composeRule.onNodeWithTag("nav_item_main").performClick()
             composeRule.onNodeWithTag("nav_item_protokoll").performClick()

@@ -25,6 +25,15 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Chaquopy (Bericht-Umbau) braucht auf der Baumaschine selbst ein Python 3.11, um pip
+      # waehrend des Gradle-Builds auszufuehren - unabhaengig vom Python, das spaeter in die APK
+      # eingebettet wird. Ohne diesen Schritt bricht installDebugPythonRequirements mit
+      # "Couldn't find Python 3.11" ab, weil ubuntu-latest keine feste 3.11 vorinstalliert hat.
+      - name: Set up Python 3.11 (Chaquopy build requirement)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:

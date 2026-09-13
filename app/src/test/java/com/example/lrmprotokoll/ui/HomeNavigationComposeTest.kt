@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -43,6 +44,10 @@ class HomeNavigationComposeTest {
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
+        // Layout-Umbau (Owner-Vorgabe 12.09.2026): Einstellungen haengt nicht mehr an einem
+        // eigenen Bottom-Nav-Tab, sondern am Drei-Punkt-Menue des Start-Screens.
+        composeRule.onNodeWithTag("btn_overflow_menu").performClick()
+        composeRule.waitForIdle()
         val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
@@ -52,17 +57,17 @@ class HomeNavigationComposeTest {
     }
 
     @Test
-    fun alleDreiNavigationszieleSindBeschriftetAufDemStartbildschirm() {
+    fun alleDreiHauptreiterSindBeschriftetAufDemStartbildschirm() {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { AppNavigation() }
         composeRule.waitForIdle()
 
         val homeLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
-        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
-        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        val dataLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
+        val reportLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_report)
 
-        listOf(homeLabel, protocolLabel, settingsLabel).forEach { label ->
+        listOf(homeLabel, dataLabel, reportLabel).forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }
@@ -75,13 +80,18 @@ class HomeNavigationComposeTest {
         composeRule.waitForIdle()
 
         val homeLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_start)
-        val protocolLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
-        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
+        val dataLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
+        val reportLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_report)
 
+        composeRule.onNodeWithTag("btn_overflow_menu").performClick()
+        composeRule.waitForIdle()
+        val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
 
-        listOf(homeLabel, protocolLabel, settingsLabel).forEach { label ->
+        // Die Navigationsleiste (jetzt Start/Daten/Bericht statt Start/Protokoll/Einstellungen)
+        // muss weiterhin sichtbar bleiben - Regressionsfix M7c, siehe Klassen-KDoc.
+        listOf(homeLabel, dataLabel, reportLabel).forEach { label ->
             composeRule.onAllNodesWithText(label).onFirst().assertIsDisplayed()
         }
     }

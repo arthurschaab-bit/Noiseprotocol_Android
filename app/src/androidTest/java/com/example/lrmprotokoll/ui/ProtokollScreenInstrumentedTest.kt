@@ -45,7 +45,7 @@ class ProtokollScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val protocolTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_protocol)
+        val protocolTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_data)
         val emptyStateText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.empty_protocol_desc)
         val backDesc = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
 

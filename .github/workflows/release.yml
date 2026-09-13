@@ -26,6 +26,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Chaquopy (Bericht-Umbau) braucht auf der Baumaschine selbst ein Python 3.11, um pip
+      # waehrend des Gradle-Builds auszufuehren - siehe androidci.yml fuer die Begruendung.
+      - name: Set up Python 3.11 (Chaquopy build requirement)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:

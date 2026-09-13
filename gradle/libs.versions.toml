@@ -23,6 +23,7 @@ sentry = "7.14.0"
 camerax = "1.4.1"
 kover = "0.9.9"
 ktlint = "14.2.0"
+chaquopy = "17.0.0"
 
 [libraries]
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
@@ -63,3 +64,4 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+chaquopy = { id = "com.chaquo.python", version.ref = "chaquopy" }

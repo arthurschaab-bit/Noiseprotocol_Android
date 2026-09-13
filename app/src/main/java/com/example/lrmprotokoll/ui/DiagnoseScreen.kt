@@ -69,7 +69,6 @@ const val DIAGNOSE_LAZY_COLUMN_TAG = "diagnose_lazy_column"
 @Composable
 fun DiagnoseScreen(
     onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     onShowSnackbar: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -139,14 +138,8 @@ fun DiagnoseScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.nav_diagnose)) },
                 navigationIcon = {
-                    if (onOpenDrawer != null) {
-                        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")) {
-                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
-                        }
-                    } else {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-                        }
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {

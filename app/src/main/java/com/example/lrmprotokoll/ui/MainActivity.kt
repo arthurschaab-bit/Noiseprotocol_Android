@@ -170,7 +170,6 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     }
 
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -181,154 +180,159 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            AppDrawerContent(
-                currentRoute = currentRoute,
-                onNavigate = { route -> navigiereZuTab(route) },
-                onCloseDrawer = { scope.launch { drawerState.close() } }
-            )
-        }
-    ) {
-        val showBottomNav = currentRoute == null || currentRoute in listOf("main", "meter", "protokoll", "diagnose", "settings")
+    fun navigiereZuEinstellungen(tab: SettingsTab) {
+        navController.navigate("settings?tab=${tab.routeArg}") { launchSingleTop = true }
+    }
 
-        Scaffold(
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                if (showBottomNav) {
-                    AppNavigationBar(
-                        currentRoute = currentRoute,
-                        onNavigateToStart = { navigiereZuTab("main") },
-                        onNavigateToProtokoll = { navigiereZuTab("protokoll") },
-                        onNavigateToDiagnose = { navigiereZuTab("diagnose") },
-                        onNavigateToSettings = { navigiereZuTab("settings") },
-                    )
-                }
+    // Bleibt auch auf Settings/Meter/Diagnose sichtbar (nicht nur den 3 Haupttabs selbst) - das
+    // war schon vor dem Layout-Umbau so (Regressionsfix M7c: "Navileiste fehlt außerhalb von
+    // Start") und soll es bleiben, damit man aus jeder Unterseite direkt in einen anderen
+    // Haupttab wechseln kann, ohne erst zurückzunavigieren.
+    val showBottomNav = currentRoute == null ||
+        currentRoute in listOf("main", "protokoll", "bericht", "meter", "diagnose") ||
+        currentRoute?.startsWith("settings") == true
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (showBottomNav) {
+                AppNavigationBar(
+                    currentRoute = currentRoute,
+                    onNavigateToStart = { navigiereZuTab("main") },
+                    onNavigateToProtokoll = { navigiereZuTab("protokoll") },
+                    onNavigateToBericht = { navigiereZuTab("bericht") },
+                )
             }
-        ) { scaffoldPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = "main",
-                modifier = Modifier.padding(bottom = scaffoldPadding.calculateBottomPadding()),
-            ) {
-                composable("main") {
-                    NoiseProtocolApp(
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
-                        onNavigateToSettings = { navigiereZuTab("settings") },
-                        onNavigateToMeter = { navigiereZuTab("meter") },
-                        onNavigateToProtokoll = { navigiereZuTab("protokoll") },
-                        onNavigateToDiagnose = { navigiereZuTab("diagnose") },
-                        onNavigateToVideo = { navController.navigate("video") },
-                        onShowSnackbar = { msg, action, onAction ->
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = msg,
-                                    actionLabel = action,
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    onAction?.invoke()
-                                }
+        }
+    ) { scaffoldPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = "main",
+            modifier = Modifier.padding(bottom = scaffoldPadding.calculateBottomPadding()),
+        ) {
+            composable("main") {
+                NoiseProtocolApp(
+                    onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
+                    onNavigateToSettings = { navigiereZuEinstellungen(SettingsTab.START) },
+                    onNavigateToMeter = { navigiereZuTab("meter") },
+                    onNavigateToProtokoll = { navigiereZuTab("protokoll") },
+                    onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                    onNavigateToVideo = { navController.navigate("video") },
+                    onShowSnackbar = { msg, action, onAction ->
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = msg,
+                                actionLabel = action,
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                onAction?.invoke()
                             }
                         }
-                    )
-                }
-                composable(
-                    "player?path={path}",
-                    arguments = listOf(navArgument("path") { defaultValue = "" })
-                ) { backStackEntry ->
-                    val path = backStackEntry.arguments?.getString("path") ?: ""
-                    AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
-                }
-                composable("settings") {
-                    SettingsScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
-                        onShowOnboarding = { onboardingErneutAnzeigen = true },
-                        onOpenKiErklaerung = { navController.navigate("ki-erklaerung") },
-                        onOpenDriveUploads = { navController.navigate("drive-uploads") },
-                        onNavigateToDiagnose = { navController.navigate("diagnose") },
-                    )
-                }
-                composable("meter") {
-                    MeterScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } }
-                    )
-                }
-                composable("protokoll") {
-                    ProtokollScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
-                        onStartNewMeasurement = { navigiereZuTab("main") }
-                    )
-                }
-                composable(
-                    "protokoll/{sessionId}",
-                    arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
-                ) { backStackEntry ->
-                    val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
-                    ProtokollDetailScreen(
-                        sessionId = sessionId,
-                        onBack = { navController.popBackStack() },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
-                    )
-                }
-                composable("ki-erklaerung") {
-                    KiErklaerungScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                    )
-                }
+                    }
+                )
+            }
+            composable(
+                "player?path={path}",
+                arguments = listOf(navArgument("path") { defaultValue = "" })
+            ) { backStackEntry ->
+                val path = backStackEntry.arguments?.getString("path") ?: ""
+                AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
+            }
+            composable(
+                "settings?tab={tab}",
+                arguments = listOf(navArgument("tab") { defaultValue = SettingsTab.START.routeArg })
+            ) { backStackEntry ->
+                val tabArg = backStackEntry.arguments?.getString("tab") ?: SettingsTab.START.routeArg
+                SettingsScreen(
+                    initialTab = SettingsTab.vonRouteArg(tabArg),
+                    onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    onShowOnboarding = { onboardingErneutAnzeigen = true },
+                    onOpenKiErklaerung = { navController.navigate("ki-erklaerung") },
+                    onOpenDriveUploads = { navController.navigate("drive-uploads") },
+                    onNavigateToDiagnose = { navController.navigate("diagnose") },
+                    onNavigateToMeter = { navController.navigate("meter") },
+                    onNavigateToTrash = { navController.navigate("trash") },
+                )
+            }
+            composable("meter") {
+                MeterScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("protokoll") {
+                ProtokollScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
+                    onStartNewMeasurement = { navigiereZuTab("main") },
+                    onOpenSettings = { navigiereZuEinstellungen(SettingsTab.DATEN) },
+                )
+            }
+            composable(
+                "protokoll/{sessionId}",
+                arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+                ProtokollDetailScreen(
+                    sessionId = sessionId,
+                    onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                )
+            }
+            composable("bericht") {
+                BerichtScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navigiereZuEinstellungen(SettingsTab.BERICHT) },
+                )
+            }
+            composable("ki-erklaerung") {
+                KiErklaerungScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
 
-                composable("video") {
-                    VideoAufnahmeScreen(
-                        onBack = { navController.popBackStack() },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
-                    )
-                }
+            composable("video") {
+                VideoAufnahmeScreen(
+                    onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                )
+            }
 
-                composable("drive-uploads") {
-                    DriveUploadScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                    )
-                }
+            composable("drive-uploads") {
+                DriveUploadScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
 
-                composable("diagnose") {
-                    DiagnoseScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
-                    )
-                }
-                composable("trash") {
-                    TrashScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                        onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
-                    )
-                }
+            composable("diagnose") {
+                DiagnoseScreen(
+                    onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                )
+            }
+            composable("trash") {
+                TrashScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                )
             }
         }
     }
 }
 
 /**
- * Bottom Navigation Bar mit semantischen Icons für 4 Hauptnavigationsziele.
+ * Bottom Navigation Bar mit semantischen Icons fuer die 3 Hauptreiter (Start/Daten/Bericht).
+ * Einstellungen und Diagnose haengen seit dem Layout-Umbau nicht mehr an der Bottom-Nav, sondern
+ * am Drei-Punkt-Menue jedes Hauptreiters (siehe [SettingsTab]).
  */
 @Composable
 fun AppNavigationBar(
     currentRoute: String?,
     onNavigateToStart: () -> Unit,
     onNavigateToProtokoll: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToDiagnose: (() -> Unit)? = null,
-    onNavigateToMeter: (() -> Unit)? = null,
+    onNavigateToBericht: () -> Unit,
 ) {
     NavigationBar(modifier = Modifier.testTag("bottom_nav_bar")) {
         NavigationBarItem(
@@ -341,16 +345,16 @@ fun AppNavigationBar(
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "protokoll"),
             onClick = onNavigateToProtokoll,
-            icon = { Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.nav_protocol)) },
-            label = { Text(stringResource(R.string.nav_protocol)) },
+            icon = { Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.nav_data)) },
+            label = { Text(stringResource(R.string.nav_data)) },
             modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_protokoll")
         )
         NavigationBarItem(
-            selected = istBottomNavZielAktiv(currentRoute, "settings"),
-            onClick = onNavigateToSettings,
-            icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.nav_settings)) },
-            label = { Text(stringResource(R.string.nav_settings)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_settings")
+            selected = istBottomNavZielAktiv(currentRoute, "bericht"),
+            onClick = onNavigateToBericht,
+            icon = { Icon(Icons.Default.DateRange, contentDescription = stringResource(R.string.nav_report)) },
+            label = { Text(stringResource(R.string.nav_report)) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_bericht")
         )
     }
 }
@@ -361,7 +365,6 @@ internal fun istBottomNavZielAktiv(currentRoute: String?, ziel: String): Boolean
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun NoiseProtocolApp(
-    onOpenDrawer: () -> Unit,
     onNavigateToPlayer: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToMeter: () -> Unit,
@@ -541,14 +544,6 @@ fun NoiseProtocolApp(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("home_title")
                     )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onOpenDrawer,
-                        modifier = Modifier.size(48.dp).testTag("btn_navigation_drawer")
-                    ) {
-                        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
-                    }
                 },
                 actions = {
                     MicrophoneStatusBadge(

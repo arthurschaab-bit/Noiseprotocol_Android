@@ -39,7 +39,6 @@ class ServiceControlComposeTest {
 
         composeRule.setContent {
             NoiseProtocolApp(
-                onOpenDrawer = {},
                 onNavigateToPlayer = {},
                 onNavigateToSettings = {},
                 onNavigateToMeter = {},

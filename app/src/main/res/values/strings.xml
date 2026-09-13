@@ -11,7 +11,8 @@
     <!-- Navigation & Tabs -->
     <string name="nav_start">Start</string>
     <string name="nav_meter">Messgerät</string>
-    <string name="nav_protocol">Protokoll</string>
+    <string name="nav_data">Daten</string>
+    <string name="nav_report">Bericht</string>
     <string name="nav_diagnose">Diagnose</string>
     <string name="nav_settings">Einstellungen</string>
     <string name="nav_trash">Papierkorb</string>
@@ -440,6 +441,10 @@
     <string name="no_audio_event_desc">Reine Pegelmessung (Ohne Audiodatei)</string>
     <string name="label_ai_prefix">KI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
+    <string name="settings_open_meter">Messgerät koppeln</string>
+    <string name="settings_open_trash">Papierkorb öffnen</string>
+    <string name="bericht_intro_title">Berichte erstellen</string>
+    <string name="bericht_intro_desc">Zeitraumbericht oder vollständiger Gesamtbericht mit Stammdaten, Kennwerten und Fotos – als PDF.</string>
     <string name="period_report_action">Zeitraumbericht erstellen</string>
     <string name="period_report_dialog_title">Zeitraumbericht</string>
     <string name="period_report_preset_7_days">Letzte 7 Tage</string>

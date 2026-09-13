@@ -242,13 +242,17 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitUntil(timeoutMillis = 5_000L) {
                 composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Test-Alarm ausgelöst", substring = true).assertIsDisplayed()
+            // Layout-Umbau (12.09.2026): der neue Seiten-Umschalter oben in SettingsScreen
+            // verschiebt den gesamten Inhalt um ein Stueck nach unten - ohne erneutes
+            // performScrollTo() kann der Ergebnistext zwar (fuer waitUntil) im Semantics-Baum
+            // existieren, aber knapp ausserhalb des sichtbaren Viewports liegen.
+            composeRule.onNodeWithText("Test-Alarm ausgelöst", substring = true).performScrollTo().assertIsDisplayed()
 
             composeRule.onNodeWithText("Alarm stoppen").performScrollTo().assertIsDisplayed().performClick()
             composeRule.waitUntil(timeoutMillis = 5_000L) {
                 composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).performScrollTo().assertIsDisplayed()
         } finally {
             settingsManager.alarmTonAktiv = initialAlarmTonAktiv
             settingsManager.alarmierungAktiv = initialAlarmAktiv
