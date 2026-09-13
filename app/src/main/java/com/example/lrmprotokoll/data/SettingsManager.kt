@@ -425,6 +425,18 @@ class SettingsManager(
         get() = prefs.getBoolean("datenbank_sicherung_drive_upload", true)
         set(value) = prefs.edit().putBoolean("datenbank_sicherung_drive_upload", value).apply()
 
+    /**
+     * Zeitpunkt der letzten erfolgreich nach Drive hochgeladenen Datenbank-Sicherung - anders als
+     * [driveSyncLastSuccessAt], das schon bei jedem CSV-/ZIP-Sync gesetzt wird, unabhaengig davon,
+     * ob die Sicherung selbst überhaupt aktiviert ist oder gerade fehlschlägt (siehe
+     * [com.example.lrmprotokoll.drive.DriveSyncCoordinator.ladeDatenbankSicherungHoch]). Owner-
+     * Meldung 12.09.2026 ("Sicherung läuft sporadisch, nicht täglich"): ohne einen eigenen
+     * Zeitstempel ließ sich in der UI nicht erkennen, wann die Sicherung selbst zuletzt gelang.
+     */
+    var datenbankSicherungLastSuccessAt: Long
+        get() = prefs.getLong("datenbank_sicherung_last_success_at", 0L)
+        set(value) = prefs.edit().putLong("datenbank_sicherung_last_success_at", value).apply()
+
     // ---------------------------------------------------------------- M11: Videobeweis
 
     /**

@@ -515,6 +515,7 @@ class DriveSyncCoordinator(
         }
         DriveDatenbankSicherung.hochladen(driveApi, ordnerId, bytes)
             .onSuccess {
+                settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
                 diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${bytes.size} Bytes)")
             }
             .onFailure { fehler ->

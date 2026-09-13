@@ -81,6 +81,15 @@ enum class DiagnosticCode {
     DRIVE_UPLOAD_FAILED,
     DRIVE_FOLDER_NOT_FOUND,
 
+    // Sicherung & Wiederherstellung
+    /**
+     * Einspielen einer Sicherung (lokal ueber SAF oder aus Drive heruntergeladen) ist
+     * fehlgeschlagen. Ging bis 12.09.2026 nur an eine fluechtige Snackbar
+     * ([com.example.lrmprotokoll.ui.SettingsScreen]) - ein Fehlschlag tauchte damit nie im
+     * Support-Bundle auf.
+     */
+    BACKUP_RESTORE_FAILED,
+
     // Berichte, Export & Wiedergabe
     REPORT_CREATE_FAILED,
     EXPORT_FAILED,

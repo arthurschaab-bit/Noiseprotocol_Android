@@ -816,4 +816,30 @@ class DriveSyncCoordinatorTest {
 
         assertTrue(ergebnis !is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen)
     }
+
+    /**
+     * Owner-Meldung 12.09.2026 ("Sicherung läuft sporadisch, nicht täglich"): ohne einen eigenen
+     * Zeitstempel fuer die Datenbank-Sicherung liess sich in der UI nicht von
+     * [SettingsManager.driveSyncLastSuccessAt] unterscheiden, wann die Sicherung selbst zuletzt
+     * tatsaechlich gelang - siehe [SettingsManager.datenbankSicherungLastSuccessAt].
+     */
+    @Test
+    fun erfolgreicherSicherungsUploadSetztEigenenZeitstempel() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        assertEquals(0L, settings.datenbankSicherungLastSuccessAt)
+
+        koordinatorMitDatenbankSicherung({ byteArrayOf(1, 2, 3) }).syncEinenZyklus()
+
+        assertEquals(uhr.now().toEpochMilli(), settings.datenbankSicherungLastSuccessAt)
+    }
+
+    @Test
+    fun fehlgeschlagenerSicherungsUploadSetztDenZeitstempelNicht() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        driveApi.dateiAnlegenErgebnis = Result.failure(java.io.IOException("Netzwerkfehler"))
+
+        koordinatorMitDatenbankSicherung({ byteArrayOf(1, 2, 3) }).syncEinenZyklus()
+
+        assertEquals(0L, settings.datenbankSicherungLastSuccessAt)
+    }
 }
