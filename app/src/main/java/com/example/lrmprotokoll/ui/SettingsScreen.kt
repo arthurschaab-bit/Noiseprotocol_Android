@@ -46,6 +46,7 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.backup.SicherungManager
+import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
 import com.example.lrmprotokoll.messreihe.RetentionVorschau
@@ -136,6 +137,37 @@ fun SettingsScreen(
     // der Ein/Aus-Schalter.
     var stammdatenAbfrageAktiv by remember { mutableStateOf(settings.stammdatenAbfrageAktiv) }
 
+    // Bericht-Umbau Schritt 3 (Owner-Klarstellung 13.09.2026): § 287 ZPO-Schaetz- und
+    // Tier-Parameter aus ReportConfigEntity. Anders als die Stammdaten oben aendern sich diese so
+    // gut wie nie zwischen einzelnen Messungen (Methodik-Konstanten fuer die gesamte Auswertung),
+    // deshalb hier in den Einstellungen statt im Stammdaten-Dialog pro Messung. `adresse`/
+    // `hardwareId` gibt es hier bewusst nicht (mehr) - die stehen schon als `messort`/
+    // `geraetSeriennummer` in StammdatenVerlaufEntity, ein zweites Feld dafuer waere nur eine
+    // zweite Quelle der Wahrheit.
+    var schaetzpegelTeilerfassung by remember { mutableFloatStateOf(50f) }
+    var schaetzpegelMessfensterAbbruch by remember { mutableFloatStateOf(55f) }
+    var tierSchwelleVollmessung by remember { mutableFloatStateOf(90f) }
+    var tierSchwelleTeilerfassung by remember { mutableFloatStateOf(70f) }
+    var geraeteUnsicherheit by remember { mutableFloatStateOf(1.4f) }
+    var gebietseinstufung by remember { mutableStateOf("") }
+
+    fun speichereReportConfig() {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                container.database.reportConfigDao().speichere(
+                    ReportConfigEntity(
+                        schaetzpegelTeilerfassungDb = schaetzpegelTeilerfassung.toDouble(),
+                        schaetzpegelMessfensterAbbruchDb = schaetzpegelMessfensterAbbruch.toDouble(),
+                        tierSchwelleVollmessungProzent = tierSchwelleVollmessung.toDouble(),
+                        tierSchwelleTeilerfassungProzent = tierSchwelleTeilerfassung.toDouble(),
+                        gebietseinstufung = gebietseinstufung,
+                        geraeteUnsicherheitDb = geraeteUnsicherheit.toDouble(),
+                    )
+                )
+            }
+        }
+    }
+
     // F1 Schwellenwert-Assistent (PROMPT_M10_FUNKTIONEN.md): Live-Mikrofonpegel neben dem
     // Schwellen-Slider - null, solange die Überwachung nicht läuft.
     val audioAufnahmeAktiv by AudioRecordingService.audioAufnahmeAktiv.collectAsState()
@@ -214,6 +246,7 @@ fun SettingsScreen(
     var expSystem by remember { mutableStateOf(false) }
     var expHilfe by remember { mutableStateOf(false) }
     var expSicherung by remember { mutableStateOf(false) }
+    var expBerichtParameter by remember { mutableStateOf(false) }
 
     // F13 Sicherung und Wiederherstellung
     var sicherungLaeuft by remember { mutableStateOf(false) }
@@ -1596,6 +1629,114 @@ fun SettingsScreen(
                         "sein - so passen sie zu jeder einzelnen Messung.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Bericht-Umbau Schritt 3 (Owner-Klarstellung 13.09.2026): § 287 ZPO-Schaetz- und
+            // Tier-Parameter - anders als die Berichtsangaben oben aendern sich diese praktisch nie
+            // zwischen Messungen, deshalb hier statt im Stammdaten-Dialog pro Messung.
+            SettingsSectionCard(
+                title = "Berichtsparameter (§ 287 ZPO)",
+                summary = "Gebiet: ${gebietseinstufung.ifBlank { "nicht gesetzt" }}",
+                expanded = expBerichtParameter,
+                onToggle = { expBerichtParameter = !expBerichtParameter },
+                zeigen = selectedTab == SettingsTab.BERICHT,
+            ) {
+                LaunchedEffect(expBerichtParameter) {
+                    if (expBerichtParameter) {
+                        val vorhanden = withContext(Dispatchers.IO) { container.database.reportConfigDao().get() }
+                        if (vorhanden != null) {
+                            schaetzpegelTeilerfassung = vorhanden.schaetzpegelTeilerfassungDb.toFloat()
+                            schaetzpegelMessfensterAbbruch = vorhanden.schaetzpegelMessfensterAbbruchDb.toFloat()
+                            tierSchwelleVollmessung = vorhanden.tierSchwelleVollmessungProzent.toFloat()
+                            tierSchwelleTeilerfassung = vorhanden.tierSchwelleTeilerfassungProzent.toFloat()
+                            gebietseinstufung = vorhanden.gebietseinstufung
+                            geraeteUnsicherheit = vorhanden.geraeteUnsicherheitDb.toFloat()
+                        }
+                    }
+                }
+
+                Text(
+                    "Annahmen für die konservative Hochrechnung bei unvollständiger Messabdeckung " +
+                        "(§ 287 ZPO) und die Einordnung nach AVV Baulärm/§ 34 BauGB/§ 4 BauNVO. " +
+                        "Wirkt sich erst mit dem eigentlichen Chaquopy-Bericht (Schritt 4) aus.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = gebietseinstufung,
+                    onValueChange = { gebietseinstufung = it; speichereReportConfig() },
+                    label = { Text("Gebietseinstufung") },
+                    placeholder = { Text("z. B. Allgemeines Wohngebiet (WA)") },
+                    modifier = Modifier.testTag("input_report_gebietseinstufung").fillMaxWidth(),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    "Tier-Schwellen (Datenverfügbarkeit eines Messtages)",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    String.format(Locale.getDefault(), "Vollmessung ab %.0f %%", tierSchwelleVollmessung),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = tierSchwelleVollmessung,
+                    onValueChange = { tierSchwelleVollmessung = it },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 50f..100f,
+                    modifier = Modifier.testTag("slider_report_tier_vollmessung"),
+                )
+                Text(
+                    String.format(Locale.getDefault(), "Teilerfassung ab %.0f %%", tierSchwelleTeilerfassung),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = tierSchwelleTeilerfassung,
+                    onValueChange = { tierSchwelleTeilerfassung = it },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 0f..100f,
+                    modifier = Modifier.testTag("slider_report_tier_teilerfassung"),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text("Schätzpegel für nicht erfasste Restzeit", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    String.format(Locale.getDefault(), "Bei Teilerfassung: %.1f dB(A)", schaetzpegelTeilerfassung),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = schaetzpegelTeilerfassung,
+                    onValueChange = { schaetzpegelTeilerfassung = it },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 30f..80f,
+                    modifier = Modifier.testTag("slider_report_schaetzpegel_teilerfassung"),
+                )
+                Text(
+                    String.format(Locale.getDefault(), "Bei Messfenster (Volltag-Annahme): %.1f dB(A)", schaetzpegelMessfensterAbbruch),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = schaetzpegelMessfensterAbbruch,
+                    onValueChange = { schaetzpegelMessfensterAbbruch = it },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 30f..80f,
+                    modifier = Modifier.testTag("slider_report_schaetzpegel_messfenster"),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    String.format(Locale.getDefault(), "Messunsicherheit Messgerät: ±%.1f dB(A)", geraeteUnsicherheit),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Slider(
+                    value = geraeteUnsicherheit,
+                    onValueChange = { geraeteUnsicherheit = it },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 0f..5f,
+                    modifier = Modifier.testTag("slider_report_geraeteunsicherheit"),
                 )
             }
 
