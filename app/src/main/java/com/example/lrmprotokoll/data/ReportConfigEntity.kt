@@ -23,6 +23,11 @@ import kotlinx.coroutines.flow.Flow
  *   [tierSchwelleVollmessungProzent] - genutzt wird dann [schaetzpegelTeilerfassungDb]
  * - Messfenster ("M"): < [tierSchwelleTeilerfassungProzent] - genutzt wird
  *   [schaetzpegelMessfensterAbbruchDb]
+ *
+ * Owner-Klarstellung 13.09.2026: `adresse`/`hardwareId` (bis v22 hier enthalten) sind entfernt
+ * (Migration [MIGRATION_22_23]) - beide waren redundant zu den bereits pro Messung erfassten
+ * Feldern `messort`/`geraetSeriennummer` in [StammdatenVerlaufEntity]; report_bridge.py (Schritt 4)
+ * liest dafuer die zuletzt gespeicherte Stammdaten-Zeile statt eines eigenen Settings-Werts.
  */
 @Entity(tableName = "report_config")
 data class ReportConfigEntity(
@@ -31,9 +36,7 @@ data class ReportConfigEntity(
     val schaetzpegelMessfensterAbbruchDb: Double = 55.0,
     val tierSchwelleVollmessungProzent: Double = 90.0,
     val tierSchwelleTeilerfassungProzent: Double = 70.0,
-    val adresse: String = "",
     val gebietseinstufung: String = "",
-    val hardwareId: String = "",
     val geraeteUnsicherheitDb: Double = 1.4,
 ) {
     companion object {

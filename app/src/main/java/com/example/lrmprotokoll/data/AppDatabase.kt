@@ -484,10 +484,44 @@ val MIGRATION_21_22 = object : Migration(21, 22) {
     }
 }
 
+/**
+ * Migration 22 -> 23 (Bericht-Umbau Schritt 3, Owner-Klarstellung 13.09.2026): `report_config.adresse`
+ * und `.hardwareId` entfernt - beide waren redundant zu den bereits pro Messung erfassten Feldern
+ * `messort`/`geraetSeriennummer` in `StammdatenVerlaufEntity` (`GesamtberichtStammdatenSheet`);
+ * report_bridge.py (Schritt 4) soll die zuletzt erfasste Stammdaten-Zeile nutzen statt eines
+ * eigenen, zwangslaeufig doppelt zu pflegenden Settings-Werts.
+ *
+ * SQLite < 3.35 kennt kein `ALTER TABLE ... DROP COLUMN` (minSdk 29 garantiert das nicht) - daher
+ * das uebliche Neuanlegen-Kopieren-Umbenennen-Muster statt eines direkten DROP COLUMN.
+ */
+val MIGRATION_22_23 = object : Migration(22, 23) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE `report_config_new` (" +
+                "`id` INTEGER PRIMARY KEY NOT NULL, " +
+                "`schaetzpegelTeilerfassungDb` REAL NOT NULL, " +
+                "`schaetzpegelMessfensterAbbruchDb` REAL NOT NULL, " +
+                "`tierSchwelleVollmessungProzent` REAL NOT NULL, " +
+                "`tierSchwelleTeilerfassungProzent` REAL NOT NULL, " +
+                "`gebietseinstufung` TEXT NOT NULL, " +
+                "`geraeteUnsicherheitDb` REAL NOT NULL)"
+        )
+        db.execSQL(
+            "INSERT INTO `report_config_new` (`id`, `schaetzpegelTeilerfassungDb`, `schaetzpegelMessfensterAbbruchDb`, " +
+                "`tierSchwelleVollmessungProzent`, `tierSchwelleTeilerfassungProzent`, `gebietseinstufung`, `geraeteUnsicherheitDb`) " +
+                "SELECT `id`, `schaetzpegelTeilerfassungDb`, `schaetzpegelMessfensterAbbruchDb`, " +
+                "`tierSchwelleVollmessungProzent`, `tierSchwelleTeilerfassungProzent`, `gebietseinstufung`, `geraeteUnsicherheitDb` " +
+                "FROM `report_config`"
+        )
+        db.execSQL("DROP TABLE `report_config`")
+        db.execSQL("ALTER TABLE `report_config_new` RENAME TO `report_config`")
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-    MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22,
+    MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23,
 )
 
 @Database(
@@ -499,7 +533,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
         ReportConfigEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

@@ -96,9 +96,7 @@ class AppDatabaseV22MigrationTest {
                 schaetzpegelMessfensterAbbruchDb = 57.0,
                 tierSchwelleVollmessungProzent = 92.0,
                 tierSchwelleTeilerfassungProzent = 65.0,
-                adresse = "Musterstraße 1, 12345 Musterstadt",
                 gebietseinstufung = "WA",
-                hardwareId = "PCE-323-000123",
                 geraeteUnsicherheitDb = 1.4,
             )
             database.reportConfigDao().speichere(config)
