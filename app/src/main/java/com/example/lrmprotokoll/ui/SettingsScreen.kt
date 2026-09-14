@@ -150,6 +150,9 @@ fun SettingsScreen(
     var tierSchwelleTeilerfassung by remember { mutableFloatStateOf(70f) }
     var geraeteUnsicherheit by remember { mutableFloatStateOf(1.4f) }
     var gebietseinstufung by remember { mutableStateOf("") }
+    var konservativFensterStart by remember { mutableIntStateOf(15) }
+    var konservativFensterEnde by remember { mutableIntStateOf(19) }
+    var erzwingeBerichtOhneBestaetigteBewertung by remember { mutableStateOf(false) }
 
     fun speichereReportConfig() {
         scope.launch {
@@ -162,6 +165,9 @@ fun SettingsScreen(
                         tierSchwelleTeilerfassungProzent = tierSchwelleTeilerfassung.toDouble(),
                         gebietseinstufung = gebietseinstufung,
                         geraeteUnsicherheitDb = geraeteUnsicherheit.toDouble(),
+                        konservativFensterStartStunde = konservativFensterStart,
+                        konservativFensterEndeStunde = konservativFensterEnde,
+                        erzwingeBerichtOhneBestaetigteBewertung = erzwingeBerichtOhneBestaetigteBewertung,
                     )
                 )
             }
@@ -1652,6 +1658,9 @@ fun SettingsScreen(
                             tierSchwelleTeilerfassung = vorhanden.tierSchwelleTeilerfassungProzent.toFloat()
                             gebietseinstufung = vorhanden.gebietseinstufung
                             geraeteUnsicherheit = vorhanden.geraeteUnsicherheitDb.toFloat()
+                            konservativFensterStart = vorhanden.konservativFensterStartStunde
+                            konservativFensterEnde = vorhanden.konservativFensterEndeStunde
+                            erzwingeBerichtOhneBestaetigteBewertung = vorhanden.erzwingeBerichtOhneBestaetigteBewertung
                         }
                     }
                 }
@@ -1738,6 +1747,49 @@ fun SettingsScreen(
                     valueRange = 0f..5f,
                     modifier = Modifier.testTag("slider_report_geraeteunsicherheit"),
                 )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text("Konservatives Messende-Fenster", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Beginn: $konservativFensterStart Uhr · Ende: $konservativFensterEnde Uhr",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = konservativFensterStart.toFloat(),
+                    onValueChange = {
+                        konservativFensterStart = it.toInt().coerceIn(0, konservativFensterEnde)
+                    },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 0f..23f,
+                    steps = 22,
+                    modifier = Modifier.testTag("slider_report_konservativ_start"),
+                )
+                Slider(
+                    value = konservativFensterEnde.toFloat(),
+                    onValueChange = {
+                        konservativFensterEnde = it.toInt().coerceIn(konservativFensterStart, 23)
+                    },
+                    onValueChangeFinished = { speichereReportConfig() },
+                    valueRange = 0f..23f,
+                    steps = 22,
+                    modifier = Modifier.testTag("slider_report_konservativ_ende"),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Bericht trotz unbestätigter A-/Zeitbewertung erlauben",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = erzwingeBerichtOhneBestaetigteBewertung,
+                        onCheckedChange = {
+                            erzwingeBerichtOhneBestaetigteBewertung = it
+                            speichereReportConfig()
+                        },
+                        modifier = Modifier.testTag("switch_report_erzwinge_override"),
+                    )
+                }
             }
 
             // Owner-Entscheidung E8: Anzeige des belegten Speichers und eine Aufraeumfunktion,

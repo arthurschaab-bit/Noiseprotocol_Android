@@ -102,11 +102,11 @@ aber noch nicht umgesetzt.
    Rechen-/Textlogik, kein Datenzugriff) - eigener Klärungspunkt, sobald die eigentliche
    Portierung ansteht, nicht Teil dieses Dokuments.
 
-## 7. Daraus folgende Nachträge (noch nicht umgesetzt)
+## 7. Daraus folgende Nachträge
 
-- `ReportConfigEntity`: zwei neue Felder für `KONSERVATIV_FENSTER_START/-ENDE` (Abschnitt 5) und
-  ein neues Feld `erzwingeBerichtOhneBestaetigteBewertung` (Abschnitt 6.3) - beides additive
-  Migrationen (23→24), kein Bruch mit bestehenden Daten.
+- `ReportConfigEntity`: `konservativFensterStartStunde`, `konservativFensterEndeStunde` und
+  `erzwingeBerichtOhneBestaetigteBewertung` sind mit Migration 23→24 und der erweiterten
+  Berichtsparameter-Sektion in `SettingsScreen.kt` umgesetzt (Teil A, 14.09.2026).
 - Ein neuer "Bericht jetzt erzeugen"-UI-Ablauf (vermutlich in `BerichtScreen.kt`) mit
   Zeitraumauswahl, Retention-Prüfung (6.1), Stammdaten-Auswahl bei mehreren Einträgen pro Tag
   (6.2) und ggf. dem Override-Hinweis (6.3) - bisher existiert dort nur der alte
