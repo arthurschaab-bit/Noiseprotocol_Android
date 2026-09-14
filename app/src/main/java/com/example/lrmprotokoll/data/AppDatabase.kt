@@ -518,10 +518,24 @@ val MIGRATION_22_23 = object : Migration(22, 23) {
     }
 }
 
+/**
+ * Nachtrag zum Bericht-Umbau: Die konservative Hochrechnung braucht ein konfigurierbares
+ * Messende-Fenster, und eine unbestaetigte Bewertung darf nur bewusst uebersteuert werden
+ * (`docs/DATENMAPPING_BERICHT_SCHRITT4.md`, Abschnitte 5 und 6.3). Bestehende Zeilen behalten
+ * ihre Werte; die neuen Spalten erhalten die Referenzskript- bzw. Sicherheits-Defaults.
+ */
+val MIGRATION_23_24 = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `report_config` ADD COLUMN `konservativFensterStartStunde` INTEGER NOT NULL DEFAULT 15")
+        db.execSQL("ALTER TABLE `report_config` ADD COLUMN `konservativFensterEndeStunde` INTEGER NOT NULL DEFAULT 19")
+        db.execSQL("ALTER TABLE `report_config` ADD COLUMN `erzwingeBerichtOhneBestaetigteBewertung` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-    MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23,
+    MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24,
 )
 
 @Database(
@@ -533,7 +547,7 @@ val ALLE_MIGRATIONEN = arrayOf(
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
         ReportConfigEntity::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)

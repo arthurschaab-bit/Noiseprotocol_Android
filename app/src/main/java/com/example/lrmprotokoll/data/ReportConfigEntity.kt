@@ -28,6 +28,13 @@ import kotlinx.coroutines.flow.Flow
  * (Migration [MIGRATION_22_23]) - beide waren redundant zu den bereits pro Messung erfassten
  * Feldern `messort`/`geraetSeriennummer` in [StammdatenVerlaufEntity]; report_bridge.py (Schritt 4)
  * liest dafuer die zuletzt gespeicherte Stammdaten-Zeile statt eines eigenen Settings-Werts.
+ *
+ * Nachtrag 14.09.2026: [konservativFensterStartStunde] und [konservativFensterEndeStunde]
+ * ersetzen die Konstanten KONSERVATIV_FENSTER_START/-ENDE des Referenzskripts (15–19 Uhr).
+ * [erzwingeBerichtOhneBestaetigteBewertung] setzt die Owner-Entscheidung aus
+ * `docs/DATENMAPPING_BERICHT_SCHRITT4.md` Abschnitt 6.3 um: ohne bestaetigte A-/Zeitbewertung
+ * wird ein Rechtsbericht standardmaessig verweigert; ein bewusstes Override verlangt im PDF
+ * einen sichtbaren Vorbehalt.
  */
 @Entity(tableName = "report_config")
 data class ReportConfigEntity(
@@ -38,6 +45,9 @@ data class ReportConfigEntity(
     val tierSchwelleTeilerfassungProzent: Double = 70.0,
     val gebietseinstufung: String = "",
     val geraeteUnsicherheitDb: Double = 1.4,
+    val konservativFensterStartStunde: Int = 15,
+    val konservativFensterEndeStunde: Int = 19,
+    val erzwingeBerichtOhneBestaetigteBewertung: Boolean = false,
 ) {
     companion object {
         const val SINGLETON_ID = 1
