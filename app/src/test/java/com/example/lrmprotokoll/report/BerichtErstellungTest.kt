@@ -65,6 +65,16 @@ class BerichtErstellungTest {
         assertTrue(fehlendeStammdatenFelder(stammdaten(1).copy(innenAussen = "Innen")).contains("Fensterzustand"))
     }
 
+    /** Review-Befund PR #144: geraetGenauigkeitsklasse/mikrofonhoehe/entfernungZurQuelle fehlten
+     * in der Pruefung, obwohl dieselben Formularabschnitte in GesamtberichtStammdatenSheet sie
+     * genauso verpflichtend abfragen wie die bereits geprueften Felder. */
+    @Test fun bislangUebersehenePflichtfelderWerdenAlsLueckeErkannt() {
+        assertTrue(fehlendeStammdatenFelder(stammdaten(1).copy(geraetGenauigkeitsklasse = "")).contains("Genauigkeitsklasse"))
+        assertTrue(fehlendeStammdatenFelder(stammdaten(1).copy(mikrofonhoehe = "")).contains("Mikrofonhöhe"))
+        assertTrue(fehlendeStammdatenFelder(stammdaten(1).copy(entfernungZurQuelle = "")).contains("Entfernung Mikrofon–Quelle"))
+        assertTrue(fehlendeStammdatenFelder(stammdaten(1)).isEmpty())
+    }
+
     @Test fun dateRangePickerUtcDatumWirdNichtAlsLokalerZeitstempelMissverstanden() {
         val zeitraum = BerichtZeitraum.ausPicker(1_789_171_200_000L, 1_789_257_600_000L)
         assertEquals(2, zeitraum.tage().size)

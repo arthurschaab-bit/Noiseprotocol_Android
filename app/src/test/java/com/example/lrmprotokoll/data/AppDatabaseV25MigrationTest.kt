@@ -51,7 +51,7 @@ class AppDatabaseV25MigrationTest {
             .allowMainThreadQueries()
             .build()
         runBlocking {
-            val original = database.stammdatenVerlaufDao().zwischen(1_700_000_000_000, 1_700_000_000_001).single()
+            val original = database.stammdatenVerlaufDao().fuerTag(1_700_000_000_000, 1_700_000_000_001).single()
             assertNull(original.giltFuerTagStart)
             assertEquals("Messort", original.messort)
 

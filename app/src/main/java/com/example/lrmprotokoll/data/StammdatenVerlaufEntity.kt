@@ -53,12 +53,10 @@ interface StammdatenVerlaufDao {
     @Query("SELECT * FROM stammdaten_verlauf WHERE giltFuerTagStart IS NULL ORDER BY erstelltAm DESC LIMIT :anzahl")
     suspend fun letzte(anzahl: Int = 10): List<StammdatenVerlaufEntity>
 
-    /** Eintraege mit echtem Erfassungszeitpunkt im lokalen Messtag; rueckwirkende Nachtraege
-     * werden durch [fuerTag] anhand ihres expliziten Geltungstags hinzugenommen. */
-    @Query("SELECT * FROM stammdaten_verlauf WHERE erstelltAm >= :von AND erstelltAm < :bis ORDER BY erstelltAm DESC")
-    suspend fun zwischen(von: Long, bis: Long): List<StammdatenVerlaufEntity>
-
-    /** Bewahrt bei Nachtraegen beide Zeitangaben: wann erfasst und fuer welchen Messtag. */
+    /** Bewahrt bei Nachtraegen beide Zeitangaben: wann erfasst und fuer welchen Messtag. Deckt
+     * den regulaeren Fall (Eintrag mit echtem Erfassungszeitpunkt im lokalen Messtag) mit ab,
+     * dafuer war frueher eine eigene `zwischen`-Query da - die hatte aber ausser dieser Klasse
+     * selbst keinen Aufrufer mehr (Review-Befund PR #144) und wurde entfernt. */
     @Query("SELECT * FROM stammdaten_verlauf WHERE giltFuerTagStart = :von OR (giltFuerTagStart IS NULL AND erstelltAm >= :von AND erstelltAm < :bis) ORDER BY erstelltAm DESC")
     suspend fun fuerTag(von: Long, bis: Long): List<StammdatenVerlaufEntity>
 }

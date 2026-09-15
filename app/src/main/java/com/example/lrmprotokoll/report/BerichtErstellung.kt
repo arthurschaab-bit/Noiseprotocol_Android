@@ -3,13 +3,15 @@ package com.example.lrmprotokoll.report
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
-import com.example.lrmprotokoll.messreihe.gruppiereSessionsNachTag
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -89,10 +91,13 @@ fun fehlendeStammdatenFelder(stammdaten: StammdatenVerlaufEntity?): List<String>
     return buildList {
         if (stammdaten.geraetHersteller.isBlank()) add("Gerätehersteller")
         if (stammdaten.geraetTyp.isBlank()) add("Gerätetyp")
+        if (stammdaten.geraetGenauigkeitsklasse.isBlank()) add("Genauigkeitsklasse")
         if (stammdaten.geraetSeriennummer.isBlank()) add("Seriennummer")
         if (stammdaten.geraetKalibrierung.isBlank()) add("Kalibrierung")
         if (stammdaten.messort.isBlank()) add("Messort")
         if (stammdaten.mikrofonposition.isBlank()) add("Mikrofonposition")
+        if (stammdaten.mikrofonhoehe.isBlank()) add("Mikrofonhöhe")
+        if (stammdaten.entfernungZurQuelle.isBlank()) add("Entfernung Mikrofon–Quelle")
         if (stammdaten.innenAussen.isBlank()) add("Innen-/Außenmessung")
         if (stammdaten.innenAussen.contains("innen", ignoreCase = true) && stammdaten.fensterzustand.isBlank()) {
             add("Fensterzustand")
@@ -162,20 +167,46 @@ private fun StammdatenVerlaufEntity.alsJson(): JSONObject = JSONObject()
     .put("wetter", wetter)
     .put("datenqualitaetHinweis", datenqualitaetHinweis)
 
-/** Lokale Kalendertage statt UTC-24h-Scheiben; das respektiert auch Sommerzeitwechsel. */
-suspend fun ladeBerichtstage(db: AppDatabase, zeitraum: BerichtZeitraum, zone: ZoneId = ZoneId.systemDefault()): List<BerichtTag> =
-    zeitraum.tage().map { datum ->
-        val von = datum.atStartOfDay(zone).toInstant().toEpochMilli()
-        val bis = datum.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val sessions = db.sessionDao().zwischen(von, bis)
-        BerichtTag(
-            datum = datum,
-            von = von,
-            bis = bis,
-            sessionIds = sessions.map { it.id },
-            rohwerte = db.measurementDao().anzahlZwischen(von, bis),
-            verdichteteMinuten = db.minuteAggregateDao().anzahlZwischen(von, bis),
-            unbestaetigteWerte = db.measurementDao().anzahlUnbestaetigtZwischen(von, bis),
-            stammdatenKandidaten = db.stammdatenVerlaufDao().fuerTag(von, bis),
-        )
+/**
+ * Lokale Kalendertage statt UTC-24h-Scheiben; das respektiert auch Sommerzeitwechsel. Die
+ * 5 Abfragen je Tag sind voneinander unabhaengig, ebenso die Tage selbst - beides laeuft
+ * nebenlaeufig statt seriell (Review-Befund PR #144).
+ */
+suspend fun ladeBerichtstage(db: AppDatabase, zeitraum: BerichtZeitraum, zone: ZoneId = ZoneId.systemDefault()): List<BerichtTag> {
+    val rohTage = coroutineScope {
+        zeitraum.tage().map { datum ->
+            async {
+                val von = datum.atStartOfDay(zone).toInstant().toEpochMilli()
+                val bis = datum.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val sessions = async { db.sessionDao().zwischen(von, bis) }
+                val rohwerte = async { db.measurementDao().anzahlZwischen(von, bis) }
+                val verdichtet = async { db.minuteAggregateDao().anzahlZwischen(von, bis) }
+                val unbestaetigt = async { db.measurementDao().anzahlUnbestaetigtZwischen(von, bis) }
+                val stammdaten = async { db.stammdatenVerlaufDao().fuerTag(von, bis) }
+                BerichtTag(
+                    datum = datum,
+                    von = von,
+                    bis = bis,
+                    sessionIds = sessions.await().map { it.id },
+                    rohwerte = rohwerte.await(),
+                    verdichteteMinuten = verdichtet.await(),
+                    unbestaetigteWerte = unbestaetigt.await(),
+                    stammdatenKandidaten = stammdaten.await(),
+                )
+            }
+        }.awaitAll()
     }
+    // Review-Befund PR #144: eine ueber Mitternacht laufende Session kann ihre Stammdaten-Zeile
+    // mit einem erstelltAm haben, das noch auf den Vortag faellt (giltFuerTagStart bleibt dann
+    // null) - fuerTag() findet sie fuer den Folgetag nicht, obwohl derselbe, bereits dokumentierte
+    // Messaufbau beide Kalendertage betrifft. Ein Tag ohne eigene Kandidaten uebernimmt deshalb
+    // die eines Nachbartags, wenn beide dieselbe Session teilen. Die Rohdaten-Fensterung je
+    // Kalendertag (rohwerte/sessionIds, Abschnitt 4 in DATENMAPPING_BERICHT_SCHRITT4.md) bleibt
+    // davon bewusst unberuehrt - nur die Stammdaten-Zuordnung wird ergaenzt.
+    return rohTage.mapIndexed { index, tag ->
+        if (tag.stammdatenKandidaten.isNotEmpty()) return@mapIndexed tag
+        val nachbarMitStammdaten = listOfNotNull(rohTage.getOrNull(index - 1), rohTage.getOrNull(index + 1))
+            .firstOrNull { nachbar -> nachbar.stammdatenKandidaten.isNotEmpty() && nachbar.sessionIds.any { it in tag.sessionIds } }
+        if (nachbarMitStammdaten != null) tag.copy(stammdatenKandidaten = nachbarMitStammdaten.stammdatenKandidaten) else tag
+    }
+}
