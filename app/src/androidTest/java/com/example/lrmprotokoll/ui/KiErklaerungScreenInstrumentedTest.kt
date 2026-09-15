@@ -30,14 +30,18 @@ class KiErklaerungScreenInstrumentedTest {
 
         composeRule.onNodeWithText("Wie die Lärmerkennung arbeitet").assertIsDisplayed()
 
-        // Letzter Absatz, damit die vollstaendige LazyColumn tatsaechlich gerendert wird, nicht
-        // nur der erste sichtbare Ausschnitt.
+        // Letzter Abschnitt (Index 5 von 6, "Was das fuer Sie praktisch bedeutet") ist in der
+        // LazyColumn anfangs nicht komponiert - onNodeWithText(...).performScrollTo() faende ihn
+        // deshalb nie (der Knoten muss fuer performScrollTo() schon im Semantics-Baum existieren).
+        // performScrollToIndex() auf dem LazyColumn-Tag scrollt dagegen schrittweise, bis der
+        // Index komponiert ist - gleiches Muster wie DiagnoseScreenInstrumentedTest.
+        composeRule.onNodeWithTag(KI_ERKLAERUNG_LAZY_COLUMN_TAG).performScrollToIndex(5)
         composeRule.onNodeWithText(
             "Behandeln Sie die Einstufung als Hinweis, nicht als Beweis. Der Beweis ist die " +
                 "Aufnahme selbst, der gemessene Pegel und – wenn vorhanden – der kalibrierte Wert " +
                 "des Messgeräts.",
             substring = true,
-        ).performScrollTo().assertIsDisplayed()
+        ).assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
         assertTrue(backed)

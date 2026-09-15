@@ -141,12 +141,21 @@ class SettingsScreenInstrumentedTest {
 
             val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
             composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
 
-            composeRule.waitUntil(timeoutMillis = 10_000L) {
+            // Zwischenpruefung, unabhaengig von ermittleSpeicherplatz(): der Titel taucht nach dem
+            // Aufklappen ein zweites Mal auf (Schalterzeile im Kartenkoerper), das haengt nur an
+            // expRetention, nicht am asynchron ermittelten Speicherplatz. Bestaetigt das Aufklappen
+            // selbst und grenzt einen etwaigen erneuten Fehlschlag auf ermittleSpeicherplatz() ein.
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
+            }
+
+            composeRule.waitUntil(timeoutMillis = 15_000L) {
                 composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Audiodateien:", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithText("Datenbank:", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Audiodateien:", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("Datenbank:", substring = true).performScrollTo().assertIsDisplayed()
         } finally {
             settingsManager.isProMode = oldPro
         }
