@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -69,6 +70,50 @@ class ReportConfigSettingsTest {
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals(100.0, gespeichert?.tierSchwelleVollmessungProzent ?: 0.0, 0.0001)
+        }
+    }
+
+    @Test
+    fun konservativesFensterWirdGespeichertUndBeiWiderspruchGeklemmt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("slider_report_konservativ_start")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(23f) }
+        composeRule.onNodeWithTag("slider_report_konservativ_ende")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(17f) }
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertEquals(19, gespeichert?.konservativFensterStartStunde)
+            assertEquals(19, gespeichert?.konservativFensterEndeStunde)
+        }
+    }
+
+    @Test
+    fun overrideSchalterWirdGespeichert() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("switch_report_erzwinge_override")
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertTrue(gespeichert?.erzwingeBerichtOhneBestaetigteBewertung ?: false)
         }
     }
 }
