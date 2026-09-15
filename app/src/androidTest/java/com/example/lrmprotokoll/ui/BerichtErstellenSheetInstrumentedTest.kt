@@ -59,21 +59,9 @@ class BerichtErstellenSheetInstrumentedTest {
         composeRule.onNodeWithTag("btn_bericht_datumsbereich").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
-        // Der eigentliche Regressionsfall: beide Buttons muessen auf dem echten Bildschirm
-        // sichtbar sein, nicht nur im Baum existieren.
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_uebernehmen").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_abbrechen").assertIsDisplayed()
-
-        // Ohne Auswahl darf Uebernehmen den Dialog nicht schliessen, sondern muss den Hinweis zeigen.
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_uebernehmen").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Bitte Start- und Enddatum wählen.").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_abbrechen").assertIsDisplayed()
-
-        // Abbrechen schliesst den Dialog, das Sheet dahinter bleibt offen.
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_abbrechen").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich_abbrechen").assertDoesNotExist()
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich").assertIsDisplayed()
+        // DIAGNOSE-VARIANTE (nicht mergen): testTags gibt es im alten, kaputten Code noch nicht -
+        // Text-Lookup, wie er im alten DatePickerDialog tatsaechlich vorhanden war.
+        composeRule.onNodeWithText("Übernehmen").assertIsDisplayed()
+        composeRule.onNodeWithText("Abbrechen").assertIsDisplayed()
     }
 }
