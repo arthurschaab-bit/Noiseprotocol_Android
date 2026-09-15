@@ -122,6 +122,42 @@ class SettingsScreenInstrumentedTest {
         }
     }
 
+    /**
+     * Echtes Geraete-Pendant zu [MeterSchwellenwertUiTest] (Robolectric, app/src/test) - Teil
+     * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Prueft-
+     * protokoll 11.09.2026 Frage 4 (Korrekturliste C-3): der eigene Messgeraet-Schwellenwert war
+     * bisher nur in SettingsManager/MeterTriggerSource erreichbar, nicht ueber die UI.
+     */
+    @Test
+    fun derMessgeraetSchwellenwertTagIstNebenDemMikrofonReglerErreichbar() {
+        composeRule.setContent { SettingsScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+
+        composeRule.onNodeWithTag("slider_meter_db_threshold").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun derMessgeraetRuhezeitSchwellenwertIstBeiAktivenRuhezeitenErreichbar() {
+        val settingsManager = app.container.settingsManager
+        val oldQuietHours = settingsManager.quietHoursEnabled
+        try {
+            settingsManager.quietHoursEnabled = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_quiet_hours_title)
+            composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+
+            composeRule.onNodeWithTag("slider_meter_quiet_hours_threshold").performScrollTo().assertIsDisplayed()
+        } finally {
+            settingsManager.quietHoursEnabled = oldQuietHours
+        }
+    }
+
     @Test
     fun ntfyErzeugtBeimErstenAktivierenAutomatischEinTopicUndZeigtEsAn() {
         val settingsManager = app.container.settingsManager
