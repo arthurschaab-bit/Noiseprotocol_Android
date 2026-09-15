@@ -46,6 +46,8 @@ class RetentionWorkerTest {
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override fun fuerSessionAbFlow(sessionId: Long, ab: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = emptyList<MeasurementEntity>()
+        override suspend fun anzahlZwischen(von: Long, bis: Long) = 0
+        override suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long) = 0
         override suspend fun aelterAls(grenze: Long): List<MeasurementEntity> =
             error("Simulierter DB-Fehler fuer den Retry-Test")
         override suspend fun loescheAelterAls(grenze: Long) {}
@@ -58,6 +60,7 @@ class RetentionWorkerTest {
         override suspend fun fuerSession(sessionId: Long) = emptyList<MinuteAggregateEntity>()
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = emptyList<MinuteAggregateEntity>()
+        override suspend fun anzahlZwischen(von: Long, bis: Long) = 0
     }
 
     private lateinit var context: Context

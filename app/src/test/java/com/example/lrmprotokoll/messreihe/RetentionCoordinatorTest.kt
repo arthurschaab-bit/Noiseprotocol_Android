@@ -29,6 +29,12 @@ class RetentionCoordinatorTest {
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override fun fuerSessionAbFlow(sessionId: Long, ab: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = zeilen.filter { it.timestamp in von until bis }
+        override suspend fun anzahlZwischen(von: Long, bis: Long) = zeilen.count { it.timestamp in von until bis }
+        override suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long) = zeilen.count {
+            it.timestamp in von until bis &&
+                (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
+                (it.weighting == null || it.timeWeighting == null)
+        }
         override suspend fun aelterAls(grenze: Long) = zeilen.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = zeilen.size
@@ -44,6 +50,7 @@ class RetentionCoordinatorTest {
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = geschrieben.filter { it.minuteStart in von until bis }
+        override suspend fun anzahlZwischen(von: Long, bis: Long) = geschrieben.count { it.minuteStart in von until bis }
     }
 
     private val measurementDao = FakeMeasurementDao()
