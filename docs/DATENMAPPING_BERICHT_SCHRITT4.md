@@ -107,7 +107,12 @@ aber noch nicht umgesetzt.
 - `ReportConfigEntity`: `konservativFensterStartStunde`, `konservativFensterEndeStunde` und
   `erzwingeBerichtOhneBestaetigteBewertung` sind mit Migration 23→24 und der erweiterten
   Berichtsparameter-Sektion in `SettingsScreen.kt` umgesetzt (Teil A, 14.09.2026).
-- Ein neuer "Bericht jetzt erzeugen"-UI-Ablauf (vermutlich in `BerichtScreen.kt`) mit
-  Zeitraumauswahl, Retention-Prüfung (6.1), Stammdaten-Auswahl bei mehreren Einträgen pro Tag
-  (6.2) und ggf. dem Override-Hinweis (6.3) - bisher existiert dort nur der alte
-  Zeitraum-/Gesamtbericht-Dialog, kein neuer Chaquopy-Berichts-Einstieg.
+- Der neue Einstieg in `BerichtScreen.kt` und `BerichtErstellenSheet.kt` nutzt einen frei
+  wählbaren Datumsbereich und prüft Retention, Stammdaten-Auswahl sowie A-/Zeitbewertung vor
+  dem Chaquopy-Aufruf (Teil B, Owner-Klärung 14.09.2026). Fehlende oder unvollständige
+  Stammdaten sind eine sichtbare Lücke, kein stiller Default: Nacherfassung bleibt möglich,
+  ein Bericht darf bis dahin mit dieser Lücke erstellt werden. Migration 24→25 ergänzt
+  `StammdatenVerlaufEntity.giltFuerTagStart`, damit historische Zuordnung und tatsächlicher
+  Erfassungszeitpunkt getrennt bleiben. Das JSON ist bis zur Integration von
+  `report_bridge.py` ausdrücklich ein vorläufiger Vertrag; der derzeitige Modulfehler wird im
+  UI verständlich gezeigt. Der alte Zeitraum-/Gesamtbericht-Dialog bleibt bestehen.
