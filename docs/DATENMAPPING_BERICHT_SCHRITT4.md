@@ -74,7 +74,7 @@ davon für den Tagesbericht gilt (Abschnitt 6).
 
 `KONSERVATIV_FENSTER_START=15`, `KONSERVATIV_FENSTER_ENDE=19` (Uhrzeit-Fenster, in dem ein
 Messende bei Tier=Messfenster die konservative Volltag-Hochrechnung auslöst, Zeile 52f./758-781)
-fehlt bisher in `ReportConfigEntity`. Nachtrag als zwei weitere `Double`-Felder (Stunde 0-23) ist
+fehlt bisher in `ReportConfigEntity`. Nachtrag als zwei weitere `Int`-Felder (Stunde 0-23) ist
 eine reine additive Migration (23→24), analog zu den bereits bestehenden Feldern - unkritisch,
 aber noch nicht umgesetzt.
 

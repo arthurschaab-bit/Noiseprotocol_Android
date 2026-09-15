@@ -153,8 +153,14 @@ fun SettingsScreen(
     var konservativFensterStart by remember { mutableIntStateOf(15) }
     var konservativFensterEnde by remember { mutableIntStateOf(19) }
     var erzwingeBerichtOhneBestaetigteBewertung by remember { mutableStateOf(false) }
+    // Review-Befund PR #143: ohne dieses Flag ueberschreibt eine Interaktion, die waehrend des
+    // asynchronen Ladens (LaunchedEffect unten) passiert, den noch nicht eingetroffenen
+    // gespeicherten Wert stillschweigend mit den obigen Kompilierzeit-Defaults. Erst nach dem
+    // ersten abgeschlossenen Ladeversuch (gefunden oder nicht) darf gespeichert werden.
+    var reportConfigBereitZumSpeichern by remember { mutableStateOf(false) }
 
     fun speichereReportConfig() {
+        if (!reportConfigBereitZumSpeichern) return
         scope.launch {
             withContext(Dispatchers.IO) {
                 container.database.reportConfigDao().speichere(
@@ -1650,6 +1656,7 @@ fun SettingsScreen(
             ) {
                 LaunchedEffect(expBerichtParameter) {
                     if (expBerichtParameter) {
+                        reportConfigBereitZumSpeichern = false
                         val vorhanden = withContext(Dispatchers.IO) { container.database.reportConfigDao().get() }
                         if (vorhanden != null) {
                             schaetzpegelTeilerfassung = vorhanden.schaetzpegelTeilerfassungDb.toFloat()
@@ -1662,6 +1669,9 @@ fun SettingsScreen(
                             konservativFensterEnde = vorhanden.konservativFensterEndeStunde
                             erzwingeBerichtOhneBestaetigteBewertung = vorhanden.erzwingeBerichtOhneBestaetigteBewertung
                         }
+                        // Auch ohne vorhandene Zeile (allererstes Oeffnen) ist das Laden jetzt
+                        // abgeschlossen - die Compile-Defaults oben sind dann die korrekten Werte.
+                        reportConfigBereitZumSpeichern = true
                     }
                 }
 
