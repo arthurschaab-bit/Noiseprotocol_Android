@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -26,6 +27,7 @@ import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.anyIntent
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasExtra
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.Alert
@@ -119,6 +121,42 @@ class SettingsScreenInstrumentedTest {
         } finally {
             settingsManager.dbThreshold = oldThreshold
             settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Echtes Geraete-Pendant zu [MeterSchwellenwertUiTest] (Robolectric, app/src/test) - Teil
+     * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Prueft-
+     * protokoll 11.09.2026 Frage 4 (Korrekturliste C-3): der eigene Messgeraet-Schwellenwert war
+     * bisher nur in SettingsManager/MeterTriggerSource erreichbar, nicht ueber die UI.
+     */
+    @Test
+    fun derMessgeraetSchwellenwertTagIstNebenDemMikrofonReglerErreichbar() {
+        composeRule.setContent { SettingsScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+
+        composeRule.onNodeWithTag("slider_meter_db_threshold").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun derMessgeraetRuhezeitSchwellenwertIstBeiAktivenRuhezeitenErreichbar() {
+        val settingsManager = app.container.settingsManager
+        val oldQuietHours = settingsManager.quietHoursEnabled
+        try {
+            settingsManager.quietHoursEnabled = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_quiet_hours_title)
+            composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+
+            composeRule.onNodeWithTag("slider_meter_quiet_hours_threshold").performScrollTo().assertIsDisplayed()
+        } finally {
+            settingsManager.quietHoursEnabled = oldQuietHours
         }
     }
 
@@ -220,6 +258,58 @@ class SettingsScreenInstrumentedTest {
         } finally {
             Intents.release()
         }
+    }
+
+    /**
+     * Echtes Geraete-Pendant zu zwei Faellen aus [OemDeviceHelperCardTest] (Robolectric,
+     * app/src/test), die die obige [systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft]
+     * noch nicht deckte - Teil der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-
+     * Auftrag 15.09.2026). Der Huawei/EMUI-SecurityException-Fallback bleibt bewusst Robolectric-
+     * only: `OemDeviceHelperCard` hat dafuer keinen Test-Override, das echte `Build.MANUFACTURER`
+     * eines CI-Emulators ist nie "HUAWEI" und laesst sich auf echter Hardware nicht faelschen.
+     */
+    @Test
+    fun systemIntentFuerBenachrichtigungenErlaubenWirdGeprueft() {
+        Intents.init()
+        try {
+            intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+            val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+            composeRule.setContent {
+                OemDeviceHelperCard(
+                    notificationPermissionOverride = false,
+                    exactAlarmPermissionOverride = true,
+                    batteryOptimizedOverride = false,
+                )
+            }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG).assertIsDisplayed().performClick()
+            intended(
+                allOf(
+                    hasAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS),
+                    hasExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            )
+        } finally {
+            Intents.release()
+        }
+    }
+
+    @Test
+    fun optimalerZustandZeigtKeineAktionsButtonsUndDenOptimalBadge() {
+        composeRule.setContent {
+            OemDeviceHelperCard(
+                notificationPermissionOverride = true,
+                exactAlarmPermissionOverride = true,
+                batteryOptimizedOverride = false,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Optimal konfiguriert").assertIsDisplayed()
+        composeRule.onNodeWithTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG).assertDoesNotExist()
+        composeRule.onNodeWithTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG).assertDoesNotExist()
     }
 
     @Test

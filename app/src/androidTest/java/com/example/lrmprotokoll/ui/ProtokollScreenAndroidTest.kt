@@ -243,6 +243,71 @@ class ProtokollScreenAndroidTest {
         composeRule.onNodeWithTag("fab_new_measurement").assertDoesNotExist()
     }
 
+    /**
+     * Bugfix (Owner-Feedback 12.09.2026): "+ Neue Messung" fuehrte waehrend einer bereits
+     * laufenden Messung nur zurueck ins Cockpit - eine zweite, parallele Messung gibt es nicht.
+     * Echtes Geraete-Pendant zu [ProtokollScreenTest] (Robolectric, app/src/test) - Teil der
+     * Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Anders als
+     * [protokollScreen_floatingActionButton_nichtVorhandenWennCallbackNull] oben geht es hier
+     * nicht um einen fehlenden Callback, sondern um den aktiven Messungs-Zustand selbst.
+     */
+    @Test
+    fun protokollScreen_floatingActionButton_ausgeblendetBeiLaufenderMessung() {
+        com.example.lrmprotokoll.audio.AudioRecordingService.testSetzeLaeuft(true)
+        try {
+            composeRule.setContent {
+                LaermprotokollTheme {
+                    ProtokollScreen(onBack = {}, onOpenSession = {}, onStartNewMeasurement = {})
+                }
+            }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("fab_new_measurement").assertDoesNotExist()
+        } finally {
+            com.example.lrmprotokoll.audio.AudioRecordingService.testSetzeLaeuft(false)
+        }
+    }
+
+    /**
+     * Owner-Feature-Auftrag 12.09.2026: Sessions an unterschiedlichen Kalendertagen muessen unter
+     * getrennten Tages-Kopfzeilen erscheinen, nicht in einer einzigen flachen Liste.
+     */
+    @Test
+    fun protokollScreen_sessionsAnUnterschiedlichenTagenBekommenGetrennteTagesueberschriften() {
+        val heute = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 10)
+        }.timeInMillis
+        val gestern = heute - 24L * 60 * 60 * 1000
+
+        runBlocking {
+            db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = heute, endedAt = heute + 10_000,
+                    deviceAddress = "AA:BB", deviceName = "PCE-323", weighting = "A", timeWeighting = "F",
+                )
+            )
+            db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = gestern, endedAt = gestern + 10_000,
+                    deviceAddress = "AA:BB", deviceName = "PCE-323", weighting = "A", timeWeighting = "F",
+                )
+            )
+        }
+
+        composeRule.setContent {
+            LaermprotokollTheme {
+                ProtokollScreen(onBack = {}, onOpenSession = {}, onStartNewMeasurement = {})
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            composeRule.onAllNodesWithText("PCE-323").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val formatter = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(heute))}").assertIsDisplayed()
+        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}").assertIsDisplayed()
+    }
+
     @Test
     fun protokollScreen_filterButton_klickbar() {
         composeRule.setContent {

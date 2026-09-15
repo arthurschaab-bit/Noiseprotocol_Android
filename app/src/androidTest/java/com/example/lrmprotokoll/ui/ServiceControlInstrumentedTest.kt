@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -85,5 +86,38 @@ class ServiceControlInstrumentedTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertIsEnabled()
+    }
+
+    /**
+     * Echtes Geraete-Pendant zu [ServiceControlComposeTest] (Robolectric, app/src/test) - Teil
+     * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026).
+     * Regressionstest fuer M7c Aufgabe 1: das Home-Dashboard zeigte den Monitoring-Status bisher
+     * nur als einmaligen Snapshot - ein Servicestart/-stopp waehrend der Screen offen war, blieb
+     * unsichtbar. Setzt den StateFlow direkt (wie das Robolectric-Original), statt den echten
+     * Service zu starten, der Mikrofon-Hardware braeuchte.
+     */
+    @Test
+    fun statusWechseltLiveOhneDenScreenNeuZuOeffnen() {
+        composeRule.setContent {
+            NoiseProtocolApp(
+                onNavigateToPlayer = {},
+                onNavigateToSettings = {},
+                onNavigateToMeter = {},
+                onNavigateToProtokoll = {},
+                onNavigateToDiagnose = {},
+                onNavigateToVideo = {},
+            )
+        }
+        composeRule.onNodeWithText("Start measurement").assertExists()
+
+        AudioRecordingService.testSetzeLaeuft(true)
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                composeRule.onAllNodesWithText("MEASUREMENT RUNNING").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("MEASUREMENT RUNNING").assertIsDisplayed()
+        } finally {
+            AudioRecordingService.testSetzeLaeuft(false)
+        }
     }
 }
