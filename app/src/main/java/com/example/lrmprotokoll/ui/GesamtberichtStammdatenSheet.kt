@@ -73,6 +73,8 @@ import kotlinx.coroutines.withContext
 fun GesamtberichtStammdatenSheet(
     sessionId: Long,
     onFertig: () -> Unit,
+    /** Nur bei Nacherfassung: Messtag statt des heutigen Erfassungsdatums zuordnen. */
+    giltFuerTagStart: Long? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -205,7 +207,9 @@ fun GesamtberichtStammdatenSheet(
         )
         scope.launch {
             withContext(Dispatchers.IO) {
-                container.database.stammdatenVerlaufDao().insert(stammdaten.zuEntity(System.currentTimeMillis()))
+                container.database.stammdatenVerlaufDao().insert(
+                    stammdaten.zuEntity(System.currentTimeMillis()).copy(giltFuerTagStart = giltFuerTagStart)
+                )
             }
             onFertig()
         }
@@ -219,11 +223,16 @@ fun GesamtberichtStammdatenSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
-            Text("Berichtsangaben für diese Messung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                if (giltFuerTagStart == null) "Berichtsangaben für diese Messung" else "Berichtsangaben nachtragen",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 "Gerät, Messaufbau und Randbedingungen für den Gesamtbericht. Vorausgefüllt mit den " +
-                    "zuletzt verwendeten Angaben - einfach anpassen, was abweicht.",
+                    "zuletzt verwendeten Angaben - einfach anpassen, was abweicht. " +
+                    if (giltFuerTagStart == null) "" else "Dieser Nachtrag wird mit dem heutigen Erfassungszeitpunkt und dem gewählten Messtag gespeichert.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

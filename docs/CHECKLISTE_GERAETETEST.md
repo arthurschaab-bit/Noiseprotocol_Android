@@ -291,6 +291,18 @@ Service). Die zugrunde liegende Ursache (Doze/Akku-Optimierung, WLAN-only-Einsch
 WLAN-Kontakt über mehrere Tage, oder etwas anderes) lässt sich mit dem hier verfügbaren, sehr
 kurzen Bundle nicht nachweisen – dafür wird echte Mehrtages-Nutzung auf einem Gerät gebraucht.
 
+### F13 — High-End-Bericht: neuer Erstellungs-Ablauf (Teil B, 14.09.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Frei gewählten Datumsbereich mit vollständigen Rohdaten und Stammdaten öffnen | Bericht wird angestoßen; bis `report_bridge.py` vorhanden ist, erscheint der Modulfehler verständlich statt eines Absturzes | |
+| Bereich mit mindestens einem bereits verdichteten Messtag wählen, auch wenn dort noch einzelne Rohwerte liegen | Erzeugung wird vor Python abgelehnt und nennt den konkreten Tag | |
+| Messtag mit mehreren Stammdaten-Einträgen wählen | Explizite Auswahl erscheint; ohne Auswahl startet kein Bericht | |
+| Messtag ohne Stammdaten wählen und Angaben nachtragen | Lücke und Nachtragen-Knopf erscheinen; Nachtrag speichert heutigen Erfassungszeitpunkt getrennt vom historischen Messtag | |
+| Fehlende oder unvollständige Angaben bestehen lassen und Bericht starten | Erstellung bleibt möglich; Lücke wird im Ablauf und nach der Python-Integration sichtbar im PDF bezeichnet | |
+| Messwerte mit unbestätigter A-/Zeitbewertung, Override aus | Bericht wird mit Verweis auf die Berichtsparameter abgelehnt | |
+| Dieselben Werte, Override bewusst aktiviert | Deutliche Warnung im Ablauf; das JSON trägt das Override-Flag, das PDF muss später einen sichtbaren Vorbehalt enthalten | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

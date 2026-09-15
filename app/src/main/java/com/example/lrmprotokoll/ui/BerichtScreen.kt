@@ -17,6 +17,8 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.report.GesamtberichtExport
 import com.example.lrmprotokoll.report.GesamtberichtStammdaten
+import com.example.lrmprotokoll.report.BerichtZeitraum
+import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import com.example.lrmprotokoll.report.PeriodenBerichtExport
 import com.example.lrmprotokoll.report.ermittleGesamtbericht
 import com.example.lrmprotokoll.report.ermittlePeriodenBericht
@@ -29,14 +31,18 @@ import java.util.Calendar
  * Reiter "Bericht" - Nachfolger des Zeitraum-/Gesamtbericht-Dialogs, der vorher unter Daten
  * (ehemals Protokoll) hinter dem Kalender-Icon lag. Der Dialog selbst (Presets, Umschalter
  * Zeitraumbericht/Gesamtbericht) ist unveraendert uebernommen; nur der Einstiegspunkt ist jetzt
- * ein eigener Hauptreiter statt eines TopAppBar-Icons, als Grundlage fuer den geplanten
- * High-End-Bericht (Chaquopy, siehe docs).
+ * ein eigener Hauptreiter statt eines TopAppBar-Icons. Der High-End-Bericht bekommt hier einen
+ * zweiten Einstieg, damit der alte Dialog bis zur funktionalen Chaquopy-Ablösung verfügbar
+ * bleibt (Owner-Vorgabe 13.09.2026).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BerichtScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Testbarer Aufrufpfad; ohne Injection wird Chaquopy erst beim Erzeugen gestartet. */
+    highEndRunner: (suspend (String) -> ChaquopyReportRunner.Ergebnis)? = null,
+    initialHighEndRange: BerichtZeitraum? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -46,6 +52,7 @@ fun BerichtScreen(
     val gesamtberichtExport = remember { GesamtberichtExport(context) }
 
     var zeigeZeitraumDialog by remember { mutableStateOf(false) }
+    var zeigeHighEndSheet by remember { mutableStateOf(false) }
     var zeitraumWirdErstellt by remember { mutableStateOf(false) }
     var zeigeMenue by remember { mutableStateOf(false) }
     // Owner-Anfrage 09.09.2026: derselbe Zeitraum-Dialog soll wahlweise den knappen
@@ -136,6 +143,13 @@ fun BerichtScreen(
             ) {
                 Text(stringResource(R.string.period_report_action))
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { zeigeHighEndSheet = true },
+                modifier = Modifier.fillMaxWidth().testTag("btn_bericht_erstellen_v2"),
+            ) {
+                Text("High-End-Bericht jetzt erzeugen")
+            }
         }
     }
 
@@ -199,6 +213,14 @@ fun BerichtScreen(
                     Text(stringResource(R.string.action_cancel))
                 }
             }
+        )
+    }
+
+    if (zeigeHighEndSheet) {
+        BerichtErstellenSheet(
+            onFertig = { zeigeHighEndSheet = false },
+            runner = highEndRunner ?: { parameter -> ChaquopyReportRunner(context).erzeugeBericht(parameter) },
+            initialRange = initialHighEndRange,
         )
     }
 }

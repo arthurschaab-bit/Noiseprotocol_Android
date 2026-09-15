@@ -43,7 +43,7 @@ class ReportConfigSettingsTest {
 
         composeRule.onNodeWithTag("input_report_gebietseinstufung")
             .performScrollTo()
-            .performTextInput("WA")
+            .performTextReplacement("WA")
         composeRule.waitForIdle()
 
         runBlocking {

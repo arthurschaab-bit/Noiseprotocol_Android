@@ -17,6 +17,10 @@ import androidx.room.Query
  * aus den letzten (bis zu) 10 Einträgen auswählen, wie es der Owner verlangt hat. Es wird nichts
  * gelöscht - die Auswahl auf die letzten 10 beschränkt sich allein über
  * [StammdatenVerlaufDao.letzte]s `LIMIT`.
+ *
+ * Fuer nachtraegliche Angaben zum Rechtsbericht bezeichnet [giltFuerTagStart] den lokalen
+ * Kalendertag der Messung, waehrend [erstelltAm] weiterhin den echten Erfassungszeitpunkt
+ * dokumentiert. Eine Rueckdatierung von [erstelltAm] wuerde die Beweiskette verfälschen.
  */
 @Entity(tableName = "stammdaten_verlauf")
 data class StammdatenVerlaufEntity(
@@ -35,6 +39,7 @@ data class StammdatenVerlaufEntity(
     val fensterzustand: String,
     val wetter: String,
     val datenqualitaetHinweis: String,
+    val giltFuerTagStart: Long? = null,
 )
 
 @Dao
@@ -43,8 +48,15 @@ interface StammdatenVerlaufDao {
     @Insert
     suspend fun insert(eintrag: StammdatenVerlaufEntity): Long
 
-    /** Neueste zuerst - Grundlage sowohl für den Default (der erste Eintrag) als auch für die
-     * Auswahl-Liste im Stammdaten-Dialog. */
-    @Query("SELECT * FROM stammdaten_verlauf ORDER BY erstelltAm DESC LIMIT :anzahl")
+    /** Neueste reguläre Messbeginn-Einträge zuerst. Ein historischer Nachtrag soll nicht
+     * automatisch zum Default einer neuen Messung werden, nur weil er heute erfasst wurde. */
+    @Query("SELECT * FROM stammdaten_verlauf WHERE giltFuerTagStart IS NULL ORDER BY erstelltAm DESC LIMIT :anzahl")
     suspend fun letzte(anzahl: Int = 10): List<StammdatenVerlaufEntity>
+
+    /** Bewahrt bei Nachtraegen beide Zeitangaben: wann erfasst und fuer welchen Messtag. Deckt
+     * den regulaeren Fall (Eintrag mit echtem Erfassungszeitpunkt im lokalen Messtag) mit ab,
+     * dafuer war frueher eine eigene `zwischen`-Query da - die hatte aber ausser dieser Klasse
+     * selbst keinen Aufrufer mehr (Review-Befund PR #144) und wurde entfernt. */
+    @Query("SELECT * FROM stammdaten_verlauf WHERE giltFuerTagStart = :von OR (giltFuerTagStart IS NULL AND erstelltAm >= :von AND erstelltAm < :bis) ORDER BY erstelltAm DESC")
+    suspend fun fuerTag(von: Long, bis: Long): List<StammdatenVerlaufEntity>
 }

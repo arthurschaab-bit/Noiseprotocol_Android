@@ -81,6 +81,15 @@ interface MeasurementDao {
     @Query("SELECT * FROM measurements WHERE timestamp >= :von AND timestamp < :bis ORDER BY timestamp")
     suspend fun zwischen(von: Long, bis: Long): List<MeasurementEntity>
 
+    /** Der Rechtsbericht prueft Tage vor dem Massendaten-Export, ohne Millionen Zeilen nur
+     * fuer eine Vorabentscheidung in den Speicher zu laden. */
+    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis")
+    suspend fun anzahlZwischen(von: Long, bis: Long): Int
+
+    /** GAP-Zeilen sind keine bestaetigten Pegelmessungen und zaehlen hier nicht mit. */
+    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis AND (flags & 8) = 0 AND (weighting IS NULL OR timeWeighting IS NULL)")
+    suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long): Int
+
     /** Fuer den Retention-Job (Plan 13.2): Rohwerte aelter als die Grenze. */
     @Query("SELECT * FROM measurements WHERE timestamp < :grenze ORDER BY timestamp")
     suspend fun aelterAls(grenze: Long): List<MeasurementEntity>
@@ -139,4 +148,9 @@ interface MinuteAggregateDao {
 
     @Query("SELECT * FROM minute_aggregates WHERE minuteStart >= :von AND minuteStart < :bis ORDER BY minuteStart")
     suspend fun zwischen(von: Long, bis: Long): List<MinuteAggregateEntity>
+
+    /** Bereits verdichtete Minuten verhindern einen genauen Rechtsbericht auch dann, wenn
+     * andere Rohwerte desselben Tages noch vorhanden sind (Owner-Entscheidung 13.09.2026). */
+    @Query("SELECT COUNT(*) FROM minute_aggregates WHERE minuteStart >= :von AND minuteStart < :bis")
+    suspend fun anzahlZwischen(von: Long, bis: Long): Int
 }
