@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -134,5 +135,63 @@ class ProtokollDetailScreenInstrumentedTest {
         composeRule.onNodeWithText(notFoundText).assertIsDisplayed()
         composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
         assertTrue(backed)
+    }
+
+    /**
+     * Echtes Geraete-Pendant zu [ProtokollDetailScreenComposeTest] (Robolectric, app/src/test) -
+     * Teil der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026).
+     * [protokollDetailScreenZeigtKennwerteUndExportButtonsFuerGueltigeSession] oben prueft bereits
+     * mit Messwerten, dass der Pegelverlauf-Abschnitt erscheint, aber nicht explizit den Leer-
+     * Hinweistext-Gegensatz zwischen beiden Faellen (M7c Aufgabe 2).
+     */
+    @Test
+    fun ohneMesswerteZeigtDerChartEinenHinweisStattZuAbstuerzen() {
+        val db = app.container.database
+        val sessionId = runBlocking {
+            db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = 1_700_000_000_000L, endedAt = 1_700_000_010_000L,
+                    deviceAddress = "AA:BB", deviceName = "PCE-323", weighting = "A", timeWeighting = "SLOW",
+                )
+            )
+        }
+
+        val chartTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
+        val noChartData = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data)
+
+        composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
+        wartetBisAngezeigt(chartTitle)
+
+        composeRule.onNodeWithText(chartTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(noChartData).assertIsDisplayed()
+    }
+
+    @Test
+    fun mitMesswertenWirdDerChartOhneHinweistextGerendert() {
+        val db = app.container.database
+        val sessionId = runBlocking {
+            val id = db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = 1_700_000_000_000L, endedAt = 1_700_000_010_000L,
+                    deviceAddress = "AA:BB", deviceName = "PCE-323", weighting = "A", timeWeighting = "SLOW",
+                )
+            )
+            db.measurementDao().insertAll(
+                listOf(
+                    MeasurementEntity(sessionId = id, timestamp = 1_700_000_000_500L, levelDb = 45.0, weighting = "A", flags = 0),
+                    MeasurementEntity(sessionId = id, timestamp = 1_700_000_005_000L, levelDb = 55.0, weighting = "A", flags = 0),
+                )
+            )
+            id
+        }
+
+        val chartTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_history_title)
+        val noChartData = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_detail_no_chart_data)
+
+        composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
+        wartetBisAngezeigt(chartTitle)
+
+        composeRule.onNodeWithText(chartTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(noChartData).assertDoesNotExist()
     }
 }
