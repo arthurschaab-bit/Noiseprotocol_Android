@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.util.Log
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -1133,8 +1134,17 @@ fun SettingsScreen(
                 ) {
                     // PROMPT_M10_FUNKTIONEN.md F5: erst beim Aufklappen ermitteln, nicht bei
                     // jedem Öffnen der Einstellungen - das Zählen der Audiodateien ist Datei-I/O.
+                    // TEMPORAER (PR #150-Diagnose, entfernen sobald geklaert): Log.d, um empirisch
+                    // zu sehen, ob dieser Effect in der echten SettingsScreen-Komposition ueberhaupt
+                    // startet und ob ermittleSpeicherplatz() darin zurueckkehrt.
                     LaunchedEffect(expRetention) {
-                        if (expRetention) speicherplatz = ermittleSpeicherplatz(context)
+                        Log.d("SpeicherplatzDiag", "LaunchedEffect gestartet, expRetention=$expRetention")
+                        if (expRetention) {
+                            val ergebnis = ermittleSpeicherplatz(context)
+                            Log.d("SpeicherplatzDiag", "ermittleSpeicherplatz() zurueck: $ergebnis")
+                            speicherplatz = ergebnis
+                            Log.d("SpeicherplatzDiag", "speicherplatz zugewiesen")
+                        }
                     }
                     speicherplatz?.let { belegung ->
                         Text(

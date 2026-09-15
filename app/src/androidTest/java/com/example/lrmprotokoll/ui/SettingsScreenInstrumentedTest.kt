@@ -125,6 +125,66 @@ class SettingsScreenInstrumentedTest {
     }
 
     /**
+     * Geraetetest-Checkliste F6: der Speicherplatz-Abschnitt (F5) war bislang kompiliert und
+     * lint-sauber, aber noch nie auf einem echten Geraet gesehen worden - `ermittleSpeicherplatz()`
+     * liest echte Dateigroessen vom Dateisystem, genau das laeuft unter Robolectric nie mit.
+     */
+    @Test
+    fun speicherplatzAbschnittZeigtErmittelteGroessenNachDemAufklappen() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        try {
+            settingsManager.isProMode = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            // Zwischenpruefung, unabhaengig von ermittleSpeicherplatz(): der Titel taucht nach dem
+            // Aufklappen ein zweites Mal auf (Schalterzeile im Kartenkoerper), das haengt nur an
+            // expRetention, nicht am asynchron ermittelten Speicherplatz. Bestaetigt das Aufklappen
+            // selbst und grenzt einen etwaigen erneuten Fehlschlag auf ermittleSpeicherplatz() ein.
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
+            }
+
+            // Der Isolationstest SpeicherplatzUebersichtInstrumentedTest belegt: ermittleSpeicherplatz()
+            // selbst ist schnell (<2s). Trotzdem haengt genau dieser LaunchedEffect(expRetention) auf
+            // dem CI-Emulator zuverlaessig fest, obwohl er (siehe Zwischenpruefung oben) nachweislich
+            // gestartet wird. Zwei gezielte Fixversuche (waitForIdle() direkt nach dem Klick,
+            // mainClock.advanceTimeBy(1_000L) fuer die Card-Animation) haben den exakt gleichen
+            // 15s-Timeout nicht behoben - der Fehlerort liegt also woanders. Statt eines dritten
+            // blinden Fixversuchs: manuelle Poll-Schleife, die im Fehlerfall mitliefert, ob der
+            // Abschnitt zu diesem Zeitpunkt ueberhaupt noch aufgeklappt ist (2 Titel-Treffer) - das
+            // grenzt zwischen "wieder eingeklappt" und "aufgeklappt, aber Ergebnis fehlt" ein.
+            val deadline = System.currentTimeMillis() + 15_000L
+            var sichtbarBeimLetztenVersuch = false
+            var expandiertBeimLetztenVersuch = false
+            while (System.currentTimeMillis() < deadline) {
+                composeRule.waitForIdle()
+                sichtbarBeimLetztenVersuch =
+                    composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
+                if (sichtbarBeimLetztenVersuch) break
+                expandiertBeimLetztenVersuch =
+                    composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
+                Thread.sleep(200)
+            }
+            assertTrue(
+                "Nach 15s kein 'Audiodateien:' sichtbar. Abschnitt beim letzten Poll " +
+                    "${if (expandiertBeimLetztenVersuch) "noch aufgeklappt (2 Titel-Treffer)" else "NICHT mehr aufgeklappt"}.",
+                sichtbarBeimLetztenVersuch,
+            )
+            composeRule.onNodeWithText("Audiodateien:", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("Datenbank:", substring = true).performScrollTo().assertIsDisplayed()
+        } finally {
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
      * Echtes Geraete-Pendant zu [MeterSchwellenwertUiTest] (Robolectric, app/src/test) - Teil
      * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Prueft-
      * protokoll 11.09.2026 Frage 4 (Korrekturliste C-3): der eigene Messgeraet-Schwellenwert war
