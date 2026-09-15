@@ -154,17 +154,29 @@ class SettingsScreenInstrumentedTest {
             // Der Isolationstest SpeicherplatzUebersichtInstrumentedTest belegt: ermittleSpeicherplatz()
             // selbst ist schnell (<2s). Trotzdem haengt genau dieser LaunchedEffect(expRetention) auf
             // dem CI-Emulator zuverlaessig fest, obwohl er (siehe Zwischenpruefung oben) nachweislich
-            // gestartet wird - ein bekannter Compose-Test-Stolperstein: ein Effect, der beim ERSTEN
-            // Eintritt in den AnimatedVisibility-Content ausgeloest wird, haengt an der laufenden
-            // Enter-Transition (Default-Dauer der Card); mainClock.autoAdvance tickt Frames nur bei
-            // synchronisierenden Aktionen, nicht innerhalb einer reinen fetchSemanticsNodes()-Schleife.
-            // Treibt die Animation deshalb explizit zu Ende, bevor auf das Ergebnis gewartet wird.
-            composeRule.mainClock.advanceTimeBy(1_000L)
-            composeRule.waitForIdle()
-
-            composeRule.waitUntil(timeoutMillis = 15_000L) {
-                composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
+            // gestartet wird. Zwei gezielte Fixversuche (waitForIdle() direkt nach dem Klick,
+            // mainClock.advanceTimeBy(1_000L) fuer die Card-Animation) haben den exakt gleichen
+            // 15s-Timeout nicht behoben - der Fehlerort liegt also woanders. Statt eines dritten
+            // blinden Fixversuchs: manuelle Poll-Schleife, die im Fehlerfall mitliefert, ob der
+            // Abschnitt zu diesem Zeitpunkt ueberhaupt noch aufgeklappt ist (2 Titel-Treffer) - das
+            // grenzt zwischen "wieder eingeklappt" und "aufgeklappt, aber Ergebnis fehlt" ein.
+            val deadline = System.currentTimeMillis() + 15_000L
+            var sichtbarBeimLetztenVersuch = false
+            var expandiertBeimLetztenVersuch = false
+            while (System.currentTimeMillis() < deadline) {
+                composeRule.waitForIdle()
+                sichtbarBeimLetztenVersuch =
+                    composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
+                if (sichtbarBeimLetztenVersuch) break
+                expandiertBeimLetztenVersuch =
+                    composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
+                Thread.sleep(200)
             }
+            assertTrue(
+                "Nach 15s kein 'Audiodateien:' sichtbar. Abschnitt beim letzten Poll " +
+                    "${if (expandiertBeimLetztenVersuch) "noch aufgeklappt (2 Titel-Treffer)" else "NICHT mehr aufgeklappt"}.",
+                sichtbarBeimLetztenVersuch,
+            )
             composeRule.onNodeWithText("Audiodateien:", substring = true).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("Datenbank:", substring = true).performScrollTo().assertIsDisplayed()
         } finally {
