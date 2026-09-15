@@ -125,6 +125,34 @@ class SettingsScreenInstrumentedTest {
     }
 
     /**
+     * Geraetetest-Checkliste F6: der Speicherplatz-Abschnitt (F5) war bislang kompiliert und
+     * lint-sauber, aber noch nie auf einem echten Geraet gesehen worden - `ermittleSpeicherplatz()`
+     * liest echte Dateigroessen vom Dateisystem, genau das laeuft unter Robolectric nie mit.
+     */
+    @Test
+    fun speicherplatzAbschnittZeigtErmittelteGroessenNachDemAufklappen() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        try {
+            settingsManager.isProMode = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Audiodateien:", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Datenbank:", substring = true).assertIsDisplayed()
+        } finally {
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
      * Echtes Geraete-Pendant zu [MeterSchwellenwertUiTest] (Robolectric, app/src/test) - Teil
      * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Prueft-
      * protokoll 11.09.2026 Frage 4 (Korrekturliste C-3): der eigene Messgeraet-Schwellenwert war
