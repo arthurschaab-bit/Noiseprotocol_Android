@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -12,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -20,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
@@ -37,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.report.BerichtTag
@@ -238,22 +241,44 @@ fun BerichtErstellenSheet(
 
     if (datumDialogOffen) {
         val picker = rememberDateRangePickerState()
-        DatePickerDialog(
+        // Review-Befund (Owner-Meldung 15.09.2026, echtes Geraet): DateRangePicker in einem
+        // DatePickerDialog ist ohne Hoehenbegrenzung hoeher als der Bildschirm - Uebernehmen/
+        // Abbrechen landeten ausserhalb des Sichtbereichs. Material3 empfiehlt fuer
+        // DateRangePicker deshalb einen Vollbild-Dialog mit fest angeordneter Button-Zeile statt
+        // DatePickerDialog (das fuer den kompakten DatePicker gedacht ist).
+        Dialog(
             onDismissRequest = { datumDialogOffen = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val start = picker.selectedStartDateMillis
-                    val ende = picker.selectedEndDateMillis
-                    if (start != null && ende != null) {
-                        zeitraum = BerichtZeitraum.ausPicker(start, ende)
-                        ausgewaehlteIds = emptyMap()
-                        pdfPfad = null
-                        datumDialogOffen = false
-                    } else meldung = "Bitte Start- und Enddatum wählen."
-                }) { Text("Übernehmen") }
-            },
-            dismissButton = { TextButton(onClick = { datumDialogOffen = false }) { Text("Abbrechen") } },
-        ) { DateRangePicker(state = picker) }
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = { datumDialogOffen = false },
+                            modifier = Modifier.testTag("btn_bericht_datumsbereich_abbrechen"),
+                        ) { Text("Abbrechen") }
+                        TextButton(
+                            onClick = {
+                                val start = picker.selectedStartDateMillis
+                                val ende = picker.selectedEndDateMillis
+                                if (start != null && ende != null) {
+                                    zeitraum = BerichtZeitraum.ausPicker(start, ende)
+                                    ausgewaehlteIds = emptyMap()
+                                    pdfPfad = null
+                                    datumDialogOffen = false
+                                } else meldung = "Bitte Start- und Enddatum wählen."
+                            },
+                            modifier = Modifier.testTag("btn_bericht_datumsbereich_uebernehmen"),
+                        ) { Text("Übernehmen") }
+                    }
+                    DateRangePicker(state = picker, modifier = Modifier.weight(1f))
+                }
+            }
+        }
     }
 
     nachtragTag?.let { tag ->
