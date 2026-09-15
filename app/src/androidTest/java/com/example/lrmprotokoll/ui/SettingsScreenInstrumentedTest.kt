@@ -151,6 +151,17 @@ class SettingsScreenInstrumentedTest {
                 composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
             }
 
+            // Der Isolationstest SpeicherplatzUebersichtInstrumentedTest belegt: ermittleSpeicherplatz()
+            // selbst ist schnell (<2s). Trotzdem haengt genau dieser LaunchedEffect(expRetention) auf
+            // dem CI-Emulator zuverlaessig fest, obwohl er (siehe Zwischenpruefung oben) nachweislich
+            // gestartet wird - ein bekannter Compose-Test-Stolperstein: ein Effect, der beim ERSTEN
+            // Eintritt in den AnimatedVisibility-Content ausgeloest wird, haengt an der laufenden
+            // Enter-Transition (Default-Dauer der Card); mainClock.autoAdvance tickt Frames nur bei
+            // synchronisierenden Aktionen, nicht innerhalb einer reinen fetchSemanticsNodes()-Schleife.
+            // Treibt die Animation deshalb explizit zu Ende, bevor auf das Ergebnis gewartet wird.
+            composeRule.mainClock.advanceTimeBy(1_000L)
+            composeRule.waitForIdle()
+
             composeRule.waitUntil(timeoutMillis = 15_000L) {
                 composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
