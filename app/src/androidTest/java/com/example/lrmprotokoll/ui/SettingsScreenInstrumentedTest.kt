@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -26,6 +27,7 @@ import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.anyIntent
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasExtra
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.Alert
@@ -256,6 +258,58 @@ class SettingsScreenInstrumentedTest {
         } finally {
             Intents.release()
         }
+    }
+
+    /**
+     * Echtes Geraete-Pendant zu zwei Faellen aus [OemDeviceHelperCardTest] (Robolectric,
+     * app/src/test), die die obige [systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft]
+     * noch nicht deckte - Teil der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-
+     * Auftrag 15.09.2026). Der Huawei/EMUI-SecurityException-Fallback bleibt bewusst Robolectric-
+     * only: `OemDeviceHelperCard` hat dafuer keinen Test-Override, das echte `Build.MANUFACTURER`
+     * eines CI-Emulators ist nie "HUAWEI" und laesst sich auf echter Hardware nicht faelschen.
+     */
+    @Test
+    fun systemIntentFuerBenachrichtigungenErlaubenWirdGeprueft() {
+        Intents.init()
+        try {
+            intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+            val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+            composeRule.setContent {
+                OemDeviceHelperCard(
+                    notificationPermissionOverride = false,
+                    exactAlarmPermissionOverride = true,
+                    batteryOptimizedOverride = false,
+                )
+            }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG).assertIsDisplayed().performClick()
+            intended(
+                allOf(
+                    hasAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS),
+                    hasExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            )
+        } finally {
+            Intents.release()
+        }
+    }
+
+    @Test
+    fun optimalerZustandZeigtKeineAktionsButtonsUndDenOptimalBadge() {
+        composeRule.setContent {
+            OemDeviceHelperCard(
+                notificationPermissionOverride = true,
+                exactAlarmPermissionOverride = true,
+                batteryOptimizedOverride = false,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Optimal konfiguriert").assertIsDisplayed()
+        composeRule.onNodeWithTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG).assertDoesNotExist()
+        composeRule.onNodeWithTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG).assertDoesNotExist()
     }
 
     @Test
