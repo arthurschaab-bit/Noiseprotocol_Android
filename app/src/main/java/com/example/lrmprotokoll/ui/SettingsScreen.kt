@@ -1562,11 +1562,15 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Beim Start eines Messvorgangs nach Fotos fragen")
-                    Switch(checked = fotoDokuAktiv, onCheckedChange = {
-                        fotoDokuAktiv = it
-                        settings.fotoDokuAktiv = it
-                    })
+                    Text("Beim Start eines Messvorgangs nach Fotos fragen", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = fotoDokuAktiv,
+                        onCheckedChange = {
+                            fotoDokuAktiv = it
+                            settings.fotoDokuAktiv = it
+                        },
+                        modifier = Modifier.testTag("switch_foto_doku_aktiv"),
+                    )
                 }
                 Text(
                     "Ein Foto vom Messaufbau belegt später, wie und wo gemessen wurde – die häufigste " +
@@ -1597,6 +1601,7 @@ fun SettingsScreen(
                                     selected = aktuell == wert,
                                     onClick = { setzen(wert) },
                                     label = { Text(beschriftung) },
+                                    modifier = Modifier.testTag("chip_foto_${bezeichnung}_$wert"),
                                 )
                             }
                         }
@@ -1618,17 +1623,22 @@ fun SettingsScreen(
                             onValueChangeFinished = { settings.fotoDokuMaxProKategorie = fotoMax.toInt() },
                             valueRange = 1f..10f,
                             steps = 8,
+                            modifier = Modifier.testTag("slider_foto_max_pro_kategorie"),
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Fotos nach Google Drive hochladen")
-                            Switch(checked = fotoDriveUpload, onCheckedChange = {
-                                fotoDriveUpload = it
-                                settings.fotoDokuDriveUpload = it
-                            })
+                            Text("Fotos nach Google Drive hochladen", modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = fotoDriveUpload,
+                                onCheckedChange = {
+                                    fotoDriveUpload = it
+                                    settings.fotoDokuDriveUpload = it
+                                },
+                                modifier = Modifier.testTag("switch_foto_drive_upload"),
+                            )
                         }
                     }
                 }
