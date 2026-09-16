@@ -1056,25 +1056,16 @@ class SettingsScreenInstrumentedTest {
             composeRule.onNodeWithText("Berichtsangaben", substring = true).performScrollTo().performClick()
             composeRule.waitForIdle()
 
+            // Echter Layout-Bug gefunden und behoben (nicht nur ein Testproblem): der Semantics-
+            // Dump eines fehlgeschlagenen CI-Laufs zeigte fuer diesen Switch Node-Bounds mit
+            // l==r (0px Breite) - der lange, ungewichtete Text in der Row drueckte ihn bei
+            // schmaler Bildschirmbreite vollstaendig hinaus, der Switch war dadurch de facto
+            // nicht klickbar. Fix: Modifier.weight(1f) auf dem Text in SettingsScreen.kt, damit
+            // er umbricht statt den Switch zu verdraengen.
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performScrollTo().assertIsOn()
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performClick()
-            composeRule.waitForIdle()
 
-            // CI-Fehler (zweimal reproduziert, kein Flake): unmittelbar nach performClick() war
-            // settingsManager.stammdatenAbfrageAktiv noch nicht auf false umgesprungen, obwohl
-            // exakt dasselbe Pruefmuster bei allen anderen Schaltern dieser Klasse (recordWavAudio,
-            // alarmierungAktiv, alarmTonAktiv, quietHoursEnabled) anstandslos funktioniert hat.
-            // Statt eines sofortigen Reads per waitUntil() pollen und im Fehlerfall den
-            // Semantics-Baum dumpen (gleiches Diagnosewerkzeug wie bei der Speicherplatz-Sektion,
-            // PR #150), damit ein erneuter CI-Fehlschlag echte Evidenz statt eines weiteren Ratens
-            // liefert.
-            val ausgeschaltet = runCatching {
-                composeRule.waitUntil(timeoutMillis = 5_000L) { !settingsManager.stammdatenAbfrageAktiv }
-            }.isSuccess
-            if (!ausgeschaltet) {
-                schreibeSemantikDiagnose("StammdatenAbfrageSchalter")
-            }
-            assertTrue("Schalter muss stammdatenAbfrageAktiv tatsaechlich ausschalten", ausgeschaltet)
+            assertFalse("Schalter muss stammdatenAbfrageAktiv tatsaechlich ausschalten", settingsManager.stammdatenAbfrageAktiv)
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").assertIsOff()
         } finally {
             settingsManager.stammdatenAbfrageAktiv = oldValue
