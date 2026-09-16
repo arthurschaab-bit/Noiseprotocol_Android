@@ -119,7 +119,12 @@ class HomeTagHeaderCollapseInstrumentedTest {
         composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagA2)))
         composeRule.onNodeWithText(labelText(aufnahmeTagA2)).assertExists()
 
-        // Tag A einklappen.
+        // Tag A einklappen. Nach den beiden vorherigen performScrollToNode()-Aufrufen (zu den
+        // Aufnahmen-Labels, weiter unten in der Liste) kann der Header laengst wieder aus der
+        // Komposition entfernt worden sein - LazyColumn disponiert Eintraege, die aus dem
+        // Sichtbereich hinausscrollen, in BEIDE Richtungen, nicht nur "noch nicht erreicht".
+        // Deshalb erst zurueckscrollen, dann klicken (wie beim zweiten Klick weiter unten).
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("day_header_$tagA"))
         composeRule.onNodeWithTag("day_header_$tagA").performClick()
         composeRule.waitForIdle()
 
