@@ -1058,8 +1058,23 @@ class SettingsScreenInstrumentedTest {
 
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performScrollTo().assertIsOn()
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performClick()
+            composeRule.waitForIdle()
 
-            assertFalse("Schalter muss stammdatenAbfrageAktiv tatsaechlich ausschalten", settingsManager.stammdatenAbfrageAktiv)
+            // CI-Fehler (zweimal reproduziert, kein Flake): unmittelbar nach performClick() war
+            // settingsManager.stammdatenAbfrageAktiv noch nicht auf false umgesprungen, obwohl
+            // exakt dasselbe Pruefmuster bei allen anderen Schaltern dieser Klasse (recordWavAudio,
+            // alarmierungAktiv, alarmTonAktiv, quietHoursEnabled) anstandslos funktioniert hat.
+            // Statt eines sofortigen Reads per waitUntil() pollen und im Fehlerfall den
+            // Semantics-Baum dumpen (gleiches Diagnosewerkzeug wie bei der Speicherplatz-Sektion,
+            // PR #150), damit ein erneuter CI-Fehlschlag echte Evidenz statt eines weiteren Ratens
+            // liefert.
+            val ausgeschaltet = runCatching {
+                composeRule.waitUntil(timeoutMillis = 5_000L) { !settingsManager.stammdatenAbfrageAktiv }
+            }.isSuccess
+            if (!ausgeschaltet) {
+                schreibeSemantikDiagnose("StammdatenAbfrageSchalter")
+            }
+            assertTrue("Schalter muss stammdatenAbfrageAktiv tatsaechlich ausschalten", ausgeschaltet)
             composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").assertIsOff()
         } finally {
             settingsManager.stammdatenAbfrageAktiv = oldValue
