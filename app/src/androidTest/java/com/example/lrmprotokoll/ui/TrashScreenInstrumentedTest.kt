@@ -38,6 +38,24 @@ class TrashScreenInstrumentedTest {
         app.container.database.clearAllTables()
     }
 
+    private fun schreibeSemantikDiagnose(bezeichnung: String) {
+        // Der Semantics-Tree ist nur im Compose-Testprozess verfügbar, nicht über ADB.
+        runCatching {
+            composeRule.onRoot().printToLog("ComposeSemantik-$bezeichnung-zusammengefuehrt")
+            composeRule.onRoot(useUnmergedTree = true)
+                .printToLog("ComposeSemantik-$bezeichnung-unmerged")
+        }
+    }
+
+    private fun warteAuf(bezeichnung: String, timeoutMillis: Long, bedingung: () -> Boolean) {
+        try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis, condition = bedingung)
+        } catch (error: ComposeTimeoutException) {
+            schreibeSemantikDiagnose(bezeichnung)
+            throw error
+        }
+    }
+
     private fun legeGeloeschtenEintragAn(dateiPfad: String = "/tmp/nicht-vorhanden.wav"): Long =
         runBlocking {
             val id = app.container.database.noiseDao().insert(
@@ -63,7 +81,7 @@ class TrashScreenInstrumentedTest {
         // waitUntil statt direktem assertIsDisplayed(): auf dem CI-Emulator kann der vorherige
         // Test noch mitten in einem Activity-Wechsel stecken, wenn dieser Test startet - der
         // Titel existiert dann kurzzeitig im Semantics-Baum, ist aber noch nicht ausgemessen.
-        composeRule.waitUntil(timeoutMillis = 5_000L) {
+        warteAuf("TrashLeerzustand", 5_000L) {
             composeRule.onAllNodesWithText("Papierkorb").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Papierkorb").assertIsDisplayed()
@@ -88,13 +106,13 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = { snackbar = it })
         }
         composeRule.waitForIdle()
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        warteAuf("TrashWiederherstellen", 10_000L) {
             composeRule.onAllNodesWithContentDescription("Wiederherstellen").fetchSemanticsNodes().isNotEmpty()
         }
 
         composeRule.onNodeWithContentDescription("Wiederherstellen").performClick()
 
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        warteAuf("TrashSnackbarNachWiederherstellen", 10_000L) {
             snackbar != null
         }
         val trashNachRestore = runBlocking {
@@ -114,7 +132,7 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = {})
         }
         composeRule.waitForIdle()
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        warteAuf("TrashLoeschenAbbrechen", 10_000L) {
             composeRule.onAllNodesWithContentDescription("Löschen").fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -138,14 +156,14 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = { snackbar = it })
         }
         composeRule.waitForIdle()
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        warteAuf("TrashLoeschenBestaetigen", 10_000L) {
             composeRule.onAllNodesWithContentDescription("Löschen").fetchSemanticsNodes().isNotEmpty()
         }
 
         composeRule.onNodeWithContentDescription("Löschen").performClick()
         composeRule.onNodeWithText("Löschen").assertIsDisplayed().performClick()
 
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        warteAuf("TrashSnackbarNachLoeschen", 10_000L) {
             snackbar != null
         }
         val nochVorhanden = runBlocking { app.container.database.noiseDao().getTrashAelterAls(Long.MAX_VALUE) }
