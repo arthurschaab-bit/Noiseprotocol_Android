@@ -800,6 +800,7 @@ fun SettingsScreen(
                             onValueChange = { karenzzeit = it },
                             onValueChangeFinished = { settings.karenzzeitSekunden = karenzzeit.toInt() },
                             valueRange = 10f..900f,
+                            modifier = Modifier.testTag("slider_karenzzeit"),
                         )
 
                         if (!exakteAlarmeErlaubt) {
@@ -865,6 +866,7 @@ fun SettingsScreen(
                                     alarmTonAktiv = it
                                     settings.alarmTonAktiv = it
                                 },
+                                modifier = Modifier.testTag("switch_alarmton_aktiv"),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(stringResource(R.string.settings_alerting_sound))

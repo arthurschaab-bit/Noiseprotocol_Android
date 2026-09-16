@@ -634,6 +634,118 @@ class SettingsScreenInstrumentedTest {
         }
     }
 
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2 (Risiko zuerst), naechste Stufe nach PR #161:
+     * der ntfy-Server-Textfeld (Pendant zu input_ntfy_topic, das bereits getestet ist) war
+     * bislang nie tatsaechlich bearbeitet worden. Zustand direkt vorgesetzt (ntfyAktiv = true),
+     * damit das Feld schon bei der ersten Komposition sichtbar ist - kein Klick, der es erst
+     * nachtraeglich einblendet (siehe PR #161-Lehre zu performScrollTo() bei nachtraeglich
+     * erscheinenden Elementen).
+     */
+    @Test
+    fun ntfyServerFeldKannBearbeitetWerdenUndUebernimmtEingabe() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        val oldNtfyActive = settingsManager.ntfyAktiv
+        val oldServer = settingsManager.ntfyServer
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.ntfyAktiv = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("input_ntfy_server").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("input_ntfy_server").performTextClearance()
+            composeRule.onNodeWithTag("input_ntfy_server").performTextInput("https://ntfy.example.test")
+
+            assertEquals("https://ntfy.example.test", settingsManager.ntfyServer)
+            composeRule.onNodeWithTag("input_ntfy_server").assertTextContains("https://ntfy.example.test")
+        } finally {
+            settingsManager.ntfyServer = oldServer
+            settingsManager.ntfyAktiv = oldNtfyActive
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Karenzzeit-Slider (Verzoegerung vor der
+     * Alarmierung nach Verbindungsabbruch) war bislang nie tatsaechlich bedient worden. Zustand
+     * direkt vorgesetzt (isProMode/alarmierungAktiv = true), damit der Slider schon bei der
+     * ersten Komposition sichtbar ist.
+     */
+    @Test
+    fun karenzzeitSliderPersistiertMinimumUndMaximum() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        val oldKarenzzeit = settingsManager.karenzzeitSekunden
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.karenzzeitSekunden = 60
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            val slider = composeRule.onNodeWithTag("slider_karenzzeit").performScrollTo().assertIsDisplayed()
+            slider.performTouchInput { swipeLeft() }
+            composeRule.waitForIdle()
+            assertEquals(10, settingsManager.karenzzeitSekunden)
+
+            slider.performTouchInput { swipeRight() }
+            composeRule.waitForIdle()
+            assertEquals(900, settingsManager.karenzzeitSekunden)
+        } finally {
+            settingsManager.karenzzeitSekunden = oldKarenzzeit
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Alarmton-Schalter (akustisches Signal
+     * zusaetzlich zu Notification/Vibration bei Verbindungsabbruch) war bislang nie tatsaechlich
+     * geklickt worden.
+     */
+    @Test
+    fun alarmTonAktivSchalterAendertEinstellung() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        val oldAlarmTon = settingsManager.alarmTonAktiv
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.alarmTonAktiv = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_alarmton_aktiv").performScrollTo().assertIsOn()
+            composeRule.onNodeWithTag("switch_alarmton_aktiv").performClick()
+
+            assertFalse("Schalter muss alarmTonAktiv tatsaechlich ausschalten", settingsManager.alarmTonAktiv)
+            composeRule.onNodeWithTag("switch_alarmton_aktiv").assertIsOff()
+        } finally {
+            settingsManager.alarmTonAktiv = oldAlarmTon
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
     @Test
     fun systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft() {
         assumeTrue("Exakte Alarme gibt es erst ab Android 12", Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
