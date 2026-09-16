@@ -10,6 +10,18 @@ set -uo pipefail
 
 api_level="$1"
 
+# Dieser Block muss im laufenden Emulator-Kontext ausgeführt werden. Der nachgelagerte
+# Workflow-Schritt läuft erst nach Ende von android-emulator-runner und kann deshalb keine
+# aussagekräftigen ADB-Diagnosen mehr liefern.
+sichere_emulator_diagnosen() {
+  mkdir -p logs
+  timeout 10s adb logcat -d > logs/adb-logcat.txt 2>&1 || true
+  timeout 10s adb shell dumpsys activity > logs/dumpsys-activity.txt 2>&1 || true
+  timeout 10s adb shell dumpsys window > logs/dumpsys-window.txt 2>&1 || true
+  adb shell uiautomator dump /sdcard/ci-ui-hierarchy.xml >/dev/null 2>&1 &&
+    adb pull /sdcard/ci-ui-hierarchy.xml logs/ui-hierarchy.xml >/dev/null 2>&1 || true
+}
+
 # Die vier "ohneBerechtigung..."-Tests unten laufen HIER NICHT mit: AGP gewaehrt beim Install
 # alle im Manifest deklarierten Laufzeitberechtigungen bereits (`pm install -g`), ein Revoke
 # waehrend dieses Laufs wuerde den instrumentierten Prozess toeten und den gesamten restlichen
@@ -19,7 +31,8 @@ notclass="com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrument
 
 ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.notClass="$notclass"
 if [ $? -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 
@@ -29,7 +42,8 @@ fi
 # installDebugAndroidTest sind reine `adb install`-Wrapper ohne die UTP-Deinstallation.
 ./gradlew installDebug installDebugAndroidTest --no-daemon --stacktrace
 if [ $? -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 
@@ -37,6 +51,8 @@ APP_ID="com.example.lrmprotokoll"
 RUNNER=$(adb shell pm list instrumentation | grep "target=$APP_ID" | sed -E 's/instrumentation:([^ ]+) .*/\1/' | tr -d '\r')
 if [ -z "$RUNNER" ]; then
   echo "::error::Keine Instrumentation fuer $APP_ID gefunden (pm list instrumentation leer) - App-/Test-APK nicht installiert?"
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 echo "Instrumentation-Komponente: $RUNNER"
@@ -107,6 +123,7 @@ for eintrag in "${faelle[@]}"; do
 done
 
 if [ "$fehlgeschlagen" -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
