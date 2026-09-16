@@ -416,6 +416,120 @@ class SettingsScreenInstrumentedTest {
     }
 
     /**
+     * Checkliste Button/Screen-Coverage Phase 6.2 (Risiko zuerst, nach PR #159): der
+     * "Audio-Aufnahmen (WAV) speichern"-Schalter ist der Datenschutz-Kernschalter aus
+     * PROMPT_M10_FUNKTIONEN.md (DSGVO-Modus: reine Pegelmessung ohne Audio) - bislang nie
+     * tatsaechlich geklickt. Die Kartenzusammenfassung ist ein hartkodierter Kotlin-Literal
+     * (kein stringResource), daher hier bewusst ohne getString() geprueft.
+     */
+    @Test
+    fun recordWavAudioSchalterAendertEinstellungUndSectionSummary() {
+        val settingsManager = app.container.settingsManager
+        val oldValue = settingsManager.recordWavAudio
+        try {
+            settingsManager.recordWavAudio = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.START) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("WAV-Audio aktiv", substring = true).assertIsDisplayed()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_record_wav_audio").performScrollTo().assertIsOn()
+            composeRule.onNodeWithTag("switch_record_wav_audio").performClick()
+
+            assertFalse("Schalter muss recordWavAudio tatsaechlich ausschalten", settingsManager.recordWavAudio)
+            composeRule.onNodeWithTag("switch_record_wav_audio").assertIsOff()
+            composeRule.onNodeWithText("Reine Pegelmessung (Kein Audio)", substring = true).assertIsDisplayed()
+        } finally {
+            settingsManager.recordWavAudio = oldValue
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Alarmierungs-Grundschalter war bislang
+     * nie geklickt. Prueft echte Wirkung statt nur des Settings-Felds: im Pro-Modus blendet das
+     * Einschalten den ntfy-Schalter (bereits eigenes testTag "switch_ntfy_enabled") ein, das
+     * Ausschalten blendet ihn wieder aus - das ist die tatsaechliche `if (alarmierungAktiv)`-
+     * Bedingung in SettingsScreen.kt, nicht nur der Zustand von SettingsManager.
+     */
+    @Test
+    fun alarmierungAktivSchalterSchaltetEinUndZeigtProOptionenAn() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlarm = settingsManager.alarmierungAktiv
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = false
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.START) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_alarmierung_aktiv").performScrollTo().assertIsOff()
+            composeRule.onAllNodesWithTag("switch_ntfy_enabled").assertCountEquals(0)
+
+            composeRule.onNodeWithTag("switch_alarmierung_aktiv").performClick()
+            assertTrue("Schalter muss alarmierungAktiv tatsaechlich einschalten", settingsManager.alarmierungAktiv)
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithTag("switch_ntfy_enabled").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag("switch_ntfy_enabled").assertIsDisplayed()
+
+            composeRule.onNodeWithTag("switch_alarmierung_aktiv").performClick()
+            assertFalse("Schalter muss alarmierungAktiv tatsaechlich ausschalten", settingsManager.alarmierungAktiv)
+            composeRule.onAllNodesWithTag("switch_ntfy_enabled").assertCountEquals(0)
+        } finally {
+            settingsManager.alarmierungAktiv = oldAlarm
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Ruhezeiten-Grundschalter (F8) war
+     * bislang nie geklickt. Prueft echte Wirkung: Einschalten blendet den
+     * Messgeraet-Ruhezeit-Schwellenwert-Slider (testTag "slider_meter_quiet_hours_threshold")
+     * ein, Ausschalten blendet ihn wieder aus.
+     */
+    @Test
+    fun quietHoursEnabledSchalterSchaltetEinUndZeigtSchwellenwertSlider() {
+        val settingsManager = app.container.settingsManager
+        val oldEnabled = settingsManager.quietHoursEnabled
+        try {
+            settingsManager.quietHoursEnabled = false
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.START) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_quiet_hours_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onAllNodesWithTag("slider_meter_quiet_hours_threshold").assertCountEquals(0)
+            composeRule.onNodeWithTag("switch_quiet_hours_enabled").performScrollTo().assertIsOff()
+
+            composeRule.onNodeWithTag("switch_quiet_hours_enabled").performClick()
+            assertTrue("Schalter muss quietHoursEnabled tatsaechlich einschalten", settingsManager.quietHoursEnabled)
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithTag("slider_meter_quiet_hours_threshold").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag("slider_meter_quiet_hours_threshold").assertIsDisplayed()
+
+            composeRule.onNodeWithTag("switch_quiet_hours_enabled").performClick()
+            assertFalse("Schalter muss quietHoursEnabled tatsaechlich ausschalten", settingsManager.quietHoursEnabled)
+            composeRule.onAllNodesWithTag("slider_meter_quiet_hours_threshold").assertCountEquals(0)
+        } finally {
+            settingsManager.quietHoursEnabled = oldEnabled
+        }
+    }
+
+    /**
      * Echtes Geraete-Pendant zu [MeterSchwellenwertUiTest] (Robolectric, app/src/test) - Teil
      * der Bestandsaufnahme nach dem Datumsbereich-Dialog-Bug (Owner-Auftrag 15.09.2026). Prueft-
      * protokoll 11.09.2026 Frage 4 (Korrekturliste C-3): der eigene Messgeraet-Schwellenwert war
