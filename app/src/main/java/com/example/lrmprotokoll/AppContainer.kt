@@ -46,6 +46,8 @@ class AppContainer(
     context: Context,
     meterTransportOverride: MeterTransport? = null,
     internal val bleScanProviderOverride: (() -> Flow<BleDevice>)? = null,
+    private val standortErmittlungOverride: com.example.lrmprotokoll.standort.StandortErmittlung? = null,
+    private val wetterProviderOverride: com.example.lrmprotokoll.wetter.WetterProvider? = null,
 ) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }
@@ -287,11 +289,11 @@ class AppContainer(
     }
 
     val wetterProvider: com.example.lrmprotokoll.wetter.WetterProvider by lazy {
-        com.example.lrmprotokoll.wetter.OpenMeteoWetterProvider()
+        wetterProviderOverride ?: com.example.lrmprotokoll.wetter.OpenMeteoWetterProvider()
     }
 
     val standortErmittlung: com.example.lrmprotokoll.standort.StandortErmittlung by lazy {
-        com.example.lrmprotokoll.standort.GeraeteStandortErmittlung(context.applicationContext)
+        standortErmittlungOverride ?: com.example.lrmprotokoll.standort.GeraeteStandortErmittlung(context.applicationContext)
     }
 
     val retentionCoordinator: RetentionCoordinator by lazy {
