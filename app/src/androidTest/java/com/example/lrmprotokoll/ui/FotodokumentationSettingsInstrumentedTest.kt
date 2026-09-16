@@ -52,20 +52,25 @@ class FotodokumentationSettingsInstrumentedTest {
 
             oeffneFotodokumentationSektion()
 
-            composeRule.onAllNodesWithText("Messaufbau", substring = true).assertCountEquals(0)
+            // CI-Fehler (root-caused): "Messaufbau" als Textsubstring ist mehrdeutig - der immer
+            // sichtbare Erklaertext ("Ein Foto vom Messaufbau belegt...") und der Titel der
+            // NACHBAR-Sektion ("Berichtsangaben (Gerät, Messaufbau, Randbedingungen)") enthalten
+            // beide "Messaufbau", unabhaengig vom Schalterzustand. Stattdessen den testTag des
+            // FilterChips selbst pruefen, der wirklich nur bei fotoDokuAktiv = true existiert.
+            composeRule.onAllNodesWithTag("chip_foto_Messaufbau_AUS").assertCountEquals(0)
 
             composeRule.onNodeWithTag("switch_foto_doku_aktiv").performScrollTo().assertIsOff()
             composeRule.onNodeWithTag("switch_foto_doku_aktiv").performClick()
 
             assertTrue("Schalter muss fotoDokuAktiv tatsaechlich einschalten", settingsManager.fotoDokuAktiv)
             composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Messaufbau", substring = true).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithTag("chip_foto_Messaufbau_AUS").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Messaufbau", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("chip_foto_Messaufbau_AUS").performScrollTo().assertIsDisplayed()
 
             composeRule.onNodeWithTag("switch_foto_doku_aktiv").performClick()
             assertFalse("Schalter muss fotoDokuAktiv tatsaechlich ausschalten", settingsManager.fotoDokuAktiv)
-            composeRule.onAllNodesWithText("Messaufbau", substring = true).assertCountEquals(0)
+            composeRule.onAllNodesWithTag("chip_foto_Messaufbau_AUS").assertCountEquals(0)
         } finally {
             settingsManager.fotoDokuAktiv = oldValue
         }
