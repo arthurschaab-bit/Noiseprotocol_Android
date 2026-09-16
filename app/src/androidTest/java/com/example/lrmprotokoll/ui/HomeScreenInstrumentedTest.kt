@@ -237,10 +237,19 @@ class HomeScreenInstrumentedTest {
         // selbst) - filterState wird beim ersten Komposieren aus SettingsManager gelesen, das
         // deckt die eigentlich risikobehaftete Frage ab: filtert der Bereich die richtigen
         // Aufnahmen, unabhaengig davon, wie minDb/maxDb zustande kamen.
+        //
+        // CI-Fehler (root-caused): mit dem Preset ist filterState.istAktiv von der allerersten
+        // Komposition an true, wodurch chip_filter_reset schon TEIL derselben Row ist wie
+        // panel_filter_header, bevor das Panel ueberhaupt aufgeklappt wird - als einziger Test
+        // hier. Die Filterwirkung auf die Aufnahmenliste haengt aber gar nicht von
+        // showFilterPanel ab (filteredRecords wird unabhaengig vom Auf-/Zugeklapptsein
+        // berechnet) - das Panel muss fuer diesen Test also gar nicht geoeffnet werden. Nur
+        // setzeInhalt() statt setzeInhaltUndOeffneFilterPanel() vermeidet den Klick auf die
+        // Kopfzeile komplett und damit jede Unklarheit rund um den benachbarten Reset-Chip.
         app.container.settingsManager.filterDbMin = 50f
         app.container.settingsManager.filterDbMax = 70f
         fuegeDreiTestaufnahmenEin()
-        setzeInhaltUndOeffneFilterPanel()
+        setzeInhalt()
 
         scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
