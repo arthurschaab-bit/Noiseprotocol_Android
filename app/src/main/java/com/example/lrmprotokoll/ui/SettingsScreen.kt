@@ -103,7 +103,15 @@ fun SettingsScreen(
     onNavigateToMeter: (() -> Unit)? = null,
     /** Fuehrt zum Papierkorb (ehemals nur ueber den Drawer erreichbar). */
     onNavigateToTrash: (() -> Unit)? = null,
-    onShowOnboarding: (() -> Unit)? = null
+    onShowOnboarding: (() -> Unit)? = null,
+    /**
+     * Testbarer Override fuer AlarmManager.canScheduleExactAlarms() (API 31+): der reale
+     * Systemzustand laesst sich auf dem CI-Emulator nicht zuverlaessig erzwingen. Analog zu
+     * [OemDeviceHelperCard]s exactAlarmPermissionOverride - dasselbe Muster fuer dieselbe
+     * Systemabfrage, statt eines zweiten, abweichenden Seam-Stils (Coverage Phase 9a,
+     * Owner-Entscheidung 16.09.2026).
+     */
+    exakteAlarmeErlaubtOverride: Boolean? = null,
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
     val context = LocalContext.current
@@ -360,7 +368,7 @@ fun SettingsScreen(
 
     val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
     fun kannExakteAlarme() =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        exakteAlarmeErlaubtOverride ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager?.canScheduleExactAlarms() == true
         } else true
     var exakteAlarmeErlaubt by remember { mutableStateOf(kannExakteAlarme()) }
@@ -811,11 +819,14 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.error,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Button(onClick = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
-                                }
-                            }) {
+                            Button(
+                                onClick = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                                    }
+                                },
+                                modifier = Modifier.testTag("btn_exakte_alarme_erlauben")
+                            ) {
                                 Text("Exakte Alarme erlauben")
                             }
                         }

@@ -746,6 +746,65 @@ class SettingsScreenInstrumentedTest {
         }
     }
 
+    /**
+     * Checkliste Button/Screen-Coverage Phase 9a (docs Plan sorted-orbiting-crown.md): der
+     * eigene "Exakte Alarme erlauben"-Button in der Alarmierung-Sektion (nicht zu verwechseln mit
+     * dem gleichnamigen Button in OemDeviceHelperCard, der bereits oben in
+     * systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft getestet wird) war zuvor
+     * ungetestet, weil der reale AlarmManager-Zustand auf dem CI-Emulator nicht erzwingbar ist.
+     * Neuer exakteAlarmeErlaubtOverride-Parameter auf SettingsScreen (Owner-Entscheidung
+     * 16.09.2026), im selben Stil wie OemDeviceHelperCards bereits etabliertes
+     * exactAlarmPermissionOverride - bewusst dasselbe Muster statt eines zweiten.
+     */
+    @Test
+    fun exakteAlarmeButtonWirdNurOhneBerechtigungAngezeigtUndLoestDenSystemIntentAus() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        Intents.init()
+        try {
+            intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, exakteAlarmeErlaubtOverride = false) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("btn_exakte_alarme_erlauben").performScrollTo().assertIsDisplayed().performClick()
+            intended(hasAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+        } finally {
+            Intents.release()
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    @Test
+    fun exakteAlarmeButtonBleibtVerborgenWennBerechtigungSchonErteiltIst() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldAlerting = settingsManager.alarmierungAktiv
+        try {
+            settingsManager.isProMode = true
+            settingsManager.alarmierungAktiv = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, exakteAlarmeErlaubtOverride = true) }
+            composeRule.waitForIdle()
+            val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
+            composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("slider_karenzzeit").performScrollTo().assertIsDisplayed()
+            composeRule.onAllNodesWithTag("btn_exakte_alarme_erlauben").assertCountEquals(0)
+        } finally {
+            settingsManager.alarmierungAktiv = oldAlerting
+            settingsManager.isProMode = oldPro
+        }
+    }
+
     @Test
     fun systemIntentsFuerAkkuOptimierungUndExakteAlarmeSindImmerGeprueft() {
         assumeTrue("Exakte Alarme gibt es erst ab Android 12", Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
