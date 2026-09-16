@@ -654,7 +654,8 @@ fun NoiseProtocolApp(
                                     } else {
                                         onShowSnackbar(context.getString(R.string.empty_records_title), null, null)
                                     }
-                                }
+                                },
+                                modifier = Modifier.testTag("menu_item_tagesbericht")
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -1074,7 +1075,7 @@ fun NoiseProtocolApp(
                             }
                             IconButton(
                                 onClick = { reportTargetRecords = dailyRecords },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(36.dp).testTag("btn_day_report_$date")
                             ) {
                                 Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
                             }
@@ -1234,20 +1235,26 @@ fun NoiseProtocolApp(
             title = { Text(stringResource(R.string.protocol_daily_report_title)) },
             text = { Text(stringResource(R.string.report_dialog_desc, target.size)) },
             confirmButton = {
-                Button(onClick = {
-                    val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
-                    reportManager.createZipAndShare(target, report)
-                    reportTargetRecords = null
-                }) {
+                Button(
+                    onClick = {
+                        val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
+                        reportManager.createZipAndShare(target, report)
+                        reportTargetRecords = null
+                    },
+                    modifier = Modifier.testTag("btn_report_zip")
+                ) {
                     Text(stringResource(R.string.report_dialog_zip_button))
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
-                    reportManager.shareFile(report)
-                    reportTargetRecords = null
-                }) {
+                TextButton(
+                    onClick = {
+                        val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
+                        reportManager.shareFile(report)
+                        reportTargetRecords = null
+                    },
+                    modifier = Modifier.testTag("btn_report_text_only")
+                ) {
                     Text(stringResource(R.string.report_dialog_text_button))
                 }
             }
