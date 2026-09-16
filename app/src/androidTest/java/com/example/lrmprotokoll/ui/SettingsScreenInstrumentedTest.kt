@@ -480,7 +480,13 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitUntil(timeoutMillis = 5_000L) {
                 composeRule.onAllNodesWithTag("switch_ntfy_enabled").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag("switch_ntfy_enabled").assertIsDisplayed()
+            // Das Aufklappen des Pro-Bereichs verschiebt den ntfy-Schalter nach unten - er kann
+            // dadurch ausserhalb des aktuellen Sichtbereichs liegen, obwohl er schon im
+            // Semantics-Baum steht (waitUntil oben reicht dafuer nicht). Anders als der
+            // Dialoginhalt in PR #159 liegt dieser Schalter im scrollbaren Hauptbereich der
+            // Settings-Seite, dort hat performScrollTo() an mehreren Stellen bereits zuverlaessig
+            // funktioniert (z.B. switch_auto_retention).
+            composeRule.onNodeWithTag("switch_ntfy_enabled").performScrollTo().assertIsDisplayed()
 
             composeRule.onNodeWithTag("switch_alarmierung_aktiv").performClick()
             assertFalse("Schalter muss alarmierungAktiv tatsaechlich ausschalten", settingsManager.alarmierungAktiv)
@@ -519,7 +525,9 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitUntil(timeoutMillis = 5_000L) {
                 composeRule.onAllNodesWithTag("slider_meter_quiet_hours_threshold").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag("slider_meter_quiet_hours_threshold").assertIsDisplayed()
+            // Gleicher Grund wie beim ntfy-Schalter oben: der Slider erscheint erst nach dem
+            // Einschalten weiter unten im scrollbaren Hauptbereich.
+            composeRule.onNodeWithTag("slider_meter_quiet_hours_threshold").performScrollTo().assertIsDisplayed()
 
             composeRule.onNodeWithTag("switch_quiet_hours_enabled").performClick()
             assertFalse("Schalter muss quietHoursEnabled tatsaechlich ausschalten", settingsManager.quietHoursEnabled)
