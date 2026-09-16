@@ -1646,10 +1646,14 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Beim Start eines Messvorgangs nach Berichtsangaben fragen")
-                    Switch(checked = stammdatenAbfrageAktiv, onCheckedChange = {
-                        stammdatenAbfrageAktiv = it
-                        settings.stammdatenAbfrageAktiv = it
-                    })
+                    Switch(
+                        checked = stammdatenAbfrageAktiv,
+                        onCheckedChange = {
+                            stammdatenAbfrageAktiv = it
+                            settings.stammdatenAbfrageAktiv = it
+                        },
+                        modifier = Modifier.testTag("switch_stammdaten_abfrage_aktiv"),
+                    )
                 }
                 Text(
                     "Gerät, Messaufbau und Randbedingungen werden jetzt beim Messbeginn abgefragt " +
