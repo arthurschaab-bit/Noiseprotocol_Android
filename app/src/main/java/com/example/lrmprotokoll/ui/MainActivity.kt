@@ -850,7 +850,7 @@ fun NoiseProtocolApp(
                                         updateFilter(filterState.copy(minDb = range.start, maxDb = range.endInclusive))
                                     },
                                     valueRange = 0f..120f,
-                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 4.dp).testTag("slider_home_filter_db")
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
