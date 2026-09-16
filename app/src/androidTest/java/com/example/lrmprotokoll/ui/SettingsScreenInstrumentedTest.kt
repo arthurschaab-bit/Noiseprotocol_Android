@@ -278,13 +278,15 @@ class SettingsScreenInstrumentedTest {
                 settingsManager.autoRetentionDays.toInt(),
                 com.example.lrmprotokoll.messreihe.formatiereBytes(erwarteteVorschau.audioBytes),
             )
-            // Der lange Erklaertext laesst den Dialoginhalt ueberlaufen (Material3 AlertDialog
-            // scrollt dann intern) - performScrollTo() noetig, siehe die gleiche Klasse Bug in
-            // GesamtberichtStammdatenSheetInstrumentedTest.kt (PR #156).
+            // Anders als der (laengere) Dialog in GesamtberichtStammdatenSheetInstrumentedTest.kt
+            // (PR #156) hat dieser Dialogtext KEIN scrollbares Elternlayout - ein CI-Lauf hat das
+            // bewiesen ("Semantic Node has no parent layout with a Scroll SemanticsAction"),
+            // performScrollTo() ist hier also schlicht falsch, nicht nur unnoetig, und wurde
+            // deshalb entfernt. Die verbleibende Ursache fuer das urspruengliche "not displayed"
+            // (CI-Runde 1, siehe PR-Kommentar) ist noch nicht geklaert - Eskalation an den Owner
+            // statt eines vierten Rateversuchs, siehe PROMPT_UMSETZUNG.md-Eskalationsregel.
             assertTrue("Es muss mindestens die eine eingefuegte alte Aufnahme als Kandidat zaehlen", erwarteteVorschau.anzahlAufnahmen >= 1)
-            composeRule.onNodeWithText(erwarteterDialogText, substring = true)
-                .performScrollTo()
-                .assertIsDisplayed()
+            composeRule.onNodeWithText(erwarteterDialogText, substring = true).assertIsDisplayed()
 
             val confirmText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_confirm)
             composeRule.onNodeWithText(confirmText).performClick()
