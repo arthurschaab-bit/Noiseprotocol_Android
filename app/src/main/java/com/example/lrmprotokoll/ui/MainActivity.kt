@@ -913,7 +913,7 @@ fun NoiseProtocolApp(
                                 trailingIcon = {
                                     IconButton(
                                         onClick = { referenceToDelete = ref },
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(20.dp).testTag("btn_delete_reference_${ref.name}")
                                     ) {
                                         Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete), modifier = Modifier.size(16.dp))
                                     }
@@ -1210,13 +1210,17 @@ fun NoiseProtocolApp(
                             onShowSnackbar(context.getString(R.string.delete_pattern_success, ref.name), null, null)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_reference")
                 ) {
                     Text(stringResource(R.string.action_delete))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { referenceToDelete = null }) {
+                TextButton(
+                    onClick = { referenceToDelete = null },
+                    modifier = Modifier.testTag("btn_cancel_delete_reference")
+                ) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
