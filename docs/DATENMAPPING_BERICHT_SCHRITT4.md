@@ -116,3 +116,23 @@ aber noch nicht umgesetzt.
   Erfassungszeitpunkt getrennt bleiben. Das JSON ist bis zur Integration von
   `report_bridge.py` ausdrücklich ein vorläufiger Vertrag; der derzeitige Modulfehler wird im
   UI verständlich gezeigt. Der alte Zeitraum-/Gesamtbericht-Dialog bleibt bestehen.
+
+## 8. Abtastratenentscheidung für die portable Kernlogik (Schritt 4a)
+
+Owner-Entscheidung 16.09.2026: Die etwa 2 Hz des PCE-323 werden vor der aus dem Original
+portierten Kernlogik auf ein striktes 1-Hz-Raster verdichtet (Option a). Pro belegter Sekunde
+laufen zwei bewusst getrennte Reihen weiter:
+
+- Für LAeq, rollierende LAeq-Werte, Abdeckung und Zeiten über den Richtwerten wird der
+  **energetische Mittelwert** aller gültigen Frames der Sekunde verwendet. Damit bleibt die
+  Verdichtung konsistent zu `energy = 10**(dba/10)` im Original.
+- Für `hoechst`, das 99.-Perzentil `l1_tag` und das 5-Sekunden-Taktmaximum in `beurt()` wird
+  der **Maximalwert der Sekunde** verwendet. Eine alleinige Ableitung dieser Kennwerte aus dem
+  energetischen Sekundenmittel würde kurze Spitzen systematisch absenken. Der Maximalwert ist
+  für Schwellenzeiten dagegen bewusst nicht maßgeblich, weil ein einzelner etwa 0,5 Sekunden
+  langer Frame sonst als volle Sekunde über der Schwelle gezählt würde.
+
+`MeasurementFlags.GAP`-Frames fließen in keine der beiden Reihen ein. Sobald in derselben
+Sekunde wenigstens ein gültiger Frame vorhanden ist, zählt diese Sekunde als gemessen. Die
+Peak-Reihe ist eine dokumentierte, konservative Erweiterung gegenüber dem Original, das wegen
+seiner bereits auf 1 Hz vorliegenden CSV nur eine gemeinsame Reihe kannte.
