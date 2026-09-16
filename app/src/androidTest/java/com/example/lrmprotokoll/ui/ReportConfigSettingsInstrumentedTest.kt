@@ -102,6 +102,88 @@ class ReportConfigSettingsInstrumentedTest {
         }
     }
 
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2, naechste Stufe: 4 von 9 §287-ZPO-Werten
+     * waren laut Phase-6.1-Audit ungetestet - alle vier sind Slider mit bereits vorhandenem
+     * testTag, keine Produktivcode-Aenderung noetig. Gleiches Pruefmuster wie
+     * tierSchwelleVollmessungWirdPerSliderVeraendertUndGespeichert oben.
+     */
+    @Test
+    fun tierSchwelleTeilerfassungWirdPerSliderVeraendertUndGespeichert() {
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("slider_report_tier_teilerfassung")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(75f) }
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertEquals(75.0, gespeichert?.tierSchwelleTeilerfassungProzent ?: 0.0, 0.0001)
+        }
+    }
+
+    @Test
+    fun schaetzpegelTeilerfassungWirdPerSliderVeraendertUndGespeichert() {
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("slider_report_schaetzpegel_teilerfassung")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(65f) }
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertEquals(65.0, gespeichert?.schaetzpegelTeilerfassungDb ?: 0.0, 0.0001)
+        }
+    }
+
+    @Test
+    fun schaetzpegelMessfensterAbbruchWirdPerSliderVeraendertUndGespeichert() {
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("slider_report_schaetzpegel_messfenster")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(55f) }
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertEquals(55.0, gespeichert?.schaetzpegelMessfensterAbbruchDb ?: 0.0, 0.0001)
+        }
+    }
+
+    @Test
+    fun geraeteUnsicherheitWirdPerSliderVeraendertUndGespeichert() {
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("slider_report_geraeteunsicherheit")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(3.5f) }
+        composeRule.waitForIdle()
+
+        runBlocking {
+            val gespeichert = app.container.database.reportConfigDao().get()
+            assertEquals(3.5, gespeichert?.geraeteUnsicherheitDb ?: 0.0, 0.0001)
+        }
+    }
+
     @Test
     fun overrideSchalterWirdGespeichert() {
         composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
