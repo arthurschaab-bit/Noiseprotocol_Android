@@ -1010,7 +1010,8 @@ fun NoiseProtocolApp(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .testTag("day_header_$date"),
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.small
                     ) {
