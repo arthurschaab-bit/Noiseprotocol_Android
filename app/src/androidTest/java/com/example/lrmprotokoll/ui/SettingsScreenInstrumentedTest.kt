@@ -282,10 +282,18 @@ class SettingsScreenInstrumentedTest {
             // (PR #156) hat dieser Dialogtext KEIN scrollbares Elternlayout - ein CI-Lauf hat das
             // bewiesen ("Semantic Node has no parent layout with a Scroll SemanticsAction"),
             // performScrollTo() ist hier also schlicht falsch, nicht nur unnoetig, und wurde
-            // deshalb entfernt. Die verbleibende Ursache fuer das urspruengliche "not displayed"
-            // (CI-Runde 1, siehe PR-Kommentar) ist noch nicht geklaert - Eskalation an den Owner
-            // statt eines vierten Rateversuchs, siehe PROMPT_UMSETZUNG.md-Eskalationsregel.
+            // deshalb entfernt.
+            //
+            // Owner-Entscheidung nach Eskalation (PR #159): letzter Fixversuch fuer das
+            // verbleibende "not displayed" aus CI-Runde 1. Hypothese: der Dialogtitel und der
+            // (laengere) Dialogtext werden zwar in derselben AlertDialog-Komposition gesetzt,
+            // koennen aber in getrennten Frames sichtbar/layoutet werden - das bisherige
+            // waitUntil() wartete nur auf den TITEL, nicht auf den TEXT selbst. Jetzt wie beim
+            // Titel per waitUntil() auf den Textknoten pollen, bevor assertIsDisplayed() greift.
             assertTrue("Es muss mindestens die eine eingefuegte alte Aufnahme als Kandidat zaehlen", erwarteteVorschau.anzahlAufnahmen >= 1)
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText(erwarteterDialogText, substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText(erwarteterDialogText, substring = true).assertIsDisplayed()
 
             val confirmText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_confirm)
