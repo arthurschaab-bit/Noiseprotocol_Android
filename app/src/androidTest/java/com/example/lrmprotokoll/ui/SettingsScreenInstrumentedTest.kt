@@ -150,6 +150,15 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
+            // Bug (PR #150): der CI-Emulator startet nicht immer mit deutscher Geraete-Locale -
+            // ein hartcodiertes deutsches Literal wie "Audiodateien:" existiert dann schlicht nicht
+            // im Baum (siehe values-en/strings.xml), waehrend andere Strings deutsch bleiben, wenn
+            // sie nicht ueber stringResource() laufen. Deshalb ueber getString() aufloesen statt
+            // hartzukodieren - funktioniert unabhaengig von der tatsaechlichen Geraete-Locale.
+            val audioLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_audio)
+                .substringBefore("%1\$s").trim()
+            val dbLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_database)
+                .substringBefore("%1\$s").trim()
             val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
             composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
             composeRule.waitForIdle()
@@ -177,7 +186,7 @@ class SettingsScreenInstrumentedTest {
             while (System.currentTimeMillis() < deadline) {
                 composeRule.waitForIdle()
                 sichtbarBeimLetztenVersuch =
-                    composeRule.onAllNodesWithText("Audiodateien:", substring = true).fetchSemanticsNodes().isNotEmpty()
+                    composeRule.onAllNodesWithText(audioLabel, substring = true).fetchSemanticsNodes().isNotEmpty()
                 if (sichtbarBeimLetztenVersuch) break
                 expandiertBeimLetztenVersuch =
                     composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
@@ -187,12 +196,12 @@ class SettingsScreenInstrumentedTest {
                 schreibeSemantikDiagnose("SettingsSpeicherplatz")
             }
             assertTrue(
-                "Nach 15s kein 'Audiodateien:' sichtbar. Abschnitt beim letzten Poll " +
+                "Nach 15s kein '$audioLabel' sichtbar. Abschnitt beim letzten Poll " +
                     "${if (expandiertBeimLetztenVersuch) "noch aufgeklappt (2 Titel-Treffer)" else "NICHT mehr aufgeklappt"}.",
                 sichtbarBeimLetztenVersuch,
             )
-            composeRule.onNodeWithText("Audiodateien:", substring = true).performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithText("Datenbank:", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(audioLabel, substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(dbLabel, substring = true).performScrollTo().assertIsDisplayed()
         } finally {
             settingsManager.isProMode = oldPro
         }
