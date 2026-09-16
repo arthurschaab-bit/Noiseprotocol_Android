@@ -1071,4 +1071,131 @@ class SettingsScreenInstrumentedTest {
             settingsManager.stammdatenAbfrageAktiv = oldValue
         }
     }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2, naechste Stufe nach PR #163: "Google Drive
+     * Synchronisation" war laut Phase-6.1-Audit zu 0% abgedeckt. [DriveStatusCard] selbst hat
+     * bereits eigene Tests (DriveStatusCardInstrumentedTest.kt, DriveStatusCardTest.kt) - hier
+     * geht es nur um die SettingsScreen-eigenen Elemente drumherum ("Upload-Optionen"), nicht um
+     * den Google-Sign-In-Fluss oder echte Drive-API-Aufrufe, die ohne echtes Google-Konto nicht
+     * sinnvoll in CI testbar sind. driveSyncEnabled = true blendet den Upload-Optionen-Block
+     * schon bei der ersten Komposition ein (kein Klick, der ihn erst nachtraeglich einblendet).
+     */
+    @Test
+    fun driveUploadWavCheckboxAendertEinstellung() {
+        val settingsManager = app.container.settingsManager
+        val oldDriveSync = settingsManager.driveSyncEnabled
+        val oldUploadWav = settingsManager.driveUploadWav
+        try {
+            settingsManager.driveSyncEnabled = true
+            settingsManager.driveUploadWav = false
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("checkbox_drive_upload_wav").performScrollTo().assertIsOff()
+            composeRule.onNodeWithTag("checkbox_drive_upload_wav").performClick()
+
+            assertTrue("Checkbox muss driveUploadWav tatsaechlich einschalten", settingsManager.driveUploadWav)
+            composeRule.onNodeWithTag("checkbox_drive_upload_wav").assertIsOn()
+        } finally {
+            settingsManager.driveUploadWav = oldUploadWav
+            settingsManager.driveSyncEnabled = oldDriveSync
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der "Upload-Übersicht öffnen"-Button war
+     * bislang nie geklickt worden. Anders als die Checkbox/Schalter/Slider im Upload-Optionen-
+     * Block ist dieser Button immer sichtbar, sobald die Sektion aufgeklappt ist - unabhaengig
+     * von driveSyncEnabled.
+     */
+    @Test
+    fun uploadUebersichtButtonRuftOnOpenDriveUploadsAuf() {
+        var geklickt = false
+        composeRule.setContent {
+            SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN, onOpenDriveUploads = { geklickt = true })
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("btn_open_drive_uploads").performScrollTo().performClick()
+
+        assertTrue("Klick auf btn_open_drive_uploads muss onOpenDriveUploads aufrufen", geklickt)
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der "Nur über WLAN synchronisieren"-Schalter
+     * (Pro-Modus) war bislang nie geklickt worden.
+     */
+    @Test
+    fun driveWlanOnlySchalterAendertEinstellung() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldDriveSync = settingsManager.driveSyncEnabled
+        val oldWlanOnly = settingsManager.driveWlanOnly
+        try {
+            settingsManager.isProMode = true
+            settingsManager.driveSyncEnabled = true
+            settingsManager.driveWlanOnly = false
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_drive_wlan_only").performScrollTo().assertIsOff()
+            composeRule.onNodeWithTag("switch_drive_wlan_only").performClick()
+
+            assertTrue("Schalter muss driveWlanOnly tatsaechlich einschalten", settingsManager.driveWlanOnly)
+            composeRule.onNodeWithTag("switch_drive_wlan_only").assertIsOn()
+        } finally {
+            settingsManager.driveWlanOnly = oldWlanOnly
+            settingsManager.driveSyncEnabled = oldDriveSync
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Aggregationsfenster-Slider (Pro-Modus,
+     * Zusammenfassungs-Intervall fuer die Google-Drive-CSV) war bislang nie tatsaechlich bedient
+     * worden. Gleiches Pruefmuster wie schwellenSliderPersistiertMinimumUndMaximum.
+     */
+    @Test
+    fun driveAggregationSekundenSliderPersistiertMinimumUndMaximum() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldDriveSync = settingsManager.driveSyncEnabled
+        val oldAggregation = settingsManager.driveAggregationSekunden
+        try {
+            settingsManager.isProMode = true
+            settingsManager.driveSyncEnabled = true
+            settingsManager.driveAggregationSekunden = 30
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            val slider = composeRule.onNodeWithTag("slider_drive_aggregation").performScrollTo().assertIsDisplayed()
+            slider.performTouchInput { swipeLeft() }
+            composeRule.waitForIdle()
+            assertEquals(1, settingsManager.driveAggregationSekunden)
+
+            slider.performTouchInput { swipeRight() }
+            composeRule.waitForIdle()
+            assertEquals(60, settingsManager.driveAggregationSekunden)
+        } finally {
+            settingsManager.driveAggregationSekunden = oldAggregation
+            settingsManager.driveSyncEnabled = oldDriveSync
+            settingsManager.isProMode = oldPro
+        }
+    }
 }
