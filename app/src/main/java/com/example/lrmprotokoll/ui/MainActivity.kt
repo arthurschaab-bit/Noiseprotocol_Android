@@ -1165,7 +1165,7 @@ fun NoiseProtocolApp(
                         onValueChange = { refName = it },
                         label = { Text(stringResource(R.string.learn_pattern_label)) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testTag("input_learn_pattern_name")
                     )
                 }
             },
@@ -1183,13 +1183,17 @@ fun NoiseProtocolApp(
                             refName = ""
                         }
                     },
-                    enabled = refName.isNotBlank()
+                    enabled = refName.isNotBlank(),
+                    modifier = Modifier.testTag("btn_learn_pattern_save")
                 ) {
                     Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showReferenceDialog = null }) {
+                TextButton(
+                    onClick = { showReferenceDialog = null },
+                    modifier = Modifier.testTag("btn_learn_pattern_cancel")
+                ) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
