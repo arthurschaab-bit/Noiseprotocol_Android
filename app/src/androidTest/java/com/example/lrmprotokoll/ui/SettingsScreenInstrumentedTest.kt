@@ -65,6 +65,17 @@ class SettingsScreenInstrumentedTest {
         LocalNotificationAlertChannel.stoppeAlarmTon(app)
     }
 
+    private fun schreibeSemantikDiagnose(bezeichnung: String) {
+        // Der Semantics-Tree ist nur im Compose-Testprozess verfügbar, nicht über ADB.
+        // Bei einem CI-Fehler wird er daher in Logcat geschrieben und von der Fehlerdiagnose
+        // als logcat-failure.txt bzw. nach PR #154 auch als vollständiges Logcat gesichert.
+        runCatching {
+            composeRule.onRoot().printToLog("ComposeSemantik-$bezeichnung-zusammengefuehrt")
+            composeRule.onRoot(useUnmergedTree = true)
+                .printToLog("ComposeSemantik-$bezeichnung-unmerged")
+        }
+    }
+
     @Test
     fun settingsScreenZeigtTitelUndScrolltBisZumEnde() {
         var backed = false
@@ -171,6 +182,9 @@ class SettingsScreenInstrumentedTest {
                 expandiertBeimLetztenVersuch =
                     composeRule.onAllNodesWithText(sectionTitle, substring = true).fetchSemanticsNodes().size == 2
                 Thread.sleep(200)
+            }
+            if (!sichtbarBeimLetztenVersuch) {
+                schreibeSemantikDiagnose("SettingsSpeicherplatz")
             }
             assertTrue(
                 "Nach 15s kein 'Audiodateien:' sichtbar. Abschnitt beim letzten Poll " +
