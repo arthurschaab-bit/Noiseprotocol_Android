@@ -154,14 +154,19 @@ class ReportConfigSettingsInstrumentedTest {
         composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
 
+        // CI-Fehler (root-caused, kein Flake): der Kompilierzeit-Default von
+        // schaetzpegelMessfensterAbbruch ist exakt 55f (Zeile 149) - ein SetProgress auf denselben
+        // Wert loest onValueChangeFinished/speichereReportConfig() offenbar nicht aus, dadurch
+        // blieb die DB-Zeile ungespeichert (reportConfigDao().get() == null, Fallback 0.0). Fix:
+        // ein Zielwert, der sich vom Default unterscheidet, wie bei den anderen drei neuen Tests.
         composeRule.onNodeWithTag("slider_report_schaetzpegel_messfenster")
             .performScrollTo()
-            .performSemanticsAction(SemanticsActions.SetProgress) { it(55f) }
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(45f) }
         composeRule.waitForIdle()
 
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
-            assertEquals(55.0, gespeichert?.schaetzpegelMessfensterAbbruchDb ?: 0.0, 0.0001)
+            assertEquals(45.0, gespeichert?.schaetzpegelMessfensterAbbruchDb ?: 0.0, 0.0001)
         }
     }
 
