@@ -91,7 +91,9 @@ class HomeLoeschbestaetigungInstrumentedTest {
         // Beide Muster muessen unveraendert weiter existieren - die Chip-Liste ist reaktiv aus
         // derselben Flow wie die DB gespeist, ihr Fortbestehen beweist also, dass nichts geloescht
         // wurde.
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.learned_patterns_count, 2)).assertExists()
+        val zweiMuster = composeRule.activity.getString(R.string.learned_patterns_count, 2)
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(zweiMuster))
+        composeRule.onNodeWithText(zweiMuster).assertExists()
         composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_delete_reference_${muster1.name}"))
         composeRule.onNodeWithTag("btn_delete_reference_${muster1.name}").assertIsDisplayed()
     }
@@ -100,7 +102,9 @@ class HomeLoeschbestaetigungInstrumentedTest {
     fun bestaetigenLoeschtNurDasAusgewaehlteMuster() {
         setzeInhalt()
 
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.learned_patterns_count, 2)).assertExists()
+        val zweiMuster = composeRule.activity.getString(R.string.learned_patterns_count, 2)
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(zweiMuster))
+        composeRule.onNodeWithText(zweiMuster).assertExists()
 
         oeffneLoeschDialogFuer(muster1.name)
         composeRule.onNodeWithTag("btn_confirm_delete_reference").performClick()
@@ -108,7 +112,9 @@ class HomeLoeschbestaetigungInstrumentedTest {
 
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.delete_pattern_title)).assertDoesNotExist()
         composeRule.onNodeWithTag("btn_delete_reference_${muster1.name}").assertDoesNotExist()
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.learned_patterns_count, 1)).assertExists()
+        val einMuster = composeRule.activity.getString(R.string.learned_patterns_count, 1)
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(einMuster))
+        composeRule.onNodeWithText(einMuster).assertExists()
 
         // Das zweite Muster darf davon unberuehrt bleiben.
         composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_delete_reference_${muster2.name}"))
