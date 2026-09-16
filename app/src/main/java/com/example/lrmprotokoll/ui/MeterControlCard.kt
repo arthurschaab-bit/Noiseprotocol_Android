@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,11 +28,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,173 +52,17 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.R
-import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.GeraetePinning
-import com.example.lrmprotokoll.meter.MeterFrame
 import com.example.lrmprotokoll.meter.PinningBefund
 import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleScanner
 import com.example.lrmprotokoll.meter.label
-import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Locale
 
 private const val SCAN_DURATION_MS = 10_000L
 private const val TAG = "MeterControlCard"
-const val METER_CARD_CONNECT_TAG = "meter_card_connect_button"
-const val METER_CARD_PAIR_TAG = "meter_card_pair_button"
-
-/**
- * Elegante, modulare Messgeräte-Karte für die Startseite.
- * Vereint Live-Pegel, Verbindungsstatus und Schnellzugriff auf Bluetooth-Kopplung.
- */
-@Composable
-fun MeterControlCard(
-    connectionState: ConnectionState,
-    pairedAddress: String?,
-    pairedName: String?,
-    latestFrame: MeterFrame?,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onOpenPairing: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Kopfzeile: Titel & Bluetooth-Status Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = AppIcons.Sensors,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "PCE-323 Messgerät",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                BluetoothStatusBadge(
-                    state = connectionState,
-                    deviceName = pairedName
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Gerätedetails oder Kopplungshinweis
-            if (pairedAddress != null) {
-                Text(
-                    text = "${pairedName ?: "PCE-323"} ($pairedAddress)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = "Kein Messgerät gekoppelt. Kalibrierte dBA-Werte erfordern ein PCE-323.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Live-Pegelanzeige, wenn Daten empfangen werden
-            if (connectionState == ConnectionState.STREAMING && latestFrame != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column {
-                        Text(
-                            text = "Live-Messwert:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        val confirmed = latestFrame.modeAssumptionConfirmed
-                        val pegelText = if (confirmed && latestFrame.weighting != null) {
-                            "${String.format(Locale.getDefault(), "%.1f", latestFrame.level)} dB(${latestFrame.weighting.name})"
-                        } else {
-                            "${String.format(Locale.getDefault(), "%.1f", latestFrame.level)} dBA"
-                        }
-                        Text(
-                            text = pegelText,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Text(
-                        text = "Kalibriert",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.statusColors.connected
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Aktionsbuttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (pairedAddress != null) {
-                    if (connectionState == ConnectionState.IDLE || connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.FAILED) {
-                        Button(
-                            onClick = onConnect,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp)
-                                .testTag(METER_CARD_CONNECT_TAG)
-                        ) {
-                            Text("Verbinden")
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = onDisconnect,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp)
-                        ) {
-                            Text("Trennen")
-                        }
-                    }
-                }
-
-                Button(
-                    onClick = onOpenPairing,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 44.dp)
-                        .testTag(METER_CARD_PAIR_TAG),
-                    colors = if (pairedAddress == null) ButtonDefaults.buttonColors()
-                    else ButtonDefaults.filledTonalButtonColors()
-                ) {
-                    Text(if (pairedAddress == null) "Gerät koppeln" else "Gerät wechseln")
-                }
-            }
-        }
-    }
-}
 
 /**
  * Dialog zum Scannen und Auswählen von Bluetooth-Messgeräten mit stabiler Sortierung.

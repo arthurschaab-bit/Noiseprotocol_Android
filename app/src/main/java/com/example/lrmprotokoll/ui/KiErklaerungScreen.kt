@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.ui.components.NoiseCard
@@ -123,6 +124,8 @@ private val ABSCHNITTE = listOf(
     ),
 )
 
+const val KI_ERKLAERUNG_LAZY_COLUMN_TAG = "ki_erklaerung_lazy_column"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KiErklaerungScreen(
@@ -141,7 +144,10 @@ fun KiErklaerungScreen(
         }
     ) { innenAbstand ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innenAbstand),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innenAbstand)
+                .testTag(KI_ERKLAERUNG_LAZY_COLUMN_TAG),
             contentPadding = PaddingValues(16.dp),
         ) {
             items(ABSCHNITTE) { abschnitt ->
