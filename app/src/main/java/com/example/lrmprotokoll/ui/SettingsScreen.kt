@@ -1253,7 +1253,10 @@ fun SettingsScreen(
                 // Owner-Wunsch: eine Seite, die zeigt, was hochgeladen wurde und was gerade
                 // laeuft. Die Statuskarte darunter nennt nur den letzten Lauf als Ganzes.
                 if (onOpenDriveUploads != null) {
-                    TextButton(onClick = onOpenDriveUploads, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = onOpenDriveUploads,
+                        modifier = Modifier.fillMaxWidth().testTag("btn_open_drive_uploads"),
+                    ) {
                         Text("Upload-Übersicht öffnen")
                     }
                 }
@@ -1331,6 +1334,7 @@ fun SettingsScreen(
                         Checkbox(
                             checked = driveUploadWav,
                             onCheckedChange = { driveUploadWav = it; settings.driveUploadWav = it },
+                            modifier = Modifier.testTag("checkbox_drive_upload_wav"),
                         )
                         Text("Audioaufnahmen (WAV) hochladen")
                     }
@@ -1345,6 +1349,7 @@ fun SettingsScreen(
                                     settings.driveWlanOnly = it
                                     DriveSyncPlanung.plane(context)
                                 },
+                                modifier = Modifier.testTag("switch_drive_wlan_only"),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Nur über WLAN synchronisieren")
@@ -1369,6 +1374,7 @@ fun SettingsScreen(
                             },
                             valueRange = 1f..60f,
                             steps = 58,
+                            modifier = Modifier.testTag("slider_drive_aggregation"),
                         )
                     }
                 }
