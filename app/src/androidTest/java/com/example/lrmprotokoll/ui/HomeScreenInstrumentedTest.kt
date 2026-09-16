@@ -130,12 +130,11 @@ class HomeScreenInstrumentedTest {
             )
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("home_lazy_column").performTouchInput { swipeUp() }
     }
 
     private fun setzeInhaltUndOeffneFilterPanel() {
         setzeInhalt()
-        composeRule.onNodeWithTag("panel_filter_header").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
 
@@ -148,11 +147,11 @@ class HomeScreenInstrumentedTest {
         setzeInhalt()
 
         composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()
-        composeRule.onNodeWithTag("panel_filter_header").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("input_filter_search").assertIsDisplayed()
+        composeRule.onNodeWithTag("input_filter_search").performScrollTo().assertIsDisplayed()
 
-        composeRule.onNodeWithTag("panel_filter_header").performClick()
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()
     }
