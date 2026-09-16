@@ -141,6 +141,16 @@ class HomeScreenInstrumentedTest {
     private fun labelText(record: NoiseRecord) =
         composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_user_prefix, record.label)
 
+    // home_lazy_column ist eine echte LazyColumn - Eintraege weit unterhalb des Viewports sind
+    // schlicht noch nicht komponiert und daher im Semantics-Tree nicht vorhanden, bis dorthin
+    // gescrollt wurde. performScrollTo() auf einen bereits gefundenen Knoten reicht hier nicht
+    // (der Knoten existiert ja noch gar nicht) - performScrollToNode() auf dem Listen-Container
+    // scrollt gezielt bis der Treffer komponiert ist, das ist die dafuer vorgesehene API.
+    private fun scrolleZuUndPruefeVorhanden(record: NoiseRecord) {
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(record)))
+        composeRule.onNodeWithText(labelText(record)).assertExists()
+    }
+
     @Test
     fun filterPanelLaesstSichAufUndZuklappen() {
         fuegeDreiTestaufnahmenEin()
@@ -164,7 +174,7 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("input_filter_search").performTextInput("Bohren")
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertExists()
+        scrolleZuUndPruefeVorhanden(leiseOhneMessgeraet)
         composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertDoesNotExist()
     }
@@ -177,7 +187,7 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("chip_filter_favorites").performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(lautFavorit)).assertExists()
+        scrolleZuUndPruefeVorhanden(lautFavorit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertDoesNotExist()
     }
@@ -190,7 +200,7 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("chip_filter_quiet_hours").performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertExists()
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
     }
@@ -203,7 +213,7 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("chip_filter_only_meter").performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertExists()
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
     }
@@ -216,7 +226,7 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("chip_filter_only_calibrated").performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertExists()
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
     }
@@ -232,7 +242,7 @@ class HomeScreenInstrumentedTest {
         fuegeDreiTestaufnahmenEin()
         setzeInhaltUndOeffneFilterPanel()
 
-        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertExists()
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
         composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
         composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
     }
@@ -279,9 +289,9 @@ class HomeScreenInstrumentedTest {
         composeRule.onNodeWithTag("chip_filter_reset").performScrollTo().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertExists()
-        composeRule.onNodeWithText(labelText(lautFavorit)).assertExists()
-        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertExists()
+        scrolleZuUndPruefeVorhanden(leiseOhneMessgeraet)
+        scrolleZuUndPruefeVorhanden(lautFavorit)
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
     }
 
     @Test
