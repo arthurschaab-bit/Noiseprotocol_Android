@@ -909,4 +909,166 @@ class SettingsScreenInstrumentedTest {
         )
         LocalNotificationAlertChannel.stoppeAlarmTon(context)
     }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2, naechste Stufe nach PR #162: der
+     * Tab-Umschalter (Owner-Vorgabe 12.09.2026, drei inhaltlich getrennte Einstellungsseiten)
+     * wurde bislang nur ueber `initialTab` in anderen Tests indirekt gesetzt, nie tatsaechlich
+     * angeklickt. Nutzt jeweils einen hartkodierten Kotlin-Literal-Sektionstitel ("Speicherplatz",
+     * "Fotodokumentation") als Nachweis, dass die richtige Seite tatsaechlich sichtbar wird -
+     * beide sind bereits als locale-unabhaengig bekannt (keine stringResource-Herkunft).
+     */
+    @Test
+    fun tabUmschalterWechseltZwischenDenDreiEinstellungsseiten() {
+        composeRule.setContent { SettingsScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        val startTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        composeRule.onNodeWithText(startTitel, substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Speicherplatz", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Fotodokumentation", substring = true).assertCountEquals(0)
+
+        composeRule.onNodeWithTag("settings_tab_daten").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText(startTitel, substring = true).assertCountEquals(0)
+        composeRule.onNodeWithText("Speicherplatz", substring = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("settings_tab_bericht").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText("Speicherplatz", substring = true).assertCountEquals(0)
+        composeRule.onNodeWithText("Fotodokumentation", substring = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("settings_tab_start").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(startTitel, substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Fotodokumentation", substring = true).assertCountEquals(0)
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: "Grenzwerte nach Wohnraum" oeffnet an zwei
+     * Stellen in SettingsScreen.kt denselben [RuhezeitPresetsDialog] (dessen eigener Inhalt schon
+     * in eigenen Tests geprueft ist) - bislang wurde aber keiner der beiden Einstiege tatsaechlich
+     * angeklickt. Jede Sektion wird nach ihrer Pruefung wieder eingeklappt, damit der
+     * Button-Text nicht doppelt im Baum steht, wenn der zweite Einstieg geprueft wird.
+     */
+    @Test
+    fun grenzwerteNachWohnraumDialogOeffnetSichVonBeidenEinstiegen() {
+        val settingsManager = app.container.settingsManager
+        val oldQuietHours = settingsManager.quietHoursEnabled
+        try {
+            settingsManager.quietHoursEnabled = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            val wohnraumButtonText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_ta_laerm_presets)
+            val schliessenText = "Schließen"
+
+            // Einstieg 1: Sektion "Schwellenwerte & Audio"
+            val aufnahmeTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+            composeRule.onNodeWithText(aufnahmeTitel, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText(wohnraumButtonText).performScrollTo().performClick()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).assertIsDisplayed()
+            composeRule.onNodeWithText(schliessenText).performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText(aufnahmeTitel, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            // Einstieg 2: Sektion "Ruhezeiten berücksichtigen"
+            val ruhezeitenTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_quiet_hours_title)
+            composeRule.onNodeWithText(ruhezeitenTitel, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText(wohnraumButtonText).performScrollTo().performClick()
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).assertIsDisplayed()
+        } finally {
+            settingsManager.quietHoursEnabled = oldQuietHours
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der "Zur Messgeraet-Kopplung"-Button war
+     * bislang nie geklickt worden, nur seine Sichtbarkeit gepruft.
+     */
+    @Test
+    fun btnOpenMeterRuftOnNavigateToMeterAuf() {
+        var geklickt = false
+        composeRule.setContent { SettingsScreen(onBack = {}, onNavigateToMeter = { geklickt = true }) }
+        composeRule.waitForIdle()
+
+        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("btn_open_meter").performScrollTo().performClick()
+
+        assertTrue("Klick auf btn_open_meter muss onNavigateToMeter aufrufen", geklickt)
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der "Zum Papierkorb"-Button war bislang nie
+     * geklickt worden. Liegt in der "Speicherplatz"-Sektion, deren Belegungsanzeige asynchron ueber
+     * ein LaunchedEffect nachgeladen wird (PR #150-Historie) - deshalb per waitUntil() auf das
+     * Erscheinen des Buttons selbst warten statt nur auf waitForIdle() zu vertrauen.
+     */
+    @Test
+    fun btnOpenTrashRuftOnNavigateToTrashAuf() {
+        var geklickt = false
+        composeRule.setContent {
+            SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN, onNavigateToTrash = { geklickt = true })
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            composeRule.onAllNodesWithTag("btn_open_trash").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("btn_open_trash").performScrollTo().performClick()
+
+        assertTrue("Klick auf btn_open_trash muss onNavigateToTrash aufrufen", geklickt)
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2: der Berichtsangaben-Abfrage-Schalter
+     * (BERICHT-Tab) war bislang nie tatsaechlich geklickt worden.
+     */
+    @Test
+    fun stammdatenAbfrageAktivSchalterAendertEinstellung() {
+        val settingsManager = app.container.settingsManager
+        val oldValue = settingsManager.stammdatenAbfrageAktiv
+        try {
+            settingsManager.stammdatenAbfrageAktiv = true
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Berichtsangaben", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            // Echter Layout-Bug gefunden und behoben (nicht nur ein Testproblem): der Semantics-
+            // Dump eines fehlgeschlagenen CI-Laufs zeigte fuer diesen Switch Node-Bounds mit
+            // l==r (0px Breite) - der lange, ungewichtete Text in der Row drueckte ihn bei
+            // schmaler Bildschirmbreite vollstaendig hinaus, der Switch war dadurch de facto
+            // nicht klickbar. Fix: Modifier.weight(1f) auf dem Text in SettingsScreen.kt, damit
+            // er umbricht statt den Switch zu verdraengen.
+            composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performScrollTo().assertIsOn()
+            composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").performClick()
+
+            assertFalse("Schalter muss stammdatenAbfrageAktiv tatsaechlich ausschalten", settingsManager.stammdatenAbfrageAktiv)
+            composeRule.onNodeWithTag("switch_stammdaten_abfrage_aktiv").assertIsOff()
+        } finally {
+            settingsManager.stammdatenAbfrageAktiv = oldValue
+        }
+    }
 }

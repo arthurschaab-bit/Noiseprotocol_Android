@@ -1645,11 +1645,24 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Beim Start eines Messvorgangs nach Berichtsangaben fragen")
-                    Switch(checked = stammdatenAbfrageAktiv, onCheckedChange = {
-                        stammdatenAbfrageAktiv = it
-                        settings.stammdatenAbfrageAktiv = it
-                    })
+                    // Modifier.weight(1f) noetig: ohne ihn drueckt dieser laengere Text den
+                    // Switch bei schmalen Bildschirmbreiten auf 0px Breite hinaus (per
+                    // Compose-Testing-Semantics-Dump nachgewiesen: Node-Bounds l==r), der Schalter
+                    // war dadurch de facto nicht klickbar - kein reines Testproblem, sondern ein
+                    // echter Layout-Bug (analog zur Fotodokumentation-Zeile oben, die aber einen
+                    // kuerzeren Text hat und dort noch nicht beobachtet wurde).
+                    Text(
+                        "Beim Start eines Messvorgangs nach Berichtsangaben fragen",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = stammdatenAbfrageAktiv,
+                        onCheckedChange = {
+                            stammdatenAbfrageAktiv = it
+                            settings.stammdatenAbfrageAktiv = it
+                        },
+                        modifier = Modifier.testTag("switch_stammdaten_abfrage_aktiv"),
+                    )
                 }
                 Text(
                     "Gerät, Messaufbau und Randbedingungen werden jetzt beim Messbeginn abgefragt " +
