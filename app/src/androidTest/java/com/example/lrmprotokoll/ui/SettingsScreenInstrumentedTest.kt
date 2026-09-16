@@ -253,7 +253,10 @@ class SettingsScreenInstrumentedTest {
             }
             // Echte Kandidatenzahl aus der DB, kein erfundener Platzhaltertext - der Dialog muss
             // die zuvor eingefuegte, alte, unmarkierte, nicht-favorisierte Aufnahme mitzaehlen.
-            composeRule.onNodeWithText("1 Aufnahmen", substring = true).assertIsDisplayed()
+            // Der lange Erklaertext laesst den Dialoginhalt ueberlaufen (Material3 AlertDialog
+            // scrollt dann intern) - performScrollTo() noetig, siehe die gleiche Klasse Bug in
+            // GesamtberichtStammdatenSheetInstrumentedTest.kt (PR #156).
+            composeRule.onNodeWithText("1 Aufnahmen", substring = true).performScrollTo().assertIsDisplayed()
 
             val confirmText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_confirm)
             composeRule.onNodeWithText(confirmText).performClick()
