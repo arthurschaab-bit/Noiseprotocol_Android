@@ -99,7 +99,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         composeRule.onNodeWithTag("input_bericht_typ").performTextInput("XL2")
         composeRule.onNodeWithTag("input_bericht_messort").performTextInput("Garten")
 
-        composeRule.onNodeWithText("Speichern").performClick()
+        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
 
         val eintraege = runBlocking { app.container.database.stammdatenVerlaufDao().letzte(10) }
@@ -150,7 +150,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Überspringen").performClick()
+        composeRule.onNodeWithText("Überspringen").performScrollTo().performClick()
 
         assertTrue("Überspringen muss onFertig aufrufen", fertig)
         val eintraege = runBlocking { app.container.database.stammdatenVerlaufDao().letzte(10) }
@@ -167,7 +167,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("button_standort_ermitteln").performClick()
+        composeRule.onNodeWithTag("button_standort_ermitteln").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText("Teststraße 42, 10115 Berlin", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
@@ -184,7 +184,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("button_standort_ermitteln").performClick()
+        composeRule.onNodeWithTag("button_standort_ermitteln").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText("Kein Standort verfügbar").fetchSemanticsNodes().isNotEmpty()
         }
@@ -202,7 +202,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("button_wetter_abrufen").performClick()
+        composeRule.onNodeWithTag("button_wetter_abrufen").performScrollTo().performClick()
         val erwarteterText = Wetterlage(18.0, 5.0, "sonnig").alsKurztext()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText(erwarteterText, substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -220,7 +220,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("button_wetter_abrufen").performClick()
+        composeRule.onNodeWithTag("button_wetter_abrufen").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             composeRule.onAllNodesWithText("Wetterdienst nicht erreichbar").fetchSemanticsNodes().isNotEmpty()
         }
