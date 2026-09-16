@@ -78,14 +78,21 @@ class TrashScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        // Bug (PR #153): der CI-Emulator startet nicht immer mit deutscher Geraete-Locale -
+        // hartcodierte deutsche Literale wie "Papierkorb" existieren dann schlicht nicht im
+        // Semantics-Baum (siehe values-en/strings.xml), der Semantics-Dump im Fehlerfall zeigte
+        // "[Trash]" statt "[Papierkorb]". Deshalb ueber getString() aufloesen statt hartzukodieren.
+        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_trash)
+        val zurueck = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back)
+
         // waitUntil statt direktem assertIsDisplayed(): auf dem CI-Emulator kann der vorherige
         // Test noch mitten in einem Activity-Wechsel stecken, wenn dieser Test startet - der
         // Titel existiert dann kurzzeitig im Semantics-Baum, ist aber noch nicht ausgemessen.
         warteAuf("TrashLeerzustand", 5_000L) {
-            composeRule.onAllNodesWithText("Papierkorb").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(titel).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Papierkorb").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(titel).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(zurueck).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 
@@ -106,11 +113,12 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = { snackbar = it })
         }
         composeRule.waitForIdle()
+        val wiederherstellen = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_restore)
         warteAuf("TrashWiederherstellen", 10_000L) {
-            composeRule.onAllNodesWithContentDescription("Wiederherstellen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithContentDescription(wiederherstellen).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithContentDescription("Wiederherstellen").performClick()
+        composeRule.onNodeWithContentDescription(wiederherstellen).performClick()
 
         warteAuf("TrashSnackbarNachWiederherstellen", 10_000L) {
             snackbar != null
@@ -132,12 +140,14 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = {})
         }
         composeRule.waitForIdle()
+        val loeschen = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_delete)
+        val abbrechen = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_cancel)
         warteAuf("TrashLoeschenAbbrechen", 10_000L) {
-            composeRule.onAllNodesWithContentDescription("Löschen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithContentDescription(loeschen).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithContentDescription("Löschen").performClick()
-        composeRule.onNodeWithText("Abbrechen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(loeschen).performClick()
+        composeRule.onNodeWithText(abbrechen).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
         val nochImPapierkorb = runBlocking { app.container.database.noiseDao().getTrashAelterAls(Long.MAX_VALUE) }
@@ -156,12 +166,13 @@ class TrashScreenInstrumentedTest {
             TrashScreen(onNavigateBack = {}, onShowSnackbar = { snackbar = it })
         }
         composeRule.waitForIdle()
+        val loeschen = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_delete)
         warteAuf("TrashLoeschenBestaetigen", 10_000L) {
-            composeRule.onAllNodesWithContentDescription("Löschen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithContentDescription(loeschen).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithContentDescription("Löschen").performClick()
-        composeRule.onNodeWithText("Löschen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(loeschen).performClick()
+        composeRule.onNodeWithText(loeschen).assertIsDisplayed().performClick()
 
         warteAuf("TrashSnackbarNachLoeschen", 10_000L) {
             snackbar != null
