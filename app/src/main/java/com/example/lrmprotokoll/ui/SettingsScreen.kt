@@ -2057,6 +2057,7 @@ fun SettingsScreen(
                     onValueChangeFinished = { settings.videoMaxDauerSekunden = videoMaxDauer.toInt() },
                     valueRange = 30f..900f,
                     steps = 28,
+                    modifier = Modifier.testTag("slider_video_max_dauer"),
                 )
                 Text(
                     "Die Grenze schützt nicht nur den Speicher: Bild und Ton stammen aus zwei " +
@@ -2077,6 +2078,7 @@ fun SettingsScreen(
                             selected = videoAufloesung == wert,
                             onClick = { videoAufloesung = wert; settings.videoAufloesung = wert },
                             label = { Text(beschriftung) },
+                            modifier = Modifier.testTag("chip_video_aufloesung_$wert"),
                         )
                     }
                 }
@@ -2087,11 +2089,15 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Videos nach Google Drive hochladen")
-                    Switch(checked = videoDriveUpload, onCheckedChange = {
-                        videoDriveUpload = it
-                        settings.videoDriveUpload = it
-                    })
+                    Text("Videos nach Google Drive hochladen", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = videoDriveUpload,
+                        onCheckedChange = {
+                            videoDriveUpload = it
+                            settings.videoDriveUpload = it
+                        },
+                        modifier = Modifier.testTag("switch_video_drive_upload"),
+                    )
                 }
                 Text(
                     "Standardmäßig an, wie Audio und Fotos. Ein Video kann Dritte, Kennzeichen " +
