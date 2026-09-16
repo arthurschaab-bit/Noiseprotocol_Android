@@ -265,11 +265,24 @@ class SettingsScreenInstrumentedTest {
             // Echte Kandidatenzahl aus der DB, kein erfundener Platzhaltertext - der Dialog muss
             // mindestens die zuvor eingefuegte, alte, unmarkierte, nicht-favorisierte Aufnahme
             // mitzaehlen (assertTrue statt exaktem Text, siehe Kommentar oben zur DB-Isolation).
+            // Der komplette erwartete Satz wird ueber getString() mit denselben Argumenten wie
+            // die Produktion aufgebaut, NICHT als deutscher Teilstring hartkodiert: der
+            // CI-Emulator bootet die Geraetesprache nicht deterministisch (en-US oder de je nach
+            // Lauf, siehe PR #150/#153) - "settings_cleanup_preview_text" hat eine echte
+            // values-en-Uebersetzung ("... recordings older than ..."), ein deutscher
+            // Teilstring wie "1 Aufnahmen" existiert auf einem englischsprachigen Emulator gar
+            // nicht im Baum, was den vorherigen CI-Fehler "could not find any node" erklaert.
+            val erwarteterDialogText = composeRule.activity.getString(
+                com.example.lrmprotokoll.R.string.settings_cleanup_preview_text,
+                erwarteteVorschau.anzahlAufnahmen,
+                settingsManager.autoRetentionDays.toInt(),
+                com.example.lrmprotokoll.messreihe.formatiereBytes(erwarteteVorschau.audioBytes),
+            )
             // Der lange Erklaertext laesst den Dialoginhalt ueberlaufen (Material3 AlertDialog
             // scrollt dann intern) - performScrollTo() noetig, siehe die gleiche Klasse Bug in
             // GesamtberichtStammdatenSheetInstrumentedTest.kt (PR #156).
             assertTrue("Es muss mindestens die eine eingefuegte alte Aufnahme als Kandidat zaehlen", erwarteteVorschau.anzahlAufnahmen >= 1)
-            composeRule.onNodeWithText("${erwarteteVorschau.anzahlAufnahmen} Aufnahmen", substring = true)
+            composeRule.onNodeWithText(erwarteterDialogText, substring = true)
                 .performScrollTo()
                 .assertIsDisplayed()
 
