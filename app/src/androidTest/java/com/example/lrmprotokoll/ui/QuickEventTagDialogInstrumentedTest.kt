@@ -65,4 +65,26 @@ class QuickEventTagDialogInstrumentedTest {
         assertEquals("🎵 Musik / Bass", gespeicherteKategorie)
         assertEquals("Nachbar Party", gespeicherteNotiz)
     }
+
+    /**
+     * Instrumentiertes Pendant zu [LiveCockpitCardTest]s
+     * ohneKategorieAuswahlWirdDieErsteKategorieAlsDefaultGespeichert (Robolectric, app/src/test) -
+     * dieser Fall hatte bislang kein echtes Geraete-Pendant (Checkliste Button/Screen-Coverage,
+     * Phase 1b).
+     */
+    @Test
+    fun ohneKategorieAuswahlWirdDieErsteKategorieAlsDefaultGespeichert() {
+        var gespeicherteKategorie: String? = null
+
+        composeRule.setContent {
+            LaermprotokollTheme {
+                QuickEventTagContent(currentDb = null, onSave = { kategorie, _ -> gespeicherteKategorie = kategorie })
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Ereignis jetzt speichern").performClick()
+
+        assertEquals(QUICK_EVENT_CATEGORIES.first(), gespeicherteKategorie)
+    }
 }
