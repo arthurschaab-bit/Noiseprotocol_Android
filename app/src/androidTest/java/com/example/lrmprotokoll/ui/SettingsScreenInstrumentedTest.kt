@@ -34,6 +34,7 @@ import com.example.lrmprotokoll.alert.Alert
 import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
+import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.allOf
@@ -204,6 +205,172 @@ class SettingsScreenInstrumentedTest {
             composeRule.onNodeWithText(dbLabel, substring = true).performScrollTo().assertIsDisplayed()
         } finally {
             settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2 (Risiko zuerst): der Auto-Bereinigung-Schalter
+     * (F5) wurde bislang nie tatsaechlich geklickt - alle bisherigen Tests setzten
+     * `autoRetentionEnabled` nur direkt im Code. Das ist der einzige Schalter der App, der
+     * *automatisch und wiederkehrend* Aufnahmen in den Papierkorb verschiebt, deshalb der
+     * Vorschau-Dialog davor (PROMPT_M10_FUNKTIONEN.md F5) - genau dieser Schutz war ungetestet.
+     */
+    @Test
+    fun autoBereinigungVorschauZeigtEchteKandidatenUndAktivierenSchaltetEin() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldEnabled = settingsManager.autoRetentionEnabled
+        val oldDays = settingsManager.autoRetentionDays
+        val alterZeitpunkt = System.currentTimeMillis() - 200L * 24 * 60 * 60 * 1000
+        try {
+            settingsManager.isProMode = true
+            settingsManager.autoRetentionEnabled = false
+            settingsManager.autoRetentionDays = 90
+
+            runBlocking {
+                app.container.database.noiseDao().insert(
+                    com.example.lrmprotokoll.data.NoiseRecord(
+                        timestamp = alterZeitpunkt,
+                        amplitude = 0.0,
+                        dbValue = 55.0,
+                        filePath = "/tmp/nicht-vorhanden-retention-test.wav",
+                    )
+                )
+            }
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_auto_retention").performScrollTo().performClick()
+
+            val dialogTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_title)
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText(dialogTitle).fetchSemanticsNodes().isNotEmpty()
+            }
+            // Echte Kandidatenzahl aus der DB, kein erfundener Platzhaltertext - der Dialog muss
+            // die zuvor eingefuegte, alte, unmarkierte, nicht-favorisierte Aufnahme mitzaehlen.
+            composeRule.onNodeWithText("1 Aufnahmen", substring = true).assertIsDisplayed()
+
+            val confirmText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_confirm)
+            composeRule.onNodeWithText(confirmText).performClick()
+
+            assertTrue(
+                "Bestaetigen im Vorschau-Dialog muss die Auto-Bereinigung tatsaechlich aktivieren",
+                settingsManager.autoRetentionEnabled,
+            )
+        } finally {
+            settingsManager.autoRetentionEnabled = oldEnabled
+            settingsManager.autoRetentionDays = oldDays
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    @Test
+    fun autoBereinigungVorschauAbbrechenLaesstEinstellungAusgeschaltet() {
+        val settingsManager = app.container.settingsManager
+        val oldPro = settingsManager.isProMode
+        val oldEnabled = settingsManager.autoRetentionEnabled
+        try {
+            settingsManager.isProMode = true
+            settingsManager.autoRetentionEnabled = false
+
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
+            composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("switch_auto_retention").performScrollTo().performClick()
+
+            val dialogTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_title)
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText(dialogTitle).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_cancel)).performClick()
+
+            composeRule.waitForIdle()
+            assertFalse(
+                "Abbrechen im Vorschau-Dialog darf die Auto-Bereinigung nicht aktivieren",
+                settingsManager.autoRetentionEnabled,
+            )
+            composeRule.onNodeWithTag("switch_auto_retention").assertIsOff()
+        } finally {
+            settingsManager.autoRetentionEnabled = oldEnabled
+            settingsManager.isProMode = oldPro
+        }
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage Phase 6.2 (Risiko zuerst): "Speicher freigeben" loescht
+     * echte Dateien unwiderruflich - bislang gab es dafuer ueberhaupt keinen Test, weder fuer die
+     * Bestaetigung noch fuers Abbrechen. Reine Datei-/DB-Logik ohne Netz/GPS, deshalb ohne Fakes
+     * direkt gegen ein echtes Dummy-File im externen App-Verzeichnis testbar.
+     */
+    @Test
+    fun speicherFreigebenLoeschtAusgewaehlteAlteDateiNachBestaetigung() {
+        val verzeichnis = app.getExternalFilesDir(null)!!
+        val datei = File(verzeichnis, "retention_test_alt.wav")
+        datei.writeBytes(ByteArray(1024))
+        datei.setLastModified(System.currentTimeMillis() - 100L * 24 * 60 * 60 * 1000)
+
+        try {
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Audioaufnahmen (WAV)").performScrollTo().performClick()
+            composeRule.onNodeWithText("alles").performScrollTo().performClick()
+            composeRule.onNodeWithText("Freigeben …").performScrollTo().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Speicher freigeben?").fetchSemanticsNodes().isNotEmpty()
+            }
+            // Echte Vorschau-Zahl, kein Platzhalter - genau unsere eine Testdatei.
+            composeRule.onNodeWithText("1 Dateien", substring = true).assertIsDisplayed()
+
+            composeRule.onNodeWithText("Endgültig löschen").performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) { !datei.exists() }
+            assertTrue("Datei muss nach Bestaetigung tatsaechlich geloescht sein", !datei.exists())
+        } finally {
+            datei.delete()
+        }
+    }
+
+    @Test
+    fun speicherFreigebenAbbrechenLoeschtNichts() {
+        val verzeichnis = app.getExternalFilesDir(null)!!
+        val datei = File(verzeichnis, "retention_test_abbrechen.wav")
+        datei.writeBytes(ByteArray(1024))
+        datei.setLastModified(System.currentTimeMillis() - 100L * 24 * 60 * 60 * 1000)
+
+        try {
+            composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Audioaufnahmen (WAV)").performScrollTo().performClick()
+            composeRule.onNodeWithText("alles").performScrollTo().performClick()
+            composeRule.onNodeWithText("Freigeben …").performScrollTo().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000L) {
+                composeRule.onAllNodesWithText("Speicher freigeben?").fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_cancel)).performClick()
+            composeRule.waitForIdle()
+
+            assertTrue("Abbrechen darf die Datei nicht loeschen", datei.exists())
+        } finally {
+            datei.delete()
         }
     }
 

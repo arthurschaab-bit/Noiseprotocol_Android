@@ -1188,7 +1188,8 @@ fun SettingsScreen(
                                     autoRetentionEnabled = false
                                     settings.autoRetentionEnabled = false
                                 }
-                            }
+                            },
+                            modifier = Modifier.testTag("switch_auto_retention"),
                         )
                     }
 
