@@ -9,6 +9,53 @@
 set -uo pipefail
 
 api_level="$1"
+APP_ID="com.example.lrmprotokoll"
+
+# Dieser Block muss im laufenden Emulator-Kontext ausgeführt werden. Der nachgelagerte
+# Workflow-Schritt läuft erst nach Ende von android-emulator-runner und kann deshalb keine
+# aussagekräftigen ADB-Diagnosen mehr liefern.
+sichere_emulator_diagnosen() {
+  mkdir -p logs
+
+  # Eine kleine, selbstbeschreibende Momentaufnahme: Locale, Display und
+  # Animationseinstellungen sind häufig entscheidend für UI-Test-Unterschiede.
+  {
+    echo "Zeitpunkt UTC: $(date --iso-8601=seconds)"
+    echo
+    echo "== adb devices -l =="
+    adb devices -l
+    echo
+    echo "== Build und Locale =="
+    adb shell getprop ro.build.fingerprint
+    adb shell getprop ro.build.version.release
+    adb shell getprop persist.sys.locale
+    adb shell getprop ro.product.locale
+    adb shell settings get system system_locales
+    echo
+    echo "== Display und Orientierung =="
+    adb shell wm size
+    adb shell wm density
+    adb shell dumpsys input | grep -E "SurfaceOrientation|SurfaceOrientation|orientation" || true
+    echo
+    echo "== Animationen =="
+    adb shell settings get global window_animation_scale
+    adb shell settings get global transition_animation_scale
+    adb shell settings get global animator_duration_scale
+  } > logs/emulator-info.txt 2>&1 || true
+
+  timeout 10s adb logcat -b all -d > logs/adb-logcat.txt 2>&1 || true
+  timeout 10s adb shell dumpsys activity > logs/dumpsys-activity.txt 2>&1 || true
+  timeout 10s adb shell dumpsys window > logs/dumpsys-window.txt 2>&1 || true
+  timeout 10s adb shell dumpsys gfxinfo "$APP_ID" > logs/gfxinfo.txt 2>&1 || true
+  timeout 10s adb shell dumpsys meminfo "$APP_ID" > logs/meminfo.txt 2>&1 || true
+  timeout 10s adb shell dumpsys package "$APP_ID" > logs/package-info.txt 2>&1 || true
+
+  # Screenshot und Hierarchie ergänzen die Logs um den sichtbaren bzw. für Android
+  # zugänglichen Zustand unmittelbar am Fehlerzeitpunkt.
+  timeout 10s adb exec-out screencap -p > logs/screenshot.png 2> logs/screenshot-stderr.txt || true
+  adb shell uiautomator dump /sdcard/ci-ui-hierarchy.xml >/dev/null 2>&1 &&
+    adb pull /sdcard/ci-ui-hierarchy.xml logs/ui-hierarchy.xml >/dev/null 2>&1 || true
+}
 
 # Die vier "ohneBerechtigung..."-Tests unten laufen HIER NICHT mit: AGP gewaehrt beim Install
 # alle im Manifest deklarierten Laufzeitberechtigungen bereits (`pm install -g`), ein Revoke
@@ -19,7 +66,8 @@ notclass="com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrument
 
 ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.notClass="$notclass"
 if [ $? -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 
@@ -29,14 +77,16 @@ fi
 # installDebugAndroidTest sind reine `adb install`-Wrapper ohne die UTP-Deinstallation.
 ./gradlew installDebug installDebugAndroidTest --no-daemon --stacktrace
 if [ $? -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 
-APP_ID="com.example.lrmprotokoll"
 RUNNER=$(adb shell pm list instrumentation | grep "target=$APP_ID" | sed -E 's/instrumentation:([^ ]+) .*/\1/' | tr -d '\r')
 if [ -z "$RUNNER" ]; then
   echo "::error::Keine Instrumentation fuer $APP_ID gefunden (pm list instrumentation leer) - App-/Test-APK nicht installiert?"
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
 echo "Instrumentation-Komponente: $RUNNER"
@@ -107,6 +157,7 @@ for eintrag in "${faelle[@]}"; do
 done
 
 if [ "$fehlgeschlagen" -ne 0 ]; then
-  timeout 10s adb logcat -d > logcat-failure.txt
+  sichere_emulator_diagnosen
+  cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
   exit 1
 fi
