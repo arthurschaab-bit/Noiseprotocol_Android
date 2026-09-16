@@ -1,27 +1,24 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
-import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.lrmprotokoll.AppContainer
+import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.meter.FakeMeterTransport
+import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,9 +26,16 @@ import org.junit.runner.RunWith
 /**
  * Instrumentierte UI-Tests für die Startseite / HomeScreen-Komponenten gemäß Testplan.
  *
- * Prüft den globalen Filter (Auf-/Zuklappen, RangeSlider, Reset), sowie
- * alle interaktiven Aktionen auf [NoiseRecordItem] (Abspielen, Löschen, Lernen, KI-Erkennung,
- * Schnellauswahl-Chips "Bagger", "Bohren", "Hämmern", "Verkehr", Long-Click Auswahl).
+ * Prüft den globalen Filter (Auf-/Zuklappen, Reset) und dessen tatsächliche Filterwirkung
+ * (Suchtext, Pegelbereich-RangeSlider, alle vier FilterChips) gegen die ECHTE Composable
+ * [NoiseProtocolApp], sowie alle interaktiven Aktionen auf [NoiseRecordItem] (Abspielen,
+ * Löschen, Lernen, KI-Erkennung, Schnellauswahl-Chips, Long-Click Auswahl).
+ *
+ * Coverage Phase 7a (docs Plan): der bisherige Filtertest hier war eine handgebaute
+ * Ersatz-Composable (Column/Card/Text/TextButton ohne echten RangeSlider, ohne echte
+ * RecordFilterState-Logik) und bewies nur, dass irgendein Text auf- und zuklappbar ist -
+ * nicht, dass der echte Filter echte Aufnahmen tatsächlich ein-/ausblendet. Ersetzt durch
+ * Tests gegen [NoiseProtocolApp] mit echten in die DB eingefügten [NoiseRecord]s.
  */
 @RunWith(AndroidJUnit4::class)
 class HomeScreenInstrumentedTest {
@@ -39,53 +43,264 @@ class HomeScreenInstrumentedTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    @Test
-    fun globalerFilterLaesstSichAufUndZuklappenUndZuruecksetzen() {
+    private lateinit var app: LaermprotokollApp
+
+    // Drei Testaufnahmen, jede so konstruiert, dass genau eine Filterdimension sie eindeutig
+    // von den beiden anderen unterscheidet (Suchtext, Favorit, Ruhezeit, Messgeraet,
+    // Kalibrierung, Pegelbereich) - siehe Testmethoden unten.
+    private val leiseOhneMessgeraet = NoiseRecord(
+        timestamp = System.currentTimeMillis(),
+        amplitude = 1000.0,
+        dbValue = 30.0,
+        filePath = "/fake/filtertest-a.wav",
+        label = "FilterTestBohren",
+        favorite = false,
+        isQuietHour = false,
+        meterConnected = false,
+        calibratedDbA = null,
+    )
+    private val lautFavorit = NoiseRecord(
+        timestamp = System.currentTimeMillis() + 1,
+        amplitude = 2000.0,
+        dbValue = 100.0,
+        filePath = "/fake/filtertest-b.wav",
+        label = "FilterTestHaemmern",
+        favorite = true,
+        isQuietHour = false,
+        meterConnected = false,
+        calibratedDbA = null,
+    )
+    private val mittelKalibriertRuhezeit = NoiseRecord(
+        timestamp = System.currentTimeMillis() + 2,
+        amplitude = 1500.0,
+        dbValue = 60.0,
+        filePath = "/fake/filtertest-c.wav",
+        label = "FilterTestVerkehr",
+        favorite = false,
+        isQuietHour = true,
+        meterConnected = true,
+        calibratedDbA = 65.0,
+    )
+
+    @Before
+    fun setUp() {
+        app = ApplicationProvider.getApplicationContext()
+        app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
+        app.container.database.clearAllTables()
+        app.container.settingsManager.filterSearchQuery = ""
+        app.container.settingsManager.filterDbMin = 0f
+        app.container.settingsManager.filterDbMax = 120f
+        app.container.settingsManager.filterOnlyMeter = false
+        app.container.settingsManager.filterOnlyCalibrated = false
+        app.container.settingsManager.filterOnlyFavorites = false
+        app.container.settingsManager.filterOnlyQuietHours = false
+    }
+
+    @After
+    fun tearDown() {
+        app.container.database.clearAllTables()
+        app.container.settingsManager.filterSearchQuery = ""
+        app.container.settingsManager.filterDbMin = 0f
+        app.container.settingsManager.filterDbMax = 120f
+        app.container.settingsManager.filterOnlyMeter = false
+        app.container.settingsManager.filterOnlyCalibrated = false
+        app.container.settingsManager.filterOnlyFavorites = false
+        app.container.settingsManager.filterOnlyQuietHours = false
+        app.resetContainer()
+    }
+
+    private fun fuegeDreiTestaufnahmenEin() {
+        runBlocking {
+            val dao = app.container.database.noiseDao()
+            dao.insert(leiseOhneMessgeraet)
+            dao.insert(lautFavorit)
+            dao.insert(mittelKalibriertRuhezeit)
+        }
+    }
+
+    private fun setzeInhalt() {
         composeRule.setContent {
-            var showGlobalFilter by remember { mutableStateOf(false) }
-            var minDb by remember { mutableStateOf(0f) }
-            var maxDb by remember { mutableStateOf(120f) }
-
-            Column(modifier = Modifier.padding(16.dp)) {
-                androidx.compose.material3.Card(
-                    modifier = Modifier.padding(8.dp),
-                    onClick = { showGlobalFilter = !showGlobalFilter }
-                ) {
-                    Text("Globale Filter (Pegel)")
-                }
-
-                if (showGlobalFilter) {
-                    Text("Pegelbereich (dB): ${minDb.toInt()} - ${maxDb.toInt()}")
-                    androidx.compose.material3.TextButton(onClick = {
-                        minDb = 0f
-                        maxDb = 120f
-                    }) {
-                        Text("Filter zurücksetzen")
-                    }
-                }
-            }
+            NoiseProtocolApp(
+                onNavigateToPlayer = {},
+                onNavigateToSettings = {},
+                onNavigateToMeter = {},
+                onNavigateToProtokoll = {},
+                onNavigateToDiagnose = {},
+                onNavigateToVideo = {},
+            )
         }
         composeRule.waitForIdle()
+    }
 
-        // 1. Initial ist Filter zugeklappt
-        composeRule.onNodeWithText("Globale Filter (Pegel)").assertIsDisplayed()
-        composeRule.onNodeWithText("Filter zurücksetzen").assertDoesNotExist()
-
-        // 2. Aufklappen
-        composeRule.onNodeWithText("Globale Filter (Pegel)").performClick()
+    private fun setzeInhaltUndOeffneFilterPanel() {
+        setzeInhalt()
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Filter zurücksetzen").assertIsDisplayed()
-        composeRule.onNodeWithText("Pegelbereich (dB): 0 - 120").assertIsDisplayed()
+    }
 
-        // 3. Zurücksetzen klicken
-        composeRule.onNodeWithText("Filter zurücksetzen").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Pegelbereich (dB): 0 - 120").assertIsDisplayed()
+    private fun labelText(record: NoiseRecord) =
+        composeRule.activity.getString(com.example.lrmprotokoll.R.string.label_user_prefix, record.label)
 
-        // 4. Wieder zuklappen
-        composeRule.onNodeWithText("Globale Filter (Pegel)").performClick()
+    // home_lazy_column ist eine echte LazyColumn - Eintraege weit unterhalb des Viewports sind
+    // schlicht noch nicht komponiert und daher im Semantics-Tree nicht vorhanden, bis dorthin
+    // gescrollt wurde. performScrollTo() auf einen bereits gefundenen Knoten reicht hier nicht
+    // (der Knoten existiert ja noch gar nicht) - performScrollToNode() auf dem Listen-Container
+    // scrollt gezielt bis der Treffer komponiert ist, das ist die dafuer vorgesehene API.
+    private fun scrolleZuUndPruefeVorhanden(record: NoiseRecord) {
+        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(record)))
+        composeRule.onNodeWithText(labelText(record)).assertExists()
+    }
+
+    @Test
+    fun filterPanelLaesstSichAufUndZuklappen() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhalt()
+
+        composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Filter zurücksetzen").assertDoesNotExist()
+        composeRule.onNodeWithTag("input_filter_search").performScrollTo().assertIsDisplayed()
+
+        composeRule.onNodeWithTag("panel_filter_header").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()
+    }
+
+    @Test
+    fun suchtextFiltertAufNichtPassendeAufnahmenAus() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("input_filter_search").performTextInput("Bohren")
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(leiseOhneMessgeraet)
+        composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun chipNurFavoritenFiltertAufFavorisierteAufnahmenAus() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("chip_filter_favorites").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(lautFavorit)
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(mittelKalibriertRuhezeit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun chipNurRuhezeitFiltertAufRuhezeitAufnahmenAus() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("chip_filter_quiet_hours").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun chipNurMessgeraetFiltertAufMessgeraetAufnahmenAus() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("chip_filter_only_meter").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun chipNurKalibriertFiltertAufKalibrierteAufnahmenAus() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("chip_filter_only_calibrated").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun ausEinstellungenVorbelegterPegelbereichFiltertAufnahmenAusserhalbDesBereichsAus() {
+        // Pre-set statt Slider-Drag (siehe rangeSlider*-Tests unten fuer die Drag-Interaktion
+        // selbst) - filterState wird beim ersten Komposieren aus SettingsManager gelesen, das
+        // deckt die eigentlich risikobehaftete Frage ab: filtert der Bereich die richtigen
+        // Aufnahmen, unabhaengig davon, wie minDb/maxDb zustande kamen.
+        //
+        // CI-Fehler (root-caused): mit dem Preset ist filterState.istAktiv von der allerersten
+        // Komposition an true, wodurch chip_filter_reset schon TEIL derselben Row ist wie
+        // panel_filter_header, bevor das Panel ueberhaupt aufgeklappt wird - als einziger Test
+        // hier. Die Filterwirkung auf die Aufnahmenliste haengt aber gar nicht von
+        // showFilterPanel ab (filteredRecords wird unabhaengig vom Auf-/Zugeklapptsein
+        // berechnet) - das Panel muss fuer diesen Test also gar nicht geoeffnet werden. Nur
+        // setzeInhalt() statt setzeInhaltUndOeffneFilterPanel() vermeidet den Klick auf die
+        // Kopfzeile komplett und damit jede Unklarheit rund um den benachbarten Reset-Chip.
+        app.container.settingsManager.filterDbMin = 50f
+        app.container.settingsManager.filterDbMax = 70f
+        fuegeDreiTestaufnahmenEin()
+        setzeInhalt()
+
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+        composeRule.onNodeWithText(labelText(lautFavorit)).assertDoesNotExist()
+    }
+
+    @Test
+    fun rangeSliderSwipeNachRechtsErhoehtMinDbSchwelle() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        val slider = composeRule.onNodeWithTag("slider_home_filter_db").performScrollTo().assertIsDisplayed()
+        slider.performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+
+        assertTrue(
+            "Ziehen des linken Reglers ganz nach rechts muss minDb deutlich erhoehen",
+            app.container.settingsManager.filterDbMin > 50f
+        )
+    }
+
+    @Test
+    fun rangeSliderSwipeNachLinksVerringertMaxDbSchwelle() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        val slider = composeRule.onNodeWithTag("slider_home_filter_db").performScrollTo().assertIsDisplayed()
+        slider.performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+
+        assertTrue(
+            "Ziehen des rechten Reglers ganz nach links muss maxDb deutlich verringern",
+            app.container.settingsManager.filterDbMax < 70f
+        )
+    }
+
+    @Test
+    fun filterZuruecksetzenChipEntferntAlleFilterUndZeigtAlleAufnahmenWieder() {
+        fuegeDreiTestaufnahmenEin()
+        setzeInhaltUndOeffneFilterPanel()
+
+        composeRule.onNodeWithTag("chip_filter_favorites").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(labelText(leiseOhneMessgeraet)).assertDoesNotExist()
+
+        composeRule.onNodeWithTag("chip_filter_reset").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        scrolleZuUndPruefeVorhanden(leiseOhneMessgeraet)
+        scrolleZuUndPruefeVorhanden(lautFavorit)
+        scrolleZuUndPruefeVorhanden(mittelKalibriertRuhezeit)
     }
 
     @Test
