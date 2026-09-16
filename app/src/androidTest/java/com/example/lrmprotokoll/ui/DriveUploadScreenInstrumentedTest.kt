@@ -20,6 +20,14 @@ import org.junit.runner.RunWith
  * noch nie auf einem echten Bildschirm gesehen worden. [DriveUploadUebersicht] (die
  * Zusammenstellungslogik) ist bereits ohne Netz getestet - hier geht es nur um das Rendering
  * selbst: Leerzustand und Liste mit Eintraegen.
+ *
+ * Checkliste Button/Screen-Coverage Phase 1a: der urspruenglich fuer diese Phase vorgesehene
+ * "Upload-Button mit Fake-Backend" existiert in [DriveUploadScreen] nicht - der Screen ist eine
+ * reine Uebersicht ueber bereits (per Hintergrund-Sync) hochgeladene/laufende/fehlgeschlagene
+ * Eintraege, ohne eigenen Auslöse-Button. Die einzige echte, bisher ungetestete Zustandslogik
+ * ist die Kopfzeile ([driveSyncAusgeschaltetZeigtHinweisStattZaehler],
+ * [driveSyncEingeschaltetZeigtZaehlerUndLetztenLauf]), die direkt von
+ * `settingsManager.driveSyncEnabled`/`driveSyncLastMessage` abhaengt.
  */
 @RunWith(AndroidJUnit4::class)
 class DriveUploadScreenInstrumentedTest {
@@ -38,6 +46,9 @@ class DriveUploadScreenInstrumentedTest {
     @After
     fun tearDown() {
         app.container.database.clearAllTables()
+        // Defaults aus SettingsManager.kt (driveSyncEnabled default = false).
+        app.container.settingsManager.driveSyncEnabled = false
+        app.container.settingsManager.driveSyncLastMessage = null
     }
 
     @Test
@@ -81,5 +92,35 @@ class DriveUploadScreenInstrumentedTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(DRIVE_UPLOAD_LISTE_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun driveSyncAusgeschaltetZeigtHinweisStattZaehler() {
+        app.container.settingsManager.driveSyncEnabled = false
+
+        composeRule.setContent {
+            DriveUploadScreen(onBack = {})
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(
+            "Drive-Synchronisation ist ausgeschaltet – es wird nichts hochgeladen.",
+        ).assertIsDisplayed()
+    }
+
+    @Test
+    fun driveSyncEingeschaltetZeigtZaehlerUndLetztenLauf() {
+        app.container.settingsManager.driveSyncEnabled = true
+        app.container.settingsManager.driveSyncLastMessage = "Erfolgreich synchronisiert"
+
+        composeRule.setContent {
+            DriveUploadScreen(onBack = {})
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(
+            "0 hochgeladen · 0 laufen · 0 offen · 0 fehlgeschlagen",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Letzter Lauf: Erfolgreich synchronisiert").assertIsDisplayed()
     }
 }
