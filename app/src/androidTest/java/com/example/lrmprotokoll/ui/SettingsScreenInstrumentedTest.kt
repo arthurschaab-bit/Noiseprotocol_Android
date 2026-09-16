@@ -237,6 +237,17 @@ class SettingsScreenInstrumentedTest {
                     )
                 )
             }
+            // Nicht auf "genau 1 Kandidat" verlassen: die App-DB wird zwischen den ueber 160
+            // Tests dieser Instrumentierungs-Session nicht zurueckgesetzt (kein clearAllTables()
+            // in @Before/@After dieser Klasse), andere Tests koennen bereits aeltere,
+            // unmarkierte Aufnahmen hinterlassen haben. Stattdessen dieselbe Funktion wie die
+            // Produktion aufrufen und den Dialog gegen deren echtes Ergebnis pruefen.
+            val erwarteteVorschau = runBlocking {
+                com.example.lrmprotokoll.messreihe.ermittleRetentionVorschau(
+                    app.container.database.noiseDao(),
+                    settingsManager.autoRetentionDays.toInt(),
+                )
+            }
 
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
@@ -252,11 +263,15 @@ class SettingsScreenInstrumentedTest {
                 composeRule.onAllNodesWithText(dialogTitle).fetchSemanticsNodes().isNotEmpty()
             }
             // Echte Kandidatenzahl aus der DB, kein erfundener Platzhaltertext - der Dialog muss
-            // die zuvor eingefuegte, alte, unmarkierte, nicht-favorisierte Aufnahme mitzaehlen.
+            // mindestens die zuvor eingefuegte, alte, unmarkierte, nicht-favorisierte Aufnahme
+            // mitzaehlen (assertTrue statt exaktem Text, siehe Kommentar oben zur DB-Isolation).
             // Der lange Erklaertext laesst den Dialoginhalt ueberlaufen (Material3 AlertDialog
             // scrollt dann intern) - performScrollTo() noetig, siehe die gleiche Klasse Bug in
             // GesamtberichtStammdatenSheetInstrumentedTest.kt (PR #156).
-            composeRule.onNodeWithText("1 Aufnahmen", substring = true).performScrollTo().assertIsDisplayed()
+            assertTrue("Es muss mindestens die eine eingefuegte alte Aufnahme als Kandidat zaehlen", erwarteteVorschau.anzahlAufnahmen >= 1)
+            composeRule.onNodeWithText("${erwarteteVorschau.anzahlAufnahmen} Aufnahmen", substring = true)
+                .performScrollTo()
+                .assertIsDisplayed()
 
             val confirmText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_preview_confirm)
             composeRule.onNodeWithText(confirmText).performClick()
