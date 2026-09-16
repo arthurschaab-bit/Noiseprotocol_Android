@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
@@ -64,5 +65,36 @@ class OnboardingScreenInstrumentedTest {
         composeRule.waitForIdle()
 
         assertTrue(finished)
+    }
+
+    /**
+     * Checkliste Button/Screen-Coverage (Phase 1b): OnboardingScreen wird inline in MainActivity
+     * gerendert (keine eigene Activity/Route, kein configChanges-Override im Manifest) - eine
+     * Bildschirmdrehung waehrend des Onboardings fuehrt zu einer echten Neukomposition.
+     * `currentPage` nutzte urspruenglich `remember` statt `rememberSaveable` und wurde dabei auf
+     * Seite 1 zurueckgesetzt (gefunden bei dieser Coverage-Pruefung, gefixt im selben PR).
+     * `StateRestorationTester` simuliert genau diesen Zyklus, ohne eine echte Geraetedrehung zu
+     * brauchen.
+     */
+    @Test
+    fun fortschrittBleibtNachKonfigurationsAenderungErhalten() {
+        val restorationTester = StateRestorationTester(composeRule)
+
+        restorationTester.setContent {
+            OnboardingScreen(onFinish = {})
+        }
+        composeRule.waitForIdle()
+
+        val nextStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_next)
+        composeRule.onNodeWithText(nextStr).performClick()
+        composeRule.waitForIdle()
+
+        val zweiteSeite = composeRule.activity.getString(com.example.lrmprotokoll.R.string.onboarding_2_title)
+        composeRule.onAllNodesWithText(zweiteSeite, substring = true).onFirst().assertIsDisplayed()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText(zweiteSeite, substring = true).onFirst().assertIsDisplayed()
     }
 }

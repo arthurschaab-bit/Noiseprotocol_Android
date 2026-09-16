@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +33,11 @@ data class OnboardingPage(
 fun OnboardingScreen(
     onFinish: () -> Unit
 ) {
-    var currentPage by remember { mutableIntStateOf(0) }
+    // Checkliste Button/Screen-Coverage: OnboardingScreen wird inline in MainActivity gerendert
+    // (keine eigene Activity/Route, kein configChanges-Override), eine Bildschirmdrehung fuehrt
+    // also zu einer echten Neukomposition. rememberSaveable statt remember, damit eine Drehung
+    // waehrend des Onboardings den Fortschritt nicht auf Seite 1 zuruecksetzt.
+    var currentPage by rememberSaveable { mutableIntStateOf(0) }
 
     val pages = listOf(
         OnboardingPage(
