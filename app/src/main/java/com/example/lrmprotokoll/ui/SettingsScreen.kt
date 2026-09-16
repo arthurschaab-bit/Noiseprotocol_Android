@@ -670,7 +670,8 @@ fun SettingsScreen(
                         onCheckedChange = {
                             recordWavAudio = it
                             settings.recordWavAudio = it
-                        }
+                        },
+                        modifier = Modifier.testTag("switch_record_wav_audio"),
                     )
                 }
 
@@ -784,6 +785,7 @@ fun SettingsScreen(
                     Switch(
                         checked = alarmierungAktiv,
                         onCheckedChange = { alarmierungAktiv = it; settings.alarmierungAktiv = it },
+                        modifier = Modifier.testTag("switch_alarmierung_aktiv"),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.settings_alerting_active))
@@ -1067,7 +1069,8 @@ fun SettingsScreen(
                         onCheckedChange = {
                             quietHoursEnabled = it
                             settings.quietHoursEnabled = it
-                        }
+                        },
+                        modifier = Modifier.testTag("switch_quiet_hours_enabled"),
                     )
                 }
 
