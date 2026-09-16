@@ -39,9 +39,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.ui.theme.TechBluePrimary
+
+const val RUHEZEIT_PRESETS_LAZY_COLUMN_TAG = "ruhezeit_presets_lazy_column"
 
 data class WohnraumPreset(
     val id: String,
@@ -141,7 +144,8 @@ fun RuhezeitPresetsDialog(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false),
+                        .weight(1f, fill = false)
+                        .testTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(WOHNRAUM_PRESETS) { preset ->

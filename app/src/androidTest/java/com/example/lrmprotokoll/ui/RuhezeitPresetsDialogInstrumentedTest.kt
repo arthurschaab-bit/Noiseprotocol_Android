@@ -34,10 +34,15 @@ class RuhezeitPresetsDialogInstrumentedTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Grenzwerte nach Wohnraum").assertIsDisplayed()
-        WOHNRAUM_PRESETS.forEach { preset ->
+        // Die LazyColumn zeigt auf einem echten Bildschirm nicht alle sechs Presets gleichzeitig -
+        // performScrollToIndex() scrollt schrittweise zu jedem, bevor assertIsDisplayed() prueft
+        // (gleiches Muster wie DiagnoseScreenInstrumentedTest/KiErklaerungScreenInstrumentedTest).
+        WOHNRAUM_PRESETS.forEachIndexed { index, preset ->
+            composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).performScrollToIndex(index)
             composeRule.onNodeWithText(preset.titel).assertIsDisplayed()
         }
-        // WA-Preset hat nachtGrenzwertDb = 40f, muss als aktiv markiert sein.
+        // WA-Preset hat nachtGrenzwertDb = 40f, muss als aktiv markiert sein - Index 1 (WR, WA, ...).
+        composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).performScrollToIndex(1)
         composeRule.onNodeWithContentDescription("Aktiv").assertIsDisplayed()
     }
 
@@ -59,7 +64,9 @@ class RuhezeitPresetsDialogInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        val wrPreset = WOHNRAUM_PRESETS.first { it.id == "WR" }
+        val wrIndex = WOHNRAUM_PRESETS.indexOfFirst { it.id == "WR" }
+        val wrPreset = WOHNRAUM_PRESETS[wrIndex]
+        composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).performScrollToIndex(wrIndex)
         composeRule.onNodeWithText(wrPreset.titel).performClick()
 
         assertEquals(wrPreset.nachtGrenzwertDb, uebergebeneNacht)
@@ -82,7 +89,9 @@ class RuhezeitPresetsDialogInstrumentedTest {
 
         composeRule.onNodeWithText("Auch reguläre Tagesschwelle anpassen").performClick()
 
-        val miPreset = WOHNRAUM_PRESETS.first { it.id == "MI" }
+        val miIndex = WOHNRAUM_PRESETS.indexOfFirst { it.id == "MI" }
+        val miPreset = WOHNRAUM_PRESETS[miIndex]
+        composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).performScrollToIndex(miIndex)
         composeRule.onNodeWithText(miPreset.titel).performClick()
 
         assertEquals(miPreset.tagGrenzwertDb, uebergebenerTag)

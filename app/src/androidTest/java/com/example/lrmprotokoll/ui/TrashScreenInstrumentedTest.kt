@@ -60,6 +60,12 @@ class TrashScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        // waitUntil statt direktem assertIsDisplayed(): auf dem CI-Emulator kann der vorherige
+        // Test noch mitten in einem Activity-Wechsel stecken, wenn dieser Test startet - der
+        // Titel existiert dann kurzzeitig im Semantics-Baum, ist aber noch nicht ausgemessen.
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            composeRule.onAllNodesWithText("Papierkorb").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithText("Papierkorb").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
         assertTrue(backed)
@@ -67,7 +73,15 @@ class TrashScreenInstrumentedTest {
 
     @Test
     fun mitEintragErmoeglichtWiederherstellenUndZeigtEsSofortAn() {
-        legeGeloeschtenEintragAn()
+        val id = legeGeloeschtenEintragAn()
+        // Diagnose (PR #153): isoliert, ob der Eintrag tatsaechlich in der DB als geloescht
+        // ankommt, bevor ueberhaupt die UI beobachtet wird - trennt einen DAO-Fehler von einem
+        // reinen Flow-Beobachtungsfehler in der Compose-UI.
+        val direktGeprueft = runBlocking { app.container.database.noiseDao().getTrashAelterAls(Long.MAX_VALUE) }
+        assertTrue(
+            "legeGeloeschtenEintragAn() muss den Eintrag direkt per DAO auffindbar machen: $direktGeprueft",
+            direktGeprueft.any { it.id == id },
+        )
         var snackbar: String? = null
 
         composeRule.setContent {
