@@ -842,4 +842,57 @@ class DriveSyncCoordinatorTest {
 
         assertEquals(0L, settings.datenbankSicherungLastSuccessAt)
     }
+
+    /**
+     * Bugfix-Regressionstest (Owner-Meldung 16.09.2026, "Upload schmiert nach 1-2h ab" - siehe
+     * [SettingsManager.datenbankSicherungLastAttemptAt]-KDoc): [DriveSyncWorker.starteSofort]
+     * loest bei jedem Laermereignis sofort einen ganzen Sync-Zyklus aus. Ohne Drosselung baute
+     * jeder dieser Zyklen die komplette Datenbank neu als ZIP im Speicher auf - bei Ereignissen
+     * im Minutentakt genug wiederholte, mehrere zehn MB grosse Allokationen fuer einen
+     * OutOfMemoryError auf kleinen Geraeten (Support-Bundle).
+     */
+    @Test
+    fun zweiterVersuchKurzNachDemErstenWirdUebersprungen() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        var quelleAufrufe = 0
+
+        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; byteArrayOf(1, 2, 3) }
+        koordinator.syncEinenZyklus()
+        koordinator.syncEinenZyklus()
+
+        assertEquals("Die Quelle darf beim zweiten Versuch innerhalb des Intervalls nicht erneut aufgerufen werden", 1, quelleAufrufe)
+        assertEquals(1, driveApi.anlegenAufrufe)
+    }
+
+    /**
+     * Die Drosselung greift auf den letzten VERSUCH, nicht nur auf den letzten ERFOLG - im
+     * Bundle waren die meisten Zyklen Fehlschlaege ("Job was cancelled" durch das REPLACE der
+     * naechsten Sofort-Anfrage). Ein Zeitstempel nur fuer Erfolge haette in genau diesem Fall
+     * gar nicht gedrosselt.
+     */
+    @Test
+    fun zweiterVersuchNachFehlgeschlagenemErstenVersuchWirdEbenfallsUebersprungen() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        var zweiteQuelleAufgerufen = false
+
+        koordinatorMitDatenbankSicherung { throw java.io.IOException("Checkpoint fehlgeschlagen") }
+            .syncEinenZyklus()
+        koordinatorMitDatenbankSicherung { zweiteQuelleAufgerufen = true; byteArrayOf(1) }
+            .syncEinenZyklus()
+
+        assertTrue("Nach einem fehlgeschlagenen Versuch darf der naechste innerhalb des Intervalls nicht erneut versuchen", !zweiteQuelleAufgerufen)
+    }
+
+    @Test
+    fun nachAblaufDesIntervallsWirdErneutVersucht() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        var quelleAufrufe = 0
+
+        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; byteArrayOf(1, 2, 3) }
+        koordinator.syncEinenZyklus()
+        uhr.vor(Duration.ofMinutes(31))
+        koordinator.syncEinenZyklus()
+
+        assertEquals(2, quelleAufrufe)
+    }
 }

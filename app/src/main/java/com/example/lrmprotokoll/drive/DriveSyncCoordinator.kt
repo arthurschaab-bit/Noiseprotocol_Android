@@ -17,6 +17,16 @@ private const val TAG = "DriveSyncCoordinator"
 private const val MIME_TYPE = "text/csv; charset=utf-8"
 
 /**
+ * Mindestabstand zwischen zwei Versuchen der Datenbank-Sicherung (siehe
+ * [DriveSyncCoordinator.ladeDatenbankSicherungHoch]). Bewusst an das Intervall des
+ * regulaeren periodischen Sync-Zyklus angelehnt ([DriveSyncPlanung.plane], 30 Minuten) -
+ * kein Wert aus Plan/Prompt vorgegeben, eigene Abwaegung: haeufiger als der ohnehin
+ * geplante Zyklus muss die vollstaendige Sicherung nie neu aufgebaut werden, seltener
+ * wuerde die von der Sofort-Ausloesung erwartete Aktualitaet unnoetig verzoegern.
+ */
+private val DATENBANK_SICHERUNG_MIN_INTERVALL: Duration = Duration.ofMinutes(30)
+
+/**
  * Ein einzelner Sync-Zyklus (Plan Abschnitt 8.4) - die eigentliche Entscheidungslogik, getrennt
  * vom [DriveSyncWorker], der nur noch WorkManager-Glue ist. So bleibt sie ohne WorkManager und
  * ohne echtes Netz testbar, wie [com.example.lrmprotokoll.alert.AlarmCoordinator] fuer M5.
@@ -504,10 +514,25 @@ class DriveSyncCoordinator(
      * - eigener Schalter [SettingsManager.datenbankSicherungDriveUpload], eigenes `runCatching`:
      * Ein Fehlschlag hier darf CSV/WAV/Foto/Video-Sync desselben Zyklus nie mitreissen, genau wie
      * bei [ladeFotosHoch]/[ladeVideosHoch].
+     *
+     * Gedrosselt auf [DATENBANK_SICHERUNG_MIN_INTERVALL] seit dem letzten VERSUCH (Bugfix,
+     * Owner-Meldung 16.09.2026, "Upload schmiert nach 1-2h ab" - siehe
+     * [SettingsManager.datenbankSicherungLastAttemptAt]-KDoc fuer die volle Herleitung): ohne
+     * das baute [datenbankSicherungQuelle] die komplette Datenbank bei jedem einzelnen, per
+     * [DriveSyncWorker.starteSofort] durch ein Laermereignis ausgeloesten Zyklus neu als ZIP im
+     * Speicher auf - bei haeufigen Ereignissen genug wiederholte, mehrere zehn MB grosse
+     * Allokationen, um den Heap eines kleinen Geraets binnen unter einer Stunde zu OOM zu
+     * treiben. Die Pruefung steht VOR dem teuren [quelle]-Aufruf, nicht erst vor dem Upload.
      */
     private suspend fun ladeDatenbankSicherungHoch(ordnerId: String) {
         if (!settings.datenbankSicherungDriveUpload) return
         val quelle = datenbankSicherungQuelle ?: return
+
+        val letzterVersuch = Instant.ofEpochMilli(settings.datenbankSicherungLastAttemptAt)
+        if (Duration.between(letzterVersuch, now.now()) < DATENBANK_SICHERUNG_MIN_INTERVALL) {
+            return
+        }
+        settings.datenbankSicherungLastAttemptAt = now.now().toEpochMilli()
 
         val bytes = runCatching { quelle() }.getOrElse { fehler ->
             diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung konnte nicht erstellt werden: ${fehler.message}")

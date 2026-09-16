@@ -437,6 +437,25 @@ class SettingsManager(
         get() = prefs.getLong("datenbank_sicherung_last_success_at", 0L)
         set(value) = prefs.edit().putLong("datenbank_sicherung_last_success_at", value).apply()
 
+    /**
+     * Zeitpunkt des letzten VERSUCHS, unabhaengig von Erfolg/Fehlschlag - Bugfix (Owner-Meldung
+     * 16.09.2026, "Upload schmiert nach 1-2h ab"): [DriveSyncWorker.starteSofort] loest bei JEDEM
+     * Laermereignis (WAV-Aufnahme) sofort einen ganzen Sync-Zyklus aus. Ohne Drosselung baute
+     * [com.example.lrmprotokoll.drive.DriveSyncCoordinator.ladeDatenbankSicherungHoch] bei jedem
+     * dieser Zyklen die komplette (wachsende) Datenbank neu als ZIP im Speicher auf - bei
+     * Laermereignissen im Minutentakt genug wiederholte, mehrere zehn MB grosse Allokationen, um
+     * den kleinen Heap eines Android-10-Geraets binnen unter einer Stunde zu fuellen (siehe
+     * Support-Bundle: 17 abgefangene OOM-nahe Fehlschlaege in genau diesem Pfad, danach ein
+     * ungefangener OutOfMemoryError in AudioRecordingService.serviceScope). Ein Zeitstempel nur
+     * fuer ERFOLGE ([datenbankSicherungLastSuccessAt]) wuerde bei wiederholt fehlschlagenden
+     * Uploads (im Bundle ueberwiegend "Job was cancelled" durch das REPLACE der naechsten
+     * Sofort-Anfrage) gar nicht erst greifen - deshalb ein eigener Versuchs-Zeitstempel, der VOR
+     * dem teuren ZIP-Aufbau geprueft und gesetzt wird.
+     */
+    var datenbankSicherungLastAttemptAt: Long
+        get() = prefs.getLong("datenbank_sicherung_last_attempt_at", 0L)
+        set(value) = prefs.edit().putLong("datenbank_sicherung_last_attempt_at", value).apply()
+
     // ---------------------------------------------------------------- M11: Videobeweis
 
     /**
