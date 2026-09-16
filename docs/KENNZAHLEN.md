@@ -6,11 +6,11 @@ siehe Kommentar über der Gradle-Task in `app/build.gradle.kts` (Prüfprotokoll 
 Owner-Entscheidung vom 11.09.2026: „Baue etwas, das es aus dem Code automatisch generiert
 wird“, Anlass: veraltete Testzahlen und ein falscher Kadenz-Toleranz-Wert in README.md).
 
-Generiert am: Wed Sep 16 16:41:17 UTC 2026
+Generiert am: Wed Sep 16 17:08:02 UTC 2026
 
 ## Tests
 - JVM-/Robolectric-Tests: **937** (aus 168 XML-Berichten unter `build/test-results/testDebugUnitTest`) · 0 Failures, 0 Errors
-- Instrumentierte Tests (Emulator): **212** `@Test`-Annotationen in 58 Dateien unter `src/androidTest`
+- Instrumentierte Tests (Emulator): **214** `@Test`-Annotationen in 59 Dateien unter `src/androidTest`
   - Gezählt aus dem Quellcode, NICHT hier ausgeführt (kein durchgereichter Bluetooth-/Kamera-Adapter in dieser Umgebung, siehe `docs/TESTEN_EINES_PR.md`).
 
 ## Datenbank
