@@ -6,7 +6,7 @@ siehe Kommentar über der Gradle-Task in `app/build.gradle.kts` (Prüfprotokoll 
 Owner-Entscheidung vom 11.09.2026: „Baue etwas, das es aus dem Code automatisch generiert
 wird“, Anlass: veraltete Testzahlen und ein falscher Kadenz-Toleranz-Wert in README.md).
 
-Generiert am: Thu Sep 17 05:00:09 UTC 2026
+Generiert am: Thu Sep 17 17:04:39 UTC 2026
 
 ## Tests
 - JVM-/Robolectric-Tests: **937** (aus 168 XML-Berichten unter `build/test-results/testDebugUnitTest`) · 0 Failures, 0 Errors

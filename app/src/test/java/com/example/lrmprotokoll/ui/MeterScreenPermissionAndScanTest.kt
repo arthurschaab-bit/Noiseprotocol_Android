@@ -8,7 +8,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.meter.FakeMeterTransport
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -34,9 +37,26 @@ class MeterScreenPermissionAndScanTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var app: LaermprotokollApp
+
+    /**
+     * CI-Fund (Issue #160): ohne einen [FakeMeterTransport] verwendet [MeterScreen] den echten,
+     * produktiven Container - der Scan-Button-Klick loest dann einen echten Bluetooth-Scan ueber
+     * `BleMeterTransport`/`ConnectionSupervisor` aus, dessen Hintergrundaktivitaet unter
+     * Robolectrics `GraphicsMode.NATIVE` (echter Choreographer, keine Fake-Uhr) Composes
+     * Idle-Erkennung nie zur Ruhe kommen laesst - beobachtet als sporadische
+     * `AppNotIdleException`. Gleiches Muster wie in jedem anderen Meter-bezogenen Test dieses
+     * Repos (z.B. MicrophoneCockpitRegressionTest).
+     */
     @Before
     fun setUp() {
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app = ApplicationProvider.getApplicationContext()
+        app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
+    }
+
+    @After
+    fun tearDown() {
+        app.resetContainer()
     }
 
     @Test
