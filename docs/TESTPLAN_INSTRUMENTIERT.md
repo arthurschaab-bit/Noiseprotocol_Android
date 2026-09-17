@@ -1,11 +1,24 @@
 # Testplan: Instrumentierte UI-Tests (echter Emulator)
 
-**Status:** Vollständig implementiert (`app/src/androidTest/`) & automatisiert in CI (`.github/workflows/emulator-tests.yml`).
+> **Historisch, nicht mehr gepflegt (Stand 17.09.2026).** Dies war der ursprüngliche Soll-Plan
+> aus einer frühen Entwicklungsphase ("34 instrumentierte Tests") und diente als
+> Anforderungsliste, warum bestimmte Regressionstests entstanden sind. Die Zeilennummern-
+> Referenzen unten sind seither durch zahlreiche Refactorings veraltet und werden nicht
+> nachgeführt. Die weit größere Coverage-Initiative (Plan `sorted-orbiting-crown.md`, Phasen
+> 0–9) hat praktisch jede hier genannte Lücke inzwischen geschlossen und viele weitere Screens
+> abgedeckt, die dieser Plan noch gar nicht kannte.
+>
+> **Für den aktuellen Stand ist ausschließlich `docs/TESTABDECKUNG.md` maßgeblich.** Diese Datei
+> bleibt nur zur historischen Nachvollziehbarkeit erhalten.
+
+**Ursprünglicher Status:** Implementiert (`app/src/androidTest/`) & automatisiert in CI
+(`.github/workflows/emulator-tests.yml`).
 
 Vollständige Liste der interaktiven Elemente in der App (Button, Switch, Checkbox, Slider,
-Chip, klickbare Card) mit Positiv- und Negativtest, verlinkt auf die genaue Codestelle. Die
-`androidTest`-Suite umfasst 34 instrumentierte Smoke- und Interaktionstests, die bei jedem
-Pull Request und Push auf `main` auf einem Android 14 (API 34) ATD-Emulator ausgeführt werden.
+Chip, klickbare Card) mit Positiv- und Negativtest, verlinkt auf die genaue Codestelle zum
+damaligen Zeitpunkt. Die `androidTest`-Suite umfasste zum Zeitpunkt dieses Plans 34
+instrumentierte Smoke- und Interaktionstests, die bei jedem Pull Request und Push auf `main`
+auf einem Android 14 (API 34) ATD-Emulator ausgeführt wurden.
 
 ## Was hier NEU ist gegenüber den bestehenden Robolectric-Compose-Tests
 
