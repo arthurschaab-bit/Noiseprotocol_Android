@@ -287,7 +287,7 @@ Entsprechend nehmen wir alle vier Bausteine auf. Alles läuft durch `DiagnosticR
 | `crash/exit_info.json` | Bis zu 16 `ApplicationExitInfo`-Einträge mit Grund, Status, Importance, RSS/PSS | Zeigt auch die Abstürze, die ACRA *nicht* sieht (Kill durch das System, LOW_MEMORY) |
 | `crash/anr_trace.txt` | `getTraceInputStream()` bei `REASON_ANR` | Vollständiger Thread-Dump vom OS |
 | `crash/native_tombstone.pb` | `getTraceInputStream()` bei `REASON_CRASH_NATIVE` (API 31+) | Native Abstürze aus MediaPipe/Chaquopy/CameraX |
-| `log/logcat.txt` | Logcat des eigenen Prozesses, redigiert | Die Sekunden vor dem Absturz |
+| `log/logcat.txt` | Logcat des eigenen Prozesses, **vollständig**; einzige Filterung ist `DiagnosticRedactor` (Owner-Entscheidung O-2, Abschnitt 8a) | Die Sekunden vor dem Absturz |
 | `log/breadcrumbs.jsonl` | Ringdatei, zusammengeführt | Strukturierter App-Kontext |
 | `log/events.jsonl` | Diagnose-Events aus Room, **gestreamt und begrenzt** | Fehlerhistorie |
 | `state/runtime.json` | Heap benutzt/frei/max, `ActivityManager.MemoryInfo`, `lowMemory`-Flag, Akkustand, Doze-/Optimierungsstatus, erteilte Berechtigungen, laufende Dienste, BLE-Verbindungszustand, Aufnahmezustand | Beantwortet „warum gerade jetzt" |
@@ -310,8 +310,23 @@ ist hier der Hauptverdächtige. Daher verbindlich:
   berechnet.
 - **`events.jsonl` wird seitenweise aus Room gelesen** (z. B. 500 Zeilen pro Seite) und
   zeilenweise geschrieben. Nie `List<DiagnosticLogEntity>` über die gesamte Tabelle.
-- **Harte Obergrenzen je Datei**: Logcat und `events.jsonl` werden bei einer festen Größe
-  abgeschnitten, mit einer Abschlusszeile, die das vermerkt.
+- **Harte Obergrenzen je Datei** (unkomprimiert, beim Schreiben geprüft — nicht erst am fertigen
+  ZIP, sonst hat man den Speicher schon verbraucht):
+
+  | Datei | Absturz-Bundle | Periodisches Bundle |
+  |---|---|---|
+  | `log/logcat.txt` | 8 MB | 512 KB |
+  | `log/events.jsonl` | 16 MB | 1 MB |
+  | `log/breadcrumbs.jsonl` | 512 KB (Ringdatei-Obergrenze) | 512 KB |
+  | `crash/anr_trace.txt` | 4 MB | — |
+  | `crash/native_tombstone.pb` | 8 MB | — |
+  | **Fertiges ZIP** | **10 MB** | **2 MB** |
+
+  Wird eine Grenze erreicht, wird abgeschnitten und eine Abschlusszeile vermerkt, wie viel fehlt.
+  Textinhalte komprimieren im ZIP typisch um Faktor 8 bis 15 — die unkomprimierten Grenzen sind
+  deshalb bewusst großzügiger als das ZIP-Budget. Reißt das fertige ZIP die 10 MB dennoch, wird
+  in dieser Reihenfolge gekürzt: `events.jsonl`, dann `logcat.txt`, zuletzt `crash/` — der
+  Absturzteil ist das, wofür das Bundle existiert.
 - **Jeder Sammelschritt ist einzeln abgesichert.** Scheitert `logcat.txt`, entsteht das Bundle
   trotzdem — mit einem Fehlervermerk in `manifest.json` statt gar keinem Bundle.
 
@@ -330,7 +345,7 @@ Dateinamensschema: `JJJJ-MM-TT_HHMMSS_<typ>[_<kurzcode>].zip`, mit `typ` ∈
 {`absturz`, `anr`, `periodisch`, `manuell`} und `kurzcode` = `DiagnosticId.shortCode` bzw. ACRA-
 Report-Kennung. Damit ist im Drive-Ordner ohne Öffnen erkennbar, was vorliegt.
 
-**Offener Punkt für den Owner (O-3, siehe Abschnitt 8):** Aufbewahrung in Drive. Vorschlag wäre,
+**Offener Punkt für den Owner (O-3, siehe Abschnitt 8b):** Aufbewahrung in Drive. Vorschlag wäre,
 periodische Bundles nach 30 Tagen automatisch zu löschen, Absturz-Bundles dagegen nie. Automatisches
 Löschen in Drive ist aber eine Operation, die Daten des Owners vernichtet — das entscheide ich nicht.
 
@@ -448,18 +463,39 @@ Ein Diagnosesystem, das nur im Ernstfall getestet wird, ist kein getestetes Syst
 
 ---
 
-## 8. Offene Punkte für den Owner
+## 8. Entscheidungen des Owners und offene Punkte
 
-Nach AGENTS.md Abschnitt 8a werden diese nicht selbst entschieden:
+### 8a. Bereits entschieden — Vorgabe, nicht Empfehlung
+
+**Diese Punkte sind beschlossen. Sie werden nicht erneut zur Diskussion gestellt.**
+
+| # | Entscheidung | Datum |
+|---|---|---|
+| **O-2** | **Ja.** `logcat.txt` kommt vollständig ins Bundle, einzige Filterung ist `DiagnosticRedactor`. Begründung: Ziel ist der private Drive-Ordner des Owners, kein fremder Dienst — und Logcat ist der Inhalt mit dem höchsten Analysewert. | 17.09.2026 |
+| **O-6** | **Budget angehoben** (Owner: „passt, kannst auch gerne erhöhen"): 10 MB je Absturz-Bundle, 2 MB je periodischem Bundle, jeweils als fertiges ZIP. Einzelobergrenzen siehe Abschnitt 4.5. | 17.09.2026 |
+
+Aus O-2 folgt unmittelbar eine Änderung an Schritt 1: `logcatArguments` wird nicht auf wenige
+hundert Zeilen begrenzt, sondern liest den Puffer so weit aus, wie er hergibt (Vorschlag
+`-t 5000 -v threadtime`). `threadtime` statt `time`, weil Thread-IDs bei der Analyse eines
+Absturzes im Aufzeichnungsbetrieb — mehrere Coroutine-Dispatcher, Foreground Service, BLE-Callbacks
+— den Unterschied zwischen lesbar und Rätselraten ausmachen.
+
+**Wichtig zur Einordnung des Budgets:** Die Bundle-Größe ist nicht der eigentliche Kostentreiber,
+die *Anzahl* der Bundles ist es. Ein 10-MB-Absturz-Bundle ist unkritisch; zweihundert davon aus
+einer Absturzschleife sind es nicht. Der `acra-limiter` aus Schritt 1 ist deshalb der wichtigere
+Schutz, nicht das Größenbudget — er darf unter keinen Umständen entfallen.
+
+### 8b. Weiterhin offen
+
+Nach der Owner-Regel in AGENTS.md Abschnitt 8a („vor dem Bauen klären, nicht raten") werden diese
+nicht selbst entschieden:
 
 | # | Frage | Warum offen |
 |---|---|---|
 | **O-1** | Sentry aktivieren, und wenn ja wann? | Owner am 17.09.2026: „langfristig geplant, noch offen". Betrifft die Handler-Reihenfolge (Abschnitt 5). Wiedervorlage: nach Schritt 5. |
-| **O-2** | Darf `logcat.txt` ungefiltert außer der Redaction ins Bundle? | Der größte Nutzen bei zugleich größtem Umfang. Ich empfehle ja, weil das Ziel der private Drive-Ordner des Owners ist. Entscheidung vor Schritt 4. |
 | **O-3** | Automatische Aufbewahrungsfrist in Drive? | Löschen fremder Daten entscheide ich nicht. Vorschlag: periodische Bundles 30 Tage, Absturz-Bundles unbegrenzt. Entscheidung vor Schritt 6. |
 | **O-4** | Soll ein Absturz zusätzlich per ntfy melden? | Die Alarminfrastruktur ist vorhanden. Aber: Ein Softwarefehler ist kein fachlicher Alarm — das Vorgängerkonzept trennt das bewusst (Abschnitt 1). Vermischung wäre eine Konzeptabweichung. Entscheidung vor Schritt 5. |
 | **O-5** | Instrumentierter Absturztest auf dem Emulator? | AGENTS.md 8b verlangt Freigabe zum Testumfang. Entscheidung vor Schritt 8. |
-| **O-6** | Größenbudget je Bundle? | Vorschlag: 5 MB für Absturz, 1 MB für periodisch. Bei täglichem Upload sind das rund 30 MB im Monat. Entscheidung vor Schritt 4. |
 
 ---
 

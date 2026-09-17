@@ -40,9 +40,13 @@ Arbeitsanweisung; die Begründungen stehen dort.
    überschreib nicht stillschweigend die Absicht.
 3. **Kein Vorgriff.** Schritt 1 baut keinen Upload. Schritt 4 baut keinen Worker. Keine
    „wenn ich schon mal hier bin"-Aufräumarbeiten.
-4. **Offene Entscheidungen entscheidest du nicht selbst.** Abschnitt 8 des Konzepts listet O-1
-   bis O-6. Wo ein Schritt unten auf einen offenen Punkt trifft, steht das dabei — dann fragst du
-   den Owner, bevor du diesen Teil baust. Der Rest des Schritts wird trotzdem fertig.
+4. **Offene Entscheidungen entscheidest du nicht selbst.** Abschnitt 8b des Konzepts listet die
+   noch offenen Punkte O-1, O-3, O-4 und O-5. Wo ein Schritt unten auf einen davon trifft, steht
+   das dabei — dann fragst du den Owner, bevor du diesen Teil baust. Der Rest des Schritts wird
+   trotzdem fertig.
+   **Abschnitt 8a des Konzepts ist das Gegenteil davon:** Dort stehen die Punkte, die der Owner
+   bereits entschieden hat (**O-2** und **O-6**, beide am 17.09.2026). Die sind Vorgabe, keine
+   Empfehlung — lies sie, bevor du Schritt 1 oder Schritt 4 anfängst, O-2 ändert an beiden etwas.
 5. **Das Repository ist öffentlich.** Keine DSNs, keine Tokens, keine Drive-Ordner-IDs, keine
    Kontonamen in Code, Tests, Kommentaren oder PR-Texten.
 
@@ -109,11 +113,18 @@ Stand 17.09.2026, `main` bei `5bc2dc5`:
        `TOTAL_MEM_SIZE`, `AVAILABLE_MEM_SIZE`, `STACK_TRACE`, `THREAD_DETAILS`, `LOGCAT`,
        `INITIAL_CONFIGURATION`, `CRASH_CONFIGURATION`, `USER_APP_START_DATE`,
        `USER_CRASH_DATE`, `IS_SILENT`, `CUSTOM_DATA`
-     - `logcatArguments`: auf den eigenen Prozess und eine sinnvolle Zeilenzahl begrenzen
-       (Vorschlag `-t 500 -v time`). **Kein `READ_LOGS` ins Manifest** — für den eigenen Prozess
-       nicht nötig, für fremde wirkungslos.
+     - `logcatArguments`: **Owner-Entscheidung O-2 vom 17.09.2026 — Logcat kommt vollständig ins
+       Bundle**, einzige Filterung ist später `DiagnosticRedactor`. Deshalb nicht knapp
+       begrenzen: Vorschlag `-t 5000 -v threadtime`. `threadtime` statt `time`, weil bei einem
+       Absturz im Aufzeichnungsbetrieb (mehrere Coroutine-Dispatcher, Foreground Service,
+       BLE-Callbacks) die Thread-IDs den Unterschied zwischen lesbar und Rätselraten ausmachen.
+       **Kein `READ_LOGS` ins Manifest** — für den eigenen Prozess nicht nötig, für fremde
+       wirkungslos.
      - `LimiterConfiguration`: aktiv, mit `failedReportLimit` und einer Obergrenze je Zeitraum,
-       damit eine Absturzschleife nicht hunderte Reports erzeugt.
+       damit eine Absturzschleife nicht hunderte Reports erzeugt. **Der Limiter darf unter keinen
+       Umständen entfallen.** Nicht die Bundle-Größe ist der Kostentreiber, sondern die Anzahl:
+       ein 10-MB-Bundle ist unkritisch, zweihundert aus einer Absturzschleife sind es nicht
+       (Konzept 8a).
      - `SchedulerConfiguration`: `requiresNetworkType` zunächst `NetworkType.CONNECTED`,
        `restartAfterCrash = false` (die App startet nicht von selbst neu — bei einer
        Dauerüberwachung wäre ein stiller Neustart ohne laufenden Foreground Service irreführend).
@@ -265,7 +276,9 @@ Stand 17.09.2026, `main` bei `5bc2dc5`:
 **Branch:** `feature/m12-4-bundle-inhalt`
 **Ziel:** Ein Bundle, das für eine Analyse ausreicht und dabei selbst kein OOM auslöst.
 **Behebt:** Lücke L7 und den Selbstschutz aus Konzept 4.5.
-**Offene Punkte vorher klären:** O-2 (Logcat-Umfang), O-6 (Größenbudget).
+**Owner-Vorgaben für diesen Schritt (Konzept 8a, bereits entschieden):** O-2 — Logcat kommt
+vollständig ins Bundle, einzige Filterung ist `DiagnosticRedactor`. O-6 — 10 MB je
+Absturz-Bundle, 2 MB je periodischem Bundle, Einzelobergrenzen siehe Konzept 4.5.
 
 ### Aufgaben
 
@@ -288,7 +301,9 @@ Stand 17.09.2026, `main` bei `5bc2dc5`:
    - `state/settings.json`: aktive Einstellungen **ohne Geheimnisse**. Kein Token, keine DSN,
      keine ntfy-Topics, keine Heartbeat-URL, keine Drive-Ordner-ID.
    - `state/db_stats.json`: Zeilenzahlen je Tabelle, DB-Dateigröße, ältester/neuester Eintrag.
-   - `log/logcat.txt`: eigener Prozess, redigiert, mit Obergrenze.
+   - `log/logcat.txt`: eigener Prozess, **vollständig** (O-2), durch `DiagnosticRedactor`, mit
+     der Obergrenze aus Konzept 4.5. Die Grenze wird **beim Schreiben** geprüft, nicht am fertigen
+     ZIP — sonst ist der Speicher bereits verbraucht, den dieser Schritt gerade schützen soll.
    - `crash/`: ACRA-Report, Thread-Dump, Exit-Historie, ANR-Trace, natives Tombstone.
 
 4. **`DiagnosticRedactor` erweitern** um Muster, die in Logcat vorkommen und bisher nicht
@@ -307,8 +322,12 @@ Stand 17.09.2026, `main` bei `5bc2dc5`:
 
 - Ein Bundle entsteht bei 50 000 Log-Einträgen ohne OOM. **Test mit entsprechend gefüllter
   Fake-Datenquelle, nicht nur mit zehn Zeilen.**
-- Kein Geheimnis in irgendeinem Bundle-Eintrag — mit Test belegt.
-- Größenbudget (O-6) wird eingehalten.
+- Kein Geheimnis in irgendeinem Bundle-Eintrag — mit Test belegt. **Das ist bei O-2 das
+  entscheidende Kriterium:** Weil Logcat jetzt vollständig mitgeht, ist der Redactor die einzige
+  verbliebene Schutzschicht. Er muss entsprechend gründlich getestet sein.
+- Größenbudget eingehalten: 10 MB je Absturz-Bundle, 2 MB je periodischem Bundle, plus die
+  Einzelobergrenzen aus Konzept 4.5. Reißt das ZIP die Grenze dennoch, wird in der dort
+  festgelegten Reihenfolge gekürzt (`events.jsonl`, dann `logcat.txt`, zuletzt `crash/`).
 - Bestehende `SupportBundleExporter`-Tests angepasst und grün.
 - `assembleDebug` und `test` grün, Ausgabe im PR.
 
@@ -317,7 +336,11 @@ Stand 17.09.2026, `main` bei `5bc2dc5`:
 - Exporter gegen ein temporäres Verzeichnis: ZIP-Struktur, alle erwarteten Einträge,
   Prüfsummen stimmen.
 - Speichertest: sehr große Fake-Datenmenge, das Ergebnis entsteht, Obergrenzen greifen.
-- Redaction: Für jedes neue Muster ein Fall; die alten Fälle bleiben grün.
+- Redaction: Für jedes neue Muster ein Fall; die alten Fälle bleiben grün. **Zusätzlich wegen
+  O-2:** ein Test gegen einen realistischen, mehrzeiligen Logcat-Ausschnitt dieser App (OkHttp-
+  Zeilen mit `Authorization`-Header, BLE-Scanergebnisse mit MAC, Drive-Pfade, eine
+  Google-Konto-Adresse) — er belegt, dass nach der Redaction kein Geheimnis mehr übrig ist.
+  Weil Logcat jetzt vollständig mitgeht, ist dieser Test die Schutzschicht, nicht eine Formalie.
 - Fehlertoleranz: Ein absichtlich scheiternder Sammelschritt erzeugt trotzdem ein Bundle mit
   Fehlervermerk.
 - Paginierung: Das DAO liefert bei mehr Einträgen als der Seitengröße alle Zeilen genau einmal.
@@ -392,7 +415,8 @@ Konzept 8).
 
 1. **`PeriodicWorkRequest`, alle 24 h**, Constraint `UNMETERED`, **kein** Fallback auf Mobilfunk.
 2. **Schlanke Bundle-Variante** (Typ `periodisch`): deutlich kürzerer Logcat-Auszug, weniger
-   Events, vollständiger `state/`-Teil. Ziel laut O-6 rund 1 MB.
+   Events, vollständiger `state/`-Teil. Obergrenze laut O-6: **2 MB** als fertiges ZIP,
+   Einzelgrenzen siehe Konzept 4.5.
 3. **Zusätzliche Kennzahlen**, die nur im Zeitverlauf etwas aussagen: Reconnect-Zähler,
    Decode-Fehlerrate, Anzahl Diagnose-Einträge, DB-Wachstum seit dem letzten Bundle,
    Heap-Hochstand, Anzahl abgefangener Fehler je Code. Genau diese Reihe hätte den in
