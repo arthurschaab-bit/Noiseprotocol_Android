@@ -9,12 +9,21 @@ import android.util.Log
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.acra.AcraConfig
 import io.sentry.android.core.SentryAndroid
+import org.acra.ACRA
 
 class LaermprotokollApp : Application() {
 
     lateinit var container: AppContainer
         internal set
+
+    /**
+     * Testseam (M12 Schritt 1): [ACRA.isACRASenderServiceProcess] liest den echten
+     * Betriebssystem-Prozessnamen - in einem Robolectric-Test laeuft alles im selben Prozess,
+     * das laesst sich nicht faken. `null` (Standard) verwendet die echte ACRA-Abfrage.
+     */
+    internal var acraSenderProcessOverride: Boolean? = null
 
     fun setCustomContainer(customContainer: AppContainer) {
         container = customContainer
@@ -24,11 +33,49 @@ class LaermprotokollApp : Application() {
         container = AppContainer(this)
     }
 
+    /**
+     * `instance::container.isInitialized` liesse sich von ausserhalb dieser Klasse nicht
+     * aufrufen (Kotlin verlangt fuer die isInitialized-Pruefung eines lateinit-Felds direkten
+     * Backing-Field-Zugriff, der nur innerhalb der deklarierenden Klasse besteht) - deshalb hier
+     * als schmaler Zugriffspunkt fuer Tests (Schritt 1 Akzeptanzkriterium "Der zweite Prozess
+     * baut nachweislich keinen AppContainer auf").
+     */
+    internal fun isContainerInitialized(): Boolean = ::container.isInitialized
+
+    /**
+     * ACRA verlangt Initialisierung hier, nicht in [onCreate] - harte Anforderung der
+     * Bibliothek (Konzept 4.1), keine Stilfrage. Sichtbarkeit auf `public` erweitert (Kotlin
+     * erlaubt das Weiten einer Override-Sichtbarkeit), damit Tests die Reihenfolge
+     * attachBaseContext() -> onCreate() an einer eigenen Instanz nachstellen koennen, ohne auf
+     * die von Robolectric automatisch gebaute Singleton-Applikation angewiesen zu sein.
+     */
+    public override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        initAcra()
+    }
+
     override fun onCreate() {
         super.onCreate()
+        // Prozess-Weiche (Konzept 4.1): ACRA startet den Sender in einem eigenen Prozess
+        // (":acra"). Application.onCreate() laeuft dort erneut - ohne diese Weiche wuerde
+        // AppContainer dort ein zweites Mal aufgebaut: zweite Room-Instanz, zweiter
+        // BLE-Transport, zweiter OkHttp-Pool, auf einem Geraet, das eventuell gerade wegen
+        // Speichermangels abgestuerzt ist.
+        if (isAcraSenderProcess()) return
         initSentry()
         container = AppContainer(this)
         checkPreviousProcessExit()
+    }
+
+    internal fun isAcraSenderProcess(): Boolean =
+        acraSenderProcessOverride ?: runCatching { ACRA.isACRASenderServiceProcess() }.getOrDefault(false)
+
+    private fun initAcra() {
+        runCatching {
+            ACRA.init(this, AcraConfig.build())
+        }.onFailure {
+            Log.w("LaermprotokollApp", "ACRA konnte nicht initialisiert werden", it)
+        }
     }
 
     private fun initSentry() {

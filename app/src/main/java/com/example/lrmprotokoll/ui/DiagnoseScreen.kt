@@ -335,6 +335,42 @@ fun DiagnoseScreen(
                     ) {
                         Text("Test-Diagnose-Event auslösen")
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Testabsturz (M12 Schritt 1)", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { throw RuntimeException("Testabsturz (Debug): ACRA-Kette pruefen") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("RuntimeException auslösen")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            // Bewusst direkt geworfen statt tatsaechlich Speicher vollzuschaufeln:
+                            // ACRA faengt jeden Throwable gleich ab, ein echter Allokationssturm
+                            // waere nur langsamer und riskanter (Emulator/Geraet destabilisieren),
+                            // ohne die Kette Absturz -> Bundle -> Drive anders zu pruefen.
+                            throw OutOfMemoryError("Testabsturz (Debug): ACRA-Kette pruefen (OOM)")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("OutOfMemoryError provozieren")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            // Blockiert absichtlich den Main-Thread, um einen ANR auszuloesen -
+                            // ohne diesen Ausloeser ist die Kette Absturz -> Bundle -> Drive in
+                            // keinem der folgenden M12-Schritte am Stueck pruefbar (Konzept
+                            // Abschnitt 7).
+                            Thread.sleep(30_000)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Main-Thread blockieren (ANR)")
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))

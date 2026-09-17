@@ -24,6 +24,9 @@ camerax = "1.4.1"
 kover = "0.9.9"
 ktlint = "14.2.0"
 chaquopy = "17.0.0"
+acra = "5.13.1"
+autoServiceAnnotations = "1.1.1"
+autoServiceKsp = "1.2.0"
 
 [libraries]
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
@@ -55,6 +58,11 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "sentry" }
+acra-core = { group = "ch.acra", name = "acra-core", version.ref = "acra" }
+acra-advanced-scheduler = { group = "ch.acra", name = "acra-advanced-scheduler", version.ref = "acra" }
+acra-limiter = { group = "ch.acra", name = "acra-limiter", version.ref = "acra" }
+autoservice-annotations = { group = "com.google.auto.service", name = "auto-service-annotations", version.ref = "autoServiceAnnotations" }
+autoservice-ksp = { group = "dev.zacsweers.autoservice", name = "auto-service-ksp", version.ref = "autoServiceKsp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
