@@ -112,6 +112,17 @@ fun SettingsScreen(
      * Owner-Entscheidung 16.09.2026).
      */
     exakteAlarmeErlaubtOverride: Boolean? = null,
+    /**
+     * Testbarer Override fuer [SicherungManager.starteNeustart]: der echte Aufruf beendet den
+     * Prozess hart (`Runtime.getRuntime().exit(0)`) - in einem Instrumented-Test wuerde das den
+     * Instrumentierungsprozess toeten, bevor irgendein Testergebnis gemeldet werden kann (siehe
+     * die Kill-Risiko-Warnung zu `pm revoke` in `run-instrumented-tests.sh`, hier aber
+     * unconditional statt nur potenziell). Default ist der echte Aufruf; Tests uebergeben einen
+     * Stellvertreter, um den kompletten Pfad davor (SAF-Dateiauswahl, Bestaetigungsdialog, echte
+     * [SicherungManager.spieleSicherungEin]) real zu pruefen (Coverage Phase 9c,
+     * Owner-Entscheidung 16.09.2026).
+     */
+    neustartAusloeser: (Context) -> Unit = SicherungManager::starteNeustart,
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
     val context = LocalContext.current
@@ -1411,7 +1422,7 @@ fun SettingsScreen(
                         sicherungErstellenLauncher.launch(dateiname)
                     },
                     enabled = !sicherungLaeuft,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("btn_backup_create")
                 ) {
                     Text(stringResource(R.string.settings_backup_create))
                 }
@@ -1420,7 +1431,7 @@ fun SettingsScreen(
                     onClick = { sicherungEinspielenLauncher.launch(arrayOf("application/zip")) },
                     enabled = !sicherungLaeuft,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("btn_backup_restore")
                 ) {
                     Text(stringResource(R.string.settings_backup_restore))
                 }
@@ -1484,7 +1495,7 @@ fun SettingsScreen(
                                     container.diagnosticsReporter.breadcrumb(
                                         "Sicherung", "Von Drive wiederhergestellt – App wird neu gestartet",
                                     )
-                                    SicherungManager.starteNeustart(context)
+                                    neustartAusloeser(context)
                                 } else {
                                     // Bugfix (Owner-Meldung 12.09.2026, "Einspielen geht nicht,
                                     // dazu kein Log"): ging bisher nur an die fluechtige Snackbar,
@@ -1530,7 +1541,7 @@ fun SettingsScreen(
                                     container.diagnosticsReporter.breadcrumb(
                                         "Sicherung", "Lokale Sicherung eingespielt – App wird neu gestartet",
                                     )
-                                    SicherungManager.starteNeustart(context)
+                                    neustartAusloeser(context)
                                 } else {
                                     // Bugfix (Owner-Meldung 12.09.2026, "Einspielen geht nicht,
                                     // dazu kein Log"): ging bisher nur an die fluechtige Snackbar,
@@ -1545,7 +1556,7 @@ fun SettingsScreen(
                                     onShowSnackbar?.invoke(ergebnis.nachricht)
                                 }
                             }
-                        }) {
+                        }, modifier = Modifier.testTag("btn_backup_restore_confirm")) {
                             Text(
                                 stringResource(R.string.settings_backup_restore_confirm),
                                 color = MaterialTheme.colorScheme.error,
@@ -1553,7 +1564,10 @@ fun SettingsScreen(
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { ausstehendeWiederherstellungUri = null }) {
+                        TextButton(
+                            onClick = { ausstehendeWiederherstellungUri = null },
+                            modifier = Modifier.testTag("btn_backup_restore_cancel"),
+                        ) {
                             Text(stringResource(R.string.action_cancel))
                         }
                     }
