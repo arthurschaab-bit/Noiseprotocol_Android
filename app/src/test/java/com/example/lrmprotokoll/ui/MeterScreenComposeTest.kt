@@ -7,7 +7,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.meter.FakeMeterTransport
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,13 +45,31 @@ class MeterScreenComposeTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var app: LaermprotokollApp
+
+    /**
+     * CI-Fund (Issue #160): ohne einen [FakeMeterTransport] verwendet [MeterScreen] den echten,
+     * produktiven Container - `container.meterTransport` loest dann auf einen echten
+     * `BleMeterTransport` auf, dessen `ConnectionSupervisor`-Hintergrundaktivitaet unter
+     * Robolectrics `GraphicsMode.NATIVE` (echter Choreographer, keine Fake-Uhr) Composes
+     * Idle-Erkennung nie zur Ruhe kommen laesst - beobachtet als sporadische
+     * `AppNotIdleException`, ausschliesslich in den beiden Testklassen, die `MeterScreen()` ohne
+     * Fake-Transport rendern. Gleiches Muster wie in jedem anderen Meter-bezogenen Test dieses
+     * Repos (z.B. MicrophoneCockpitRegressionTest).
+     */
+    @Before
+    fun setUp() {
+        app = ApplicationProvider.getApplicationContext()
+        app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
+    }
+
+    @After
+    fun tearDown() {
+        app.resetContainer()
+    }
+
     @Test
     fun scanButtonAmEndeDesKopfbereichsIstPerScrollErreichbar() {
-        // Erzwingt, dass LaermprotokollApp.onCreate() (und damit AppContainer) bereits gelaufen
-        // ist, bevor MeterScreen darauf zugreift - unter Robolectric normalerweise automatisch
-        // der Fall, hier zur Klarheit explizit angefordert.
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-
         composeRule.setContent { MeterScreen(onBack = {}) }
 
         composeRule.onNodeWithTag(SCAN_BUTTON_TAG).performScrollTo().assertIsDisplayed()
@@ -55,7 +77,6 @@ class MeterScreenComposeTest {
 
     @Test
     fun entkoppelnButtonWirdAngezeigtUndLoeschtGeraeteadresse() {
-        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
 
         composeRule.setContent { MeterScreen(onBack = {}) }
