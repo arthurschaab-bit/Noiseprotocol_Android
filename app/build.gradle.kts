@@ -287,7 +287,8 @@ val checkUnusedDaoMethods =
                     "com/example/lrmprotokoll/data/NoiseDao.kt:restoreMultiple", // Mehrfachauswahl im Papierkorb noch nicht gebaut
                     "com/example/lrmprotokoll/data/NoiseDao.kt:deleteMultiple", // dito
                     "com/example/lrmprotokoll/data/NoiseDao.kt:setNotes", // Notizfeld-UI noch nicht gebaut
-                    "com/example/lrmprotokoll/data/ReportConfigEntity.kt:getFlow", // Bericht-Einstellungen-UI fuer die § 287 ZPO-Parameter (Schritt 3) noch nicht gebaut
+                    // Bericht-Einstellungen-UI fuer die § 287 ZPO-Parameter (Schritt 3) noch nicht gebaut
+                    "com/example/lrmprotokoll/data/ReportConfigEntity.kt:getFlow",
                     "com/example/lrmprotokoll/data/ReportConfigEntity.kt:speichere", // dito
                 )
 
