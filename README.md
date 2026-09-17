@@ -549,6 +549,7 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
 | [`docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md`](docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md) | **Diagnose-, Fehleranalyse- und Observability-Konzept** — Architektur für Sentry, Breadcrumbs, Redaction & Support-Bundle (umgesetzt) |
 | [`docs/EXTERNE_DIENSTE_EINRICHTUNG.md`](docs/EXTERNE_DIENSTE_EINRICHTUNG.md) | Externe Dienste einrichten (Sentry, Google Drive, ntfy, Healthchecks.io) |
 | [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Release-Pipeline (umgesetzt) — signierte APKs über GitHub Releases via Tag `vX.Y.Z` |
+| [`docs/PROMPT_VERSIONSKENNUNG.md`](docs/PROMPT_VERSIONSKENNUNG.md) | **Auftrag Versionskennung (offen)** — `versionName`/`versionCode` für CI- und Debug-Builds aus PR-Nummer, CI-Laufnummer und Commit-Kürzel statt des festen „1.0 (1)"; APK-Dateiname, Anzeige in App und Audit-Zeile |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |
