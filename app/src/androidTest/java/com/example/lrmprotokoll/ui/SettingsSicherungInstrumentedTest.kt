@@ -59,12 +59,15 @@ class SettingsSicherungInstrumentedTest {
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
         app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
-        app.container.database.clearAllTables()
+        AppDatabase.getDatabase(app).clearAllTables()
     }
 
     @After
     fun tearDown() {
-        app.container.database.clearAllTables()
+        // Nicht ueber container.database (by lazy): der Wiederherstellungs-Test ersetzt und
+        // schliesst die echte Instanz ueber AppDatabase.resetInstance() - die im Container
+        // gecachte Referenz waere dann bereits geschlossen (siehe KDoc an SicherungManagerTest).
+        AppDatabase.getDatabase(app).clearAllTables()
         app.resetContainer()
     }
 
