@@ -53,6 +53,9 @@ data class BundleKontext(
      * uebergibt der ACRA-Sender den bereits von ACRA gesammelten Text (Schritt 5). */
     val logcatText: String? = null,
     val exitInfos: List<ProcessExitInfo> = emptyList(),
+    /** M12 Schritt 6 (Konzept Aufgabe 3): fertiges JSON der [HealthMetrics] des periodischen
+     * Gesundheits-Bundles. `null` fuer alle anderen Bundle-Typen. */
+    val healthMetricsJson: String? = null,
 )
 
 private const val SEITENGROESSE = 500
@@ -169,6 +172,9 @@ class SupportBundleExporter(
             schreibeEintrag("state/runtime.json") { it.write(buildRuntimeJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/settings.json") { it.write(buildSettingsJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/db_stats.json") { it.write(buildDbStatsJson().toByteArray(StandardCharsets.UTF_8)) }
+            kontext.healthMetricsJson?.let { inhalt ->
+                schreibeEintrag("state/health_metrics.json") { it.write(inhalt.toByteArray(StandardCharsets.UTF_8)) }
+            }
 
             // manifest.json zuletzt - sammelt die bis hierhin aufgelaufenen Fehler ein.
             schreibeEintrag("manifest.json") { it.write(buildManifestJson(kontext, kuerzungsstufe, fehler).toByteArray(StandardCharsets.UTF_8)) }

@@ -19,6 +19,7 @@ class DiagnosticLogCleanupCoordinatorTest {
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
         override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> =
             zeilen.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)
+        override suspend fun anzahlSeit(von: Long): Long = zeilen.count { it.timestamp >= von }.toLong()
     }
 
     private val dao = FakeDiagnosticLogDao()

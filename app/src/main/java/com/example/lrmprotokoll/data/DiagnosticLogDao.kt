@@ -28,4 +28,12 @@ interface DiagnosticLogDao {
      */
     @Query("SELECT * FROM diagnostic_log_entries WHERE id > :nachId ORDER BY id ASC LIMIT :seitengroesse")
     suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity>
+
+    /**
+     * Fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 3): Anzahl der
+     * Diagnose-Eintraege seit dem letzten periodischen Bundle - eine der Kennzahlen, die nur im
+     * Zeitverlauf etwas aussagen.
+     */
+    @Query("SELECT COUNT(*) FROM diagnostic_log_entries WHERE timestamp >= :von")
+    suspend fun anzahlSeit(von: Long): Long
 }

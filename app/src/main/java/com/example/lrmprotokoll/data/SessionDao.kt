@@ -125,6 +125,15 @@ interface ConnectionEventDao {
 
     @Query("SELECT * FROM connection_events WHERE sessionId = :sessionId ORDER BY at")
     fun fuerSessionFlow(sessionId: Long): Flow<List<ConnectionEventEntity>>
+
+    /**
+     * Fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 3): alle
+     * Verbindungsaenderungen seit einem Zeitpunkt, app-weit statt je Session - anders als
+     * [fuerSession] (Diagnose-Screen, eine einzelne Session) fuer den Reconnect-Zaehler im
+     * Zeitverlauf ueber mehrere Sessions hinweg.
+     */
+    @Query("SELECT * FROM connection_events WHERE at >= :von ORDER BY at")
+    suspend fun seit(von: Long): List<ConnectionEventEntity>
 }
 
 @Dao

@@ -67,6 +67,9 @@ class LaermprotokollApp : Application() {
         // zusaetzlich jetzt ALLE neuen Eintraege statt nur dem letzten, plus ANR-Thread-Dump und
         // natives Tombstone.
         container.processExitCollector.auswerten()
+        // M12 Schritt 6 (Konzept Schritt 6 Aufgabe 1): immer geplant, der Abschalter wirkt im
+        // Coordinator bei jedem Lauf (siehe SupportBundleHealthPlanung-KDoc).
+        com.example.lrmprotokoll.diagnose.export.SupportBundleHealthPlanung.plane(this)
     }
 
     internal fun isAcraSenderProcess(): Boolean =

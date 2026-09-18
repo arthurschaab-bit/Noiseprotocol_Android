@@ -50,6 +50,7 @@ class SupportBundleExporterTest {
             abgefragteSeiten++
             return eintraege.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)
         }
+        override suspend fun anzahlSeit(von: Long): Long = eintraege.count { it.timestamp >= von }.toLong()
     }
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()

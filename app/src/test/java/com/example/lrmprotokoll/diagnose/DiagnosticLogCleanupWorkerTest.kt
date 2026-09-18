@@ -40,6 +40,7 @@ class DiagnosticLogCleanupWorkerTest {
             if (beimLoeschenFehlschlagen) error("Simulierter DB-Fehler fuer den Retry-Test")
         }
         override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
+        override suspend fun anzahlSeit(von: Long): Long = 0L
     }
 
     private lateinit var context: Context
