@@ -124,9 +124,10 @@ class DiagnoseScreenInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
 
-        val copyStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_copy)
+        // Seit der Versionskennung-Zeile (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) gibt es
+        // zwei "Kopieren"-Knoepfe in dieser Karte - testTag statt Text macht diesen hier eindeutig.
         composeRule.onNodeWithText("DIA-20260820-TEST9999").assertIsDisplayed()
-        composeRule.onNodeWithText(copyStr).assertIsDisplayed()
+        composeRule.onNodeWithTag(DIAGNOSE_ID_KOPIEREN_TAG).assertIsDisplayed()
     }
 
     /**

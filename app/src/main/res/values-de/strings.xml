@@ -279,6 +279,10 @@
     <string name="settings_battery_optimization_title">Akku-Optimierung für Hintergrunddienst</string>
     <string name="settings_battery_optimization_desc">Hintergrundüberwachung ohne Unterbrechungen durch das Android-System</string>
     <string name="settings_battery_optimization_button">Akku-Optimierung anpassen</string>
+    <string name="settings_about_title">Über die App</string>
+    <string name="settings_about_version_label">Versionskennung</string>
+    <string name="settings_about_copied">Versionskennung in Zwischenablage kopiert</string>
+    <string name="settings_about_dev_build_note">Test-/Entwicklungsstand, kein offizieller Release</string>
 
     <!-- Diagnose Screen -->
     <string name="diagnose_screen_title">System-Status &amp; Diagnose</string>
@@ -289,6 +293,8 @@
     <string name="diagnose_send_reports">Fehlerberichte senden</string>
     <string name="diagnose_send_reports_desc">Übermittelt technische Fehlercodes und Absturzberichte (Sentry). Keine Audiodaten, MAC-Adressen und Namen sind pseudonymisiert.</string>
     <string name="diagnose_last_id_label">Letzte Diagnose-ID:</string>
+    <string name="diagnose_version_label">App-Version:</string>
+    <string name="diagnose_version_copied">Versionskennung in Zwischenablage kopiert</string>
     <string name="action_copy">Kopieren</string>
     <string name="diagnose_export_bundle">Support-Bundle exportieren (ZIP)</string>
     <string name="diagnose_creating_bundle">Erstelle Support-Bundle…</string>

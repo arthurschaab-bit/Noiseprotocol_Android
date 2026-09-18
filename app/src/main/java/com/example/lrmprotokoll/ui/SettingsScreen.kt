@@ -42,8 +42,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.widget.Toast
 import com.example.lrmprotokoll.AppContainer
+import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.backup.SicherungManager
@@ -277,6 +279,7 @@ fun SettingsScreen(
     var expDrive by remember { mutableStateOf(false) }
     var expSystem by remember { mutableStateOf(false) }
     var expHilfe by remember { mutableStateOf(false) }
+    var expUeberApp by remember { mutableStateOf(false) }
     var expSicherung by remember { mutableStateOf(false) }
     var expBerichtParameter by remember { mutableStateOf(false) }
 
@@ -2201,8 +2204,76 @@ fun SettingsScreen(
                 }
             }
 
+            // Sektion 10: Über die App (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) - ganz
+            // unten, damit die Kennung des installierten CI-/Debug-Builds auf dem Telefon
+            // nachsehbar ist, ohne den Umweg über einen aapt2-Dump am Rechner.
+            run {
+                val versionKennung =
+                    Versionskennung.formatiere(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+                val istReleaseBuild = Versionskennung.istReleaseBuild(BuildConfig.VERSION_NAME)
+                SettingsSectionCard(
+                    title = stringResource(R.string.settings_about_title),
+                    summary = versionKennung,
+                    expanded = expUeberApp,
+                    onToggle = { expUeberApp = !expUeberApp },
+                    zeigen = selectedTab == SettingsTab.START,
+                ) {
+                    UeberDieAppInhalt(versionKennung, istReleaseBuild)
+                }
+            }
+
             Spacer(modifier = Modifier.fillMaxWidth().height(8.dp).testTag(BILDSCHIRM_ENDE_TAG))
         }
+    }
+}
+
+/**
+ * Inhalt der "Über die App"-Karte (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) - als eigene
+ * Funktion, weil der umgebende Aufrufkontext (verschachtelte Sektionen/Composables) hier schon
+ * tief eingerückt ist.
+ */
+@Composable
+private fun UeberDieAppInhalt(
+    versionKennung: String,
+    istReleaseBuild: Boolean,
+) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                stringResource(R.string.settings_about_version_label),
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(
+                versionKennung,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag(VERSIONSKENNUNG_TEXT_TAG),
+            )
+        }
+        OutlinedButton(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Versionskennung", versionKennung))
+                val kopiertText = context.getString(R.string.settings_about_copied)
+                Toast.makeText(context, kopiertText, Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.testTag(VERSIONSKENNUNG_KOPIEREN_TAG),
+        ) {
+            Text(stringResource(R.string.action_copy))
+        }
+    }
+    if (!istReleaseBuild) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.settings_about_dev_build_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag(VERSIONSKENNUNG_DEV_HINWEIS_TAG),
+        )
     }
 }
 
@@ -2250,6 +2321,9 @@ private fun SettingsSectionCard(
 }
 
 const val BILDSCHIRM_ENDE_TAG = "settings_bildschirm_ende"
+const val VERSIONSKENNUNG_TEXT_TAG = "settings_versionskennung_text"
+const val VERSIONSKENNUNG_KOPIEREN_TAG = "settings_versionskennung_kopieren"
+const val VERSIONSKENNUNG_DEV_HINWEIS_TAG = "settings_versionskennung_dev_hinweis"
 
 internal fun formatiereDriveFehler(fehler: Throwable): String {
     val ursache = fehler.cause?.message

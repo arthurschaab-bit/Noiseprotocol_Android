@@ -19,6 +19,97 @@ val releaseStoreFile = (findProperty("releaseStoreFile") as String?)?.let { file
 // als eingecheckte Datei im Repository.
 val debugStoreFile = (findProperty("debugStoreFile") as String?)?.let { file(it) }
 
+// Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md, Owner-Entscheidung vom 17.09.2026):
+// -PversionName/-PversionCode (release.yml) gewinnen weiterhin unveraendert - dieser Zweig
+// rechnet dann gar nicht erst (Abschnitt 3.3). Fehlt eine der beiden Properties, wird sie aus
+// Basisversion + CI-/Git-Kontext zusammengesetzt (Abschnitt 3).
+val propVersionName = findProperty("versionName") as String?
+val propVersionCode = (findProperty("versionCode") as String?)?.toIntOrNull()
+val basisVersion = (findProperty("basisVersion") as String?) ?: "1.0.0"
+val propBuildSha = (findProperty("buildSha") as String?)?.takeIf { it.isNotBlank() }
+val propBuildPrNumber = (findProperty("buildPrNumber") as String?)?.takeIf { it.isNotBlank() }
+val propBuildCiRun = (findProperty("buildCiRun") as String?)?.takeIf { it.isNotBlank() }
+
+// Ergebnis einer lokalen Git-Abfrage (SHA + Dirty-Status) - null, wenn Git nicht verfuegbar ist
+// oder die Abfrage aus irgendeinem Grund fehlschlaegt (Abschnitt 4.1: "jeder Fehlerfall muss
+// weich landen"). providers.exec statt project.exec/ProcessBuilder, weil nur das mit der
+// Konfigurations-Cache vertraeglich ist.
+data class LokaleGitInfo(
+    val sha7: String,
+    val dirty: Boolean,
+)
+
+fun ermittleLokaleGitInfo(): LokaleGitInfo? =
+    try {
+        val shaLauf =
+            providers.exec {
+                workingDir = projectDir
+                commandLine("git", "rev-parse", "--short=7", "HEAD")
+                isIgnoreExitValue = true
+            }
+        val sha =
+            shaLauf.standardOutput.asText
+                .get()
+                .trim()
+        if (shaLauf.result.get().exitValue != 0 || sha.isEmpty()) {
+            null
+        } else {
+            val statusLauf =
+                providers.exec {
+                    workingDir = projectDir
+                    commandLine("git", "status", "--porcelain")
+                    isIgnoreExitValue = true
+                }
+            val dirty =
+                statusLauf.result.get().exitValue == 0 &&
+                    statusLauf.standardOutput.asText
+                        .get()
+                        .isNotBlank()
+            LokaleGitInfo(sha, dirty)
+        }
+    } catch (_: Exception) {
+        // Kein Git installiert, kein Git-Repository (z.B. ZIP-Download ohne .git) - der Build
+        // darf daran niemals scheitern, siehe Abschnitt 4.1.
+        null
+    }
+
+val berechneteVersionName: String =
+    propVersionName ?: if (propBuildSha != null) {
+        // Die SHA kommt bewusst NICHT aus einer eigenen Git-Abfrage: actions/checkout checkt bei
+        // pull_request-Laeufen einen Merge-Commit aus, dessen SHA in keinem PR/Branch auffindbar
+        // ist. Sie kommt deshalb ueber -PbuildSha aus dem Workflow (Abschnitt 4.1).
+        val shaKurz = propBuildSha.take(7)
+        val ciLauf = propBuildCiRun ?: "0"
+        if (propBuildPrNumber != null) {
+            "$basisVersion-pr$propBuildPrNumber.ci$ciLauf+$shaKurz"
+        } else {
+            "$basisVersion-main.ci$ciLauf+$shaKurz"
+        }
+    } else {
+        val gitInfo = ermittleLokaleGitInfo()
+        if (gitInfo != null) {
+            "$basisVersion-lokal+${gitInfo.sha7}" + if (gitInfo.dirty) ".dirty" else ""
+        } else {
+            "$basisVersion-lokal"
+        }
+    }
+
+// CI-Debug-Codes (dreistellig, die CI-Laufnummer) liegen unter den Release-Codes (ab 10000,
+// Abschnitt 3.2) - das ist bewusst so und KEIN Bug: Debug- und Release-APK sind mit
+// verschiedenen Schluesseln signiert, es gibt zwischen ihnen ohnehin keinen Update-Pfad ueber
+// "adb install -r", sondern nur Deinstallieren und Neuinstallieren.
+val berechneterVersionCode: Int =
+    propVersionCode ?: propBuildCiRun?.toIntOrNull() ?: 1
+
+// APK-Dateiname (Abschnitt 4.2): "app-debug.apk" ist fuer mehrere heruntergeladene CI-Artefakte
+// ununterscheidbar. Das "+" aus dem Versionsschema ist in Dateinamen/URLs unschoen und wird
+// deshalb wie alles ausserhalb [A-Za-z0-9._-] durch "-" ersetzt.
+val bereinigteVersionName = berechneteVersionName.replace(Regex("[^A-Za-z0-9._-]"), "-")
+
+base {
+    archivesName.set("laermprotokoll-$bereinigteVersionName")
+}
+
 android {
     namespace = "com.example.lrmprotokoll"
     compileSdk = 36
@@ -27,8 +118,8 @@ android {
         applicationId = "com.example.lrmprotokoll"
         minSdk = 29
         targetSdk = 36
-        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = (findProperty("versionName") as String?) ?: "1.0"
+        versionCode = berechneterVersionCode
+        versionName = berechneteVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
