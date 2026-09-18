@@ -36,6 +36,7 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
@@ -65,6 +66,9 @@ import kotlinx.coroutines.withContext
  * und Google Drive Sync-Historie.
  */
 const val DIAGNOSE_LAZY_COLUMN_TAG = "diagnose_lazy_column"
+const val DIAGNOSE_ID_KOPIEREN_TAG = "diagnose_id_kopieren"
+const val DIAGNOSE_VERSIONSKENNUNG_TEXT_TAG = "diagnose_versionskennung_text"
+const val DIAGNOSE_VERSIONSKENNUNG_KOPIEREN_TAG = "diagnose_versionskennung_kopieren"
 
 /**
  * M12 Schritt 7 (Konzept Abschnitt 2): Startobergrenze fuer [DiagnosticLogDao.neueste] - ersetzt
@@ -306,12 +310,32 @@ fun DiagnoseScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("Diagnose-ID", letzteDiagnoseId))
                                         Toast.makeText(context, "Diagnose-ID in Zwischenablage kopiert", Toast.LENGTH_SHORT).show()
-                                    }
+                                    },
+                                    // Seit der Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md
+                                    // Abschnitt 4.5) gibt es zwei "Kopieren"-Knoepfe in dieser
+                                    // Karte - testTag macht diesen hier eindeutig ansprechbar.
+                                    modifier = Modifier.testTag(DIAGNOSE_ID_KOPIEREN_TAG),
                                 ) {
                                     Text(stringResource(R.string.action_copy))
                                 }
                             }
                         }
+
+                        // Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5):
+                        // im Support-Fall braucht man Diagnose-ID UND Versionskennung zusammen,
+                        // deshalb in derselben Karte, gleiches Kopier-Verhalten wie oben.
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        VersionskennungZeile(
+                            kennung =
+                                Versionskennung.formatiere(
+                                    BuildConfig.VERSION_NAME,
+                                    BuildConfig.VERSION_CODE,
+                                ),
+                            textTag = DIAGNOSE_VERSIONSKENNUNG_TEXT_TAG,
+                            kopierenTag = DIAGNOSE_VERSIONSKENNUNG_KOPIEREN_TAG,
+                        )
                     }
                 }
 
@@ -609,6 +633,39 @@ fun DiagnoseScreen(
                 }
             }
             items(syncHistorie) { tag -> SyncHistorieZeile(tag) }
+        }
+    }
+}
+
+/** Kopier-Muster fuer die Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) - dasselbe
+ * wie bei der Diagnose-ID oben, als eigene Funktion, weil der umgebende Kontext hier schon tief
+ * verschachtelt ist. */
+@Composable
+private fun VersionskennungZeile(
+    kennung: String,
+    textTag: String,
+    kopierenTag: String,
+) {
+    val context = LocalContext.current
+    val kopierteNachricht = stringResource(R.string.diagnose_version_copied)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(stringResource(R.string.diagnose_version_label), style = MaterialTheme.typography.labelSmall)
+            Text(kennung, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag(textTag))
+        }
+        OutlinedButton(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Versionskennung", kennung))
+                Toast.makeText(context, kopierteNachricht, Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.testTag(kopierenTag),
+        ) {
+            Text(stringResource(R.string.action_copy))
         }
     }
 }

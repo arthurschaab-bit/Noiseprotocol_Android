@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.data.DokumentationsFotoEntity
 import com.example.lrmprotokoll.data.FotoKategorie
@@ -639,7 +640,25 @@ fun ProtokollDetailScreen(
                             kennwerte?.l10Db?.let { AuditDetailRow("L10 (Spitzenpegel)", "%.1f dB".format(Locale.US, it)) }
                             kennwerte?.l50Db?.let { AuditDetailRow("L50 (Median)", "%.1f dB".format(Locale.US, it)) }
                             kennwerte?.l90Db?.let { AuditDetailRow("L90 (Grundgeräusch)", "%.1f dB".format(Locale.US, it)) }
-                            AuditDetailRow("App-Version", "Noise Protocol v${BuildConfig.VERSION_NAME}")
+                            // docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.6: dieser Block ist das
+                            // gerichtsverwertbare Audit-Protokoll - eine Zeile, die bei einem
+                            // CI-/Debug-Zwischenstand einen offiziellen Release suggeriert, ist
+                            // hier schlimmer als gar keine Aussage. Deshalb der explizite Hinweis
+                            // bei jedem Nicht-Release-Build statt nur der nackten Versionsnummer.
+                            val versionKennung =
+                                Versionskennung.formatiere(
+                                    BuildConfig.VERSION_NAME,
+                                    BuildConfig.VERSION_CODE,
+                                )
+                            val istRelease =
+                                Versionskennung.istReleaseBuild(BuildConfig.VERSION_NAME)
+                            val versionsText =
+                                if (istRelease) {
+                                    "Noise Protocol v$versionKennung"
+                                } else {
+                                    "Noise Protocol v$versionKennung (KEIN offizieller Release-Stand)"
+                                }
+                            AuditDetailRow("App-Version", versionsText)
                         }
                     }
                 }

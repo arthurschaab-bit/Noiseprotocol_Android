@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
@@ -91,9 +92,12 @@ class DiagnoseScreenComposeTest {
         val sendReports = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_send_reports)
         val exportBundle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_export_bundle)
 
-        composeRule.onNodeWithText(secPrivacy).assertIsDisplayed()
-        composeRule.onNodeWithText(sendReports).assertIsDisplayed()
-        composeRule.onNodeWithText(exportBundle).assertIsDisplayed()
+        // Seit der Versionskennung-Karte (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) ist
+        // dieses LazyColumn-Item hoeher als der Viewport - performScrollTo() holt den jeweiligen
+        // Knoten zusaetzlich in Sicht, statt sich auf performScrollToIndex(1) allein zu verlassen.
+        composeRule.onNodeWithText(secPrivacy).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(sendReports).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(exportBundle).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -105,9 +109,28 @@ class DiagnoseScreenComposeTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
 
-        val copyStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_copy)
+        // Seit der Versionskennung-Zeile (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5) gibt es
+        // zwei "Kopieren"-Knoepfe in dieser Karte - testTag statt Text macht diesen hier eindeutig.
         composeRule.onNodeWithText("DIA-20260820-TEST9999").assertIsDisplayed()
-        composeRule.onNodeWithText(copyStr).assertIsDisplayed()
+        composeRule.onNodeWithTag(DIAGNOSE_ID_KOPIEREN_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun versionskennungWirdMitKopierenButtonAngezeigt() {
+        // docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.5: dieselbe Karte wie die Diagnose-ID
+        // (getestet direkt darueber), damit man im Support-Fall beides zusammen hat.
+        composeRule.setContent { DiagnoseScreen(onBack = {}) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
+
+        val kennung =
+            com.example.lrmprotokoll.Versionskennung.formatiere(
+                com.example.lrmprotokoll.BuildConfig.VERSION_NAME,
+                com.example.lrmprotokoll.BuildConfig.VERSION_CODE,
+            )
+        composeRule.onNodeWithTag(DIAGNOSE_VERSIONSKENNUNG_TEXT_TAG).assertIsDisplayed()
+        composeRule.onNodeWithText(kennung).assertIsDisplayed()
+        composeRule.onNodeWithTag(DIAGNOSE_VERSIONSKENNUNG_KOPIEREN_TAG).assertIsDisplayed()
     }
 
     @Test

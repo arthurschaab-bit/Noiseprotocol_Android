@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.BuildConfig
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
@@ -213,7 +214,10 @@ class SupportBundleExporter(
         json.put("typ", kontext.typ.bezeichnung)
         json.put("ausloeser", kontext.ausloeser)
         json.put("erstelltAm", DateTimeFormatter.ISO_INSTANT.format(Instant.now()))
-        json.put("appVersion", BuildConfig.VERSION_NAME)
+        // Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.6, aus main
+        // gemergt): die volle Kennung statt nur BuildConfig.VERSION_NAME - im Support-Fall soll
+        // der exakte CI-/Debug-Stand erkennbar sein.
+        json.put("appVersion", Versionskennung.aktuelleKennung())
         json.put("versionCode", BuildConfig.VERSION_CODE)
         json.put("buildType", BuildConfig.BUILD_TYPE)
         json.put("kuerzungsstufe", kuerzungsstufe)
@@ -314,6 +318,13 @@ class SupportBundleExporter(
 
     private fun buildRuntimeJson(): String {
         val json = JSONObject()
+        // Geraete-/OS-Metadaten (aus main gemergt, vormals buildDeviceJson() im
+        // Vor-Schritt-4-Exporter) - hier statt einer eigenen device.json, weil state/runtime.json
+        // seit Schritt 4 ohnehin der Sammelort fuer Laufzeitkontext ist.
+        json.put("sdkInt", Build.VERSION.SDK_INT)
+        json.put("osRelease", Build.VERSION.RELEASE)
+        json.put("manufacturer", DiagnosticRedactor.redactString(Build.MANUFACTURER))
+        json.put("model", DiagnosticRedactor.redactString(Build.MODEL))
         val runtime = Runtime.getRuntime()
         json.put("heapUsedBytes", runtime.totalMemory() - runtime.freeMemory())
         json.put("heapFreeBytes", runtime.freeMemory())

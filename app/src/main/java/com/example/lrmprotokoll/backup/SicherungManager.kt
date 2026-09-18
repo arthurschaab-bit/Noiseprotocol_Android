@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.example.lrmprotokoll.BuildConfig
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SettingsManager
 import java.io.File
@@ -167,7 +168,11 @@ object SicherungManager {
     private fun buildManifest(): JSONObject {
         val json = JSONObject()
         json.put("formatVersion", SICHERUNG_FORMAT_VERSION)
-        json.put("appVersionName", BuildConfig.VERSION_NAME)
+        // Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.6): appVersionName
+        // traegt jetzt die volle Kennung (Basisversion + PR/CI/SHA bzw. lokaler Git-Stand) statt
+        // nur "1.0"/"1.0.0" - geprueft, dass spieleSicherungBytesEin() dieses Feld nirgends parst
+        // oder vergleicht, nur formatVersion. appVersionCode bleibt bewusst numerisch.
+        json.put("appVersionName", Versionskennung.aktuelleKennung())
         json.put("appVersionCode", BuildConfig.VERSION_CODE)
         json.put("createdAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()))
         return json

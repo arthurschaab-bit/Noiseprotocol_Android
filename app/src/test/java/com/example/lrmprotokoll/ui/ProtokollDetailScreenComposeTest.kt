@@ -5,11 +5,15 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -98,5 +102,37 @@ class ProtokollDetailScreenComposeTest {
 
         composeRule.onNodeWithText(chartTitle).assertIsDisplayed()
         composeRule.onNodeWithText(noChartData).assertDoesNotExist()
+    }
+
+    @Test
+    fun auditZeileZeigtNichtReleaseHinweisStattNackterVersionsnummer() {
+        // docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.6: die Audit-Zeile ist Teil des
+        // gerichtsverwertbaren Protokolls - ein CI-/Debug-Zwischenstand (wie im Testlauf, siehe
+        // VersionskennungTest) darf hier nie wie ein offizieller Release aussehen.
+        val container = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
+        val sessionId =
+            runBlocking {
+                container.database.sessionDao().insert(
+                    SessionEntity(
+                        startedAt = 1_700_000_000_000L,
+                        endedAt = 1_700_000_010_000L,
+                        deviceAddress = "AA:BB",
+                        deviceName = "PCE-323",
+                        weighting = "A",
+                        timeWeighting = "SLOW",
+                    ),
+                )
+            }
+
+        val auditHeader = composeRule.activity.getString(com.example.lrmprotokoll.R.string.protocol_audit_header)
+        composeRule.setContent { ProtokollDetailScreen(sessionId = sessionId, onBack = {}) }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText(auditHeader).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(auditHeader).performClick()
+
+        val kennung = Versionskennung.formatiere(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+        assertFalse(Versionskennung.istReleaseBuild(BuildConfig.VERSION_NAME))
+        composeRule.onNodeWithText("Noise Protocol v$kennung (KEIN offizieller Release-Stand)").assertIsDisplayed()
     }
 }

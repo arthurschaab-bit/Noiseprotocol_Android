@@ -75,6 +75,11 @@ vor der Umsetzung, aber änderbar, falls der Owner etwas anderes will:
   (z. B. "M2 fertig" → `v2.0.0`), `Y` für neue Funktionalität, `Z` für reine Fixes - der Owner tggt
   wann und wie er will, es gibt keine Automatik, die das erzwingt.
 
+> Für Debug-/CI-Builds (also alles außerhalb eines Git-Tags) gilt zusätzlich
+> `docs/PROMPT_VERSIONSKENNUNG.md` - dort das vollständige Schema (Basisversion + PR-Nummer +
+> CI-Laufnummer + Commit-Kürzel) für genau die Builds, die dieses Dokument hier nicht abdeckt.
+> Der Release-Zweig hier bleibt davon unberührt.
+
 ## 5. Pipeline-Entwurf (`.github/workflows/release.yml`, neue Datei)
 
 ```yaml

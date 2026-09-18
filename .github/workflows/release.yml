@@ -87,6 +87,11 @@ jobs:
         if: always()
         run: rm -f release.jks
 
+      # Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.3): seit dem
+      # archivesName-Umbau (Abschnitt 4.2) heissen die APKs "laermprotokoll-<versionName>-...apk"
+      # statt fest "app-release(-unsigned).apk" - mit den bisherigen festen Namen wuerde
+      # softprops/action-gh-release still nichts hochladen. Der Glob funktioniert unveraendert,
+      # weil genau eine signierte bzw. unsignierte APK pro Lauf entsteht.
       - name: GitHub Release mit APK erstellen
         uses: softprops/action-gh-release@v2
         with:
@@ -94,6 +99,5 @@ jobs:
           name: "Release ${{ steps.version.outputs.tag }}"
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/apk/release/*.apk
             app/build/outputs/mapping/release/mapping.txt

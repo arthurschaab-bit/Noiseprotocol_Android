@@ -18,9 +18,12 @@ Der verlässliche Weg:
 2. Links **Android CI**, dann in der Liste den Lauf anklicken, der zum gewünschten Branch bzw. PR
    gehört (Branchname und Commit stehen in der Zeile).
 3. Auf der **Übersichtsseite des Laufs** ganz nach unten scrollen. Dort ein Kasten
-   **Artifacts** mit `app-debug-apk` (rund 37 MB) und `unit-test-reports`.
-4. `app-debug-apk` anklicken → es lädt eine **ZIP-Datei** herunter. Entpacken, darin liegt
-   `app-debug.apk`.
+   **Artifacts** mit `app-debug-apk-<Laufnummer>` (rund 37 MB) und `unit-test-reports` (die
+   Laufnummer im Artefaktnamen macht mehrere heruntergeladene Läufe im Downloads-Ordner
+   unterscheidbar, docs/PROMPT_VERSIONSKENNUNG.md).
+4. `app-debug-apk-<Laufnummer>` anklicken → es lädt eine **ZIP-Datei** herunter. Entpacken, darin
+   liegt `laermprotokoll-<versionName>-debug.apk` (der Dateiname trägt jetzt die volle
+   Versionskennung, z. B. `laermprotokoll-1.0.0-pr181.ci342-a1b2c3d-debug.apk`).
 
 Aus dem PR heraus geht es auch: Reiter **Checks** → links `build-and-test` → oben rechts
 **„View more details on GitHub Actions"** → dann ist man auf der Job-Seite, und von dort führt der
@@ -32,7 +35,7 @@ Breadcrumb oben (Name des Laufs) auf die Übersichtsseite mit den Artefakten.
 Installieren:
 
 ```bat
-adb install -r app-debug.apk
+adb install -r laermprotokoll-<versionName>-debug.apk
 ```
 
 Ohne Kabel: die APK auf das Telefon kopieren und dort im Dateimanager öffnen. Android fragt dann
@@ -44,6 +47,11 @@ Ein Artefakt enthält genau den Stand **des Branches, auf dem der Lauf lief** �
 `main`. Ein PR-Branch, der vor dem Merge eines anderen PRs abgezweigt wurde, enthält dessen
 Änderungen nicht. Im Zweifel den Lauf nehmen, dessen Commit-Kürzel zum gewünschten Stand passt,
 oder den neuesten Lauf auf `main`.
+
+Seit der sauberen Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md) beantwortet die installierte
+App diese Frage selbst: **Einstellungen → Über die App** (und die Diagnose-Karte) zeigen PR-Nummer,
+CI-Laufnummer und Commit-Kürzel der installierten Fassung direkt auf dem Telefon, mit
+Kopieren-Knopf - der Dateiname des APKs allein reicht meist schon.
 
 Damit ist keine lokale Build-Umgebung nötig, um eine PR-Fassung auszuprobieren.
 
@@ -137,7 +145,7 @@ Nützliche Befehle:
 
 ```bat
 adb devices                                  :: läuft der Emulator?
-adb install -r app-debug.apk
+adb install -r laermprotokoll-<versionName>-debug.apk
 adb logcat -s AlarmCoordinator NtfyAlert AudioRecordingService ConnectionSupervisor
 adb shell dumpsys deviceidle force-idle      :: Doze erzwingen
 adb shell dumpsys deviceidle unforce
