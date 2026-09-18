@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.BuildConfig
+import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticBreadcrumb
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
@@ -99,7 +100,9 @@ class SupportBundleExporter(
     ): String {
         val json = JSONObject()
         json.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()))
-        json.put("appVersion", BuildConfig.VERSION_NAME)
+        // Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.6): die volle
+        // Kennung statt nur "1.0" - im Support-Fall soll der exakte CI-/Debug-Stand erkennbar sein.
+        json.put("appVersion", Versionskennung.aktuelleKennung())
         json.put("buildType", BuildConfig.BUILD_TYPE)
         json.put("totalDiagnosticLogs", logs.size)
         json.put("totalBreadcrumbs", breadcrumbs.size)
@@ -157,7 +160,7 @@ class SupportBundleExporter(
         json.put("osRelease", Build.VERSION.RELEASE)
         json.put("manufacturer", DiagnosticRedactor.redactString(Build.MANUFACTURER))
         json.put("model", DiagnosticRedactor.redactString(Build.MODEL))
-        json.put("appVersion", BuildConfig.VERSION_NAME)
+        json.put("appVersion", Versionskennung.aktuelleKennung())
         json.put("versionCode", BuildConfig.VERSION_CODE)
         json.put("buildType", BuildConfig.BUILD_TYPE)
         return json.toString(2)
