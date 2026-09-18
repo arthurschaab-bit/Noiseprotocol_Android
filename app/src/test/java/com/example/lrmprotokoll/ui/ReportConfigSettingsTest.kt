@@ -6,6 +6,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.ReportConfigEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -32,7 +33,7 @@ class ReportConfigSettingsTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun gebietseinstufungWirdEingegebenUndUeberDasDaoGespeichert() {
+    fun gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
 
         composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
@@ -43,13 +44,39 @@ class ReportConfigSettingsTest {
 
         composeRule.onNodeWithTag("input_report_gebietseinstufung")
             .performScrollTo()
-            .performTextReplacement("WA")
+            .performClick()
+        composeRule.onNodeWithTag("report_area_WA").performClick()
         composeRule.waitForIdle()
 
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals("WA", gespeichert?.gebietseinstufung)
         }
+    }
+
+    @Test
+    fun unbekannterAlttextBleibtBisZurBewusstenNeuauswahlErhalten() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        runBlocking {
+            app.container.database.reportConfigDao().speichere(ReportConfigEntity(gebietseinstufung = "WA oder MI"))
+        }
+        composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("input_report_gebietseinstufung").performScrollTo()
+            .assertTextContains("WA oder MI")
+        runBlocking {
+            assertEquals("WA oder MI", app.container.database.reportConfigDao().get()?.gebietseinstufung)
+        }
+    }
+
+    @Test
+    fun ungepruefteGebieteKoennenNichtAusgewaehltWerden() {
+        composeRule.setContent { ReportAreaSelection(value = "WA", enabled = true, onSelect = { error("Keine Auswahl erwartet") }) }
+        composeRule.onNodeWithTag("input_report_gebietseinstufung").performClick()
+        composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
+        composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
     }
 
     @Test

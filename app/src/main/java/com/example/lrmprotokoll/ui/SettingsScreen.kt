@@ -1750,19 +1750,17 @@ fun SettingsScreen(
 
                 Text(
                     "Annahmen für die konservative Hochrechnung bei unvollständiger Messabdeckung " +
-                        "(§ 287 ZPO) und die Einordnung nach AVV Baulärm/§ 34 BauGB/§ 4 BauNVO. " +
-                        "Wirkt sich erst mit dem eigentlichen Chaquopy-Bericht (Schritt 4) aus.",
+                        "(§ 287 ZPO) und die gewählte Gebietseinstufung nach AVV Baulärm. " +
+                        "Die PDF-Ausgabe des High-End-Berichts ist noch in Vorbereitung.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
-                OutlinedTextField(
+                ReportAreaSelection(
                     value = gebietseinstufung,
-                    onValueChange = { gebietseinstufung = it; speichereReportConfig() },
-                    label = { Text("Gebietseinstufung") },
-                    placeholder = { Text("z. B. Allgemeines Wohngebiet (WA)") },
-                    modifier = Modifier.testTag("input_report_gebietseinstufung").fillMaxWidth(),
+                    enabled = reportConfigBereitZumSpeichern,
+                    onSelect = { gebietseinstufung = it; speichereReportConfig() },
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -1807,15 +1805,8 @@ fun SettingsScreen(
                     modifier = Modifier.testTag("slider_report_schaetzpegel_teilerfassung"),
                 )
                 Text(
-                    String.format(Locale.getDefault(), "Bei Messfenster (Volltag-Annahme): %.1f dB(A)", schaetzpegelMessfensterAbbruch),
+                    "Bei Messfenster: Tagesrichtwert des gewählten Gebiets. Der bisher gespeicherte freie Schätzpegel wird dafür nicht verwendet.",
                     style = MaterialTheme.typography.bodySmall,
-                )
-                Slider(
-                    value = schaetzpegelMessfensterAbbruch,
-                    onValueChange = { schaetzpegelMessfensterAbbruch = it },
-                    onValueChangeFinished = { speichereReportConfig() },
-                    valueRange = 30f..80f,
-                    modifier = Modifier.testTag("slider_report_schaetzpegel_messfenster"),
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))

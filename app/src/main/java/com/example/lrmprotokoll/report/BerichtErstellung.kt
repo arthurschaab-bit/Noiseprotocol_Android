@@ -113,6 +113,8 @@ fun vorlaeufigeBerichtsparameter(
     ausgabePfad: String,
 ): String {
     require(tage.isNotEmpty()) { "Es wurde kein Berichtszeitraum gewählt." }
+    val areaError = areaSelectionError(config.gebietseinstufung)
+    require(areaError == null) { areaError.orEmpty() }
     val jsonTage = JSONArray()
     for (tag in tage) {
         val stammdaten = gewaehlteStammdaten(tag, gewaehlteIds)
@@ -143,7 +145,7 @@ private fun ReportConfigEntity.alsJson(): JSONObject = JSONObject()
     .put("schaetzpegelMessfensterAbbruchDb", schaetzpegelMessfensterAbbruchDb)
     .put("tierSchwelleVollmessungProzent", tierSchwelleVollmessungProzent)
     .put("tierSchwelleTeilerfassungProzent", tierSchwelleTeilerfassungProzent)
-    .put("gebietseinstufung", gebietseinstufung)
+    .put("gebietseinstufung", ReportArea.fromCode(gebietseinstufung)?.name ?: gebietseinstufung)
     .put("geraeteUnsicherheitDb", geraeteUnsicherheitDb)
     .put("konservativFensterStartStunde", konservativFensterStartStunde)
     .put("konservativFensterEndeStunde", konservativFensterEndeStunde)
