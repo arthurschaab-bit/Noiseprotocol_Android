@@ -538,6 +538,16 @@ class SettingsManager(
         get() = prefs.getLong("letzter_verarbeiteter_prozess_exit_zeitstempel", 0L)
         set(value) = prefs.edit().putLong("letzter_verarbeiteter_prozess_exit_zeitstempel", value).apply()
 
+    /**
+     * Snapshot der unverschluesselten Einstellungen fuer das Support-Bundle (M12 Schritt 4,
+     * `state/settings.json`). Enthaelt STRUKTURELL keine Geheimnisse: ntfyTopic/ntfyServer/
+     * heartbeatUrl liegen in [securePrefs], nicht in [prefs] - dieser Snapshot sieht sie gar
+     * nicht. [com.example.lrmprotokoll.diagnose.export.SupportBundleExporter] schickt das
+     * Ergebnis zusaetzlich durch [com.example.lrmprotokoll.diagnose.DiagnosticRedactor] (Konzept
+     * Abschnitt 8: zwei unabhaengige Schutzschichten statt einer).
+     */
+    fun unverschluesselteEinstellungenSnapshot(): Map<String, Any?> = prefs.all
+
     // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", true)

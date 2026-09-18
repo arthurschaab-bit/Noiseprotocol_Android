@@ -19,4 +19,13 @@ interface DiagnosticLogDao {
     /** Fuer den taeglichen Bereinigungs-Job (Plan Abschnitt 6: 7-Tage-Loeschung). */
     @Query("DELETE FROM diagnostic_log_entries WHERE timestamp < :grenze")
     suspend fun loescheAelterAls(grenze: Long)
+
+    /**
+     * Seitenweises, Keyset-paginiertes Lesen fuer den streamenden Bundle-Export (M12 Schritt 4,
+     * Konzept Aufgabe 2): liest ab `id > nachId` aufsteigend. Anders als LIMIT/OFFSET liefert das
+     * bei gleichzeitigen Einfuegungen waehrend des Exports garantiert jede Zeile genau einmal -
+     * OFFSET wuerde bei wachsender Tabelle Zeilen ueberspringen oder doppelt liefern.
+     */
+    @Query("SELECT * FROM diagnostic_log_entries WHERE id > :nachId ORDER BY id ASC LIMIT :seitengroesse")
+    suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity>
 }

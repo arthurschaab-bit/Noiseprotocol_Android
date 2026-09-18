@@ -180,7 +180,14 @@ class AppContainer(
     val supportBundleExporter: com.example.lrmprotokoll.diagnose.export.SupportBundleExporter by lazy {
         com.example.lrmprotokoll.diagnose.export.SupportBundleExporter(
             context = context.applicationContext,
-            reporter = diagnosticsReporter
+            reporter = diagnosticsReporter,
+            diagnosticLogDao = database.diagnosticLogDao(),
+            breadcrumbRingFile = breadcrumbRingFile,
+            settingsManager = settingsManager,
+            database = database,
+            traceVerzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
+            bleVerbindungszustandProvider = { connectionSupervisor.state.value.toString() },
+            aufnahmeAktivProvider = { com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv.value },
         )
     }
 

@@ -298,7 +298,12 @@ fun DiagnoseScreen(
                             exportiertGerade = true
                             try {
                                 val zipFile = withContext(Dispatchers.IO) {
-                                    container.supportBundleExporter.createBundle(diagnoseLog)
+                                    container.supportBundleExporter.createBundle(
+                                        com.example.lrmprotokoll.diagnose.export.BundleKontext(
+                                            typ = com.example.lrmprotokoll.diagnose.export.BundleTyp.MANUELL,
+                                            ausloeser = "Nutzer (DiagnoseScreen)",
+                                        )
+                                    )
                                 }
                                 val shareIntent = container.supportBundleExporter.createShareIntent(zipFile)
                                 context.startActivity(Intent.createChooser(shareIntent, "Support-Bundle teilen…"))
