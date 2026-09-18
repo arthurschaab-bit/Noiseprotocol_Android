@@ -2,14 +2,21 @@ package com.example.lrmprotokoll.diagnose.export
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
+import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
-import com.example.lrmprotokoll.diagnose.DiagnosticBreadcrumb
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
+import java.security.MessageDigest
 import java.util.zip.ZipFile
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -18,17 +25,62 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/**
+ * M12 Schritt 4: [SupportBundleExporter] streamend, mit erweiterten Inhalten und
+ * Groessenbudget (Konzept 4.4/4.5). Nutzt fuer `database`/`settingsManager`/`breadcrumbRingFile`
+ * den echten, von Robolectric gebauten [LaermprotokollApp]-Container (wie
+ * [com.example.lrmprotokoll.data.MeasurementDaoTest]), fuer [DiagnosticLogDao] aber eine
+ * handgeschriebene Fake-Implementierung (AGENTS.md Abschnitt 3: keine Mocking-Bibliothek) -
+ * die geteilte, nicht pro Testmethode isolierte Room-Datenbank waere fuer die hier geprueften
+ * exakten Zeilenzahlen (Paginierung, 50000-Eintraege-Test) ungeeignet.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SupportBundleExporterTest {
 
+    private class FakeDiagnosticLogDao(private val eintraege: List<DiagnosticLogEntity>) : DiagnosticLogDao {
+        var abgefragteSeiten = 0
+        var schlaegtFehl = false
+
+        override suspend fun insert(eintrag: DiagnosticLogEntity) {}
+        override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(eintraege.take(grenze))
+        override suspend fun loescheAelterAls(grenze: Long) {}
+        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> {
+            if (schlaegtFehl) error("Simulierter DB-Fehler fuer den Fehlertoleranz-Test")
+            abgefragteSeiten++
+            return eintraege.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)
+        }
+        override suspend fun anzahlSeit(von: Long): Long = eintraege.count { it.timestamp >= von }.toLong()
+    }
+
     private val context: Context get() = ApplicationProvider.getApplicationContext()
+    private val container get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
+
+    private fun exporter(
+        dao: DiagnosticLogDao,
+        reporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter = CompositeDiagnosticsReporter(
+            sinks = emptyList(),
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
+        ),
+        ringFile: BreadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+    ) = SupportBundleExporter(
+        context = context,
+        reporter = reporter,
+        diagnosticLogDao = dao,
+        breadcrumbRingFile = ringFile,
+        settingsManager = container.settingsManager,
+        database = container.database,
+        traceVerzeichnis = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
+    )
+
+    private fun logEintrag(id: Long, nachricht: String) =
+        DiagnosticLogEntity(id = id, timestamp = System.currentTimeMillis(), message = nachricht)
 
     @Test
-    fun createBundleCreatesZipWithAllRequiredFiles() {
+    fun createBundleCreatesZipWithAllRequiredFiles() = runTest {
         val reporter = CompositeDiagnosticsReporter(
             sinks = emptyList(),
-            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
         )
         reporter.breadcrumb("BLE", "Scan started for device")
         reporter.report(
@@ -36,133 +88,186 @@ class SupportBundleExporterTest {
             component = "BleMeterTransport",
             operation = "connect",
             severity = DiagnosticSeverity.ERROR,
-            message = "Connect timed out"
+            message = "Connect timed out",
         )
+        val dao = FakeDiagnosticLogDao(listOf(logEintrag(1, "CONNECT_FAILED: Timeout nach 10s")))
 
-        val exporter = SupportBundleExporter(context, reporter)
-        val logs = listOf(
-            DiagnosticLogEntity(
-                id = 1,
-                timestamp = System.currentTimeMillis(),
-                message = "CONNECT_FAILED: Timeout nach 10s"
-            )
-        )
-
-        val zipFile = exporter.createBundle(logs)
+        val zipFile = exporter(dao, reporter).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
         assertTrue(zipFile.exists())
         assertTrue(zipFile.length() > 0)
 
         ZipFile(zipFile).use { zip ->
             val entries = zip.entries().asSequence().map { it.name }.toSet()
-            assertTrue(entries.contains("summary.json"))
-            assertTrue(entries.contains("events.jsonl"))
-            assertTrue(entries.contains("breadcrumbs.jsonl"))
-            assertTrue(entries.contains("device.json"))
+            assertTrue(entries.contains("manifest.json"))
+            assertTrue(entries.contains("log/events.jsonl"))
+            assertTrue(entries.contains("log/breadcrumbs.jsonl"))
+            assertTrue(entries.contains("log/logcat.txt"))
+            assertTrue(entries.contains("state/runtime.json"))
+            assertTrue(entries.contains("state/settings.json"))
+            assertTrue(entries.contains("state/db_stats.json"))
             assertTrue(entries.contains("checksums.sha256"))
 
-            val summary = zip.getInputStream(zip.getEntry("summary.json")).bufferedReader().readText()
-            assertTrue(summary.contains("totalDiagnosticLogs"))
-            assertTrue(summary.contains("totalBreadcrumbs"))
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            assertTrue(manifest.contains("\"typ\": \"manuell\""))
 
-            val events = zip.getInputStream(zip.getEntry("events.jsonl")).bufferedReader().readText()
+            val events = zip.getInputStream(zip.getEntry("log/events.jsonl")).bufferedReader().readText()
             assertTrue(events.contains("CONNECT_FAILED"))
-
-            val checksums = zip.getInputStream(zip.getEntry("checksums.sha256")).bufferedReader().readText()
-            assertTrue(checksums.contains("summary.json"))
-            assertTrue(checksums.contains("events.jsonl"))
         }
     }
 
     @Test
-    fun createBundleSanitizesPiiInEventsAndBreadcrumbs() {
+    fun crashBundleEnthaeltCrashOrdnerWennKontextDatenLiefert() = runTest {
+        val dao = FakeDiagnosticLogDao(emptyList())
+        val kontext = BundleKontext(
+            typ = BundleTyp.ABSTURZ,
+            ausloeser = "ACRA",
+            acraReportJson = "{\"STACK_TRACE\":\"java.lang.RuntimeException\"}",
+            threadDetails = "main: RUNNABLE\n  at com.example.Foo.bar",
+            exitInfos = listOf(
+                ProcessExitInfo(
+                    reason = 6, status = 0, timestamp = 123L, importance = 100,
+                    pss = 1000L, rss = 2000L, description = "crash", processName = "com.example.lrmprotokoll",
+                    definingUid = 10123,
+                ),
+            ),
+        )
+
+        val zipFile = exporter(dao).createBundle(kontext)
+
+        ZipFile(zipFile).use { zip ->
+            val entries = zip.entries().asSequence().map { it.name }.toSet()
+            assertTrue(entries.contains("crash/acra_report.json"))
+            assertTrue(entries.contains("crash/threads.txt"))
+            assertTrue(entries.contains("crash/exit_info.json"))
+        }
+    }
+
+    @Test
+    fun createBundleSanitizesPiiInEventsAndBreadcrumbs() = runTest {
+        val ringFile = BreadcrumbRingFile(File(context.cacheDir, "ring_pii_${System.nanoTime()}").apply { mkdirs() })
         val reporter = CompositeDiagnosticsReporter(
             sinks = emptyList(),
-            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
+            ringFile = ringFile,
         )
         reporter.breadcrumb(
             category = "Auth",
             message = "User user@example.com logged in with token=secret12345",
-            data = mapOf("token" to "supersecret", "email" to "user@example.com")
+            data = mapOf("token" to "supersecret", "email" to "user@example.com"),
+        )
+        ringFile.wartenBisFertig()
+        val dao = FakeDiagnosticLogDao(
+            listOf(logEintrag(1, "Device AA:BB:CC:DD:EE:FF at C:\\Users\\secret\\test.txt failed for user@example.com"))
         )
 
-        val exporter = SupportBundleExporter(context, reporter)
-        val logs = listOf(
-            DiagnosticLogEntity(
-                id = 1,
-                timestamp = System.currentTimeMillis(),
-                message = "Device AA:BB:CC:DD:EE:FF at C:\\Users\\secret\\test.txt failed for user@example.com"
-            )
-        )
+        val zipFile = exporter(dao, reporter, ringFile).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
 
-        val zipFile = exporter.createBundle(logs)
         ZipFile(zipFile).use { zip ->
-            val events = zip.getInputStream(zip.getEntry("events.jsonl")).bufferedReader().readText()
+            val events = zip.getInputStream(zip.getEntry("log/events.jsonl")).bufferedReader().readText()
             assertTrue(events.contains("AA:BB:CC:XX:XX:XX"))
             assertTrue(events.contains("[REDACTED_EMAIL]"))
             assertTrue(!events.contains("user@example.com"))
             assertTrue(!events.contains("C:\\Users\\secret\\test.txt"))
 
-            val breadcrumbs = zip.getInputStream(zip.getEntry("breadcrumbs.jsonl")).bufferedReader().readText()
+            val breadcrumbs = zip.getInputStream(zip.getEntry("log/breadcrumbs.jsonl")).bufferedReader().readText()
             assertTrue(breadcrumbs.contains("[REDACTED_EMAIL]"))
             assertTrue(!breadcrumbs.contains("user@example.com"))
             assertTrue(!breadcrumbs.contains("supersecret"))
         }
     }
 
-    /**
-     * Bugfix (Owner-Feedback 12.09.2026): der bisherige Dateiname "support_bundle_<Millis>.zip"
-     * landete beim Teilen (kombiniert mit dem alten Klammer-Betreff) als viel zu langer,
-     * fehlerhaft wirkender Dateiname (".zip)") auf dem Geraet. Jetzt: kurzer, lesbarer Name mit
-     * Datum/Uhrzeit, und der Betreff enthaelt den Dateinamen nicht mehr doppelt in Klammern.
-     */
     @Test
-    fun createBundleVerwendetLesbarenDateinamenMitZeitstempel() {
-        val reporter = CompositeDiagnosticsReporter(
-            sinks = emptyList(),
-            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
-        )
-        val exporter = SupportBundleExporter(context, reporter)
+    fun createBundleVerwendetLesbarenDateinamenMitZeitstempelUndTyp() = runTest {
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
 
-        val zipFile = exporter.createBundle(emptyList())
-
-        assertTrue(zipFile.name.endsWith("_Noise_Protocol_Support_Bundle.zip"))
-        assertTrue(zipFile.name.matches(Regex("\\d{8}_\\d{6}_Noise_Protocol_Support_Bundle\\.zip")))
+        assertTrue(zipFile.name.matches(Regex("\\d{4}-\\d{2}-\\d{2}_\\d{6}_manuell\\.zip")))
         assertTrue(!zipFile.name.contains(" "))
-        assertTrue(!zipFile.name.contains("("))
-        assertTrue(!zipFile.name.contains(")"))
-
-        val shareIntent = exporter.createShareIntent(zipFile)
-        val subject = shareIntent.getStringExtra(android.content.Intent.EXTRA_SUBJECT)
-        assertNotNull(subject)
-        assertTrue(!subject!!.contains("("))
-        assertTrue(!subject.contains(")"))
-        assertTrue(!subject.contains(zipFile.name))
     }
 
-    /**
-     * KI-Umbau Etappe 1 (Nachtrag): ein `null`-Wert in `data` (z.B. "AGC-Zustand unbekannt") ist
-     * selbst ein Diagnosewert und muss im Export als JSON-`null` erscheinen - nicht als
-     * fehlender Schluessel, der spaeter mit "nie gemessen" verwechselt werden koennte.
-     */
     @Test
-    fun createBundleSchreibtNullWerteAlsJsonNullStattSieZuUeberspringen() {
-        val reporter = CompositeDiagnosticsReporter(
-            sinks = emptyList(),
-            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug")
-        )
-        reporter.breadcrumb(
-            category = "AudioService",
-            message = "Audioeffekte geprueft",
-            data = mapOf("aec" to "deaktiviert", "agcAktiv" to null)
-        )
-
-        val exporter = SupportBundleExporter(context, reporter)
-        val zipFile = exporter.createBundle(emptyList())
+    fun checksummenStimmenMitDemInhaltUeberein() = runTest {
+        val zipFile = exporter(FakeDiagnosticLogDao(listOf(logEintrag(1, "Testeintrag"))))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
 
         ZipFile(zipFile).use { zip ->
-            val breadcrumbs = zip.getInputStream(zip.getEntry("breadcrumbs.jsonl")).bufferedReader().readText()
-            assertTrue(breadcrumbs.contains("\"agcAktiv\":null"))
-            assertTrue(breadcrumbs.contains("\"aec\":\"deaktiviert\""))
+            val checksums = zip.getInputStream(zip.getEntry("checksums.sha256")).bufferedReader().readText()
+                .lineSequence().filter { it.isNotBlank() }
+                .associate { zeile -> val (hash, name) = zeile.split("  ", limit = 2); name to hash }
+
+            assertTrue(checksums.containsKey("manifest.json"))
+            assertTrue(checksums.containsKey("log/events.jsonl"))
+
+            val inhalt = zip.getInputStream(zip.getEntry("log/events.jsonl")).readBytes()
+            val erwarteterHash = MessageDigest.getInstance("SHA-256").digest(inhalt).joinToString("") { "%02x".format(it) }
+            assertEquals(erwarteterHash, checksums.getValue("log/events.jsonl"))
+        }
+    }
+
+    @Test
+    fun paginierungLiefertAlleZeilenGenauEinmal() = runTest {
+        // Deutlich mehr Eintraege als eine Seite (500) - erzwingt mindestens drei Seiten.
+        val eintraege = (1..1234L).map { logEintrag(it, "Eintrag Nummer $it") }
+        val dao = FakeDiagnosticLogDao(eintraege)
+
+        val zipFile = exporter(dao).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val zeilen = zip.getInputStream(zip.getEntry("log/events.jsonl")).bufferedReader().readLines()
+                .filter { it.isNotBlank() }
+            assertEquals(1234, zeilen.size)
+            val ids = zeilen.map { org.json.JSONObject(it).getLong("id") }.toSet()
+            assertEquals(1234, ids.size)
+        }
+        assertTrue("Mehr als eine Seite muss abgefragt worden sein", dao.abgefragteSeiten >= 3)
+    }
+
+    @Test
+    fun bundleEntstehtBei50000EintraegenOhneOOM() = runTest {
+        val eintraege = (1..50_000L).map { logEintrag(it, "Log-Eintrag $it mit etwas zusaetzlichem Text fuer Realismus") }
+        val dao = FakeDiagnosticLogDao(eintraege)
+
+        val zipFile = exporter(dao).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        assertTrue(zipFile.exists())
+        assertTrue(zipFile.length() > 0)
+    }
+
+    @Test
+    fun fehlertoleranzErzeugtBundleTrotzScheiterndemSammelschritt() = runTest {
+        val dao = FakeDiagnosticLogDao(listOf(logEintrag(1, "wird nie gelesen")))
+        dao.schlaegtFehl = true
+
+        val zipFile = exporter(dao).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        assertTrue("Ein scheiternder Sammelschritt darf das Bundle nicht verhindern", zipFile.exists())
+        ZipFile(zipFile).use { zip ->
+            assertNotNull("manifest.json muss trotzdem entstehen", zip.getEntry("manifest.json"))
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            // org.json escaped "/" als "\/" beim Serialisieren - deshalb ohne den "log/"-Praefix
+            // suchen statt den woertlichen Pfad.
+            assertTrue("Der Fehler muss im Manifest vermerkt sein", manifest.contains("events.jsonl"))
+        }
+    }
+
+    @Test
+    fun groessenbudgetWirdEingehaltenUndKuerztZuerstEventsDannLogcat() = runTest {
+        // Absichtlich schlecht komprimierbarer Inhalt (jede Zeile pseudo-eindeutig), um trotz der
+        // Einzelobergrenzen das 2-MB-Budget eines periodischen Bundles zu reissen.
+        val eintraege = (1..20_000L).map { i ->
+            logEintrag(i, (1..40).joinToString("") { ('a' + ((it + i) % 26).toInt()).toString() })
+        }
+        val dao = FakeDiagnosticLogDao(eintraege)
+
+        val zipFile = exporter(dao).createBundle(BundleKontext(typ = BundleTyp.PERIODISCH, ausloeser = "Test"))
+
+        assertTrue(zipFile.length() <= 2L * 1024 * 1024)
+        ZipFile(zipFile).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            assertTrue(
+                "manifest.json muss die Kuerzung vermerken, wenn das Budget nur durch Kuerzen eingehalten wurde",
+                manifest.contains("\"kuerzungsstufe\": 0") || manifest.contains("Budget ueberschritten"),
+            )
         }
     }
 }

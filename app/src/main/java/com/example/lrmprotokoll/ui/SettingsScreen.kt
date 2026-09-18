@@ -269,6 +269,9 @@ fun SettingsScreen(
 
     // Diagnose & Akku
     var diagnoseLoggingAktiv by remember { mutableStateOf(settings.diagnoseLoggingAktiv) }
+    // M12 Schritt 8 (Konzept Aufgabe 2)
+    var absturzAutoUploadAktiv by remember { mutableStateOf(settings.absturzAutoUploadAktiv) }
+    var periodischesGesundheitsBundleAktiv by remember { mutableStateOf(settings.periodischesGesundheitsBundleAktiv) }
 
     // Expandable Sektionszustände
     var expAufnahme by remember { mutableStateOf(false) }
@@ -2160,6 +2163,51 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Diagnose-Log aktiv")
                 }
+
+                // M12 Schritt 8 (Konzept Aufgabe 2): Schalter fuer den automatischen Support-
+                // Bundle-Upload bei Absturz und fuer das taegliche Gesundheits-Bundle.
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = absturzAutoUploadAktiv,
+                        onCheckedChange = {
+                            absturzAutoUploadAktiv = it
+                            settings.absturzAutoUploadAktiv = it
+                        },
+                        modifier = Modifier.testTag("switch_absturz_auto_upload"),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.settings_absturz_auto_upload))
+                }
+                Text(
+                    stringResource(R.string.settings_absturz_auto_upload_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = periodischesGesundheitsBundleAktiv,
+                        onCheckedChange = {
+                            periodischesGesundheitsBundleAktiv = it
+                            settings.periodischesGesundheitsBundleAktiv = it
+                        },
+                        modifier = Modifier.testTag("switch_periodisches_gesundheits_bundle"),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.settings_periodisches_bundle))
+                }
+                Text(
+                    stringResource(R.string.settings_periodisches_bundle_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.settings_support_bundle_drive_ordner, settings.driveFolderName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Akku-Optimierung", style = MaterialTheme.typography.titleSmall)

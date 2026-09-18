@@ -85,6 +85,7 @@ class MeasurementRecorderTest {
         override suspend fun insert(event: ConnectionEventEntity) { geschrieben += event }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun seit(von: Long) = geschrieben.filter { it.at >= von }
     }
 
     private val sessionDao = FakeSessionDao()

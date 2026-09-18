@@ -303,6 +303,27 @@ kurzen Bundle nicht nachweisen – dafür wird echte Mehrtages-Nutzung auf einem
 | Messwerte mit unbestätigter A-/Zeitbewertung, Override aus | Bericht wird mit Verweis auf die Berichtsparameter abgelehnt | |
 | Dieselben Werte, Override bewusst aktiviert | Deutliche Warnung im Ablauf; das JSON trägt das Override-Flag, das PDF muss später einen sichtbaren Vorbehalt enthalten | |
 
+### F14 — M12: Absturzsichere Diagnose mit automatischem Drive-Upload (18.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und breit unit-/Compose-getestet, aber **kein
+einziger Punkt hier war auf echter Hardware oder einem Emulator zu sehen** — es gab während der
+Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Siehe
+[`docs/DIAGNOSE_CRASH_KONZEPT.md`](DIAGNOSE_CRASH_KONZEPT.md) für die Architektur.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Im Diagnose-Screen (Debug-Build) „RuntimeException auslösen" drücken | App stürzt ab; beim nächsten Start liegt in `support_outbox/` kurz ein `..._absturz.zip`, das automatisch nach Drive hochgeladen wird | |
+| „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | |
+| Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `state/runtime.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | |
+| Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | |
+| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog; nach dem nächsten App-Start liegt ein lesbarer Thread-Dump in den Diagnosedaten (aktuell **kein** automatischer Bundle-Upload dafür, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 8b) | |
+| 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | |
+| Absturz auslösen, danach WLAN ausschalten, 6+ h warten, dann WLAN wieder anschalten | Der Upload wird nachgeholt (Fallback-Job ohne Netzbeschränkung nach 6 h) | |
+| Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | |
+| Einstellungen → „Automatischer Upload bei Absturz" ausschalten, dann Absturz auslösen | Bundle entsteht weiterhin lokal, wird aber **nicht** automatisch hochgeladen | |
+| Einstellungen → „Tägliches Gesundheits-Bundle" ausschalten | Weder Erzeugung noch Upload finden mehr statt | |
+| DiagnoseScreen mit vielen (>200) Diagnose-Log-Einträgen öffnen, im Aufzeichnungsbetrieb | Bildschirm bleibt bedienbar (behebt den ursprünglich gemeldeten Absturz - **unbestätigter Verdacht, kein Befund**, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 2/Schritt 7) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

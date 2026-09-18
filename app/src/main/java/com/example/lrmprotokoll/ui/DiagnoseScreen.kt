@@ -51,6 +51,7 @@ import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.messreihe.zaehleReconnects
 import com.example.lrmprotokoll.meter.label
 import com.example.lrmprotokoll.ui.theme.statusColors
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +70,19 @@ const val DIAGNOSE_ID_KOPIEREN_TAG = "diagnose_id_kopieren"
 const val DIAGNOSE_VERSIONSKENNUNG_TEXT_TAG = "diagnose_versionskennung_text"
 const val DIAGNOSE_VERSIONSKENNUNG_KOPIEREN_TAG = "diagnose_versionskennung_kopieren"
 
+/**
+ * M12 Schritt 7 (Konzept Abschnitt 2): Startobergrenze fuer [DiagnosticLogDao.neueste] - ersetzt
+ * die vormalige unbegrenzte `alle()`-Abfrage, die bei jeder neuen Zeile im Aufzeichnungsbetrieb
+ * die komplette, mit der Zeit beliebig lange Tabelle neu in den Heap zog (siehe Konzept-Verdacht
+ * fuer den vom Owner gemeldeten Absturz). "Weitere laden" erhoeht sie um denselben Schritt.
+ */
+private const val DIAGNOSE_LOG_GRENZE_SCHRITT = 200
+
+/** M12 Schritt 8 (Konzept Aufgabe 1): Anzahl der noch nicht hochgeladenen Bundles in `support_outbox/`. */
+private fun zaehleSupportOutbox(context: Context): Int =
+    File(context.filesDir, com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR)
+        .listFiles { f -> f.isFile && f.name.endsWith(".zip") }?.size ?: 0
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnoseScreen(
@@ -83,7 +97,10 @@ fun DiagnoseScreen(
 
     val verbindungszustand by supervisor.state.collectAsState()
     val frameQuality by transport.frameQuality.collectAsState()
-    val diagnoseLog by container.database.diagnosticLogDao().alle().collectAsState(initial = emptyList())
+    var diagnoseLogGrenze by remember { mutableStateOf(DIAGNOSE_LOG_GRENZE_SCHRITT) }
+    val diagnoseLog by remember(diagnoseLogGrenze) {
+        container.database.diagnosticLogDao().neueste(diagnoseLogGrenze)
+    }.collectAsState(initial = emptyList())
     val syncHistorie by container.database.driveDailyFileDao().alle().collectAsState(initial = emptyList())
     val alarmHistorie by container.database.alertDao().alle().collectAsState(initial = emptyList())
 
@@ -93,6 +110,12 @@ fun DiagnoseScreen(
     var exportiertGerade by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
     var driveMessage by remember { mutableStateOf(container.settingsManager.driveSyncLastMessage) }
+
+    // M12 Schritt 8 (Konzept Aufgabe 1): Sichtbarkeit des Support-Bundle-Uploads.
+    var supportBundleLastUploadAt by remember { mutableStateOf(container.settingsManager.supportBundleLastUploadAt) }
+    var supportBundleLastUploadMessage by remember { mutableStateOf(container.settingsManager.supportBundleLastUploadMessage) }
+    var supportBundleOutboxAnzahl by remember { mutableStateOf(0) }
+    var supportBundleAktionLaeuft by remember { mutableStateOf(false) }
 
     val hasAudioPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
     val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -129,6 +152,7 @@ fun DiagnoseScreen(
         if (session != null) {
             reconnectZaehler = zaehleReconnects(db.connectionEventDao().fuerSession(session.id))
         }
+        supportBundleOutboxAnzahl = withContext(Dispatchers.IO) { zaehleSupportOutbox(context) }
     }
 
     val fehlerrateProzent = if (frameQuality.totalFrames > 0) {
@@ -322,7 +346,12 @@ fun DiagnoseScreen(
                             exportiertGerade = true
                             try {
                                 val zipFile = withContext(Dispatchers.IO) {
-                                    container.supportBundleExporter.createBundle(diagnoseLog)
+                                    container.supportBundleExporter.createBundle(
+                                        com.example.lrmprotokoll.diagnose.export.BundleKontext(
+                                            typ = com.example.lrmprotokoll.diagnose.export.BundleTyp.MANUELL,
+                                            ausloeser = "Nutzer (DiagnoseScreen)",
+                                        )
+                                    )
                                 }
                                 val shareIntent = container.supportBundleExporter.createShareIntent(zipFile)
                                 context.startActivity(Intent.createChooser(shareIntent, "Support-Bundle teilen…"))
@@ -337,6 +366,76 @@ fun DiagnoseScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (exportiertGerade) stringResource(R.string.diagnose_creating_bundle) else stringResource(R.string.diagnose_export_bundle))
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(stringResource(R.string.diagnose_support_bundles_header), style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            if (supportBundleLastUploadAt > 0) {
+                                val formatierer = remember { SimpleDateFormat("dd.MM. HH:mm:ss", Locale.getDefault()) }
+                                stringResource(R.string.diagnose_support_bundles_last_upload, formatierer.format(supportBundleLastUploadAt))
+                            } else {
+                                stringResource(R.string.diagnose_support_bundles_last_upload_never)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (supportBundleLastUploadMessage.isNotBlank()) {
+                            Text(
+                                supportBundleLastUploadMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            stringResource(R.string.diagnose_support_bundles_outbox_count, supportBundleOutboxAnzahl),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    supportBundleAktionLaeuft = true
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            val bundleDatei = container.supportBundleExporter.createBundle(
+                                                com.example.lrmprotokoll.diagnose.export.BundleKontext(
+                                                    typ = com.example.lrmprotokoll.diagnose.export.BundleTyp.MANUELL,
+                                                    ausloeser = "Nutzer (DiagnoseScreen, Support-Bundles-Sofortupload)",
+                                                )
+                                            )
+                                            val outboxDir = File(context.filesDir, com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR).apply { mkdirs() }
+                                            val ziel = File(outboxDir, bundleDatei.name)
+                                            bundleDatei.copyTo(ziel, overwrite = true)
+                                            bundleDatei.delete()
+                                        }
+                                        // Manuelle Aktion - laeuft unabhaengig vom Absturz-Auto-Upload-Schalter
+                                        // (Einstellungen), der nur den automatischen Pfad betrifft.
+                                        com.example.lrmprotokoll.diagnose.export.SupportBundleUploadPlanung.planeSofort(context)
+                                        supportBundleOutboxAnzahl = withContext(Dispatchers.IO) { zaehleSupportOutbox(context) }
+                                        val msg = context.getString(R.string.diagnose_support_bundles_upload_queued)
+                                        onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        supportBundleAktionLaeuft = false
+                                    }
+                                }
+                            },
+                            enabled = !supportBundleAktionLaeuft,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (supportBundleAktionLaeuft) stringResource(R.string.diagnose_creating_bundle) else stringResource(R.string.diagnose_support_bundles_create_and_upload))
+                        }
+                    }
                 }
 
                 if (BuildConfig.DEBUG) {
@@ -359,6 +458,42 @@ fun DiagnoseScreen(
                     ) {
                         Text("Test-Diagnose-Event auslösen")
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Testabsturz (M12 Schritt 1)", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { throw RuntimeException("Testabsturz (Debug): ACRA-Kette pruefen") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("RuntimeException auslösen")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            // Bewusst direkt geworfen statt tatsaechlich Speicher vollzuschaufeln:
+                            // ACRA faengt jeden Throwable gleich ab, ein echter Allokationssturm
+                            // waere nur langsamer und riskanter (Emulator/Geraet destabilisieren),
+                            // ohne die Kette Absturz -> Bundle -> Drive anders zu pruefen.
+                            throw OutOfMemoryError("Testabsturz (Debug): ACRA-Kette pruefen (OOM)")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("OutOfMemoryError provozieren")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            // Blockiert absichtlich den Main-Thread, um einen ANR auszuloesen -
+                            // ohne diesen Ausloeser ist die Kette Absturz -> Bundle -> Drive in
+                            // keinem der folgenden M12-Schritte am Stueck pruefbar (Konzept
+                            // Abschnitt 7).
+                            Thread.sleep(30_000)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Main-Thread blockieren (ANR)")
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -374,6 +509,19 @@ fun DiagnoseScreen(
                 }
             }
             items(diagnoseLog) { eintrag -> DiagnoseLogZeile(eintrag) }
+            if (diagnoseLog.size >= diagnoseLogGrenze) {
+                // Geladene Menge erreicht die aktuelle Grenze - es koennten weitere, aeltere
+                // Eintraege existieren (M12 Schritt 7).
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { diagnoseLogGrenze += DIAGNOSE_LOG_GRENZE_SCHRITT },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.diagnose_log_load_more))
+                    }
+                }
+            }
 
             // Sektion: Alarm-Historie (F15)
             item {

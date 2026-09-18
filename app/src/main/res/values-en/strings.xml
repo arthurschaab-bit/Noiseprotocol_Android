@@ -202,6 +202,11 @@
     <!-- Settings Screen -->
     <string name="settings_section_general">General &amp; Display</string>
     <string name="settings_section_diagnostics">Diagnostics &amp; System Health</string>
+    <string name="settings_absturz_auto_upload">Automatic upload on crash</string>
+    <string name="settings_absturz_auto_upload_desc">A support bundle is always created locally on a crash. This switch only controls whether it is automatically uploaded to Google Drive - manual sharing/export is unaffected.</string>
+    <string name="settings_periodisches_bundle">Daily health bundle</string>
+    <string name="settings_periodisches_bundle_desc">Creates and uploads a lightweight bundle with metrics (reconnects, error counts, DB growth) once a day so slowly developing problems become visible over time - Wi-Fi only, and only if something changed since the last one.</string>
+    <string name="settings_support_bundle_drive_ordner">Support bundles go to: %1$s/Support-Bundle</string>
     <string name="settings_help_title">Help</string>
     <string name="settings_help_summary">Watch the introduction again</string>
     <string name="settings_help_show_onboarding">Show introduction again</string>
@@ -296,8 +301,15 @@
     <string name="action_copy">Copy</string>
     <string name="diagnose_export_bundle">Export Support Bundle (ZIP)</string>
     <string name="diagnose_creating_bundle">Creating support bundle…</string>
-    <string name="diagnose_log_header">Diagnostic Log (%1$d)</string>
+    <string name="diagnose_support_bundles_header">Support Bundles</string>
+    <string name="diagnose_support_bundles_last_upload">Last upload: %1$s</string>
+    <string name="diagnose_support_bundles_last_upload_never">Last upload: none yet</string>
+    <string name="diagnose_support_bundles_outbox_count">Waiting in outbox: %1$d</string>
+    <string name="diagnose_support_bundles_create_and_upload">Create and upload bundle now</string>
+    <string name="diagnose_support_bundles_upload_queued">Bundle created, upload queued</string>
+    <string name="diagnose_log_header">Diagnostic Log (newest %1$d)</string>
     <string name="diagnose_log_empty">No entries - either everything is fine or diagnostic logging is disabled in settings (default).</string>
+    <string name="diagnose_log_load_more">Load more</string>
     <string name="diagnose_self_check_header">System Self-Check</string>
     <string name="diagnose_alert_history_header">Alert History (%1$d)</string>
     <string name="diagnose_alert_history_empty">No alerts triggered so far.</string>

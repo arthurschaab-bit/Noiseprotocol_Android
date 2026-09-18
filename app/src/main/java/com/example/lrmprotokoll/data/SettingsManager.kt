@@ -529,6 +529,78 @@ class SettingsManager(
         get() = prefs.getBoolean("remote_diagnose_enabled", false)
         set(value) = prefs.edit().putBoolean("remote_diagnose_enabled", value).apply()
 
+    /**
+     * Zeitstempel (Millis) des zuletzt von [com.example.lrmprotokoll.diagnose.ProcessExitCollector]
+     * verarbeiteten Prozess-Exits (M12 Schritt 3, Konzept Aufgabe 2: Entprellung). Ohne das
+     * wuerde derselbe Absturz bei jedem App-Start erneut gemeldet und spaeter erneut hochgeladen.
+     */
+    var letzterVerarbeiteterProzessExitZeitstempel: Long
+        get() = prefs.getLong("letzter_verarbeiteter_prozess_exit_zeitstempel", 0L)
+        set(value) = prefs.edit().putLong("letzter_verarbeiteter_prozess_exit_zeitstempel", value).apply()
+
+    /**
+     * Snapshot der unverschluesselten Einstellungen fuer das Support-Bundle (M12 Schritt 4,
+     * `state/settings.json`). Enthaelt STRUKTURELL keine Geheimnisse: ntfyTopic/ntfyServer/
+     * heartbeatUrl liegen in [securePrefs], nicht in [prefs] - dieser Snapshot sieht sie gar
+     * nicht. [com.example.lrmprotokoll.diagnose.export.SupportBundleExporter] schickt das
+     * Ergebnis zusaetzlich durch [com.example.lrmprotokoll.diagnose.DiagnosticRedactor] (Konzept
+     * Abschnitt 8: zwei unabhaengige Schutzschichten statt einer).
+     */
+    fun unverschluesselteEinstellungenSnapshot(): Map<String, Any?> = prefs.all
+
+    /**
+     * Zeitpunkt (Millis) und Ergebnis des letzten [com.example.lrmprotokoll.diagnose.export.SupportBundleUploadWorker]-
+     * Laufs (M12 Schritt 5 Aufgabe 5) - fuer die Anzeige im DiagnoseScreen (Schritt 8).
+     */
+    var supportBundleLastUploadAt: Long
+        get() = prefs.getLong("support_bundle_last_upload_at", 0L)
+        set(value) = prefs.edit().putLong("support_bundle_last_upload_at", value).apply()
+
+    var supportBundleLastUploadMessage: String
+        get() = prefs.getString("support_bundle_last_upload_message", "").orEmpty()
+        set(value) = prefs.edit().putString("support_bundle_last_upload_message", value).apply()
+
+    /**
+     * Abschalter fuer den automatischen Drive-Upload eines Absturz-/ANR-Bundles (M12 Schritt 8,
+     * Konzept Aufgabe 2). Betrifft NUR den Upload, nicht die Bundle-Erstellung: der ACRA-Sender
+     * baut bei einem Absturz immer ein lokales Bundle (das ist der eigentliche Sicherheitsnetz-
+     * Zweck von M12) - dieser Schalter entscheidet nur, ob [com.example.lrmprotokoll.diagnose.export.SupportBundleUploadPlanung]
+     * dafuer automatisch aufgerufen wird. Ein manueller Export/Teilen-Vorgang bleibt davon
+     * unberuehrt. Standardmaessig an.
+     */
+    var absturzAutoUploadAktiv: Boolean
+        get() = prefs.getBoolean("absturz_auto_upload_aktiv", true)
+        set(value) = prefs.edit().putBoolean("absturz_auto_upload_aktiv", value).apply()
+
+    /**
+     * Abschalter fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 4).
+     * Bedienoberflaeche folgt in Schritt 8 - der Schalter selbst und seine Auswertung im
+     * [com.example.lrmprotokoll.diagnose.export.SupportBundleHealthCoordinator] entstehen bereits
+     * hier. Standardmaessig an: das Gesundheits-Bundle ist Owner-seitig ausdruecklich gewuenscht
+     * (Konzept Schritt 6).
+     */
+    var periodischesGesundheitsBundleAktiv: Boolean
+        get() = prefs.getBoolean("periodisches_gesundheits_bundle_aktiv", true)
+        set(value) = prefs.edit().putBoolean("periodisches_gesundheits_bundle_aktiv", value).apply()
+
+    /**
+     * Zeitstempel (Millis) des letzten Laufs von [com.example.lrmprotokoll.diagnose.export.SupportBundleHealthCoordinator]
+     * (M12 Schritt 6) - Startpunkt fuer "seit dem letzten periodischen Bundle" bei den
+     * Kennzahlen (Reconnects, Diagnose-Eintraege). `0L` heisst "noch nie gelaufen": der erste
+     * Lauf bezieht dann konsequenterweise alles seit App-Installation ein.
+     */
+    var supportBundleGesundheitLetzterLaufAt: Long
+        get() = prefs.getLong("support_bundle_gesundheit_letzter_lauf_at", 0L)
+        set(value) = prefs.edit().putLong("support_bundle_gesundheit_letzter_lauf_at", value).apply()
+
+    /**
+     * DB-Dateigroesse (Bytes) beim letzten Lauf von [com.example.lrmprotokoll.diagnose.export.SupportBundleHealthCoordinator]
+     * (M12 Schritt 6) - Basiswert fuer die Kennzahl "DB-Wachstum seit dem letzten Bundle".
+     */
+    var supportBundleGesundheitLetzteDbGroesseBytes: Long
+        get() = prefs.getLong("support_bundle_gesundheit_letzte_db_groesse_bytes", 0L)
+        set(value) = prefs.edit().putLong("support_bundle_gesundheit_letzte_db_groesse_bytes", value).apply()
+
     // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", true)

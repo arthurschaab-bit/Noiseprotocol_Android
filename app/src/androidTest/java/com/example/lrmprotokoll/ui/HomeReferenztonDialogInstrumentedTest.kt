@@ -60,6 +60,20 @@ class HomeReferenztonDialogInstrumentedTest {
         app = ApplicationProvider.getApplicationContext()
         app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
         app.container.database.clearAllTables()
+        // CI-Fund M12 Schritt 8 (Test Orchestrator, 18.09.2026): F2s Filter-State
+        // (MainActivity.kt) liest seinen Anfangswert aus SettingsManager, nicht aus einem
+        // frischen Default - unter dem neu eingefuehrten Test Orchestrator (kein
+        // clearPackageData, siehe app/build.gradle.kts) ueberlebt das eine noch von einem
+        // fruehen Test gesetzte, einschraenkende Filterkriterium den Prozesswechsel und kann den
+        // hier eingefuegten aufnahme-Datensatz aus der Liste herausfiltern. Gleiches Muster wie
+        // bereits in HomeScreenInstrumentedTest.setUp()/tearDown().
+        app.container.settingsManager.filterSearchQuery = ""
+        app.container.settingsManager.filterDbMin = 0f
+        app.container.settingsManager.filterDbMax = 120f
+        app.container.settingsManager.filterOnlyMeter = false
+        app.container.settingsManager.filterOnlyCalibrated = false
+        app.container.settingsManager.filterOnlyFavorites = false
+        app.container.settingsManager.filterOnlyQuietHours = false
         runBlocking {
             app.container.database.noiseDao().insert(aufnahme)
         }
@@ -68,6 +82,13 @@ class HomeReferenztonDialogInstrumentedTest {
     @After
     fun tearDown() {
         app.container.database.clearAllTables()
+        app.container.settingsManager.filterSearchQuery = ""
+        app.container.settingsManager.filterDbMin = 0f
+        app.container.settingsManager.filterDbMax = 120f
+        app.container.settingsManager.filterOnlyMeter = false
+        app.container.settingsManager.filterOnlyCalibrated = false
+        app.container.settingsManager.filterOnlyFavorites = false
+        app.container.settingsManager.filterOnlyQuietHours = false
         app.resetContainer()
     }
 
