@@ -277,6 +277,10 @@
     <string name="settings_battery_optimization_title">Battery Optimization for Background Service</string>
     <string name="settings_battery_optimization_desc">Uninterrupted background monitoring by Android system</string>
     <string name="settings_battery_optimization_button">Adjust battery optimization</string>
+    <string name="settings_about_title">About the app</string>
+    <string name="settings_about_version_label">Version identifier</string>
+    <string name="settings_about_copied">Version identifier copied to clipboard</string>
+    <string name="settings_about_dev_build_note">Test/development build, not an official release</string>
 
     <!-- Diagnose Screen -->
     <string name="diagnose_screen_title">System Status &amp; Diagnostics</string>
@@ -287,6 +291,8 @@
     <string name="diagnose_send_reports">Send error reports</string>
     <string name="diagnose_send_reports_desc">Transmits technical error codes and crash reports (Sentry). No audio data; MAC addresses and device names are anonymized.</string>
     <string name="diagnose_last_id_label">Last Diagnostic ID:</string>
+    <string name="diagnose_version_label">App version:</string>
+    <string name="diagnose_version_copied">Version identifier copied to clipboard</string>
     <string name="action_copy">Copy</string>
     <string name="diagnose_export_bundle">Export Support Bundle (ZIP)</string>
     <string name="diagnose_creating_bundle">Creating support bundle…</string>
