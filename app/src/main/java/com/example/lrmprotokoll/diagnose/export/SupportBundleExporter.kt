@@ -107,10 +107,14 @@ class SupportBundleExporter(
             bundleDir.listFiles()?.forEach { if (it.isFile && it.name.endsWith(".zip")) it.delete() }
         }
 
+        // Dateinamensschema aus Konzept 4.6 (Schritt 5, Ablage auf Drive):
+        // JJJJ-MM-TT_HHMMSS_<typ>.zip - derselbe Name wird spaeter unveraendert nach Drive
+        // hochgeladen (SupportBundleUploadWorker), deshalb hier bereits in diesem Format statt
+        // einer spaeteren Umbenennung.
         val zeitstempel = System.currentTimeMillis()
-        val dateiStempel = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+        val dateiStempel = java.text.SimpleDateFormat("yyyy-MM-dd_HHmmss", java.util.Locale.US)
             .format(java.util.Date(zeitstempel))
-        val zipFile = File(bundleDir, "${dateiStempel}_${kontext.typ.bezeichnung}_Noise_Protocol_Support_Bundle.zip")
+        val zipFile = File(bundleDir, "${dateiStempel}_${kontext.typ.bezeichnung}.zip")
 
         val istPeriodisch = kontext.typ == BundleTyp.PERIODISCH
         val zipBudget = if (istPeriodisch) ZIP_BUDGET_PERIODISCH else ZIP_BUDGET_ABSTURZ

@@ -548,6 +548,18 @@ class SettingsManager(
      */
     fun unverschluesselteEinstellungenSnapshot(): Map<String, Any?> = prefs.all
 
+    /**
+     * Zeitpunkt (Millis) und Ergebnis des letzten [com.example.lrmprotokoll.diagnose.export.SupportBundleUploadWorker]-
+     * Laufs (M12 Schritt 5 Aufgabe 5) - fuer die Anzeige im DiagnoseScreen (Schritt 8).
+     */
+    var supportBundleLastUploadAt: Long
+        get() = prefs.getLong("support_bundle_last_upload_at", 0L)
+        set(value) = prefs.edit().putLong("support_bundle_last_upload_at", value).apply()
+
+    var supportBundleLastUploadMessage: String
+        get() = prefs.getString("support_bundle_last_upload_message", "").orEmpty()
+        set(value) = prefs.edit().putString("support_bundle_last_upload_message", value).apply()
+
     // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", true)

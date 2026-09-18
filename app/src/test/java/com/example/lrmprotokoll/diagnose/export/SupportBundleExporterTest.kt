@@ -180,7 +180,7 @@ class SupportBundleExporterTest {
         val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
             .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
 
-        assertTrue(zipFile.name.matches(Regex("\\d{8}_\\d{6}_manuell_Noise_Protocol_Support_Bundle\\.zip")))
+        assertTrue(zipFile.name.matches(Regex("\\d{4}-\\d{2}-\\d{2}_\\d{6}_manuell\\.zip")))
         assertTrue(!zipFile.name.contains(" "))
     }
 
