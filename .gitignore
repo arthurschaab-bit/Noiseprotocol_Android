@@ -10,6 +10,9 @@
 .cxx
 local.properties
 /.kotlin
+/.pytest_cache/
+__pycache__/
+*.py[cod]
 
 # Praefprotokoll C-6-Rest: der Debug-Keystore lebt seit der oeffentlichen Exponierung des
 # Repositories nicht mehr im Repository selbst - siehe Kommentar bei debugStoreFile in
