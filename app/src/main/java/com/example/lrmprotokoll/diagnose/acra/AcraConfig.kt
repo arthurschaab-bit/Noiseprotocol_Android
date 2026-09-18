@@ -70,11 +70,16 @@ object AcraConfig {
         }
 
         scheduler {
-            // Schritt 1 sendet noch nicht ueber Netzwerk (der Sender schreibt nur eine Datei,
-            // siehe SupportOutboxReportSender) - relevant wird das erst mit dem echten
-            // Upload-Worker in Schritt 5. NETWORK_TYPE_ANY statt NONE, damit der spaetere
-            // netzwerkbehaftete Sender ohne erneute Konfigurationsaenderung funktioniert.
-            requiresNetworkType = JobInfo.NETWORK_TYPE_ANY
+            // CI-Fund M12 Schritt 8 (instrumentierter Testlauf 18.09.2026): mit NETWORK_TYPE_ANY
+            // blieb SupportOutboxReportSender nach einem echten Absturz auf dem CI-Emulator aus -
+            // ACRAs Scheduler haelt seinen Job zurueck, bis eine Netzwerkverbindung als verbunden
+            // gilt, unabhaengig davon, ob der Job selbst welche braucht. SupportOutboxReportSender
+            // (Schritt 1/5) schreibt nur eine lokale Datei in support_outbox/ - kein
+            // Netzwerkzugriff. Die urspruengliche Begruendung fuer ANY (vorausschauend fuer einen
+            // "spaeteren netzwerkbehafteten Sender") ist mit Schritt 5 obsolet: der echte
+            // Drive-Upload laeuft ueber SupportBundleUploadWorker, einen eigenen, entkoppelten
+            // WorkManager-Job mit eigenen Netzwerk-Constraints - nicht ueber diesen ACRA-Scheduler.
+            requiresNetworkType = JobInfo.NETWORK_TYPE_NONE
             // Die App startet nicht von selbst neu - bei einer Dauerueberwachung waere ein
             // stiller Neustart ohne laufenden Foreground Service irrefuehrend.
             restartAfterCrash = false

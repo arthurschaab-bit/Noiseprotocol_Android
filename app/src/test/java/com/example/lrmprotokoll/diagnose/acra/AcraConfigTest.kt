@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.diagnose.acra
 
+import android.app.job.JobInfo
 import org.acra.ReportField
 import org.acra.data.StringFormat
 import org.junit.Assert.assertEquals
@@ -79,5 +80,21 @@ class AcraConfigTest {
             .singleOrNull()
         assertTrue("Es muss genau eine SchedulerConfiguration registriert sein", schedulerConfig != null)
         assertTrue(!schedulerConfig!!.restartAfterCrash)
+    }
+
+    /**
+     * CI-Fund M12 Schritt 8 (instrumentierter Testlauf 18.09.2026): mit NETWORK_TYPE_ANY blieb
+     * der Scheduler-Job (und damit SupportOutboxReportSender) auf dem CI-Emulator nach einem
+     * echten Absturz aus, obwohl der Sender selbst nur lokal in support_outbox/ schreibt - kein
+     * Netzwerkzugriff. Regressionsschutz gegen ein erneutes Zurueckwechseln auf ANY/NONE-Aequivalente.
+     */
+    @Test
+    fun schedulerVerlangtKeinNetzwerk() {
+        val config = AcraConfig.build()
+        val schedulerConfig = config.pluginConfigurations
+            .filterIsInstance<org.acra.config.SchedulerConfiguration>()
+            .singleOrNull()
+        assertTrue("Es muss genau eine SchedulerConfiguration registriert sein", schedulerConfig != null)
+        assertEquals(JobInfo.NETWORK_TYPE_NONE, schedulerConfig!!.requiresNetworkType)
     }
 }
