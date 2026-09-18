@@ -82,9 +82,14 @@ class SupportOutboxReportSender : ReportSender {
         bundleDatei.copyTo(ziel, overwrite = true)
         bundleDatei.delete()
 
-        SupportBundleUploadPlanung.planeSofort(context)
-        // Fallback fuer ein Geraet ohne WLAN (Konzept 4.7) - nur fuer Absturz/ANR, nicht fuer
-        // periodische Bundles (die reiht nur planeSofort() ein, siehe Schritt 6).
-        SupportBundleUploadPlanung.planeFallbackOhneNetzbeschraenkung(context)
+        // M12 Schritt 8 (Konzept Aufgabe 2): der Schalter betrifft nur den automatischen Upload,
+        // nicht die Bundle-Erstellung oben - das Bundle bleibt bei ausgeschaltetem Schalter in
+        // support_outbox/ liegen (weiterhin manuell teilbar/hochladbar ueber den DiagnoseScreen).
+        if (settingsManager.absturzAutoUploadAktiv) {
+            SupportBundleUploadPlanung.planeSofort(context)
+            // Fallback fuer ein Geraet ohne WLAN (Konzept 4.7) - nur fuer Absturz/ANR, nicht fuer
+            // periodische Bundles (die reiht nur planeSofort() ein, siehe Schritt 6).
+            SupportBundleUploadPlanung.planeFallbackOhneNetzbeschraenkung(context)
+        }
     }
 }

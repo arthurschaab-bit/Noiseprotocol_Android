@@ -2,7 +2,12 @@
 
 **Stand:** August 2026
 
-**Status:** Vollständig implementiert (`com.example.lrmprotokoll.diagnose.*`), getestet und integriert
+**Status:** Die hier beschriebenen Bausteine sind implementiert und getestet, aber "vollständig" traf
+gemessen am eigenen Zielbild dieses Dokuments ("jeder relevante Fehler wird erfasst") nicht zu: bis
+M12 (September 2026) wurde der wichtigste Fehlerfall - ein unbehandelter Absturz - nicht erfasst
+(kein `UncaughtExceptionHandler`, Sentry inaktiv mangels DSN). Siehe
+[DIAGNOSE_CRASH_KONZEPT.md](DIAGNOSE_CRASH_KONZEPT.md) für die seither umgesetzte Absturzsicherung
+über ACRA, die diese Lücke schließt.
 
 **Zugehörige externe Checkliste:** [EXTERNE_DIENSTE_EINRICHTUNG.md](EXTERNE_DIENSTE_EINRICHTUNG.md)
 
@@ -34,11 +39,11 @@ Die folgenden Bausteine sind vollständig umgesetzt:
 | Baustein | Aufgabe | Status |
 |---|---|---|
 | `DiagnosticsReporter` | Zentrales Interface für strukturierte Breadcrumbs, Fehlerberichte & Kontext | ✅ Implementiert (`CompositeDiagnosticsReporter`) |
-| `SentryDiagnosticSink` | Anbindung an Sentry Remote Crash-Reporting | ✅ Implementiert (DSN konfigurierbar) |
+| `SentryDiagnosticSink` | Anbindung an Sentry Remote Crash-Reporting | ⏸️ Ruhend - Code implementiert, aber `SENTRY_DSN` ist leer (`app/build.gradle.kts`), der Zweig damit praktisch wirkungslos. Offener Punkt O-1 in [DIAGNOSE_CRASH_KONZEPT.md](DIAGNOSE_CRASH_KONZEPT.md#8b-weiterhin-offen): ob/wann Sentry aktiviert wird, ist eine noch offene Owner-Entscheidung. Absturzsicherung laeuft seit M12 stattdessen ueber ACRA (siehe dort). |
 | `DiagnosticLogger` / `DiagnosticLogDao` | Technisches lokales Diagnoseprotokoll in Room (V12) | ✅ Implementiert |
 | `DiagnosticRedactor` | Bereinigung von sensiblen Daten (Tokens, MACs, Passwörtern) | ✅ Implementiert & getestet |
 | `DiagnosticFingerprint` & `DiagnosticRateLimiter` | Stabile Fehlergruppierung & Sentry-Kontingentschutz | ✅ Implementiert & getestet |
-| `SupportBundleExporter` | Kontrollierter ZIP-Export (Logs, System-Health, Metriken) | ✅ Implementiert & getestet |
+| `SupportBundleExporter` | Kontrollierter ZIP-Export (Logs, System-Health, Metriken) | ✅ Implementiert & getestet - seit M12 streamend, mit Crash-/ANR-Daten und automatischem Google-Drive-Upload, nicht mehr nur manueller Rückkanal (siehe [DIAGNOSE_CRASH_KONZEPT.md](DIAGNOSE_CRASH_KONZEPT.md)) |
 | `SystemHealthChecker` | Health-Prüfung (Speicher, Akku-Optimierung, Berechtigungen) | ✅ Implementiert |
 | `DiagnosticLogCleanupCoordinator` | Automatische 7-Tage-Bereinigung lokaler Diagnose-Logs | ✅ Implementiert |
 | `DiagnoseScreen` | Live-Status, Reconnects, Volltextsuche im Diagnose-Log, Drive-Verlauf & Support-Export | ✅ Implementiert |

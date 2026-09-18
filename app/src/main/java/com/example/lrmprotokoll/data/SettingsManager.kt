@@ -561,6 +561,18 @@ class SettingsManager(
         set(value) = prefs.edit().putString("support_bundle_last_upload_message", value).apply()
 
     /**
+     * Abschalter fuer den automatischen Drive-Upload eines Absturz-/ANR-Bundles (M12 Schritt 8,
+     * Konzept Aufgabe 2). Betrifft NUR den Upload, nicht die Bundle-Erstellung: der ACRA-Sender
+     * baut bei einem Absturz immer ein lokales Bundle (das ist der eigentliche Sicherheitsnetz-
+     * Zweck von M12) - dieser Schalter entscheidet nur, ob [com.example.lrmprotokoll.diagnose.export.SupportBundleUploadPlanung]
+     * dafuer automatisch aufgerufen wird. Ein manueller Export/Teilen-Vorgang bleibt davon
+     * unberuehrt. Standardmaessig an.
+     */
+    var absturzAutoUploadAktiv: Boolean
+        get() = prefs.getBoolean("absturz_auto_upload_aktiv", true)
+        set(value) = prefs.edit().putBoolean("absturz_auto_upload_aktiv", value).apply()
+
+    /**
      * Abschalter fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 4).
      * Bedienoberflaeche folgt in Schritt 8 - der Schalter selbst und seine Auswertung im
      * [com.example.lrmprotokoll.diagnose.export.SupportBundleHealthCoordinator] entstehen bereits

@@ -31,6 +31,15 @@ android {
         versionName = (findProperty("versionName") as String?) ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // M12 Schritt 8: der Test Orchestrator startet jede instrumentierte Testmethode in einem
+        // eigenen Instrumentierungs-Prozess. Ohne ihn liefen alle instrumentierten Tests im selben
+        // Prozess wie die App unter Test (siehe testOptions.execution unten) - ein Test, der einen
+        // echten Absturz ausloest (die neuen ACRA-Crash-Tests aus M12 Schritt 8), wuerde sonst den
+        // gesamten Testlauf mitreissen. Bewusst OHNE clearPackageData: das wuerde App-Daten
+        // zwischen JEDER instrumentierten Testmethode loeschen, nicht nur den drei neuen - ein
+        // globaler Verhaltenswechsel fuer alle ~60 bestehenden instrumentierten Tests, der ausserhalb
+        // dieses Schritts liegt. Die drei Crash-Tests raeumen ihre eigene support_outbox/ deshalb
+        // selbst auf (siehe CrashSupportBundleInstrumentedTest).
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -120,6 +129,10 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+        // M12 Schritt 8: siehe Begruendung bei testInstrumentationRunner oben - jeder
+        // instrumentierte Test bekommt einen eigenen Prozess, ein Absturz in einem Test reisst
+        // die uebrigen nicht mehr mit.
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
     sourceSets {
         // Robolectric liest fuer lokale Unit-Tests die zusammengefuehrten Assets des
@@ -262,6 +275,10 @@ dependencies {
     // Berechtigungsdialog im Emulator zu bedienen (Allow/Deny antippen), siehe
     // BerechtigungsTestHelfer.kt. Reines Testdependency, nicht Teil der App.
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // M12 Schritt 8: der Test Orchestrator selbst - siehe testOptions.execution oben. Kein
+    // "implementation", weil er als eigene APK neben der Test-APK installiert und vom
+    // Testrunner aus gestartet wird, nicht in die Test-APK hineingelinkt.
+    androidTestUtil(libs.androidx.test.orchestrator)
 }
 
 // Praefprotokoll Frage 5 (Owner-Entscheidung vom 11.09.2026: "Pruefe das selber und ueberlege

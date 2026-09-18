@@ -2,12 +2,17 @@ package com.example.lrmprotokoll.diagnose.acra
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.WorkManager
+import androidx.work.testing.WorkManagerTestInitHelper
+import com.example.lrmprotokoll.data.SettingsManager
 import java.io.File
 import java.util.zip.ZipFile
 import org.acra.ReportField
 import org.acra.data.CrashReportData
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -22,7 +27,22 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class SupportOutboxReportSenderTest {
 
+    /** Muss mit der privaten `WORK_NAME`-Konstante in [com.example.lrmprotokoll.diagnose.export.SupportBundleUploadPlanung] uebereinstimmen. */
+    private val uploadWorkName = "support_bundle_upload"
+
     private val context: Context get() = ApplicationProvider.getApplicationContext()
+
+    @Before
+    fun aufbauen() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        SettingsManager(context).absturzAutoUploadAktiv = true
+    }
+
+    @After
+    fun aufraeumen() {
+        SettingsManager(context).absturzAutoUploadAktiv = true
+        WorkManagerTestInitHelper.closeWorkDatabase()
+    }
 
     @Test
     fun bautEinBundleUndLegtEsInDenSupportOutbox() {
@@ -51,6 +71,41 @@ class SupportOutboxReportSenderTest {
             val acraReport = zip.getInputStream(zip.getEntry("crash/acra_report.json")).bufferedReader().readText()
             assertTrue(acraReport.contains("Testabsturz"))
         }
+    }
+
+    @Test
+    fun beiDeaktiviertemAutoUploadEntstehtDasBundleTrotzdemAberKeinUploadWirdEingereiht() {
+        // M12 Schritt 8 (Konzept Aufgabe 2): der Schalter betrifft nur den automatischen Upload,
+        // die Bundle-Erstellung (das eigentliche Sicherheitsnetz) laeuft unveraendert weiter.
+        val outboxDir = File(context.filesDir, SUPPORT_OUTBOX_DIR)
+        outboxDir.deleteRecursively()
+        SettingsManager(context).absturzAutoUploadAktiv = false
+
+        val report = CrashReportData().apply {
+            put(ReportField.STACK_TRACE, "java.lang.RuntimeException: Testabsturz")
+        }
+
+        SupportOutboxReportSender().send(context, report)
+
+        assertEquals(
+            "Das Bundle muss trotz ausgeschaltetem Auto-Upload lokal entstehen",
+            1,
+            outboxDir.listFiles().orEmpty().size,
+        )
+        val ausstehendeUploads = WorkManager.getInstance(context).getWorkInfosForUniqueWork(uploadWorkName).get()
+        assertTrue("Bei ausgeschaltetem Schalter darf kein Upload eingereiht werden", ausstehendeUploads.isEmpty())
+    }
+
+    @Test
+    fun beiAktiviertemAutoUploadStandardWirdDerUploadEingereiht() {
+        val report = CrashReportData().apply {
+            put(ReportField.STACK_TRACE, "java.lang.RuntimeException: Testabsturz")
+        }
+
+        SupportOutboxReportSender().send(context, report)
+
+        val ausstehendeUploads = WorkManager.getInstance(context).getWorkInfosForUniqueWork(uploadWorkName).get()
+        assertTrue("Bei aktiviertem Schalter (Standard) muss der Upload eingereiht werden", ausstehendeUploads.isNotEmpty())
     }
 
     @Test
