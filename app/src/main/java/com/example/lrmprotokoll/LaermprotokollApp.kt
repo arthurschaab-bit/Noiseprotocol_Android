@@ -64,6 +64,9 @@ class LaermprotokollApp : Application() {
         if (isAcraSenderProcess()) return
         initSentry()
         container = AppContainer(this)
+        // Aufgabe 5 (Konzept 4.3): die Ringdatei wird genau einmal beim Start beschnitten,
+        // falls sie durch einen frueheren Fehler die Obergrenze ueberschreitet.
+        container.breadcrumbRingFile.beimStartBeschneiden()
         checkPreviousProcessExit()
     }
 

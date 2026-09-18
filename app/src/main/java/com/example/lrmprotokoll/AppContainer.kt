@@ -142,9 +142,15 @@ class AppContainer(
         )
     }
 
+    /** M12 Schritt 2 (Konzept 4.3): behebt Luecke L3 - Breadcrumbs ueberleben jetzt den Prozesstod. */
+    val breadcrumbRingFile: com.example.lrmprotokoll.diagnose.BreadcrumbRingFile by lazy {
+        com.example.lrmprotokoll.diagnose.BreadcrumbRingFile(context.applicationContext.filesDir)
+    }
+
     val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter by lazy {
         com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
             sinks = listOf(localDiagnosticSink, sentryDiagnosticSink),
+            ringFile = breadcrumbRingFile,
             initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(
                 appVersion = "1.0",
                 buildType = "debug",
