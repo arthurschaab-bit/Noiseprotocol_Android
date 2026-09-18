@@ -33,7 +33,7 @@ class DiagnosticLogCleanupWorkerTest {
         var loeschenAufrufe = 0
         var letzteGrenze: Long? = null
         override suspend fun insert(eintrag: DiagnosticLogEntity) {}
-        override fun alle(): Flow<List<DiagnosticLogEntity>> = flowOf(emptyList())
+        override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(emptyList())
         override suspend fun loescheAelterAls(grenze: Long) {
             loeschenAufrufe++
             letzteGrenze = grenze

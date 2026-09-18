@@ -43,7 +43,7 @@ class SupportBundleExporterTest {
         var schlaegtFehl = false
 
         override suspend fun insert(eintrag: DiagnosticLogEntity) {}
-        override fun alle(): Flow<List<DiagnosticLogEntity>> = flowOf(eintraege)
+        override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(eintraege.take(grenze))
         override suspend fun loescheAelterAls(grenze: Long) {}
         override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> {
             if (schlaegtFehl) error("Simulierter DB-Fehler fuer den Fehlertoleranz-Test")

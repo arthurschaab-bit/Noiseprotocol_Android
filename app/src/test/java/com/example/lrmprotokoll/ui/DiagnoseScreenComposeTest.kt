@@ -2,11 +2,13 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
@@ -26,6 +28,10 @@ import org.robolectric.annotation.GraphicsMode
  *
  * Läuft gegen die echte, productive DiagnoseScreen()-Funktion mit vollem AppContainer, wie
  * MeterScreenComposeTest/SettingsScreenComposeTest.
+ *
+ * M12 Schritt 7 (Konzept Abschnitt 2): `DiagnosticLogDao.alle()` (ohne `LIMIT`) wurde durch
+ * `neueste(grenze)` ersetzt - derselbe Flow-Mechanismus, aber mit fester Obergrenze. Siehe
+ * [DiagnoseLogPaginierungTest] fuer die "Weitere laden"-Gegenprobe.
  *
  * PROMPT_M10_FUNKTIONEN.md F3: die Selbstprüfungs-Checkliste steht seither ganz oben (Index 0
  * der LazyColumn), der hier geprüfte Inhalt ist dadurch auf Index 1 gerutscht - außerhalb des
@@ -54,19 +60,25 @@ class DiagnoseScreenComposeTest {
 
         runBlocking {
             container.database.diagnosticLogDao().insert(
-                DiagnosticLogEntity(timestamp = 1_700_000_000_000L, message = "DEGRADED: Testeintrag")
+                // Zeitstempel bewusst weiter in der Zukunft als jede Basis in DiagnosticLogDaoTest/
+                // DiagnoseLogPaginierungTest (M12 Schritt 7): die Datenbank ist nicht
+                // in-memory-isoliert je Testmethode, und seit Schritt 7 begrenzt neueste() auf die
+                // juengsten N Eintraege - ohne einen garantiert juengsten Zeitstempel koennte dieser
+                // Eintrag aus dem Anzeigefenster fallen, wenn zuvor andere Tests viele Zeilen
+                // eingefuegt haben. Deshalb hier auf den Zeileninhalt statt auf die (bei geteilter
+                // Tabelle nicht mehr exakt vorhersagbare) Kopfzeilen-Anzahl gepruefft.
+                DiagnosticLogEntity(timestamp = 4_000_000_000_000L, message = "DEGRADED: Testeintrag")
             )
         }
 
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToIndex(1)
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText("DEGRADED: Testeintrag", substring = true))
 
-        val logTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_header, 1)
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(logTitle).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("DEGRADED: Testeintrag", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(logTitle).assertExists()
+        composeRule.onNodeWithText("DEGRADED: Testeintrag", substring = true).assertExists()
     }
 
     @Test

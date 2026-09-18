@@ -65,6 +65,14 @@ import kotlinx.coroutines.withContext
  */
 const val DIAGNOSE_LAZY_COLUMN_TAG = "diagnose_lazy_column"
 
+/**
+ * M12 Schritt 7 (Konzept Abschnitt 2): Startobergrenze fuer [DiagnosticLogDao.neueste] - ersetzt
+ * die vormalige unbegrenzte `alle()`-Abfrage, die bei jeder neuen Zeile im Aufzeichnungsbetrieb
+ * die komplette, mit der Zeit beliebig lange Tabelle neu in den Heap zog (siehe Konzept-Verdacht
+ * fuer den vom Owner gemeldeten Absturz). "Weitere laden" erhoeht sie um denselben Schritt.
+ */
+private const val DIAGNOSE_LOG_GRENZE_SCHRITT = 200
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnoseScreen(
@@ -79,7 +87,10 @@ fun DiagnoseScreen(
 
     val verbindungszustand by supervisor.state.collectAsState()
     val frameQuality by transport.frameQuality.collectAsState()
-    val diagnoseLog by container.database.diagnosticLogDao().alle().collectAsState(initial = emptyList())
+    var diagnoseLogGrenze by remember { mutableStateOf(DIAGNOSE_LOG_GRENZE_SCHRITT) }
+    val diagnoseLog by remember(diagnoseLogGrenze) {
+        container.database.diagnosticLogDao().neueste(diagnoseLogGrenze)
+    }.collectAsState(initial = emptyList())
     val syncHistorie by container.database.driveDailyFileDao().alle().collectAsState(initial = emptyList())
     val alarmHistorie by container.database.alertDao().alle().collectAsState(initial = emptyList())
 
@@ -391,6 +402,19 @@ fun DiagnoseScreen(
                 }
             }
             items(diagnoseLog) { eintrag -> DiagnoseLogZeile(eintrag) }
+            if (diagnoseLog.size >= diagnoseLogGrenze) {
+                // Geladene Menge erreicht die aktuelle Grenze - es koennten weitere, aeltere
+                // Eintraege existieren (M12 Schritt 7).
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { diagnoseLogGrenze += DIAGNOSE_LOG_GRENZE_SCHRITT },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.diagnose_log_load_more))
+                    }
+                }
+            }
 
             // Sektion: Alarm-Historie (F15)
             item {

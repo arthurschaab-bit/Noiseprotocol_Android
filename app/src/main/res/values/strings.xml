@@ -292,8 +292,9 @@
     <string name="action_copy">Kopieren</string>
     <string name="diagnose_export_bundle">Support-Bundle exportieren (ZIP)</string>
     <string name="diagnose_creating_bundle">Erstelle Support-Bundle…</string>
-    <string name="diagnose_log_header">Diagnose-Log (%1$d)</string>
+    <string name="diagnose_log_header">Diagnose-Log (neueste %1$d)</string>
     <string name="diagnose_log_empty">Kein Eintrag - entweder ist alles in Ordnung, oder das Diagnose-Log ist in den Einstellungen ausgeschaltet (Default).</string>
+    <string name="diagnose_log_load_more">Weitere laden</string>
     <string name="diagnose_self_check_header">System-Selbstprüfung</string>
     <string name="diagnose_alert_history_header">Alarm-Historie (%1$d)</string>
     <string name="diagnose_alert_history_empty">Bisher wurden keine Alarme ausgelöst.</string>

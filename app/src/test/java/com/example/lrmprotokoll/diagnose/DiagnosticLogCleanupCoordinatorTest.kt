@@ -15,7 +15,7 @@ class DiagnosticLogCleanupCoordinatorTest {
     private class FakeDiagnosticLogDao : DiagnosticLogDao {
         val zeilen = mutableListOf<DiagnosticLogEntity>()
         override suspend fun insert(eintrag: DiagnosticLogEntity) { zeilen += eintrag }
-        override fun alle() = flowOf(zeilen.sortedByDescending { it.timestamp })
+        override fun neueste(grenze: Int) = flowOf(zeilen.sortedByDescending { it.timestamp }.take(grenze))
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
         override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> =
             zeilen.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)

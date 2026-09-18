@@ -11,10 +11,16 @@ interface DiagnosticLogDao {
     @Insert
     suspend fun insert(eintrag: DiagnosticLogEntity)
 
-    /** Flow statt einmaliger Abfrage (M7c Aufgabe 5): DiagnoseScreen soll neue Eintraege sehen,
-     * ohne den Screen neu zu oeffnen - analog zu NoiseDao.getAll(). */
-    @Query("SELECT * FROM diagnostic_log_entries ORDER BY timestamp DESC")
-    fun alle(): Flow<List<DiagnosticLogEntity>>
+    /**
+     * Fuer die Anzeige im DiagnoseScreen (M12 Schritt 7, Konzept Abschnitt 2 Verdacht): Flow statt
+     * einmaliger Abfrage (M7c Aufgabe 5), aber mit fester Obergrenze - ersetzt die vormalige
+     * `alle()`-Abfrage OHNE `LIMIT`. Im Aufzeichnungsbetrieb schreibt der ConnectionSupervisor
+     * laufend neue Zeilen; ohne Obergrenze emittierte Room bei jeder einzelnen Aenderung die
+     * VOLLSTAENDIGE, mit der Zeit beliebig lange Ergebnisliste neu (samt Recomposition) - der im
+     * Konzept dokumentierte Verdacht fuer den vom Owner gemeldeten Absturz. Neueste zuerst.
+     */
+    @Query("SELECT * FROM diagnostic_log_entries ORDER BY timestamp DESC LIMIT :grenze")
+    fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>>
 
     /** Fuer den taeglichen Bereinigungs-Job (Plan Abschnitt 6: 7-Tage-Loeschung). */
     @Query("DELETE FROM diagnostic_log_entries WHERE timestamp < :grenze")
