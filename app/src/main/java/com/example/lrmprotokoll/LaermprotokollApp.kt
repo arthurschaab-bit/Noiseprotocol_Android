@@ -1,14 +1,9 @@
 package com.example.lrmprotokoll
 
-import android.app.ActivityManager
 import android.app.Application
-import android.app.ApplicationExitInfo
 import android.content.Context
-import android.os.Build
 import android.util.Log
-import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
-import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.acra.AcraConfig
 import io.sentry.android.core.SentryAndroid
 import org.acra.ACRA
@@ -67,7 +62,11 @@ class LaermprotokollApp : Application() {
         // Aufgabe 5 (Konzept 4.3): die Ringdatei wird genau einmal beim Start beschnitten,
         // falls sie durch einen frueheren Fehler die Obergrenze ueberschreitet.
         container.breadcrumbRingFile.beimStartBeschneiden()
-        checkPreviousProcessExit()
+        // M12 Schritt 3 (Konzept 6): die Auswertung liegt jetzt in ProcessExitCollector, nicht
+        // mehr inline hier - Verhalten bleibt sonst gleich (Breadcrumb + Report bei CRASH/ANR),
+        // zusaetzlich jetzt ALLE neuen Eintraege statt nur dem letzten, plus ANR-Thread-Dump und
+        // natives Tombstone.
+        container.processExitCollector.auswerten()
     }
 
     internal fun isAcraSenderProcess(): Boolean =
@@ -106,55 +105,6 @@ class LaermprotokollApp : Application() {
             }
         }.onFailure {
             Log.w("LaermprotokollApp", "Sentry konnte nicht initialisiert werden", it)
-        }
-    }
-
-    private fun checkPreviousProcessExit() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
-                val exitInfos = am.getHistoricalProcessExitReasons(packageName, 0, 1)
-                if (exitInfos.isNotEmpty()) {
-                    val exit = exitInfos.first()
-                    val reasonDesc = when (exit.reason) {
-                        ApplicationExitInfo.REASON_CRASH -> "CRASH"
-                        ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
-                        ApplicationExitInfo.REASON_ANR -> "ANR"
-                        ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
-                        ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
-                        ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
-                        else -> "CODE_${exit.reason}"
-                    }
-
-                    container.diagnosticsReporter.breadcrumb(
-                        category = "Process",
-                        message = "Vorheriger Prozess-Exit: $reasonDesc (Status: ${exit.status})",
-                        level = if (exit.reason == ApplicationExitInfo.REASON_CRASH || exit.reason == ApplicationExitInfo.REASON_ANR) {
-                            DiagnosticSeverity.WARN
-                        } else {
-                            DiagnosticSeverity.INFO
-                        }
-                    )
-
-                    if (exit.reason == ApplicationExitInfo.REASON_CRASH || exit.reason == ApplicationExitInfo.REASON_ANR) {
-                        container.diagnosticsReporter.report(
-                            code = DiagnosticCode.APP_PREVIOUS_EXIT,
-                            component = "Process",
-                            operation = "checkPreviousProcessExit",
-                            severity = DiagnosticSeverity.WARN,
-                            message = "Vorherige Prozessbeendigung war unnormal: $reasonDesc",
-                            details = mapOf(
-                                "exitReason" to reasonDesc,
-                                "exitStatus" to exit.status,
-                                "exitTimestamp" to exit.timestamp,
-                                "importance" to exit.importance
-                            )
-                        )
-                    }
-                }
-            }.onFailure {
-                Log.w("LaermprotokollApp", "Konnte vorherige Prozessbeendigung nicht auslesen", it)
-            }
         }
     }
 }

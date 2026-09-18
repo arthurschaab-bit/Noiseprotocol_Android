@@ -529,6 +529,15 @@ class SettingsManager(
         get() = prefs.getBoolean("remote_diagnose_enabled", false)
         set(value) = prefs.edit().putBoolean("remote_diagnose_enabled", value).apply()
 
+    /**
+     * Zeitstempel (Millis) des zuletzt von [com.example.lrmprotokoll.diagnose.ProcessExitCollector]
+     * verarbeiteten Prozess-Exits (M12 Schritt 3, Konzept Aufgabe 2: Entprellung). Ohne das
+     * wuerde derselbe Absturz bei jedem App-Start erneut gemeldet und spaeter erneut hochgeladen.
+     */
+    var letzterVerarbeiteterProzessExitZeitstempel: Long
+        get() = prefs.getLong("letzter_verarbeiteter_prozess_exit_zeitstempel", 0L)
+        set(value) = prefs.edit().putLong("letzter_verarbeiteter_prozess_exit_zeitstempel", value).apply()
+
     // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", true)

@@ -48,4 +48,24 @@ class LaermprotokollAppTest {
 
         assertTrue(app.isContainerInitialized())
     }
+
+    /**
+     * Schritt 3 Test (Konzept Abschnitt 6, "Robolectric fuer den Pfad in LaermprotokollApp"):
+     * der normale Start ruft container.processExitCollector.auswerten() auf, ohne dabei
+     * abzustuerzen - unter Robolectric liefert die echte ActivityManager-Abfrage typischerweise
+     * eine leere Historie, das darf kein Fehler sein (Konzept Schritt 3, SDK-Gate + leere Liste).
+     */
+    @Test
+    fun startRuftDenProcessExitCollectorAufOhneAbzustuerzen() {
+        val app = LaermprotokollApp()
+        app.acraSenderProcessOverride = false
+
+        app.attachBaseContext(ApplicationProvider.getApplicationContext())
+        app.onCreate()
+
+        // onCreate() hat container.processExitCollector.auswerten() bereits aufgerufen (siehe
+        // oben) - dieser zweite, explizite Aufruf bestaetigt zusaetzlich, dass das Bean selbst
+        // wiederholt ohne Fehler benutzbar ist (z.B. bei einem erneuten manuellen Trigger).
+        app.container.processExitCollector.auswerten()
+    }
 }
