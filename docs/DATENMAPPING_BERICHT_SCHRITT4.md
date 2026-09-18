@@ -98,9 +98,16 @@ aber noch nicht umgesetzt.
    false`, additive Migration) plus eine deutlich sichtbare Warnung/Disclaimer-Zeile im
    generierten Bericht selbst, wenn übersteuert wurde - ein Bericht darf nie so aussehen, als wäre
    er ohne diesen Vorbehalt entstanden.
-4. **Gebietseinstufungs-Generalisierung:** ist Teil des Datenmappings nicht enthalten (reine
-   Rechen-/Textlogik, kein Datenzugriff) - eigener Klärungspunkt, sobald die eigentliche
-   Portierung ansteht, nicht Teil dieses Dokuments.
+4. **Gebietseinstufungs-Generalisierung (Schritt 4b, 18.09.2026):** Registry und
+   parameterisierte Textbausteine in `laermbericht/areas.py`. Werte für WA, WR, MI, GE und GI
+   aus AVV Baulärm vom 19.08.1970 und amtlicher Zuordnung belegt. WS, WB, MD, MDW, MU und MK
+   bleiben ohne Werte (`TODO(Owner)`) und sind für Berichte gesperrt. Rechtliche Begründung
+   der örtlichen Zuordnung bleibt für jeden Typ `TODO(Owner)`, auch WA. Owner-Entscheidung
+   18.09.2026: feste Auswahl statt Freitext; unbekannte Alttexte verlangen Neuauswahl.
+   Quellen, vollständiges Original-Textinventar, Unterschiede zur Referenz und 4c-Anschluss:
+   `docs/BERICHT_GEBIETSEINSTUFUNG_QUELLEN.md`. Messfenster-Schätzpegel folgt jetzt dem
+   Gebietstagesrichtwert; freier Altwert bleibt in der DB erhalten, wird dafür nicht genutzt.
+
 
 ## 7. Daraus folgende Nachträge
 
