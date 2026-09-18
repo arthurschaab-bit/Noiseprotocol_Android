@@ -55,12 +55,22 @@ jobs:
       # stabil und passt zur in der Google Cloud Console registrierten Android-OAuth-Client-SHA-1.
       # Fehlt das Secret (z.B. auf einem Fork), faellt AGP sauber auf sein eigenes
       # ~/.android/debug.keystore zurueck (siehe debugStoreFile in app/build.gradle.kts).
+      # Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.3): buildSha kommt
+      # bewusst aus dem Workflow statt aus einer eigenen Git-Abfrage in build.gradle.kts -
+      # actions/checkout checkt bei pull_request-Laeufen einen Merge-Commit aus, dessen SHA in
+      # keinem PR/Branch auffindbar waere. buildPrNumber bleibt bei Push auf main leer, dann
+      # greift die main-Variante des Versionsschemas.
       - name: Build Debug & Test APKs
+        env:
+          BUILD_SHA_FULL: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_PR_NUMBER: ${{ github.event.pull_request.number }}
+          BUILD_CI_RUN: ${{ github.run_number }}
         run: |
+          BUILD_SHA=${BUILD_SHA_FULL:0:7}
           if [ -f "debug.keystore" ]; then
-            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PdebugStoreFile=$(pwd)/debug.keystore
+            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PdebugStoreFile=$(pwd)/debug.keystore -PbuildSha=$BUILD_SHA -PbuildPrNumber=$BUILD_PR_NUMBER -PbuildCiRun=$BUILD_CI_RUN
           else
-            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace
+            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PbuildSha=$BUILD_SHA -PbuildPrNumber=$BUILD_PR_NUMBER -PbuildCiRun=$BUILD_CI_RUN
           fi
 
       - name: Debug-Keystore-Kopie löschen
@@ -145,11 +155,14 @@ jobs:
           retention-days: 7
 
       # Erlaubt, eine PR-Fassung auf dem Telefon zu installieren, ohne sie selbst zu bauen:
-      # Artefakt herunterladen, entpacken, `adb install -r app-debug.apk`.
+      # Artefakt herunterladen, entpacken, `adb install -r laermprotokoll-<versionName>-debug.apk`
+      # (Abschnitt 4.2 - der Dateiname traegt jetzt die volle Versionskennung). Der Artefaktname
+      # selbst haengt zusaetzlich die Laufnummer an, damit mehrere Laeufe im Downloads-Ordner
+      # unterscheidbar bleiben (Abschnitt 4.3).
       - name: Debug-APK bereitstellen
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: app-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
