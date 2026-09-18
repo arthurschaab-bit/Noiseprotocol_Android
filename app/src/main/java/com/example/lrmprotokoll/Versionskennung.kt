@@ -9,11 +9,13 @@ package com.example.lrmprotokoll
  * der schlanke Convenience-Zugriff darueber, der tatsaechlich [BuildConfig] liest.
  */
 object Versionskennung {
-
     private val releaseMuster = Regex("""^\d+\.\d+\.\d+$""")
 
     /** Die Zeichenkette fuer Zwischenablage/Exporte, z.B. "1.0.0-pr181.ci342+a1b2c3d (342)". */
-    fun formatiere(versionName: String, versionCode: Int): String = "$versionName ($versionCode)"
+    fun formatiere(
+        versionName: String,
+        versionCode: Int,
+    ): String = "$versionName ($versionCode)"
 
     /** true nur beim reinen X.Y.Z ohne Suffix - der Release-Fall aus Abschnitt 3.1. */
     fun istReleaseBuild(versionName: String): Boolean = releaseMuster.matches(versionName)

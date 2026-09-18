@@ -34,7 +34,10 @@ val propBuildCiRun = (findProperty("buildCiRun") as String?)?.takeIf { it.isNotB
 // oder die Abfrage aus irgendeinem Grund fehlschlaegt (Abschnitt 4.1: "jeder Fehlerfall muss
 // weich landen"). providers.exec statt project.exec/ProcessBuilder, weil nur das mit der
 // Konfigurations-Cache vertraeglich ist.
-data class LokaleGitInfo(val sha7: String, val dirty: Boolean)
+data class LokaleGitInfo(
+    val sha7: String,
+    val dirty: Boolean,
+)
 
 fun ermittleLokaleGitInfo(): LokaleGitInfo? =
     try {
@@ -44,7 +47,10 @@ fun ermittleLokaleGitInfo(): LokaleGitInfo? =
                 commandLine("git", "rev-parse", "--short=7", "HEAD")
                 isIgnoreExitValue = true
             }
-        val sha = shaLauf.standardOutput.asText.get().trim()
+        val sha =
+            shaLauf.standardOutput.asText
+                .get()
+                .trim()
         if (shaLauf.result.get().exitValue != 0 || sha.isEmpty()) {
             null
         } else {
@@ -56,7 +62,9 @@ fun ermittleLokaleGitInfo(): LokaleGitInfo? =
                 }
             val dirty =
                 statusLauf.result.get().exitValue == 0 &&
-                    statusLauf.standardOutput.asText.get().isNotBlank()
+                    statusLauf.standardOutput.asText
+                        .get()
+                        .isNotBlank()
             LokaleGitInfo(sha, dirty)
         }
     } catch (_: Exception) {
