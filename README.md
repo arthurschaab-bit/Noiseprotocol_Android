@@ -484,15 +484,20 @@ ein gleichzeitiger Lauf (ein neuer Push bricht einen laufenden ab):
      Zusammenfassungsseite des Laufs (`GITHUB_STEP_SUMMARY`), nicht nur im Artefakt.
    - **Artefakte** (jeweils mit `if: always()` — werden auch bei fehlgeschlagenem Build/Test
      hochgeladen, soweit vorhanden): `lint-reports` (7 Tage), `unit-test-reports` (7 Tage) und
-     **`app-debug-apk` (14 Tage)** — die fertig gebaute Debug-APK aus
+     **`app-debug-apk-<Laufnummer>` (14 Tage)** — die fertig gebaute Debug-APK aus
      `app/build/outputs/apk/debug/*.apk`, signiert mit dem Schlüssel aus dem
      `DEBUG_KEYSTORE_BASE64`-Repository-Secret (siehe C-6 in der Prüfprotokoll-Historie) — ohne
      das Secret fällt AGP auf sein eigenes, pro Laufumgebung neu erzeugtes
      `~/.android/debug.keystore` zurück, dann ist die Signatur zwischen zwei Läufen nicht mehr
-     stabil (siehe `signingConfigs.debug` in `app/build.gradle.kts`). Das ist der einzige Weg,
-     eine PR-Fassung auf einem Telefon auszuprobieren, ohne selbst zu bauen —
-     siehe [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) für den genauen Weg vom PR bis
-     zur installierten APK (Artefakte hängen an der **Übersichtsseite des Laufs**, nicht an der
+     stabil (siehe `signingConfigs.debug` in `app/build.gradle.kts`). Die Datei selbst heißt seit
+     der sauberen Versionskennung (`docs/PROMPT_VERSIONSKENNUNG.md`) nicht mehr einheitlich
+     `app-debug.apk`, sondern `laermprotokoll-<versionName>-debug.apk` mit PR-Nummer,
+     CI-Laufnummer und Commit-Kürzel im Namen — mehrere heruntergeladene Läufe bleiben so
+     unterscheidbar, und dieselbe Kennung lässt sich auf dem installierten Gerät unter
+     Einstellungen → „Über die App" nachsehen. Das ist der einzige Weg, eine PR-Fassung auf einem
+     Telefon auszuprobieren, ohne selbst zu bauen — siehe
+     [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) für den genauen Weg vom PR bis zur
+     installierten APK (Artefakte hängen an der **Übersichtsseite des Laufs**, nicht an der
      Job-Seite mit dem Protokoll — das ist die übliche Stolperstelle).
 2. **[`emulator-tests.yml`](.github/workflows/emulator-tests.yml)** (Job `instrumented-tests`,
    25 min Timeout): baut Debug- und Test-APK, startet einen echten Android-Emulator (API 34,
