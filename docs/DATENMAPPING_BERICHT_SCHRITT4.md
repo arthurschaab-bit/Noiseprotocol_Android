@@ -143,3 +143,17 @@ laufen zwei bewusst getrennte Reihen weiter:
 Sekunde wenigstens ein gültiger Frame vorhanden ist, zählt diese Sekunde als gemessen. Die
 Peak-Reihe ist eine dokumentierte, konservative Erweiterung gegenüber dem Original, das wegen
 seiner bereits auf 1 Hz vorliegenden CSV nur eine gemeinsame Reihe kannte.
+
+## 9. Schritt 4c: Integration V1 minimal
+
+Implementierung abgeschlossen: `HighEndReportExport` übergibt private Tages-CSVs und kleine
+JSON-Metadaten an `report_bridge.generate_report`. Matplotlib/PdfPages verbindet Kernlogik und
+Gebietsregistry zu einem teilbaren PDF. Vollständige Seitenzuordnung, Vertrag, Bereinigung und
+bewusste Abweichungen: `docs/BERICHT_PDF_SEITEN_V1.md`.
+
+Fehlende Stammdaten bleiben sichtbar. Unbekannte Innen-/Außenlage sperrt Außenvergleiche und
+Hochrechnungen; Gebietstypen/Rechtsprosa-TODOs aus 4b bleiben unverändert. Sommerzeitgrenzen im
+4a-Kern sind auf lokale Uhrzeit korrigiert, das 1-Hz-Verdichtungsverfahren bleibt gleich.
+
+Lokale Python-/PDF-Prüfung und echte Android-CI-Ergebnisse stehen im zugehörigen PR.
+Ein realer PCE-323-Gerätetest und die rechtliche Freigabe der örtlichen Zuordnung bleiben offen.
