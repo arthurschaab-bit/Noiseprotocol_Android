@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Der UI-Pfad erreicht den Runner und zeigt dessen erwarteten Modulfehler ohne Absturz. */
+/** Der UI-Pfad erreicht den Runner und zeigt dessen Dateifehler ohne Absturz. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -32,7 +32,7 @@ class BerichtErstellenSheetTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun neuerBerichtButtonOeffnetAblaufUndModulfehlerIstVerstaendlich() {
+    @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val jetzt = System.currentTimeMillis()
         val datum = LocalDate.now()
@@ -64,7 +64,7 @@ class BerichtErstellenSheetTest {
                 onBack = {}, onOpenSettings = {}, initialHighEndRange = BerichtZeitraum(datum, datum),
                 highEndRunner = {
                     runnerAufgerufen = true
-                    ChaquopyReportRunner.Ergebnis.Fehler("No module named 'report_bridge'")
+                    ChaquopyReportRunner.Ergebnis.Fehler("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
                 },
             )
         }
@@ -75,6 +75,6 @@ class BerichtErstellenSheetTest {
 
         assertTrue(runnerAufgerufen)
         composeRule.onNodeWithTag("bericht_erstellen_fehler")
-            .assertTextEquals("Der Berichtskern ist noch nicht installiert. Die Auswahl wurde geprüft; der Python-Bericht folgt im nächsten Schritt.")
+            .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 }

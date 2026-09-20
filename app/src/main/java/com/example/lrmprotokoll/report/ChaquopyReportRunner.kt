@@ -4,67 +4,63 @@ import android.content.Context
 import com.chaquo.python.PyException
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
-/**
- * Kotlin-Bruecke zum embedded CPython-Interpreter (Chaquopy) fuer den geplanten High-End-Bericht
- * (Owner-Vorgabe 12.09.2026, Schritt 1: nur diese Wrapper-Klasse, das eigentliche Python-Modul
- * `report_bridge.py` mit `generate_report()` ist Schritt 4 und noch nicht Teil dieses Auftrags -
- * ein Aufruf von [erzeugeBericht] schlaegt bis dahin mit einem [PyException] fehl, weil das Modul
- * nicht existiert).
- *
- * Bewusst KEIN `PyApplication` in `AndroidManifest.xml`: die App hat mit [com.example.lrmprotokoll.LaermprotokollApp]
- * bereits eine eigene `Application`-Klasse (siehe [com.example.lrmprotokoll.AppContainer]), die zu
- * ersetzen ausserhalb dieses Auftrags läge. Stattdessen die von Chaquopy dokumentierte Alternative:
- * `Python.start()` einmalig und idempotent hier im Konstruktor, gegen `Python.isStarted()` geprüft.
- *
- * Laeuft bewusst NICHT auf dem Main-Thread ([erzeugeBericht] wechselt selbst auf [Dispatchers.IO]):
- * Matplotlib-Rendering und ReportLab-PDF-Aufbau sind CPU- und speicherintensiv (Owner-Vorgabe,
- * Schritt 7) - der eigentliche Foreground-Service/Worker mit Fortschrittsanzeige ist Schritt 3.
- */
+/** Echter CPython-/Matplotlib-Aufruf auf IO; pro Prozess serialisiert (Matplotlib-Zustand). */
 class ChaquopyReportRunner(context: Context) {
-
     private val appContext = context.applicationContext
 
-    init {
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(appContext))
-        }
-    }
-
-    /** Ergebnis eines Berichtslaufs - ohne Exceptions ueber die Kotlin/Python-Grenze zu reichen,
-     * damit der Aufrufer (Schritt 3: Worker mit Fortschrittsanzeige) nicht selbst zwischen
-     * [PyException] und regulaeren Kotlin-Exceptions unterscheiden muss. */
     sealed interface Ergebnis {
-        /** [pdfPfad] ist der absolute Pfad der von `report_bridge.py` erzeugten PDF-Datei im
-         * App-Speicher. */
         data class Erfolg(val pdfPfad: String) : Ergebnis
-
-        /** [nachricht] ist bereits fuer die Anzeige aufbereitet (kein rohes Python-Traceback);
-         * [ursache] bleibt fuer Diagnose-Log/Sentry erhalten. */
         data class Fehler(val nachricht: String, val ursache: Throwable? = null) : Ergebnis
     }
 
-    /**
-     * Ruft `report_bridge.generate_report(parameterJson)` auf (Schritt 4). [parameterJson] traegt
-     * alles, was das Python-Modul zur Auswertung braucht: DB-Pfad bzw. exportierte CSV-Pfade,
-     * die § 287 ZPO-Schaetzparameter aus [com.example.lrmprotokoll.data.ReportConfigEntity],
-     * Zeitraum, Standortwechsel und die Rohdaten-Pruefsummen fuer das Manifest - strukturiert
-     * uebergeben statt als CLI-Argumente (Owner-Vorgabe Schritt 7: "JSON-Parameter + CSV-Pfade").
-     *
-     * `report_bridge.generate_report()` muss synchron einen String mit dem absoluten PDF-Pfad
-     * zurueckgeben - deshalb hier [Dispatchers.IO] statt den Aufrufer zwingen, das selbst zu tun.
-     */
+    /** Kleine JSON-Metadaten und private CSV-Pfade, niemals die Rohwerte selbst. */
     suspend fun erzeugeBericht(parameterJson: String): Ergebnis = withContext(Dispatchers.IO) {
-        try {
-            val modul = Python.getInstance().getModule("report_bridge")
-            val pdfPfad = modul.callAttr("generate_report", parameterJson).toString()
-            Ergebnis.Erfolg(pdfPfad)
-        } catch (e: PyException) {
-            Ergebnis.Fehler("Python-Fehler bei der Berichtserzeugung: ${e.message}", e)
-        } catch (e: Exception) {
-            Ergebnis.Fehler("Unerwarteter Fehler bei der Berichtserzeugung: ${e.message}", e)
+        pythonMutex.withLock {
+            try {
+                // Die erlaubten Wurzeln stammen ausschließlich vom Android-Context.
+                val parameter = try {
+                    JSONObject(parameterJson)
+                } catch (error: Exception) {
+                    return@withLock Ergebnis.Fehler("Die Berichtsparameter sind kein gültiges JSON.", error)
+                }
+                parameter.put("privateRoots", JSONArray(listOf(
+                    appContext.filesDir.canonicalPath, appContext.cacheDir.canonicalPath,
+                )))
+                val requestedOutput = File(parameter.optString("outputPath")).canonicalFile
+                require(requestedOutput.toPath().startsWith(File(appContext.filesDir, "reports").canonicalFile.toPath())) {
+                    "Der PDF-Zielpfad liegt außerhalb des privaten Berichtsordners."
+                }
+                if (!Python.isStarted()) Python.start(AndroidPlatform(appContext))
+                val module = Python.getInstance().getModule("report_bridge")
+                val path = module.callAttr("generate_report", parameter.toString()).toString()
+                val output = File(path).canonicalFile
+                check(output.toPath().startsWith(File(appContext.filesDir, "reports").canonicalFile.toPath())) {
+                    "Der Bericht liegt außerhalb des privaten Berichtsordners."
+                }
+                check(output.isFile && output.length() > 0) { "Die PDF-Datei wurde nicht erzeugt." }
+                Ergebnis.Erfolg(output.absolutePath)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: PyException) {
+                val message = error.message.orEmpty().lineSequence().firstOrNull().orEmpty()
+                    .removePrefix("ValueError: ").removePrefix("RuntimeError: ")
+                Ergebnis.Fehler("Bericht konnte nicht erzeugt werden: ${message.ifBlank { "Python-Verarbeitung fehlgeschlagen." }}", error)
+            } catch (error: Exception) {
+                Ergebnis.Fehler("Bericht konnte nicht erzeugt werden: ${error.message ?: "Dateifehler"}", error)
+            }
         }
+    }
+
+    companion object {
+        private val pythonMutex = Mutex()
     }
 }

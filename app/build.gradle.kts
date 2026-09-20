@@ -133,7 +133,7 @@ android {
         // werden pro ABI als native Bibliotheken mitgeliefert - deshalb hier explizit auf die
         // beiden Ziel-ABIs eingeschraenkt, statt (Chaquopy-Default) alle vier zu bauen. armeabi-v7a
         // und x86 sind fuer PCE-323-taugliche Geraete (minSdk 29, BLE) nicht relevant und wuerden
-        // die APK-Groesse durch NumPy/Matplotlib/ReportLab pro zusaetzlicher ABI weiter aufblaehen.
+        // die APK-Groesse durch NumPy/pandas/Matplotlib pro zusaetzlicher ABI weiter aufblaehen.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -232,16 +232,16 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
-// Chaquopy (High-End-Bericht, Schritt 1): embedded CPython fuer gesamtbericht_generator.py
-// (Schritt 4, noch nicht Teil dieses Auftrags). numpy/matplotlib/reportlab werden hier nur
-// deklariert - das eigentliche Python-Modul kommt mit Schritt 3/4 nach src/main/python/.
+// High-End-Bericht V1: CPython, numpy/pandas und Matplotlib-PdfPages.
+// tzdata liefert ZoneInfo auch ohne Betriebssystem-Zeitzonendatenbank auf Android.
 chaquopy {
     defaultConfig {
         version = "3.11"
         pip {
             install("numpy")
             install("matplotlib")
-            install("reportlab")
+            install("pandas")
+            install("tzdata")
         }
     }
 }

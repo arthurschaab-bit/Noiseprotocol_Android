@@ -105,7 +105,7 @@ fun fehlendeStammdatenFelder(stammdaten: StammdatenVerlaufEntity?): List<String>
     }
 }
 
-/** Vorläufiger JSON-Vertrag für Teil B; Schritt 4 ergänzt private Rohdaten-Dateipfade. */
+/** Metadaten-Basis; HighEndReportExport ergänzt den vollständigen Datei-Vertrag Version 2. */
 fun vorlaeufigeBerichtsparameter(
     tage: List<BerichtTag>,
     config: ReportConfigEntity,
