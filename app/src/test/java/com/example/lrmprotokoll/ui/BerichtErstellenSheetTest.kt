@@ -1,11 +1,13 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.MeasurementEntity
@@ -15,6 +17,7 @@ import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -58,22 +61,28 @@ class BerichtErstellenSheetTest {
             db.reportConfigDao().speichere(ReportConfigEntity(gebietseinstufung = "WA"))
         }
 
-        var runnerAufgerufen = false
+        val runnerAufgerufen = AtomicBoolean(false)
         composeRule.setContent {
             BerichtScreen(
                 onBack = {}, onOpenSettings = {}, initialHighEndRange = BerichtZeitraum(datum, datum),
                 highEndRunner = {
-                    runnerAufgerufen = true
+                    runnerAufgerufen.set(true)
                     ChaquopyReportRunner.Ergebnis.Fehler("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
                 },
             )
         }
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
-        composeRule.waitForIdle()
+        val startButton = composeRule.onNodeWithTag("btn_bericht_erstellen_start")
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            runCatching { startButton.assertIsEnabled() }.isSuccess
+        }
+        startButton.performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
 
-        assertTrue(runnerAufgerufen)
+        assertTrue(runnerAufgerufen.get())
         composeRule.onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }

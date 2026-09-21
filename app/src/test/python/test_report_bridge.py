@@ -88,8 +88,12 @@ def test_invalid_json_or_contract(value):
 @pytest.mark.parametrize("mutation,message", [
     (lambda p: p["reportConfig"].update(gebietseinstufung="NICHTBEKANNT"), "Unbekannte Gebietseinstufung"),
     (lambda p: p["days"][0].update(samplesPath=p["days"][0]["samplesPath"]+"missing"), "fehlt"),
-    (lambda p: p["days"][0].update(samplesPath="/etc/passwd"), "privaten App-Speichers"),
-    (lambda p: p.update(outputPath="/tmp/escaped.pdf"), "privaten App-Speichers"),
+    (lambda p: p["days"][0].update(
+        samplesPath=str(Path(p["privateRoots"][0]).parent / "escaped-samples.csv")
+    ), "privaten App-Speichers"),
+    (lambda p: p.update(
+        outputPath=str(Path(p["privateRoots"][0]).parent / "escaped-report.pdf")
+    ), "privaten App-Speichers"),
     (lambda p: p["days"][0].update(rawSampleCount=241), "unvollständig"),
     (lambda p: p.pop("timeZone"), "unvollständig"),
 ])
