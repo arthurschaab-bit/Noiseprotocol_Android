@@ -31,6 +31,7 @@ class ChaquopyReportRunnerInstrumentedTest {
     fun roomExportErzeugtLesbareTeilbarePdfUndEntferntTemporaereDateien() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         var output: File? = null
+        var unexpectedOutput: File? = null
         try {
             val date = LocalDate.of(2026, 9, 12)
             val start = date.atTime(8, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -83,8 +84,21 @@ class ChaquopyReportRunnerInstrumentedTest {
             }
             assertTrue(failed is ChaquopyReportRunner.Ergebnis.Fehler)
             assertFalse(temporary!!.exists())
+
+            // Nur die für diesen Lauf erzeugte Zieldatei darf als Erfolg gelten.
+            val unexpected = HighEndReportExport(context, db).generate(days, config, emptyMap()) { json ->
+                temporary = File(JSONObject(json).getJSONArray("days").getJSONObject(0).getString("samplesPath")).parentFile
+                unexpectedOutput = File(context.filesDir, "reports/unexpected-output.pdf").apply {
+                    parentFile!!.mkdirs()
+                    writeBytes("%PDF-unexpected".toByteArray())
+                }
+                ChaquopyReportRunner.Ergebnis.Erfolg(unexpectedOutput!!.absolutePath)
+            }
+            assertTrue(unexpected is ChaquopyReportRunner.Ergebnis.Fehler)
+            assertFalse(temporary!!.exists())
         } finally {
             output?.delete()
+            unexpectedOutput?.delete()
             db.close()
         }
     }
@@ -112,7 +126,10 @@ class ChaquopyReportRunnerInstrumentedTest {
                 .put("konservativFensterStartStunde", 15).put("konservativFensterEndeStunde", 19)
                 .put("erzwingeBerichtOhneBestaetigteBewertung", false))
             .put("days", JSONArray().put(JSONObject().put("date", "2026-09-12")
-                .put("rawSampleCount", 1).put("samplesPath", File(context.cacheDir, "missing-raw.csv").absolutePath)))
+                .put("rawSampleCount", 1).put("samplesPath", File(
+                    context.cacheDir,
+                    "report_handoff/error-test/missing-raw.csv",
+                ).apply { parentFile!!.mkdirs() }.absolutePath)))
         checkError(runner.erzeugeBericht(parameter.toString()), "Unbekannte Gebietseinstufung")
         parameter.getJSONObject("reportConfig").put("gebietseinstufung", "WA")
         checkError(runner.erzeugeBericht(parameter.toString()), "Rohdaten-Datei")

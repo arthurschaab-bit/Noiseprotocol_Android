@@ -13,24 +13,26 @@ import os
 from datetime import date
 from pathlib import Path
 from threading import Lock
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from laermbericht.areas import apply_area_to_config, area_report_texts, get_area
 from laermbericht.day_metrics import DayConfig, Sample, calculate_day_metrics
 
 _RENDER_LOCK = Lock()
+_PRIVATE_DIRECTORIES = None
 
 
-def _private_path(value, roots, label):
+def _private_path(value, root, label):
     if not isinstance(value, str) or not Path(value).is_absolute():
         raise ValueError(f"{label}: Ein absoluter privater Dateipfad fehlt.")
     path = Path(value).resolve()
-    if not any(path.is_relative_to(root) for root in roots):
+    if not path.is_relative_to(root):
         raise ValueError(f"{label}: Die Datei liegt außerhalb des privaten App-Speichers.")
     return path
 
 
-def _load_samples(day, roots, override):
-    path = _private_path(day.get("samplesPath"), roots, "Rohdaten")
+def _load_samples(day, handoff_root, override):
+    path = _private_path(day.get("samplesPath"), handoff_root, "Rohdaten")
     if not path.is_file():
         raise ValueError(f"Die Rohdaten-Datei für {day['date']} fehlt. Bitte den Bericht erneut erzeugen.")
     samples = []
@@ -65,6 +67,47 @@ def _load_samples(day, roots, override):
     return samples, unconfirmed, sorted(modes)
 
 
+def _parse_private_directories(private_directories_json):
+    try:
+        directories = json.loads(private_directories_json)
+    except (ValueError, TypeError):
+        raise ValueError("Die privaten Android-Verzeichnisse sind kein gültiges JSON.") from None
+    if not isinstance(directories, dict) or set(directories) != {"filesDir", "cacheDir"}:
+        raise ValueError("Die privaten Android-Verzeichnisse sind unvollständig.")
+
+    canonical = {}
+    for key, label in (("filesDir", "Dateiverzeichnis"), ("cacheDir", "Cacheverzeichnis")):
+        value = directories[key]
+        if not isinstance(value, str) or not Path(value).is_absolute():
+            raise ValueError(f"{label}: Ein absoluter privater Verzeichnispfad fehlt.")
+        canonical[key] = Path(value).resolve()
+    if canonical["filesDir"] == canonical["cacheDir"]:
+        raise ValueError("Datei- und Cacheverzeichnis dürfen nicht identisch sein.")
+    return (
+        (canonical["filesDir"] / "reports").resolve(),
+        (canonical["cacheDir"] / "report_handoff").resolve(),
+        canonical["cacheDir"],
+    )
+
+
+def configure_private_directories(private_directories_json: str) -> None:
+    """Setzt die Android-Allowlist getrennt vom untrusted Berichtsparameter-JSON."""
+    global _PRIVATE_DIRECTORIES
+    _PRIVATE_DIRECTORIES = _parse_private_directories(private_directories_json)
+
+
+def _parse_iso_date(value, index):
+    if not isinstance(value, str):
+        raise ValueError(f"Berichtstag {index + 1}: Das Datum muss im ISO-Format YYYY-MM-DD vorliegen.")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"Berichtstag {index + 1}: Das Datum ist kein gültiges ISO-Datum.") from None
+    if parsed.isoformat() != value:
+        raise ValueError(f"Berichtstag {index + 1}: Das Datum muss kanonisch als YYYY-MM-DD vorliegen.")
+    return parsed
+
+
 def _parse(parameter_json):
     try:
         parameter = json.loads(parameter_json)
@@ -72,18 +115,21 @@ def _parse(parameter_json):
         raise ValueError("Die Berichtsparameter sind kein gültiges JSON.") from None
     if not isinstance(parameter, dict) or parameter.get("contractVersion") != 2:
         raise ValueError("Die Version der Berichtsparameter ist ungültig; bitte erneut exportieren.")
+    if _PRIVATE_DIRECTORIES is None:
+        raise ValueError("Die privaten Android-Verzeichnisse wurden nicht konfiguriert.")
+    reports_root, handoff_root, cache_root = _PRIVATE_DIRECTORIES
     try:
-        root_values = parameter["privateRoots"]
-        if not isinstance(root_values, list) or not root_values:
-            raise ValueError("Private Speicherorte fehlen.")
-        roots = []
-        for value in root_values:
-            if not isinstance(value, str) or not Path(value).is_absolute():
-                raise ValueError("Private Speicherorte müssen absolute Pfade sein.")
-            roots.append(Path(value).resolve())
-        output = _private_path(parameter["outputPath"], roots, "PDF-Ausgabe")
+        output = _private_path(parameter["outputPath"], reports_root, "PDF-Ausgabe")
         if output.suffix.lower() != ".pdf" or not output.parent.is_dir():
             raise ValueError("Der private PDF-Ausgabeordner fehlt oder der Dateiname ist ungültig.")
+        parameter["outputPath"] = str(output)
+        time_zone = parameter["timeZone"]
+        if not isinstance(time_zone, str) or not time_zone:
+            raise ValueError("Die Zeitzone ist ungültig.")
+        try:
+            ZoneInfo(time_zone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(f"Die Zeitzone '{time_zone}' ist unbekannt.") from None
         c = parameter["reportConfig"]
         code = c["gebietseinstufung"]
         config = apply_area_to_config(DayConfig(
@@ -94,21 +140,30 @@ def _parse(parameter_json):
             conservative_window_start_hour=int(c["konservativFensterStartStunde"]),
             conservative_window_end_hour=int(c["konservativFensterEndeStunde"]),
             device_uncertainty_db=float(c["geraeteUnsicherheitDb"]),
-            time_zone=parameter["timeZone"],
+            time_zone=time_zone,
         ), code)
         days = parameter["days"]
         if not isinstance(days, list) or not days:
             raise ValueError("Es wurden keine Berichtstage übergeben.")
-        dates = [date.fromisoformat(d["date"]) for d in days]
-        if dates != sorted(set(dates)):
-            raise ValueError("Die Berichtstage müssen eindeutig und chronologisch sortiert sein.")
-        for d in days:
+        dates = []
+        seen_dates = set()
+        for index, d in enumerate(days):
+            if not isinstance(d, dict):
+                raise ValueError(f"Berichtstag {index + 1}: Die Tagesdaten sind ungültig.")
+            parsed_date = _parse_iso_date(d.get("date"), index)
+            if parsed_date in seen_dates:
+                raise ValueError("Die Berichtstage müssen eindeutig sein.")
+            if dates and parsed_date < dates[-1]:
+                raise ValueError("Die Berichtstage müssen chronologisch sortiert sein.")
+            seen_dates.add(parsed_date)
+            dates.append(parsed_date)
             if not isinstance(d["rawSampleCount"], int) or d["rawSampleCount"] < 0:
                 raise ValueError("Die Rohdatenanzahl ist ungültig.")
             if d.get("stammdaten") is not None and not isinstance(d["stammdaten"], dict):
                 raise ValueError("Die Stammdaten sind ungültig.")
+            d["samplesPath"] = str(_private_path(d.get("samplesPath"), handoff_root, "Rohdaten"))
             for photo in d.get("photos", []):
-                photo["path"] = str(_private_path(photo["path"], roots, "Dokumentationsfoto"))
+                photo["path"] = str(_private_path(photo["path"], handoff_root, "Dokumentationsfoto"))
         override = parameter["unconfirmedWeightingOverride"]
         if type(override) is not bool or type(c["erzwingeBerichtOhneBestaetigteBewertung"]) is not bool:
             raise ValueError("Die Override-Angabe ist ungültig.")
@@ -116,15 +171,15 @@ def _parse(parameter_json):
             raise ValueError("Der Override wurde in den Berichtsparametern nicht freigegeben.")
     except (KeyError, TypeError, OverflowError) as error:
         raise ValueError("Die Berichtsparameter sind unvollständig oder falsch aufgebaut.") from error
-    return parameter, roots, output, config, code, override
+    return parameter, handoff_root, cache_root, output, config, code, override
 
 
 def generate_report(parameter_json: str) -> str:
     """Erzeugt synchron eine PDF; verständliche ValueErrors passieren die JNI-Grenze."""
-    parameter, roots, output, config, code, override = _parse(parameter_json)
+    parameter, handoff_root, cache_root, output, config, code, override = _parse(parameter_json)
     days = []
     for source in parameter["days"]:
-        samples, unconfirmed, modes = _load_samples(source, roots, override)
+        samples, unconfirmed, modes = _load_samples(source, handoff_root, override)
         metadata = source.get("stammdaten") or {}
         setting = str(metadata.get("innenAussen", "")).strip().lower()
         environment = "inside" if setting.startswith("innen") else (
@@ -142,7 +197,9 @@ def generate_report(parameter_json: str) -> str:
     partial = output.with_name(output.name + ".part")
     try:
         with _RENDER_LOCK:
-            os.environ.setdefault("MPLCONFIGDIR", str(roots[0] / "matplotlib"))
+            matplotlib_root = (cache_root / "matplotlib").resolve()
+            matplotlib_root.mkdir(parents=True, exist_ok=True)
+            os.environ["MPLCONFIGDIR"] = str(matplotlib_root)
             from laermbericht.pdf_pages import render_report
             render_report(partial, days, config, get_area(code), area_report_texts(code, config), override)
         partial.replace(output)

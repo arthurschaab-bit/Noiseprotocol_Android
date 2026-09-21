@@ -49,8 +49,12 @@ im Speicher. Keine Datenbank-/Schemaänderung.
 - JSON enthält `contractVersion=2`, IANA-`timeZone`, `days` mit `samplesPath`, tatsächlicher
   `rawSampleCount`, ausgewählten `stammdaten`, Lückenliste, `sessions` und `photos`;
   dazu `reportConfig`, `unconfirmedWeightingOverride`, Zeitraumgrenzen und `outputPath`.
-- `privateRoots` setzt ausschließlich der Runner aus dem Android-Context. PDF-Ziel:
-  `filesDir/reports/Schallbericht_<UUID>.pdf`; Prüfung bereits vor dem Python-Aufruf.
+- Die Android-Allowlist (`filesDir`, `cacheDir`) konfiguriert der Runner über
+  `configure_private_directories(...)` getrennt vom untrusted Parameter-JSON. Python akzeptiert
+  PDFs nur unter `filesDir/reports/` und Rohdaten/Fotos nur
+  unter `cacheDir/report_handoff/`; alle Pfade werden kanonisiert. PDF-Ziel:
+  `filesDir/reports/Schallbericht_<UUID>.pdf`; Rückgabepfad und Ziel dieses Laufs müssen exakt
+  übereinstimmen.
 - Die bisherigen Dokumentationsfotos liegen im app-eigenen externen Speicher. Für den Handoff
   werden sie in den privaten temporären Ordner kopiert; die Originale bleiben unverändert.
   Vorhandene SHA-256-Werte werden mitgegeben, nicht neu berechnet. Fehlende/defekte Fotos
