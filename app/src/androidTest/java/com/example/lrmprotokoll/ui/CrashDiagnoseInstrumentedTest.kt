@@ -83,21 +83,25 @@ class CrashDiagnoseInstrumentedTest {
     @Test
     fun anrHinterlaesstEinenThreadDump() {
         val start = System.currentTimeMillis()
-        ausloesen("Main-Thread blockieren (ANR)")
-        // Erst ein weiteres Eingabeereignis macht den blockierten Main-Thread zum Input-ANR.
-        device.pressBack()
-        // CI-Fund (22.09.2026, PR #182): kein Warten mehr auf den System-ANR-Dialog
-        // (Resource-ID "aerr_close"). Das CI-Zielimage ist "aosp_atd" (siehe
+        // CI-Fund (22.09.2026, PR #182, 2. Iteration): das CI-Zielimage ist "aosp_atd" (siehe
         // emulator-tests.yml) - Googles Automated-Test-Device-Images entfernen SystemUI
         // komplett (ersetzt durch ein minimales com.android.fakesystemapp, siehe
         // https://developer.android.com/studio/test/managed-devices und
-        // https://blog.emulator.wtf/posts/2022-04-15-atd-images/). Der Dialog wird von
-        // SystemUI gerendert und kann auf diesem Image deshalb strukturell nie erscheinen -
-        // das war keine Flakiness, sondern eine Test-Erwartung, die mit dem gewaehlten
-        // CI-Image unvereinbar war. Die eigentliche ANR-Erkennung (InputDispatcher/
-        // ActivityManagerService-Timeout, Trace-Datei, REASON_ANR) laeuft unabhaengig von
-        // SystemUI auf System-Server-Ebene weiter und ist auch das, was M12 tatsaechlich
-        // braucht - direkt darauf warten statt auf den Dialog.
+        // https://blog.emulator.wtf/posts/2022-04-15-atd-images/). Der System-ANR-Dialog wird
+        // von SystemUI gerendert, kann auf diesem Image also strukturell nie erscheinen (1.
+        // Iteration: dieses Warten entfernt). Laut AOSP-Quelle (AppErrors.appNotResponding())
+        // toetet das System den blockierten Prozess automatisch und vermerkt REASON_ANR NUR
+        // dann sofort, wenn canShowErrorDialogs() false liefert - dieses Flag (mShowDialogs)
+        // ist per Default true und haengt an Settings.Global.HIDE_ERROR_DIALOGS, das hier
+        // niemand setzt. Ohne diese Einstellung wartet das System auf eine Dialog-Interaktion,
+        // die auf diesem Bild nie kommt: der blockierte Prozess wird dann NICHT automatisch
+        // getoetet, sondern laeuft nach dem 30s-Block einfach normal weiter - kein REASON_ANR.
+        // Deshalb hier explizit erzwungen, statt laenger auf ein Ereignis zu warten, das ohne
+        // dieses Flag nie eintritt.
+        device.executeShellCommand("settings put global hide_error_dialogs 1")
+        ausloesen("Main-Thread blockieren (ANR)")
+        // Erst ein weiteres Eingabeereignis macht den blockierten Main-Thread zum Input-ANR.
+        device.pressBack()
         wartenBis("Neuer REASON_ANR fuer den Diagnose-Prozess fehlt") {
             SystemProcessExitSource(app).historischeExits().any {
                 it.timestamp >= start && it.processName.endsWith(":crashprobe") &&
