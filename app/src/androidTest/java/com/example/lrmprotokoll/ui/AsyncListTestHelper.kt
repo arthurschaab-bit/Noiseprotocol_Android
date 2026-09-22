@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -24,12 +26,13 @@ private const val LOG_TAG = "AsyncListTestHelper"
  * CI-Fund (22.09.2026, PR #182, 2. Iteration): die Timeout-Erhoehung allein senkte die
  * Fehlerquote NICHT sichtbar - weiterhin ComposeTimeoutException, nur nach laengerer Wartezeit.
  * Das spricht dagegen, dass es ein reines Zeitproblem ist: die Bedingung tritt in manchen
- * Faellen offenbar gar nicht ein. Statt weiter am Timeout zu drehen, jetzt Diagnose beim
- * endgueltigen Scheitern: ob "home_lazy_column" ueberhaupt existiert UND wie viele
- * text-tragende Knoten insgesamt sichtbar sind, stehen direkt in der Fehlermeldung (im
- * CI-Job-Log sichtbar, kein Artefakt-Download noetig) - unterscheidet "Screen praktisch leer"
- * von "Liste/Screen da, aber anderer Inhalt als erwartet". Der volle Semantics-Baum zusaetzlich
- * in Logcat unter diesem Tag fuer eine tiefere Analyse, falls die Zahlen allein nicht reichen.
+ * Faellen offenbar gar nicht ein.
+ *
+ * CI-Fund (22.09.2026, PR #182, 3. Iteration): die Textknoten-ANZAHL allein (stabil 16-17,
+ * ueber verschiedene Tests/Zielmatcher hinweg) reichte nicht, um "leere Liste" von "Liste mit
+ * unerwartetem Inhalt" zu unterscheiden. Jetzt die tatsaechlichen Textwerte (bis zu 30) direkt
+ * in der Fehlermeldung - im CI-Job-Log sichtbar, kein Artefakt-Download noetig. Der volle
+ * Semantics-Baum zusaetzlich in Logcat unter diesem Tag fuer eine noch tiefere Analyse.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
     try {
@@ -44,15 +47,14 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
     } catch (timeout: Throwable) {
         val lazyColumnGefunden = onAllNodesWithTag("home_lazy_column")
             .fetchSemanticsNodes(atLeastOneRootRequired = false).size
-        val textKnotenGesamt = onAllNodesWithText("", substring = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false).size
+        val textWerte = onAllNodesWithText("", substring = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }
+            .map { it.text }
         runCatching { onRoot().printToLog(LOG_TAG) }
         throw AssertionError(
             "warteUndScrolleZu-Timeout - home_lazy_column-Knoten gefunden: $lazyColumnGefunden, " +
-                "text-tragende Knoten insgesamt: $textKnotenGesamt " +
-                "(home_lazy_column=0: Screen/Liste nicht komponiert; wenige Textknoten insgesamt: " +
-                "Screen praktisch leer/haengt fest; viele Textknoten aber Zielknoten fehlt: " +
-                "anderer Inhalt sichtbar als erwartet). " +
+                "${textWerte.size} Textwerte sichtbar: ${textWerte.take(30)}. " +
                 "Voller Semantics-Baum in Logcat unter Tag \"$LOG_TAG\".",
             timeout,
         )
