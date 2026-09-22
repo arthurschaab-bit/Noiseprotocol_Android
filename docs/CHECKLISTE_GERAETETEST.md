@@ -291,17 +291,21 @@ Service). Die zugrunde liegende Ursache (Doze/Akku-Optimierung, WLAN-only-Einsch
 WLAN-Kontakt über mehrere Tage, oder etwas anderes) lässt sich mit dem hier verfügbaren, sehr
 kurzen Bundle nicht nachweisen – dafür wird echte Mehrtages-Nutzung auf einem Gerät gebraucht.
 
-### F13 — High-End-Bericht: neuer Erstellungs-Ablauf (Teil B, 14.09.2026)
+### F13 — High-End-Bericht: vollständiger V1-Pfad (Schritt 4c)
 
-| Test | Erwartung | Ergebnis |
-|---|---|---|
-| Frei gewählten Datumsbereich mit vollständigen Rohdaten und Stammdaten öffnen | Bericht wird angestoßen; bis `report_bridge.py` vorhanden ist, erscheint der Modulfehler verständlich statt eines Absturzes | |
-| Bereich mit mindestens einem bereits verdichteten Messtag wählen, auch wenn dort noch einzelne Rohwerte liegen | Erzeugung wird vor Python abgelehnt und nennt den konkreten Tag | |
-| Messtag mit mehreren Stammdaten-Einträgen wählen | Explizite Auswahl erscheint; ohne Auswahl startet kein Bericht | |
-| Messtag ohne Stammdaten wählen und Angaben nachtragen | Lücke und Nachtragen-Knopf erscheinen; Nachtrag speichert heutigen Erfassungszeitpunkt getrennt vom historischen Messtag | |
-| Fehlende oder unvollständige Angaben bestehen lassen und Bericht starten | Erstellung bleibt möglich; Lücke wird im Ablauf und nach der Python-Integration sichtbar im PDF bezeichnet | |
-| Messwerte mit unbestätigter A-/Zeitbewertung, Override aus | Bericht wird mit Verweis auf die Berichtsparameter abgelehnt | |
-| Dieselben Werte, Override bewusst aktiviert | Deutliche Warnung im Ablauf; das JSON trägt das Override-Flag, das PDF muss später einen sichtbaren Vorbehalt enthalten | |
+- Automatisierter Emulator-Test vorhanden: synthetische Room-Session → privater CSV-Handoff →
+  echter Chaquopy-/Matplotlib-Aufruf → PDF. Android `PdfRenderer` öffnet/rendert die Datei;
+  FileProvider liefert `%PDF-`. Cleanup und JSON-/Gebiets-/Dateifehler werden geprüft.
+  Tatsächliche CI-Ausführung und Ergebnis siehe Schritt-4c-PR; lokal kein Emulator verfügbar.
+- [ ] Auf dem PCE-323-Gerät einen realen Mehrtagesbericht erzeugen und über „PDF teilen“ öffnen.
+- [ ] Geräteklasse/Kalibrierung, ausgewählte Stammdaten, Galerie-Fotos und fehlende Angaben prüfen.
+- [ ] Override-Warnung auf jeder Seite prüfen; Innenraum ohne Außenrichtwertlinien.
+- [ ] Etwa 20 reale volle Messtage hinsichtlich Laufzeit/Speicher auf dem Zielgerät prüfen.
+- [ ] PDF nach längeren Freitexten, mehreren Sessions und Messlücken visuell gegenprüfen.
+- [ ] Örtliche Gebietseinordnung/Rechts-TODOs durch Owner/rechtskundige Person freigeben.
+
+Die bisherigen Datumsdialog-/Stammdatenauswahl-Tests bleiben bestehen. Ein synthetischer
+Emulatorlauf bestätigt keinen realen Sensor, keine Kalibrierung und keine Rechtsprosa.
 
 ### F14 — M12: Absturzsichere Diagnose mit automatischem Drive-Upload (18.09.2026)
 

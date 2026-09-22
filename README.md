@@ -11,6 +11,12 @@ kalibrierte dBA-Werte statt unkalibrierter Mikrofonwerte zu protokollieren.
 
 ## Status
 
+**High-End-Bericht (Chaquopy): Schritte 1–4 umgesetzt, V1 minimal.** Private CSV-Übergabe,
+Python-Tageskennwerte und gebietsabhängige Matplotlib-PDFs einschließlich Fotos und gespeicherter
+Prüfsummen. Bautagebuch, Quellenverteilung, Dauerlärm-Phasen und Vergleichstage bleiben außerhalb
+V1. Rechts-TODOs bleiben sichtbar. Umfang/Verifikationsgrenzen:
+[`BERICHT_PDF_SEITEN_V1.md`](docs/BERICHT_PDF_SEITEN_V1.md).
+
 | Bereich | Stand |
 |---------|-------|
 | Aufnahme über Mikrofon, Pre-Roll, WAV | ✅ läuft |

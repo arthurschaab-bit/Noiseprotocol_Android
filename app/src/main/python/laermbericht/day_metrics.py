@@ -176,7 +176,7 @@ def resample_to_one_hz(
         )
 
     frame = pd.DataFrame(rows).sort_values("timestamp", kind="stable")
-    frame["second"] = frame["timestamp"].map(lambda value: value.floor("s"))
+    frame["second"] = frame["timestamp"].map(lambda value: value.tz_convert("UTC").floor("s").tz_convert(zone))
     valid = frame.loc[~frame["is_gap"]].copy()
 
     start = frame["second"].min()
@@ -197,8 +197,8 @@ def resample_to_one_hz(
     sessions = tuple(
         sorted(
             (
-                group["timestamp"].min().floor("s"),
-                group["timestamp"].max().floor("s"),
+                group["timestamp"].min().tz_convert("UTC").floor("s").tz_convert(zone),
+                group["timestamp"].max().tz_convert("UTC").floor("s").tz_convert(zone),
             )
             for _, group in frame.groupby("session_id", sort=False)
         ),
@@ -331,7 +331,7 @@ def calculate_day_metrics(
     _validate_config(config)
     grid = resample_to_one_hz(samples, day, config.time_zone)
     day_start = pd.Timestamp(day).tz_localize(_load_time_zone(config.time_zone))
-    day_window_end = day_start + pd.Timedelta(hours=20)
+    day_window_end = day_start.replace(hour=20)
 
     levels = grid.energy_level_db
     peaks = grid.peak_level_db
@@ -586,8 +586,8 @@ def _sessions_in_day(
     sessions: Sequence[SessionPeriod],
     day_start: pd.Timestamp,
 ) -> list[SessionPeriod]:
-    window_start = day_start + pd.Timedelta(hours=7)
-    window_end = day_start + pd.Timedelta(hours=20)
+    window_start = day_start.replace(hour=7)
+    window_end = day_start.replace(hour=20)
     within = []
     for start, end in sessions:
         clipped_start = max(start, window_start)
@@ -603,8 +603,8 @@ def _get_gaps(
 ) -> tuple[list[SessionPeriod], list[SessionPeriod]]:
     """Portiert die Lückenermittlung aus den Referenzzeilen 532-556."""
 
-    window_start = day_start + pd.Timedelta(hours=7)
-    window_end = day_start + pd.Timedelta(hours=20)
+    window_start = day_start.replace(hour=7)
+    window_end = day_start.replace(hour=20)
     merged = _merge_sessions(sessions, gap_seconds=GAP_MIN_SECONDS)
     within = _sessions_in_day(merged, day_start)
     gaps: list[SessionPeriod] = []
