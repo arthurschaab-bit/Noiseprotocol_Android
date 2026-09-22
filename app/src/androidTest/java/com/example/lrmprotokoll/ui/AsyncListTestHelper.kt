@@ -4,6 +4,7 @@ import android.app.Application
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.printToLog
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.NoiseRecord
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -72,6 +74,17 @@ private const val LOG_TAG = "AsyncListTestHelper"
  * Collector existiert nicht mehr (still beendet/abgebrochen), stabil >= 1 = er existiert und
  * wartet, schwankend = er wird staendig neu gestartet. Dazu, ob ein frischer Flow ausserhalb von
  * Compose sofort emittiert.
+ *
+ * CI-Fund (22.09.2026, PR #182, 7. Iteration, Lauf auf be929b3): die UI-Collector existieren und
+ * sind stabil angemeldet (noise_records=1, reference_sounds=1, sessions=3 ueber alle Proben,
+ * needsSync=false), ein frischer Flow liefert die Zeile in 6ms - trotzdem kommt sie nie in der UI
+ * an. Room ist damit vollstaendig entlastet; es haengt zwischen Collector und Compose-State.
+ * Compose UI-Test 1.6.7 fuehrt LaunchedEffects auf einem UnconfinedTestDispatcher aus, der
+ * Collector schreibt den State also vom Room-Thread aus. Zwei gezielte Eingriffe trennen die
+ * verbleibenden Moeglichkeiten: (1) Snapshot.sendApplyNotifications() von Hand - wird die Zeile
+ * dann sichtbar, ging nur die Compose-Benachrichtigung verloren; (2) sonst eine zusaetzliche
+ * Zeile einfuegen - wird die Liste dann befuellt, lebt der Collector und nur seine
+ * Initial-Emission ging verloren; (3) beides wirkungslos - der Collector selbst haengt.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
     val start = System.currentTimeMillis()
@@ -103,12 +116,21 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
             .flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }
             .map { it.text }
         runCatching { onRoot().printToLog(LOG_TAG) }
+        // Eingriffe erst NACH allen reinen Beobachtungen oben - sie veraendern den Zustand.
+        val nachApply = pruefeNachEingriff(matcher) { runOnUiThread { Snapshot.sendApplyNotifications() } }
+        val nachInsert = pruefeNachEingriff(matcher) {
+            runBlocking {
+                ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.database.noiseDao()
+                    .insert(NoiseRecord(timestamp = System.currentTimeMillis(), amplitude = 1.0, filePath = "", label = "DiagnoseSonde"))
+            }
+        }
         throw AssertionError(
             "warteUndScrolleZu-Timeout nach ${elapsedMs}ms, noise_database-Dateigroesse: " +
                 "$dbGroesseBytes Bytes - home_lazy_column-Knoten gefunden: $lazyColumnGefunden, " +
                 "${textWerte.size} Textwerte sichtbar: ${textWerte.take(30)}. " +
                 "Direkt per Framework-SQLite: $rohZaehlung. Ueber Room: $roomZaehlung. " +
                 "Room-Beobachter: $beobachter. " +
+                "Nach Snapshot.sendApplyNotifications(): $nachApply. Nach zusaetzlichem Insert: $nachInsert. " +
                 "Voller Semantics-Baum und voller Thread-Dump in Logcat unter Tag \"$LOG_TAG\".\n" +
                 "Thread-Dump (Room/SQLite/Dispatcher-Threads):\n$threadDump",
             timeout,
@@ -195,6 +217,27 @@ private fun roomBeobachterZustand(): String = runCatching {
         "inProgressSync=${feld(zustaende, "inProgressSync")}, onSyncLock=${feld(zustaende, "onSyncLock")}, " +
         "pendingRefresh=${feld(tracker, "pendingRefresh")}"
 }.getOrElse { "Reflection fehlgeschlagen: $it" }
+
+/**
+ * Fuehrt [eingriff] aus und prueft danach bis zu 3s, ob der Zielknoten erreichbar wird - und, als
+ * zweites Signal unabhaengig vom Ziel, wie viele Textknoten danach sichtbar sind (bei befuellter
+ * Liste mehr als die 19 des Leerzustands).
+ */
+private fun ComposeTestRule.pruefeNachEingriff(matcher: SemanticsMatcher, eingriff: () -> Unit): String = runCatching {
+    eingriff()
+    val erreichbar = runCatching {
+        waitUntil(timeoutMillis = 3_000) {
+            try {
+                onNodeWithTag("home_lazy_column").performScrollToNode(matcher)
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+    }.isSuccess
+    val texte = onAllNodesWithText("", substring = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size
+    "Ziel erreichbar=$erreichbar, Textknoten=$texte"
+}.getOrElse { "Fehler ${it.javaClass.simpleName}: ${it.message}" }
 
 private fun feld(objekt: Any?, name: String): Any? {
     checkNotNull(objekt) { "Kein Objekt fuer Feld $name" }
