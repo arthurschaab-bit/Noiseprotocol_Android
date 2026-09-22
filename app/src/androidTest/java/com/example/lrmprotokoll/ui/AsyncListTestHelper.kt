@@ -2,8 +2,13 @@ package com.example.lrmprotokoll.ui
 
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.printToLog
+
+private const val LOG_TAG = "AsyncListTestHelper"
 
 /**
  * Room-Flows laufen auf IO; Compose-Idle garantiert noch keine erste Datenemission.
@@ -14,14 +19,34 @@ import androidx.compose.ui.test.performScrollToNode
  * teilen. Zeigte sich als wechselnde ComposeTimeoutException in verschiedenen, voneinander
  * unabhaengigen Home-/Meter-Tests ueber mehrere CI-Laeufe hinweg (nie dieselben Tests zweimal -
  * klassisches Lastflakiness-Muster, kein Logikfehler). Grosszuegiger gefasst statt geraten.
+ *
+ * CI-Fund (22.09.2026, PR #182, 2. Iteration): die Timeout-Erhoehung allein senkte die
+ * Fehlerquote NICHT sichtbar - weiterhin ComposeTimeoutException, nur nach laengerer Wartezeit.
+ * Das spricht dagegen, dass es ein reines Zeitproblem ist: die Bedingung tritt in manchen
+ * Faellen offenbar gar nicht ein. Statt weiter am Timeout zu drehen, jetzt Diagnose beim
+ * endgueltigen Scheitern: ob "home_lazy_column" ueberhaupt existiert steht direkt in der
+ * Fehlermeldung (im CI-Job-Log sichtbar, kein Artefakt-Download noetig), der volle
+ * Semantics-Baum zusaetzlich in Logcat unter diesem Tag fuer eine tiefere Analyse.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
-    waitUntil(timeoutMillis = 20_000) {
-        try {
-            onNodeWithTag("home_lazy_column").performScrollToNode(matcher)
-            true
-        } catch (_: AssertionError) {
-            false
+    try {
+        waitUntil(timeoutMillis = 20_000) {
+            try {
+                onNodeWithTag("home_lazy_column").performScrollToNode(matcher)
+                true
+            } catch (_: AssertionError) {
+                false
+            }
         }
+    } catch (timeout: Throwable) {
+        val lazyColumnGefunden = onAllNodesWithTag("home_lazy_column")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).size
+        runCatching { onRoot().printToLog(LOG_TAG) }
+        throw AssertionError(
+            "warteUndScrolleZu-Timeout - home_lazy_column-Knoten gefunden: $lazyColumnGefunden " +
+                "(0 = Screen/Liste nicht komponiert, 1 = Liste da aber Zielknoten fehlt). " +
+                "Voller Semantics-Baum in Logcat unter Tag \"$LOG_TAG\".",
+            timeout,
+        )
     }
 }
