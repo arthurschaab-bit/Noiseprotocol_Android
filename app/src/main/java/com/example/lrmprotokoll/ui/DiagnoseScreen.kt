@@ -460,40 +460,7 @@ fun DiagnoseScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Testabsturz (M12 Schritt 1)", style = MaterialTheme.typography.labelMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = { throw RuntimeException("Testabsturz (Debug): ACRA-Kette pruefen") },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("RuntimeException auslösen")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            // Bewusst direkt geworfen statt tatsaechlich Speicher vollzuschaufeln:
-                            // ACRA faengt jeden Throwable gleich ab, ein echter Allokationssturm
-                            // waere nur langsamer und riskanter (Emulator/Geraet destabilisieren),
-                            // ohne die Kette Absturz -> Bundle -> Drive anders zu pruefen.
-                            throw OutOfMemoryError("Testabsturz (Debug): ACRA-Kette pruefen (OOM)")
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("OutOfMemoryError provozieren")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            // Blockiert absichtlich den Main-Thread, um einen ANR auszuloesen -
-                            // ohne diesen Ausloeser ist die Kette Absturz -> Bundle -> Drive in
-                            // keinem der folgenden M12-Schritte am Stueck pruefbar (Konzept
-                            // Abschnitt 7).
-                            Thread.sleep(30_000)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Main-Thread blockieren (ANR)")
-                    }
+                    CrashTriggerButtons()
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -634,6 +601,57 @@ fun DiagnoseScreen(
             }
             items(syncHistorie) { tag -> SyncHistorieZeile(tag) }
         }
+    }
+}
+
+/**
+ * Die drei Testabsturz-Ausloeser (M12 Schritt 1) - eigene, wiederverwendbare Komponente statt
+ * inline in [DiagnoseScreen]: [CrashProbeActivity] (`app/src/debug`, M12 Schritt 8 CI-Fund
+ * 22.09.2026, PR #182) rendert NUR diese Buttons in einem eigenen Prozess (`:crashprobe`) statt
+ * des gesamten DiagnoseScreens. Grund: der instrumentierte Absturztest fand die Buttons dort
+ * zuverlaessig NICHT - anders als Composes eigene `onNodeWithText`/`performScrollToIndex`
+ * (die den vollen Semantics-Baum unabhaengig vom aktuellen Sichtbereich abfragen) scrollt
+ * UiAutomators `UiScrollable` per echten Swipe-Gesten durch den Accessibility-Baum, der
+ * praktisch nur das aktuell Sichtbare/Naheliegende zeigt - innerhalb der einen, sehr hohen
+ * LazyColumn-Sektion (Status, Fernwartungs-Karte, Support-Bundles-Karte, dann erst dieser
+ * Abschnitt) kam er dort nicht zuverlaessig an. `internal` statt `private`, damit
+ * [CrashProbeActivity] (anderes Paket-File, gleiches Paket) sie aufrufen kann.
+ */
+@Composable
+internal fun CrashTriggerButtons() {
+    Text("Testabsturz (M12 Schritt 1)", style = MaterialTheme.typography.labelMedium)
+    Spacer(modifier = Modifier.height(4.dp))
+    OutlinedButton(
+        onClick = { throw RuntimeException("Testabsturz (Debug): ACRA-Kette pruefen") },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("RuntimeException auslösen")
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = {
+            // Bewusst direkt geworfen statt tatsaechlich Speicher vollzuschaufeln:
+            // ACRA faengt jeden Throwable gleich ab, ein echter Allokationssturm
+            // waere nur langsamer und riskanter (Emulator/Geraet destabilisieren),
+            // ohne die Kette Absturz -> Bundle -> Drive anders zu pruefen.
+            throw OutOfMemoryError("Testabsturz (Debug): ACRA-Kette pruefen (OOM)")
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("OutOfMemoryError provozieren")
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = {
+            // Blockiert absichtlich den Main-Thread, um einen ANR auszuloesen -
+            // ohne diesen Ausloeser ist die Kette Absturz -> Bundle -> Drive in
+            // keinem der folgenden M12-Schritte am Stueck pruefbar (Konzept
+            // Abschnitt 7).
+            Thread.sleep(30_000)
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Main-Thread blockieren (ANR)")
     }
 }
 
