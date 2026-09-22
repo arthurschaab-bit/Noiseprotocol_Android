@@ -92,9 +92,9 @@ class HomeLoeschbestaetigungInstrumentedTest {
         // derselben Flow wie die DB gespeist, ihr Fortbestehen beweist also, dass nichts geloescht
         // wurde.
         val zweiMuster = composeRule.activity.getString(R.string.learned_patterns_count, 2)
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(zweiMuster))
+        composeRule.warteUndScrolleZu(hasText(zweiMuster))
         composeRule.onNodeWithText(zweiMuster).assertExists()
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_delete_reference_${muster1.name}"))
+        composeRule.warteUndScrolleZu(hasTestTag("btn_delete_reference_${muster1.name}"))
         composeRule.onNodeWithTag("btn_delete_reference_${muster1.name}").assertIsDisplayed()
     }
 
@@ -103,7 +103,7 @@ class HomeLoeschbestaetigungInstrumentedTest {
         setzeInhalt()
 
         val zweiMuster = composeRule.activity.getString(R.string.learned_patterns_count, 2)
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(zweiMuster))
+        composeRule.warteUndScrolleZu(hasText(zweiMuster))
         composeRule.onNodeWithText(zweiMuster).assertExists()
 
         oeffneLoeschDialogFuer(muster1.name)
@@ -113,11 +113,11 @@ class HomeLoeschbestaetigungInstrumentedTest {
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.delete_pattern_title)).assertDoesNotExist()
         composeRule.onNodeWithTag("btn_delete_reference_${muster1.name}").assertDoesNotExist()
         val einMuster = composeRule.activity.getString(R.string.learned_patterns_count, 1)
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(einMuster))
+        composeRule.warteUndScrolleZu(hasText(einMuster))
         composeRule.onNodeWithText(einMuster).assertExists()
 
         // Das zweite Muster darf davon unberuehrt bleiben.
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_delete_reference_${muster2.name}"))
+        composeRule.warteUndScrolleZu(hasTestTag("btn_delete_reference_${muster2.name}"))
         composeRule.onNodeWithTag("btn_delete_reference_${muster2.name}").assertIsDisplayed()
     }
 }
