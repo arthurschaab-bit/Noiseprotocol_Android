@@ -8,8 +8,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiScrollable
-import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
@@ -36,10 +34,13 @@ class CrashDiagnoseInstrumentedTest {
             Intent().setClassName(app, "com.example.lrmprotokoll.ui.CrashProbeActivity")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
-        assertTrue("Diagnose-Prozess muss sichtbar werden", device.wait(Until.hasObject(By.pkg(app.packageName)), 20_000))
-        val scroll = UiScrollable(UiSelector().scrollable(true))
-        assertTrue("Debug-Ausloeser muss sichtbar sein: $buttonText", scroll.scrollTextIntoView(buttonText))
-        val button = device.findObject(By.text(buttonText))
+        // CI-Fund (22.09.2026, PR #182): CrashProbeActivity zeigt seit der Extraktion der
+        // Buttons in CrashTriggerButtons() (DiagnoseScreen.kt) nur noch diese drei Buttons in
+        // einer einfachen, NICHT scrollbaren Column - kein Scrollen mehr noetig. Ein zuvor
+        // hier verwendetes UiScrollable(UiSelector().scrollable(true)) warf sogar
+        // UiObjectNotFoundException("SCROLLABLE=true"): es versucht intern zuerst, zum
+        // (nicht mehr vorhandenen) Listenanfang zu scrollen, bevor es ueberhaupt sucht.
+        val button = device.wait(Until.findObject(By.text(buttonText)), 20_000)
         checkNotNull(button) { "Debug-Ausloeser fehlt: $buttonText" }
         button.click()
     }
