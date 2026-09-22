@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import android.app.Application
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.printToLog
+import androidx.test.core.app.ApplicationProvider
 
 private const val LOG_TAG = "AsyncListTestHelper"
 
@@ -33,8 +35,19 @@ private const val LOG_TAG = "AsyncListTestHelper"
  * unerwartetem Inhalt" zu unterscheiden. Jetzt die tatsaechlichen Textwerte (bis zu 30) direkt
  * in der Fehlermeldung - im CI-Job-Log sichtbar, kein Artefakt-Download noetig. Der volle
  * Semantics-Baum zusaetzlich in Logcat unter diesem Tag fuer eine noch tiefere Analyse.
+ *
+ * CI-Fund (22.09.2026, PR #182, 4. Iteration): die Textwerte zeigten den echten Leerzustand
+ * (R.string.empty_records_title/-desc) statt der erwarteten Aufnahme - der Screen ist also
+ * korrekt komponiert, aber dao.getAll().collectAsState(initial = emptyList()) (MainActivity.kt)
+ * hat die per @Before synchron eingefuegte Zeile nicht rechtzeitig gesehen. Bevor daran etwas
+ * geaendert wird: zwei zusaetzliche, gezielt messbare Groessen in der Fehlermeldung, um zwischen
+ * "generische Race" und "Datenbankdatei waechst ueber den ~218-Test-Orchestrator-Lauf, weil
+ * kein clearPackageData zwischen Testmethoden laeuft (bewusste Repo-Konvention) und nicht jeder
+ * Test aufraeumt" zu unterscheiden: die tatsaechlich verstrichene Wartezeit UND die aktuelle
+ * Groesse der "noise_database"-Datei auf der Platte.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
+    val start = System.currentTimeMillis()
     try {
         waitUntil(timeoutMillis = 20_000) {
             try {
@@ -45,6 +58,11 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
             }
         }
     } catch (timeout: Throwable) {
+        val elapsedMs = System.currentTimeMillis() - start
+        val dbGroesseBytes = runCatching {
+            ApplicationProvider.getApplicationContext<Application>()
+                .getDatabasePath("noise_database").length()
+        }.getOrDefault(-1)
         val lazyColumnGefunden = onAllNodesWithTag("home_lazy_column")
             .fetchSemanticsNodes(atLeastOneRootRequired = false).size
         val textWerte = onAllNodesWithText("", substring = true)
@@ -53,7 +71,8 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
             .map { it.text }
         runCatching { onRoot().printToLog(LOG_TAG) }
         throw AssertionError(
-            "warteUndScrolleZu-Timeout - home_lazy_column-Knoten gefunden: $lazyColumnGefunden, " +
+            "warteUndScrolleZu-Timeout nach ${elapsedMs}ms, noise_database-Dateigroesse: " +
+                "$dbGroesseBytes Bytes - home_lazy_column-Knoten gefunden: $lazyColumnGefunden, " +
                 "${textWerte.size} Textwerte sichtbar: ${textWerte.take(30)}. " +
                 "Voller Semantics-Baum in Logcat unter Tag \"$LOG_TAG\".",
             timeout,
