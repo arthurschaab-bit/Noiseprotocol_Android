@@ -26,24 +26,70 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val LOG_TAG = "AsyncListTestHelper"
 
 /**
- * Room-Flows laufen auf IO; Compose-Idle garantiert noch keine erste Datenemission. Deshalb auf
- * den Zielknoten warten statt nur auf waitForIdle().
+ * Room-Flows laufen auf IO; Compose-Idle garantiert noch keine erste Datenemission.
  *
- * CI-Fund (22.09.2026, PR #182, aufgeklaert): unter dem Test Orchestrator blieb die Home-Liste
- * sporadisch leer. Ursache war nicht Room und kein Timing-Problem (die Timeout-Erhoehung auf 20s
- * hatte nichts geaendert und ist wieder zurueckgenommen), sondern ein verlorener State-Write: in
- * Compose-UI-Tests laufen Effekte auf einem UnconfinedTestDispatcher, collectAsState schrieb die
- * erste Emission deshalb vom Room-Thread aus, 9 ms nach der ersten Komposition, und die
- * Invalidierung ging verloren. Fix in NoiseProtocolApp (collectAsStateWithLifecycle, sammelt auf
- * Dispatchers.Main.immediate). Die Diagnose unten bleibt fuer kuenftige Faelle: sie meldet beim
- * Timeout Thread-Dump, Datenbankinhalt direkt und ueber Room, Rooms Beobachterzaehler und das
- * Ergebnis zweier Eingriffe (sendApplyNotifications, zusaetzlicher Insert), die "Emission kommt
- * nicht an" von "State-Write/Invalidierung verloren" trennen.
+ * CI-Fund (22.09.2026, PR #182): 10s Timeout war unter dem seit Schritt 8 eingefuehrten Test
+ * Orchestrator zu knapp - jede Testmethode startet dort in einem frischen Prozess, zahlt also
+ * den vollen Room-/Compose-Kaltstart statt ihn sich mit anderen Tests im selben Prozess zu
+ * teilen. Zeigte sich als wechselnde ComposeTimeoutException in verschiedenen, voneinander
+ * unabhaengigen Home-/Meter-Tests ueber mehrere CI-Laeufe hinweg (nie dieselben Tests zweimal -
+ * klassisches Lastflakiness-Muster, kein Logikfehler). Grosszuegiger gefasst statt geraten.
+ *
+ * CI-Fund (22.09.2026, PR #182, 2. Iteration): die Timeout-Erhoehung allein senkte die
+ * Fehlerquote NICHT sichtbar - weiterhin ComposeTimeoutException, nur nach laengerer Wartezeit.
+ * Das spricht dagegen, dass es ein reines Zeitproblem ist: die Bedingung tritt in manchen
+ * Faellen offenbar gar nicht ein.
+ *
+ * CI-Fund (22.09.2026, PR #182, 3. Iteration): die Textknoten-ANZAHL allein (stabil 16-17,
+ * ueber verschiedene Tests/Zielmatcher hinweg) reichte nicht, um "leere Liste" von "Liste mit
+ * unerwartetem Inhalt" zu unterscheiden. Jetzt die tatsaechlichen Textwerte (bis zu 30) direkt
+ * in der Fehlermeldung - im CI-Job-Log sichtbar, kein Artefakt-Download noetig. Der volle
+ * Semantics-Baum zusaetzlich in Logcat unter diesem Tag fuer eine noch tiefere Analyse.
+ *
+ * CI-Fund (22.09.2026, PR #182, 4. Iteration): die Textwerte zeigten den echten Leerzustand
+ * (R.string.empty_records_title/-desc) statt der erwarteten Aufnahme - der Screen ist also
+ * korrekt komponiert, aber dao.getAll().collectAsState(initial = emptyList()) (MainActivity.kt)
+ * hat die per @Before synchron eingefuegte Zeile nicht rechtzeitig gesehen. Bevor daran etwas
+ * geaendert wird: zwei zusaetzliche, gezielt messbare Groessen in der Fehlermeldung, um zwischen
+ * "generische Race" und "Datenbankdatei waechst ueber den ~218-Test-Orchestrator-Lauf, weil
+ * kein clearPackageData zwischen Testmethoden laeuft (bewusste Repo-Konvention) und nicht jeder
+ * Test aufraeumt" zu unterscheiden: die tatsaechlich verstrichene Wartezeit UND die aktuelle
+ * Groesse der "noise_database"-Datei auf der Platte.
+ *
+ * CI-Fund (22.09.2026, PR #182, 5. Iteration): das Logcat des Laufs auf ebf0f63 zeigt im
+ * haengenden Testprozess 20s lang KEINE einzige App-Logzeile und systemweit keine Last (kein
+ * dexopt, keine uebersprungenen Frames) - der Prozess haengt, er ist nicht bloss langsam. Room 2.8
+ * gibt die erste Flow-Emission erst nach syncTriggers() frei, das den einzigen Schreib-Connection
+ * in einer IMMEDIATE-Transaktion braucht; Queries und Transaktionen teilen sich ausserdem die vier
+ * arch_disk_io-Threads. Um "Zeile fehlt" von "Room blockiert" zu trennen und im zweiten Fall den
+ * Blockierer zu sehen, zusaetzlich: ein Thread-Dump im Moment des Timeouts (gefiltert in der
+ * Fehlermeldung, vollstaendig im Logcat), eine Room-unabhaengige Zaehlung direkt ueber das
+ * Framework-SQLite und dieselbe Abfrage ueber Room mit eigenem Timeout.
+ *
+ * CI-Fund (22.09.2026, PR #182, 6. Iteration, Lauf auf 91df90c): Room ist NICHT blockiert - alle
+ * vier arch_disk_io-Threads und der Main-Thread sind idle, die Daten liegen in der Datei
+ * (reference_sounds=2) und Room beantwortet eine direkte Abfrage sofort. Trotzdem hat die UI die
+ * Emission ihres Flows nie erhalten. Offen ist damit nur noch, was mit dem UI-Collector selbst
+ * los ist. Rooms interner Beobachterzaehler je Tabelle (ObservedTableStates) zeigt das: 0 = der
+ * Collector existiert nicht mehr (still beendet/abgebrochen), stabil >= 1 = er existiert und
+ * wartet, schwankend = er wird staendig neu gestartet. Dazu, ob ein frischer Flow ausserhalb von
+ * Compose sofort emittiert.
+ *
+ * CI-Fund (22.09.2026, PR #182, 7. Iteration, Lauf auf be929b3): die UI-Collector existieren und
+ * sind stabil angemeldet (noise_records=1, reference_sounds=1, sessions=3 ueber alle Proben,
+ * needsSync=false), ein frischer Flow liefert die Zeile in 6ms - trotzdem kommt sie nie in der UI
+ * an. Room ist damit vollstaendig entlastet; es haengt zwischen Collector und Compose-State.
+ * Compose UI-Test 1.6.7 fuehrt LaunchedEffects auf einem UnconfinedTestDispatcher aus, der
+ * Collector schreibt den State also vom Room-Thread aus. Zwei gezielte Eingriffe trennen die
+ * verbleibenden Moeglichkeiten: (1) Snapshot.sendApplyNotifications() von Hand - wird die Zeile
+ * dann sichtbar, ging nur die Compose-Benachrichtigung verloren; (2) sonst eine zusaetzliche
+ * Zeile einfuegen - wird die Liste dann befuellt, lebt der Collector und nur seine
+ * Initial-Emission ging verloren; (3) beides wirkungslos - der Collector selbst haengt.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
     val start = System.currentTimeMillis()
     try {
-        waitUntil(timeoutMillis = 10_000) {
+        waitUntil(timeoutMillis = 20_000) {
             try {
                 onNodeWithTag("home_lazy_column").performScrollToNode(matcher)
                 true
