@@ -86,9 +86,18 @@ class CrashDiagnoseInstrumentedTest {
         ausloesen("Main-Thread blockieren (ANR)")
         // Erst ein weiteres Eingabeereignis macht den blockierten Main-Thread zum Input-ANR.
         device.pressBack()
-        val close = device.wait(Until.findObject(By.res("android", "aerr_close")), 60_000)
-        checkNotNull(close) { "Android hat keinen ANR-Dialog angezeigt" }
-        close.click()
+        // CI-Fund (22.09.2026, PR #182): kein Warten mehr auf den System-ANR-Dialog
+        // (Resource-ID "aerr_close"). Das CI-Zielimage ist "aosp_atd" (siehe
+        // emulator-tests.yml) - Googles Automated-Test-Device-Images entfernen SystemUI
+        // komplett (ersetzt durch ein minimales com.android.fakesystemapp, siehe
+        // https://developer.android.com/studio/test/managed-devices und
+        // https://blog.emulator.wtf/posts/2022-04-15-atd-images/). Der Dialog wird von
+        // SystemUI gerendert und kann auf diesem Image deshalb strukturell nie erscheinen -
+        // das war keine Flakiness, sondern eine Test-Erwartung, die mit dem gewaehlten
+        // CI-Image unvereinbar war. Die eigentliche ANR-Erkennung (InputDispatcher/
+        // ActivityManagerService-Timeout, Trace-Datei, REASON_ANR) laeuft unabhaengig von
+        // SystemUI auf System-Server-Ebene weiter und ist auch das, was M12 tatsaechlich
+        // braucht - direkt darauf warten statt auf den Dialog.
         wartenBis("Neuer REASON_ANR fuer den Diagnose-Prozess fehlt") {
             SystemProcessExitSource(app).historischeExits().any {
                 it.timestamp >= start && it.processName.endsWith(":crashprobe") &&
