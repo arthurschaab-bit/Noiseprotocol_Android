@@ -17,6 +17,7 @@ import androidx.compose.ui.test.printToLog
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.AppDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -62,6 +63,15 @@ private const val LOG_TAG = "AsyncListTestHelper"
  * Blockierer zu sehen, zusaetzlich: ein Thread-Dump im Moment des Timeouts (gefiltert in der
  * Fehlermeldung, vollstaendig im Logcat), eine Room-unabhaengige Zaehlung direkt ueber das
  * Framework-SQLite und dieselbe Abfrage ueber Room mit eigenem Timeout.
+ *
+ * CI-Fund (22.09.2026, PR #182, 6. Iteration, Lauf auf 91df90c): Room ist NICHT blockiert - alle
+ * vier arch_disk_io-Threads und der Main-Thread sind idle, die Daten liegen in der Datei
+ * (reference_sounds=2) und Room beantwortet eine direkte Abfrage sofort. Trotzdem hat die UI die
+ * Emission ihres Flows nie erhalten. Offen ist damit nur noch, was mit dem UI-Collector selbst
+ * los ist. Rooms interner Beobachterzaehler je Tabelle (ObservedTableStates) zeigt das: 0 = der
+ * Collector existiert nicht mehr (still beendet/abgebrochen), stabil >= 1 = er existiert und
+ * wartet, schwankend = er wird staendig neu gestartet. Dazu, ob ein frischer Flow ausserhalb von
+ * Compose sofort emittiert.
  */
 internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
     val start = System.currentTimeMillis()
@@ -82,6 +92,8 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
             ApplicationProvider.getApplicationContext<Application>()
                 .getDatabasePath("noise_database").length()
         }.getOrDefault(-1)
+        // Vor jedem frischen Flow unten, der die Zaehler sonst selbst erhoehen wuerde.
+        val beobachter = roomBeobachterZustand()
         val rohZaehlung = zaehleDirektUeberFrameworkSqlite()
         val roomZaehlung = zaehleUeberRoomMitTimeout()
         val lazyColumnGefunden = onAllNodesWithTag("home_lazy_column")
@@ -96,6 +108,7 @@ internal fun ComposeTestRule.warteUndScrolleZu(matcher: SemanticsMatcher) {
                 "$dbGroesseBytes Bytes - home_lazy_column-Knoten gefunden: $lazyColumnGefunden, " +
                 "${textWerte.size} Textwerte sichtbar: ${textWerte.take(30)}. " +
                 "Direkt per Framework-SQLite: $rohZaehlung. Ueber Room: $roomZaehlung. " +
+                "Room-Beobachter: $beobachter. " +
                 "Voller Semantics-Baum und voller Thread-Dump in Logcat unter Tag \"$LOG_TAG\".\n" +
                 "Thread-Dump (Room/SQLite/Dispatcher-Threads):\n$threadDump",
             timeout,
@@ -137,11 +150,59 @@ private fun zaehleDirektUeberFrameworkSqlite(): String = runCatching {
     }
 }.getOrElse { "Fehler ${it.javaClass.simpleName}: ${it.message}" }
 
-/** Dieselbe Abfrage wie die Home-Liste, aber ueber Room und mit eigenem 3s-Timeout. */
+/**
+ * Dieselben Abfragen wie die Home-Liste ueber Room, jeweils mit eigenem 3s-Timeout: einmal direkt
+ * (suspend), einmal als FRISCHER Flow (getAll()/getAllReferences() + first()) ausserhalb von
+ * Compose - letzteres durchlaeuft wie der UI-Collector syncTriggers() und die Initial-Emission.
+ */
 private fun zaehleUeberRoomMitTimeout(): String = runCatching {
     val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
     val db = app.container.database
+    val dao = db.noiseDao()
     val zustand = "Instanz=AppDatabase-Singleton: ${db === AppDatabase.getDatabase(app)}, isOpen=${db.isOpen}"
-    val anzahl = runBlocking { withTimeoutOrNull(3_000) { db.noiseDao().getAlleAktiven().size } }
-    "$zustand, aktive noise_records=${anzahl ?: "TIMEOUT nach 3000ms"}"
+    val direkt = runBlocking { withTimeoutOrNull(3_000) { dao.getAlleAktiven().size } }
+    val muster = runCatching { dao.getAllReferencesBlocking().size.toString() }.getOrElse { "Fehler: $it" }
+    val start = System.currentTimeMillis()
+    val flowRecords = runBlocking { withTimeoutOrNull(3_000) { dao.getAll().first().size } }
+    val flowMuster = runBlocking { withTimeoutOrNull(3_000) { dao.getAllReferences().first().size } }
+    val flowMs = System.currentTimeMillis() - start
+    "$zustand, direkt: aktive noise_records=${direkt ?: "TIMEOUT"}, reference_sounds=$muster; " +
+        "frischer Flow: getAll()=${flowRecords ?: "TIMEOUT"}, getAllReferences()=${flowMuster ?: "TIMEOUT"} " +
+        "(beide zusammen ${flowMs}ms)"
 }.getOrElse { "Fehler ${it.javaClass.simpleName}: ${it.message}" }
+
+/**
+ * Rooms interner Zustand der Tabellenbeobachtung per Reflection (nur Testcode, Room 2.8.4:
+ * InvalidationTracker.implementation -> TriggerBasedInvalidationTracker.observedTableStates).
+ * Fuenf Proben ueber eine Sekunde, damit "Collector weg" (0), "wartet" (stabil) und "wird
+ * staendig neu gestartet" (schwankend) unterscheidbar sind.
+ */
+private fun roomBeobachterZustand(): String = runCatching {
+    val db = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.database
+    val tracker = feld(db.invalidationTracker, "implementation")
+    @Suppress("UNCHECKED_CAST")
+    val tabellenIds = feld(tracker, "tableIdLookup") as Map<String, Int>
+    val zustaende = feld(tracker, "observedTableStates")
+    val zaehler = feld(zustaende, "tableObserversCount") as LongArray
+    val beobachtet = listOf("noise_records", "reference_sounds", "sessions")
+    val proben = (1..5).map { probe ->
+        if (probe > 1) Thread.sleep(250)
+        beobachtet.joinToString(prefix = "{", postfix = "}") { name ->
+            "$name=${tabellenIds[name]?.let { zaehler[it] } ?: "?"}"
+        }
+    }
+    "Zaehler $proben, needsSync=${feld(zustaende, "needsSync")}, " +
+        "inProgressSync=${feld(zustaende, "inProgressSync")}, onSyncLock=${feld(zustaende, "onSyncLock")}, " +
+        "pendingRefresh=${feld(tracker, "pendingRefresh")}"
+}.getOrElse { "Reflection fehlgeschlagen: $it" }
+
+private fun feld(objekt: Any?, name: String): Any? {
+    checkNotNull(objekt) { "Kein Objekt fuer Feld $name" }
+    var klasse: Class<*>? = objekt.javaClass
+    while (klasse != null) {
+        val treffer = klasse.declaredFields.firstOrNull { it.name == name }
+        if (treffer != null) return treffer.apply { isAccessible = true }.get(objekt)
+        klasse = klasse.superclass
+    }
+    error("Feld $name nicht in ${objekt.javaClass.name}")
+}

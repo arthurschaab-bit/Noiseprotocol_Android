@@ -150,8 +150,14 @@ class MeterScreenAndroidTest {
         container.settingsManager.meterDeviceName = testName
 
         runBlocking {
-            fakeTransport.connect(BoundDevice(testAddress, testName))
+            // CI-Fund (22.09.2026, PR #182): Stall VOR connect() setzen, nicht danach.
+            // connect() startet die Emit-Schleife asynchron; lief deren erste Iteration an der
+            // !stalled-Pruefung vorbei, bevor simulateStall(true) griff, kam ihr synthetischer
+            // Frame (55 +/- 3 dB, ohne Bewertung) NACH dem hier eingespeisten Frame an und
+            // ueberschrieb ihn (CI: Anzeige "54.5 dB" statt 68). Unter dem Test Orchestrator ist
+            // die erste Iteration im frischen Prozess langsamer, deshalb trat das erst dort auf.
             fakeTransport.simulateStall(true)
+            fakeTransport.connect(BoundDevice(testAddress, testName))
             fakeTransport.emitFrame(
                 level = 68.4,
                 weighting = Weighting.A,
@@ -190,8 +196,9 @@ class MeterScreenAndroidTest {
         container.settingsManager.meterDeviceName = testName
 
         runBlocking {
-            fakeTransport.connect(BoundDevice(testAddress, testName))
+            // Stall vor connect(), siehe liveStreamingZeigtPegelUndParameterkarte.
             fakeTransport.simulateStall(true)
+            fakeTransport.connect(BoundDevice(testAddress, testName))
             fakeTransport.emitFrame(
                 level = 55.2,
                 weighting = Weighting.A,
