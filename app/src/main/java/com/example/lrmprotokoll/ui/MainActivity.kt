@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -79,6 +80,9 @@ import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -359,6 +363,23 @@ fun AppNavigationBar(
     }
 }
 
+private const val HOME_FLOW_DIAG = "HomeFlowDiag"
+private val homeFlowDiagZaehler = java.util.concurrent.atomic.AtomicInteger()
+
+/** TEMPORAERE DIAGNOSE (PR #182), siehe Kommentar an der Aufrufstelle in [NoiseProtocolApp]. */
+private fun <T : List<*>> kotlinx.coroutines.flow.Flow<T>.homeFlowDiagnose(name: String): kotlinx.coroutines.flow.Flow<T> {
+    val nr = homeFlowDiagZaehler.incrementAndGet()
+    var emissionen = 0
+    return onStart { Log.d(HOME_FLOW_DIAG, "$name#$nr Start auf ${Thread.currentThread().name}") }
+        .onEach {
+            emissionen++
+            Log.d(HOME_FLOW_DIAG, "$name#$nr Emission $emissionen, Groesse ${it.size}, Thread ${Thread.currentThread().name}")
+        }
+        .onCompletion { ursache ->
+            Log.d(HOME_FLOW_DIAG, "$name#$nr Ende nach $emissionen Emissionen, Ursache: ${ursache?.javaClass?.simpleName ?: "normal"}")
+        }
+}
+
 internal fun istBottomNavZielAktiv(currentRoute: String?, ziel: String): Boolean =
     currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
 
@@ -379,8 +400,16 @@ fun NoiseProtocolApp(
     val db = container.database
     val dao = db.noiseDao()
     val rohdatenDao = db.klassifikationsRohdatenDao()
-    val records by dao.getAll().collectAsState(initial = emptyList())
-    val references by dao.getAllReferences().collectAsState(initial = emptyList())
+    // TEMPORAERE DIAGNOSE (PR #182, 22.09.2026) - wird nach Auswertung wieder entfernt.
+    // Emulator-Tests zeigen sporadisch: die ERSTE Emission dieser Flows erreicht den UI-State nie,
+    // jede spaetere schon (Room, Threads und Compose-Benachrichtigung sind per Diagnose entlastet).
+    // Die Operatoren unten aendern das Verhalten nicht (weiterhin ein neuer Flow je Komposition,
+    // wie bisher) und zeigen je Testlauf: wie oft die Sammlung startet/endet, ob und mit welcher
+    // Groesse die erste Emission beim Collector ankommt und auf welchem Thread.
+    val kompositionNr = remember { java.util.concurrent.atomic.AtomicInteger() }
+    SideEffect { Log.d(HOME_FLOW_DIAG, "NoiseProtocolApp Komposition #${kompositionNr.incrementAndGet()}") }
+    val records by dao.getAll().homeFlowDiagnose("records").collectAsState(initial = emptyList())
+    val references by dao.getAllReferences().homeFlowDiagnose("references").collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val reportManager = remember { ReportManager(context) }
 
