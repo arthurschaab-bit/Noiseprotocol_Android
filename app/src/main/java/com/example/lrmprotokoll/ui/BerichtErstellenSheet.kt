@@ -46,6 +46,7 @@ import com.example.lrmprotokoll.report.BerichtTag
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import com.example.lrmprotokoll.report.auswahlFehler
+import com.example.lrmprotokoll.report.areaSelectionError
 import com.example.lrmprotokoll.report.bewertungsFehler
 import com.example.lrmprotokoll.report.fehlendeStammdatenFelder
 import com.example.lrmprotokoll.report.gewaehlteStammdaten
@@ -112,6 +113,7 @@ fun BerichtErstellenSheet(
             else -> retentionFehler(tage)
                 ?: bewertungsFehler(tage, aktuell)
                 ?: auswahlFehler(tage, ausgewaehlteIds)
+                ?: areaSelectionError(aktuell.gebietseinstufung)
         }
         if (fehler != null) {
             meldung = fehler

@@ -21,8 +21,9 @@ import kotlinx.coroutines.flow.Flow
  * - Vollmessung: >= [tierSchwelleVollmessungProzent]
  * - Teilerfassung ("~"): zwischen [tierSchwelleTeilerfassungProzent] und
  *   [tierSchwelleVollmessungProzent] - genutzt wird dann [schaetzpegelTeilerfassungDb]
- * - Messfenster ("M"): < [tierSchwelleTeilerfassungProzent] - genutzt wird
- *   [schaetzpegelMessfensterAbbruchDb]
+ * - Messfenster ("M"): < [tierSchwelleTeilerfassungProzent] - Schritt 4b verwendet den
+ *   Tagesrichtwert des gewählten Gebiets. [schaetzpegelMessfensterAbbruchDb] bleibt als
+ *   Altwert erhalten, wird für die neue Hochrechnung aber nicht verwendet.
  *
  * Owner-Klarstellung 13.09.2026: `adresse`/`hardwareId` (bis v22 hier enthalten) sind entfernt
  * (Migration [MIGRATION_22_23]) - beide waren redundant zu den bereits pro Messung erfassten
@@ -43,6 +44,7 @@ data class ReportConfigEntity(
     val schaetzpegelMessfensterAbbruchDb: Double = 55.0,
     val tierSchwelleVollmessungProzent: Double = 90.0,
     val tierSchwelleTeilerfassungProzent: Double = 70.0,
+    // Schritt 4b: Kürzel aus ReportArea; alte Freitexte bleiben bis zur Neuauswahl erhalten.
     val gebietseinstufung: String = "",
     val geraeteUnsicherheitDb: Double = 1.4,
     val konservativFensterStartStunde: Int = 15,
