@@ -69,6 +69,14 @@ class ReportConfigSettingsTest {
         composeRule.onNodeWithTag("report_area_WA").performClick()
         composeRule.waitForIdle()
 
+        // CI-Fund (22.09.2026, PR #182): waitForIdle() wartet nur auf Komposition/Layout, nicht
+        // auf die durch den State-Wechsel ausgeloeste asynchrone DB-Speicherung (eigene
+        // Coroutine, kein Teil des Compose-Idle-Begriffs) - direkt danach lesen kann deshalb
+        // noch den alten Wert liefern. Explizit auf den geschriebenen Wert pollen statt zu raten.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }?.gebietseinstufung == "WA"
+        }
+
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals("WA", gespeichert?.gebietseinstufung)
@@ -115,6 +123,12 @@ class ReportConfigSettingsTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(100f) }
         composeRule.waitForIdle()
 
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
+                ?.let { kotlin.math.abs(it.tierSchwelleVollmessungProzent - 100.0) < 0.0001 } == true
+        }
+
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals(100.0, gespeichert?.tierSchwelleVollmessungProzent ?: 0.0, 0.0001)
@@ -138,6 +152,12 @@ class ReportConfigSettingsTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(17f) }
         composeRule.waitForIdle()
 
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
+                ?.let { it.konservativFensterStartStunde == 19 && it.konservativFensterEndeStunde == 19 } == true
+        }
+
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals(19, gespeichert?.konservativFensterStartStunde)
@@ -158,6 +178,13 @@ class ReportConfigSettingsTest {
             .performScrollTo()
             .performClick()
         composeRule.waitForIdle()
+
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) {
+                app.container.database.reportConfigDao().get()
+            }?.erzwingeBerichtOhneBestaetigteBewertung == true
+        }
 
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
