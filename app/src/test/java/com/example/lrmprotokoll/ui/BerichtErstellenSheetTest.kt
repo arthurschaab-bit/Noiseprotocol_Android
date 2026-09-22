@@ -1,11 +1,13 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.MeasurementEntity
@@ -15,6 +17,7 @@ import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -24,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Der UI-Pfad erreicht den Runner und zeigt dessen erwarteten Modulfehler ohne Absturz. */
+/** Der UI-Pfad erreicht den Runner und zeigt dessen Dateifehler ohne Absturz. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -32,7 +35,7 @@ class BerichtErstellenSheetTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun neuerBerichtButtonOeffnetAblaufUndModulfehlerIstVerstaendlich() {
+    @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val jetzt = System.currentTimeMillis()
         val datum = LocalDate.now()
@@ -58,23 +61,29 @@ class BerichtErstellenSheetTest {
             db.reportConfigDao().speichere(ReportConfigEntity(gebietseinstufung = "WA"))
         }
 
-        var runnerAufgerufen = false
+        val runnerAufgerufen = AtomicBoolean(false)
         composeRule.setContent {
             BerichtScreen(
                 onBack = {}, onOpenSettings = {}, initialHighEndRange = BerichtZeitraum(datum, datum),
                 highEndRunner = {
-                    runnerAufgerufen = true
-                    ChaquopyReportRunner.Ergebnis.Fehler("No module named 'report_bridge'")
+                    runnerAufgerufen.set(true)
+                    ChaquopyReportRunner.Ergebnis.Fehler("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
                 },
             )
         }
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
-        composeRule.waitForIdle()
+        val startButton = composeRule.onNodeWithTag("btn_bericht_erstellen_start")
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            runCatching { startButton.assertIsEnabled() }.isSuccess
+        }
+        startButton.performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
 
-        assertTrue(runnerAufgerufen)
+        assertTrue(runnerAufgerufen.get())
         composeRule.onNodeWithTag("bericht_erstellen_fehler")
-            .assertTextEquals("Der Berichtskern ist noch nicht installiert. Die Auswahl wurde geprüft; der Python-Bericht folgt im nächsten Schritt.")
+            .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 }

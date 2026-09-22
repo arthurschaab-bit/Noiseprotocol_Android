@@ -52,7 +52,8 @@ import com.example.lrmprotokoll.report.fehlendeStammdatenFelder
 import com.example.lrmprotokoll.report.gewaehlteStammdaten
 import com.example.lrmprotokoll.report.ladeBerichtstage
 import com.example.lrmprotokoll.report.retentionFehler
-import com.example.lrmprotokoll.report.vorlaeufigeBerichtsparameter
+import com.example.lrmprotokoll.report.HighEndReportExport
+import com.example.lrmprotokoll.report.BerichtDatei
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -119,15 +120,11 @@ fun BerichtErstellenSheet(
             meldung = fehler
             return
         }
-        val parameter = vorlaeufigeBerichtsparameter(
-            tage, aktuell!!, ausgewaehlteIds,
-            File(context.filesDir, "high_end_report_${System.currentTimeMillis()}.pdf").absolutePath,
-        )
         erzeugt = true
         meldung = null
         scope.launch {
             val ergebnis = try {
-                runner(parameter)
+                HighEndReportExport(context, db).generate(tage, aktuell!!, ausgewaehlteIds, runner)
             } catch (e: Exception) {
                 ChaquopyReportRunner.Ergebnis.Fehler("Berichtserzeugung konnte nicht gestartet werden: ${e.message}", e)
             }
@@ -135,10 +132,7 @@ fun BerichtErstellenSheet(
             when (ergebnis) {
                 is ChaquopyReportRunner.Ergebnis.Erfolg -> pdfPfad = ergebnis.pdfPfad
                 is ChaquopyReportRunner.Ergebnis.Fehler -> {
-                    meldung = if (ergebnis.nachricht.contains("report_bridge") &&
-                        ergebnis.nachricht.contains("module", ignoreCase = true)) {
-                        "Der Berichtskern ist noch nicht installiert. Die Auswahl wurde geprüft; der Python-Bericht folgt im nächsten Schritt."
-                    } else ergebnis.nachricht
+                    meldung = ergebnis.nachricht
                 }
             }
         }
@@ -227,7 +221,14 @@ fun BerichtErstellenSheet(
             }
             pdfPfad?.let {
                 Spacer(Modifier.height(12.dp))
-                Text("Bericht erzeugt: $it", modifier = Modifier.testTag("bericht_erstellen_erfolg"))
+                Text("Bericht wurde erzeugt.", modifier = Modifier.testTag("bericht_erstellen_erfolg"))
+                OutlinedButton(onClick = {
+                    try {
+                        BerichtDatei.teile(context, File(it))
+                    } catch (_: Exception) {
+                        meldung = "Der Bericht konnte nicht zum Teilen geöffnet werden."
+                    }
+                }, modifier = Modifier.testTag("btn_high_end_teilen")) { Text("PDF teilen") }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

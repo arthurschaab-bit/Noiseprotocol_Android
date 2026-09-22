@@ -96,7 +96,11 @@ def test_non_wa_threshold_is_strict_and_drives_real_core(config):
 
 def test_kotlin_selection_and_python_registry_cannot_drift():
     source = Path(__file__).parents[2] / "main/java/com/example/lrmprotokoll/report/ReportArea.kt"
-    entries = re.findall(r'^    (\w+)\("([^"]+)", (true|false)\)', source.read_text(), re.MULTILINE)
+    entries = re.findall(
+        r'^    (\w+)\("([^"]+)", (true|false)\)',
+        source.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
     assert {code: (label, ready == "true") for code, label, ready in entries} == {
         code: (area.name, area.limits is not None) for code, area in AREA_TYPES.items()
     }
