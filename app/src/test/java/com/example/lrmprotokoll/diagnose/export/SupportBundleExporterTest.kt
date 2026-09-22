@@ -143,6 +143,30 @@ class SupportBundleExporterTest {
     }
 
     @Test
+    fun crashBundleRedigiertPiiImAcraReportJson() = runTest {
+        // Review-Fund (Copilot, PR #182): anders als crash/threads.txt lief der ACRA-JSON-Report
+        // bislang unredigiert ins Bundle - er enthaelt u.a. LOGCAT/THREAD_DETAILS/CUSTOM_DATA
+        // (AcraConfig.reportContent), also denselben Inhalt, der anderswo bereits redigiert wird.
+        val dao = FakeDiagnosticLogDao(emptyList())
+        val kontext = BundleKontext(
+            typ = BundleTyp.ABSTURZ,
+            ausloeser = "ACRA",
+            acraReportJson = "{\"LOGCAT\":\"Device AA:BB:CC:DD:EE:FF failed for user@example.com\"," +
+                "\"CUSTOM_DATA\":\"Authorization: Bearer supersecrettoken\"}",
+        )
+
+        val zipFile = exporter(dao).createBundle(kontext)
+
+        ZipFile(zipFile).use { zip ->
+            val acraReport = zip.getInputStream(zip.getEntry("crash/acra_report.json")).bufferedReader().readText()
+            assertTrue(acraReport.contains("AA:BB:CC:XX:XX:XX"))
+            assertTrue(acraReport.contains("[REDACTED_EMAIL]"))
+            assertTrue(!acraReport.contains("user@example.com"))
+            assertTrue(!acraReport.contains("supersecrettoken"))
+        }
+    }
+
+    @Test
     fun createBundleSanitizesPiiInEventsAndBreadcrumbs() = runTest {
         val ringFile = BreadcrumbRingFile(File(context.cacheDir, "ring_pii_${System.nanoTime()}").apply { mkdirs() })
         val reporter = CompositeDiagnosticsReporter(

@@ -148,8 +148,15 @@ class SupportBundleExporter(
             }
 
             // crash/
+            // Review-Fund (Copilot, PR #182): anders als threads.txt/logcat.txt lief der volle
+            // ACRA-JSON-Report bislang UNREDIGIERT ins Bundle - er enthaelt unter anderem
+            // LOGCAT, THREAD_DETAILS und CUSTOM_DATA (siehe AcraConfig.reportContent), also
+            // dieselbe Art Inhalt, die anderswo bereits durch den Redactor muss. Der Redactor
+            // arbeitet stringbasiert (kein strukturiertes ACRA-Feldmodell noetig) - auf den
+            // gesamten JSON-Text angewendet greifen dieselben Muster (Token, E-Mail, Pfade) wie
+            // im Rest des Bundles.
             kontext.acraReportJson?.let { inhalt ->
-                schreibeEintrag("crash/acra_report.json") { it.write(inhalt.toByteArray(StandardCharsets.UTF_8)) }
+                schreibeEintrag("crash/acra_report.json") { it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8)) }
             }
             kontext.threadDetails?.let { inhalt ->
                 schreibeEintrag("crash/threads.txt") { it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8)) }
