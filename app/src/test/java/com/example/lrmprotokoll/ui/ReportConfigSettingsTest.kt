@@ -7,9 +7,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.ReportConfigEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +34,24 @@ class ReportConfigSettingsTest {
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    // CI-Fund (22.09.2026, PR #182): AppDatabase.getDatabase() ist ein @Volatile
+    // Klassen-Singleton auf einer benannten Datei ("noise_database"), kein In-Memory-/Pro-Test-
+    // Handle. Gradle fasst mehrere Testklassen im selben JVM-Fork zusammen - das Singleton
+    // ueberlebt also den Wechsel zwischen Testmethoden UND -klassen, unabhaengig von Robolectrics
+    // sonst frischer Application pro Test. Ohne expliziten Reset lecken reportConfigDao()-Werte
+    // aus vorherigen Tests (auch aus anderen Klassen, z.B. BerichtErstellenSheetTest) hier hinein.
+    @Before
+    @After
+    fun reportConfigZuruecksetzen() {
+        // clearAllTables() ist im Gegensatz zu den suspend-DAO-Methoden NICHT automatisch
+        // thread-verlagert und prueft explizit, nicht auf dem Hauptthread zu laufen -
+        // Dispatchers.IO hier ist deshalb noetig, nicht nur Stil.
+        runBlocking(Dispatchers.IO) {
+            ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+                .container.database.clearAllTables()
+        }
+    }
 
     @Test
     fun gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert() {
