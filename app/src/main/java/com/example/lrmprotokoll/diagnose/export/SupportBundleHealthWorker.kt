@@ -61,7 +61,17 @@ class SupportBundleHealthCoordinator(
             dbGroesseAktuellBytes = aktuelleDbGroesse,
             dbGroesseLetztesBundleBytes = settingsManager.supportBundleGesundheitLetzteDbGroesseBytes,
             heapHochstandBytes = heapVerwendetBytesProvider(),
-            eventsSeitLetztemBundle = reporter.recentEvents(Int.MAX_VALUE),
+            // Review-Fund (Copilot, PR #182): reporter.recentEvents() liefert die im Reporter
+            // gehaltene RAM-Historie (CompositeDiagnosticsReporter, auf 100 Eintraege begrenzt),
+            // NICHT die Events seit letzterLauf - ohne diesen Filter wuerde ein alter Fehler, der
+            // noch in der Historie steht, bei jedem taeglichen Lauf erneut gezaehlt und
+            // "Kein Bundle ohne Not" nie mehr zuschlagen. Die 100er-Obergrenze selbst bleibt eine
+            // bewusste Naeherung (siehe HealthMetrics-KDoc) - Events, die aelter als die letzten
+            // 100 in der RAM-Historie sind, aber neuer als letzterLauf, gehen so verloren; eine
+            // vollstaendige, zeitlich unbegrenzte Erfassung braeuchte eine eigene Room-Tabelle wie
+            // DiagnosticLogDao und waere eine groessere, hier nicht beauftragte Aenderung.
+            eventsSeitLetztemBundle = reporter.recentEvents(Int.MAX_VALUE)
+                .filter { it.timestampUtc.toEpochMilli() >= letzterLauf },
         )
 
         // Zeitstempel/Basiswert IMMER fortschreiben, auch wenn kein Bundle entsteht - sonst

@@ -17,8 +17,10 @@ import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
+import com.example.lrmprotokoll.diagnose.DiagnosticEvent
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import java.io.File
+import java.time.Instant
 import java.util.zip.ZipFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -71,12 +73,12 @@ class SupportBundleHealthWorkerTest {
         connectionEvents: List<ConnectionEventEntity> = emptyList(),
         diagnosticLogAnzahl: Long = 0L,
         dbDatei: File = File(context.cacheDir, "nicht_vorhanden_${System.nanoTime()}.db"),
-    ): SupportBundleHealthCoordinator {
-        val container = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
-        val reporter = CompositeDiagnosticsReporter(
+        reporter: CompositeDiagnosticsReporter = CompositeDiagnosticsReporter(
             sinks = emptyList(),
             initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
-        )
+        ),
+    ): SupportBundleHealthCoordinator {
+        val container = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
         return SupportBundleHealthCoordinator(
             context = context,
             connectionEventDao = FakeConnectionEventDao(connectionEvents),
@@ -208,6 +210,65 @@ class SupportBundleHealthWorkerTest {
         assertTrue(ergebnis is Result.Success)
         assertEquals(1, outboxDir.listFiles()?.size)
         dbDatei.delete()
+    }
+
+    @Test
+    fun alterFehlerVorLetzterLaufLoestKeinBundleMehrAus() = runTest {
+        // Review-Fund (Copilot, PR #182): reporter.recentEvents() lieferte bisher die komplette
+        // RAM-Historie ungefiltert statt nur die Events seit letzterLauf - ein Fehler von VOR
+        // letzterLauf durfte deshalb kein neues Bundle mehr ausloesen, sonst wuerde
+        // "Kein Bundle ohne Not" nie mehr zuschlagen.
+        val reporter = CompositeDiagnosticsReporter(
+            sinks = emptyList(),
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
+        )
+        val settings = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.settingsManager
+        val letzterLauf = 10_000L
+        settings.supportBundleGesundheitLetzterLaufAt = letzterLauf
+        reporter.report(
+            DiagnosticEvent(
+                timestampUtc = Instant.ofEpochMilli(letzterLauf - 5_000L),
+                code = DiagnosticCode.BLE_DECODE_RATE_HIGH,
+                component = "Test",
+                operation = "Test",
+            )
+        )
+
+        val ergebnis = bauWorker(coordinator(reporter = reporter)).doWork()
+
+        assertTrue(ergebnis is Result.Success)
+        assertTrue(
+            "Ein Fehler von vor letzterLauf darf kein neues Bundle mehr ausloesen",
+            outboxDir.listFiles().orEmpty().isEmpty(),
+        )
+    }
+
+    @Test
+    fun neuerFehlerNachLetzterLaufLoestWeiterhinEinBundleAus() = runTest {
+        val reporter = CompositeDiagnosticsReporter(
+            sinks = emptyList(),
+            initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
+        )
+        val settings = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.settingsManager
+        val letzterLauf = 10_000L
+        settings.supportBundleGesundheitLetzterLaufAt = letzterLauf
+        reporter.report(
+            DiagnosticEvent(
+                timestampUtc = Instant.ofEpochMilli(letzterLauf + 5_000L),
+                code = DiagnosticCode.BLE_DECODE_RATE_HIGH,
+                component = "Test",
+                operation = "Test",
+            )
+        )
+
+        val ergebnis = bauWorker(coordinator(reporter = reporter)).doWork()
+
+        assertTrue(ergebnis is Result.Success)
+        assertEquals(
+            "Ein Fehler von nach letzterLauf muss weiterhin ein Bundle ausloesen",
+            1,
+            outboxDir.listFiles()?.size,
+        )
     }
 
     @Test
