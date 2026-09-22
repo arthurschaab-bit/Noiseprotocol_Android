@@ -558,11 +558,16 @@ fun NoiseProtocolApp(
         )
     }
 
+    // TEMPORAERE DIAGNOSE (PR #182, 2. Runde): wird der Listeninhalt nach der ersten Emission
+    // ueberhaupt neu ausgewertet? records/references werden NUR hier gelesen, also nur ueber den
+    // abgeleiteten Zustand der LazyColumn (Messphase) beobachtet, nicht ueber die Komposition.
+    val inhaltNr = remember { java.util.concurrent.atomic.AtomicInteger() }
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        Log.d(HOME_FLOW_DIAG, "LazyColumn-Inhalt #${inhaltNr.incrementAndGet()}: records=${records.size}, references=${references.size}")
         // 1. TopAppBar als Listeneintrag (integriert, kein Nested Scroll Konflikt)
         item {
             TopAppBar(
