@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Echter App-Prozess ohne Instrumentation; nur im Debug-APK vorhanden. -->
+        <activity
+            android:name="com.example.lrmprotokoll.ui.CrashProbeActivity"
+            android:exported="false"
+            android:process=":crashprobe" />
+    </application>
+</manifest>

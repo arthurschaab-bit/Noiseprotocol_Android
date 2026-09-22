@@ -106,7 +106,7 @@ class HomeReferenztonDialogInstrumentedTest {
         composeRule.waitForIdle()
 
         val lernChip = composeRule.activity.getString(R.string.action_learn_pattern)
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(lernChip))
+        composeRule.warteUndScrolleZu(hasText(lernChip))
         composeRule.onNodeWithText(lernChip).performClick()
         composeRule.waitForIdle()
     }

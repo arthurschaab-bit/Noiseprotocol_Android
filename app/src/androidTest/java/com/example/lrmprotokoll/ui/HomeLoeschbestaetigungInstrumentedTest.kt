@@ -68,7 +68,7 @@ class HomeLoeschbestaetigungInstrumentedTest {
     }
 
     private fun oeffneLoeschDialogFuer(name: String) {
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_delete_reference_$name"))
+        composeRule.warteUndScrolleZu(hasTestTag("btn_delete_reference_$name"))
         composeRule.onNodeWithTag("btn_delete_reference_$name").performClick()
         composeRule.waitForIdle()
     }

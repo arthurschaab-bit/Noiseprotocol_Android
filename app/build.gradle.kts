@@ -122,15 +122,10 @@ android {
         versionName = berechneteVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // M12 Schritt 8: der Test Orchestrator startet jede instrumentierte Testmethode in einem
-        // eigenen Instrumentierungs-Prozess. Ohne ihn liefen alle instrumentierten Tests im selben
-        // Prozess wie die App unter Test (siehe testOptions.execution unten) - ein Test, der einen
-        // echten Absturz ausloest (die neuen ACRA-Crash-Tests aus M12 Schritt 8), wuerde sonst den
-        // gesamten Testlauf mitreissen. Bewusst OHNE clearPackageData: das wuerde App-Daten
-        // zwischen JEDER instrumentierten Testmethode loeschen, nicht nur den drei neuen - ein
-        // globaler Verhaltenswechsel fuer alle ~60 bestehenden instrumentierten Tests, der ausserhalb
-        // dieses Schritts liegt. Die drei Crash-Tests raeumen ihre eigene support_outbox/ deshalb
-        // selbst auf (siehe CrashSupportBundleInstrumentedTest).
+        // Der Orchestrator isoliert den Runner pro Test. Echte Abstuerze laufen zusaetzlich
+        // im Debug-Prozess :crashprobe, damit Ausloesen und Pruefen EIN Test bleiben.
+        // Persistente Daten werden nicht global geloescht; Tests setzen ihre Voraussetzungen
+        // selbst und pruefen bei Absturz-Bundles nur neu erzeugte Dateien.
         vectorDrawables {
             useSupportLibrary = true
         }
