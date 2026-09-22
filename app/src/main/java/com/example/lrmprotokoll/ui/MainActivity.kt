@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -80,9 +79,6 @@ import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -363,23 +359,6 @@ fun AppNavigationBar(
     }
 }
 
-private const val HOME_FLOW_DIAG = "HomeFlowDiag"
-private val homeFlowDiagZaehler = java.util.concurrent.atomic.AtomicInteger()
-
-/** TEMPORAERE DIAGNOSE (PR #182), siehe Kommentar an der Aufrufstelle in [NoiseProtocolApp]. */
-private fun <T : List<*>> kotlinx.coroutines.flow.Flow<T>.homeFlowDiagnose(name: String): kotlinx.coroutines.flow.Flow<T> {
-    val nr = homeFlowDiagZaehler.incrementAndGet()
-    var emissionen = 0
-    return onStart { Log.d(HOME_FLOW_DIAG, "$name#$nr Start auf ${Thread.currentThread().name}") }
-        .onEach {
-            emissionen++
-            Log.d(HOME_FLOW_DIAG, "$name#$nr Emission $emissionen, Groesse ${it.size}, Thread ${Thread.currentThread().name}")
-        }
-        .onCompletion { ursache ->
-            Log.d(HOME_FLOW_DIAG, "$name#$nr Ende nach $emissionen Emissionen, Ursache: ${ursache?.javaClass?.simpleName ?: "normal"}")
-        }
-}
-
 internal fun istBottomNavZielAktiv(currentRoute: String?, ziel: String): Boolean =
     currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
 
@@ -400,16 +379,14 @@ fun NoiseProtocolApp(
     val db = container.database
     val dao = db.noiseDao()
     val rohdatenDao = db.klassifikationsRohdatenDao()
-    // TEMPORAERE DIAGNOSE (PR #182, 22.09.2026) - wird nach Auswertung wieder entfernt.
-    // Emulator-Tests zeigen sporadisch: die ERSTE Emission dieser Flows erreicht den UI-State nie,
-    // jede spaetere schon (Room, Threads und Compose-Benachrichtigung sind per Diagnose entlastet).
-    // Die Operatoren unten aendern das Verhalten nicht (weiterhin ein neuer Flow je Komposition,
-    // wie bisher) und zeigen je Testlauf: wie oft die Sammlung startet/endet, ob und mit welcher
-    // Groesse die erste Emission beim Collector ankommt und auf welchem Thread.
-    val kompositionNr = remember { java.util.concurrent.atomic.AtomicInteger() }
-    SideEffect { Log.d(HOME_FLOW_DIAG, "NoiseProtocolApp Komposition #${kompositionNr.incrementAndGet()}") }
-    val records by dao.getAll().homeFlowDiagnose("records").collectAsState(initial = emptyList())
-    val references by dao.getAllReferences().homeFlowDiagnose("references").collectAsState(initial = emptyList())
+    // CI-Fund (22.09.2026, PR #182): .value hier im Kompositions-Scope lesen, nicht per `by` erst
+    // im LazyColumn-Builder unten. Wird ein State NUR dort gelesen, beobachtet ihn allein der
+    // abgeleitete Zustand der LazyColumn, der in der ersten Messphase entsteht - im Emulator
+    // belegt: kam die erste Room-Emission 2-3 ms nach dieser ersten Auswertung an, wurde der
+    // Inhalt nie neu ausgewertet und die Liste blieb leer, bis eine spaetere Aenderung neu zeichnen
+    // liess. Hier gelesen, loest jede Aenderung eine normale Rekomposition aus.
+    val records = dao.getAll().collectAsState(initial = emptyList()).value
+    val references = dao.getAllReferences().collectAsState(initial = emptyList()).value
     val scope = rememberCoroutineScope()
     val reportManager = remember { ReportManager(context) }
 
@@ -558,16 +535,11 @@ fun NoiseProtocolApp(
         )
     }
 
-    // TEMPORAERE DIAGNOSE (PR #182, 2. Runde): wird der Listeninhalt nach der ersten Emission
-    // ueberhaupt neu ausgewertet? records/references werden NUR hier gelesen, also nur ueber den
-    // abgeleiteten Zustand der LazyColumn (Messphase) beobachtet, nicht ueber die Komposition.
-    val inhaltNr = remember { java.util.concurrent.atomic.AtomicInteger() }
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        Log.d(HOME_FLOW_DIAG, "LazyColumn-Inhalt #${inhaltNr.incrementAndGet()}: records=${records.size}, references=${references.size}")
         // 1. TopAppBar als Listeneintrag (integriert, kein Nested Scroll Konflikt)
         item {
             TopAppBar(
