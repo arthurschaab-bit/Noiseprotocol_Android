@@ -70,7 +70,15 @@ class BerichtErstellenSheetTest {
         }
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
+        // CI-Fund (22.09.2026, PR #182): performScrollTo() und performClick() direkt verkettet
+        // liessen den Klick sporadisch ins Leere gehen (runnerAufgerufen blieb false) - der Klick
+        // traf offenbar manchmal, bevor das durch den Scroll ausgeloeste Layout unter Robolectrics
+        // GraphicsMode.NATIVE fertig war. Reproduziert unabhaengig von jeder sonstigen Aenderung
+        // dieses PRs (2 von 3 isolierten Laeufen auf dem unveraenderten main-Stand). waitForIdle()
+        // zwischen Scroll und Klick statt beides zu verketten.
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performClick()
         composeRule.waitForIdle()
 
         assertTrue(runnerAufgerufen)
