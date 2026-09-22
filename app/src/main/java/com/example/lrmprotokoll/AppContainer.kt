@@ -35,6 +35,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -329,5 +330,22 @@ class AppContainer(
             measurementDao = database.measurementDao(),
             minuteAggregateDao = database.minuteAggregateDao(),
         )
+    }
+
+    /**
+     * CI-Fund (22.09.2026, PR #182): produktiv wird nie mehr als ein [AppContainer] pro
+     * Prozesslauf gebraucht (die App ersetzt ihren Container nie - [LaermprotokollApp.setCustomContainer]/
+     * [LaermprotokollApp.resetContainer] sind reine Test-Seams, siehe dort), deshalb hatte
+     * [connectionSupervisorScope]/[videobeweisAbschlussScope] nie einen Abschluss noetig. In
+     * Tests entsteht dagegen pro Testmethode oft ein neuer Container - ohne Abschluss laeuft der
+     * alte Scope einfach weiter, angehaeuft ueber Hunderte Testmethoden im selben Gradle-Test-
+     * JVM-Fork. Vermuteter Beitrag zu den sporadischen AppNotIdleException-Flakes in
+     * MeterScreenComposeTest/MeterScreenPermissionAndScanTest (Issue #160, PR #179) - jener Fix
+     * adressierte nur die Aktivitaet im eigenen Test, nicht die Ansammlung aus frueheren Tests.
+     * Aufruf aus [LaermprotokollApp.setCustomContainer]/[LaermprotokollApp.resetContainer].
+     */
+    fun close() {
+        connectionSupervisorScope.cancel()
+        videobeweisAbschlussScope.cancel()
     }
 }

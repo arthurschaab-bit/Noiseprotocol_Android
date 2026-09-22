@@ -21,10 +21,12 @@ class LaermprotokollApp : Application() {
     internal var acraSenderProcessOverride: Boolean? = null
 
     fun setCustomContainer(customContainer: AppContainer) {
+        if (::container.isInitialized) container.close()
         container = customContainer
     }
 
     fun resetContainer() {
+        if (::container.isInitialized) container.close()
         container = AppContainer(this)
     }
 
