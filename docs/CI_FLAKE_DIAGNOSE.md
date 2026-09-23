@@ -1,5 +1,8 @@
 # Emulator-Tests gezielt wiederholen
 
+GitHub zeigt einen neuen `workflow_dispatch`-Workflow erst an, wenn seine Workflow-Datei
+auf `main` liegt. Nach dem Merge kann jeder gewünschte Branch als Teststand gewählt werden.
+
 Unter **Actions → Emulator Flake Diagnose → Run workflow** den zu prüfenden Branch wählen,
 `tests` mit einer oder mehreren durch Komma getrennten Klassen oder Methoden füllen
 (zum Beispiel `ui.HomeScreenInstrumentedTest#filterPanelLaesstSichAufUndZuklappen`),

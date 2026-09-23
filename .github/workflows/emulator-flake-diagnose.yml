@@ -52,6 +52,36 @@ jobs:
           WIEDERHOLUNGEN: ${{ inputs.wiederholungen }}
           API_LEVEL: ${{ inputs.api_level }}
         run: bash .github/scripts/wiederhole-instrumentierte-tests.sh --validate
+      - name: Cache clean AVD snapshot
+        id: avd-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-${{ inputs.api_level }}-aosp_atd-x86_64-2core-2048ram-512heap-swiftshader-noaudio-nobootanim-cameraoff-v1
+      - name: Create clean AVD snapshot on cache miss
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.api_level }}
+          target: aosp_atd
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          script: echo 'Clean AVD snapshot booted before app installation'
+      - name: Save clean AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-${{ inputs.api_level }}-aosp_atd-x86_64-2core-2048ram-512heap-swiftshader-noaudio-nobootanim-cameraoff-v1
       - name: Pre-build Debug and Test APKs
         run: ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
       - name: Run repeated tests on emulator
@@ -65,7 +95,7 @@ jobs:
           target: aosp_atd
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           cores: 2
           ram-size: 2048M

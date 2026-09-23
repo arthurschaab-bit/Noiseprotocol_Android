@@ -38,6 +38,10 @@ done
 
 [[ ${1:-} != --validate ]] || exit 0
 
+if adb shell pm path "$APP_ID" | grep -q '^package:'; then
+  fehler "AVD-Snapshot enthaelt bereits $APP_ID; Cache-Schluessel erhoehen und neu erzeugen."
+fi
+echo "AVD-Snapshot sauber: $APP_ID ist vor der Testinstallation nicht vorhanden."
 ./gradlew installDebug installDebugAndroidTest --no-daemon --stacktrace
 runner=$(adb shell pm list instrumentation | grep "target=$APP_ID" | sed -E 's/instrumentation:([^ ]+) .*/\1/' | tr -d '\r' | head -n 1)
 [[ -n $runner ]] || fehler "Keine Instrumentation fuer $APP_ID gefunden; App-/Test-APK nicht installiert?"
@@ -67,14 +71,15 @@ for testname in "${klassen[@]}"; do
     adb shell am force-stop "$APP_ID"
     adb logcat -c
     start=$(date +%s)
-    ausgabe=$(adb shell am instrument -w -e class "$testname" "$runner" 2>&1) || true
+    instrument_status=0
+    ausgabe=$(adb shell am instrument -w -e class "$testname" "$runner" 2>&1) || instrument_status=$?
     sekunden=$(( $(date +%s) - start ))
     echo "$ausgabe"
     echo "Dauer: ${sekunden}s"
     summe=$((summe + sekunden))
     dauern+=("$sekunden")
     (( sekunden > maximum )) && maximum=$sekunden
-    if [[ $ausgabe =~ OK\ \(([1-9][0-9]*)\ tests?\) ]]; then
+    if (( instrument_status == 0 )) && printf '%s\n' "$ausgabe" | tr -d '\r' | grep -Eq '^OK \([1-9][0-9]* tests?\)$'; then
       bestanden=$((bestanden + 1))
       resultate+=("bestanden")
     else
