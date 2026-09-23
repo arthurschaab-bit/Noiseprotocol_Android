@@ -196,9 +196,10 @@ class AppContainer(
 
     /** Eigener Scope fuer den Bundle-Bau nach einem Haenger - wird mit [close] beendet. */
     private val anrWatchdogScope: CoroutineScope by lazy {
-        val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-            Log.w("AppContainer", "Unerwarteter Fehler im ANR-Watchdog-Scope", throwable)
-        }
+        val exceptionHandler =
+            CoroutineExceptionHandler { _, throwable ->
+                Log.w("AppContainer", "Unerwarteter Fehler im ANR-Watchdog-Scope", throwable)
+            }
         CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     }
 
@@ -212,15 +213,16 @@ class AppContainer(
         )
     }
 
-    private val anrWatchdogLazy = lazy {
-        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        com.example.lrmprotokoll.diagnose.AnrWatchdog(
-            postAufMainThread = { mainHandler.post(it) },
-            mainThreadStacktrace = com.example.lrmprotokoll.diagnose.AnrWatchdog::echterMainThreadStack,
-            onHaenger = anrWatchdogCoordinator::haengerErkannt,
-            onErholt = anrWatchdogCoordinator::erholt,
-        )
-    }
+    private val anrWatchdogLazy =
+        lazy {
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            com.example.lrmprotokoll.diagnose.AnrWatchdog(
+                postAufMainThread = { mainHandler.post(it) },
+                mainThreadStacktrace = com.example.lrmprotokoll.diagnose.AnrWatchdog::echterMainThreadStack,
+                onHaenger = anrWatchdogCoordinator::haengerErkannt,
+                onErholt = anrWatchdogCoordinator::erholt,
+            )
+        }
 
     /** Gestartet von [LaermprotokollApp.onCreate], ausser unter Robolectric (siehe dort). */
     val anrWatchdog: com.example.lrmprotokoll.diagnose.AnrWatchdog by anrWatchdogLazy

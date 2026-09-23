@@ -13,21 +13,21 @@ import org.junit.Test
  * Default-Parametern, die hier ersetzt werden.
  */
 class AnrWatchdogTest {
-
     private var uhr = 0L
     private val offeneSignale = mutableListOf<Runnable>()
     private val befunde = mutableListOf<HaengerBefund>()
     private var erholungen = 0
     private val stack = arrayOf(StackTraceElement("com.example.Blockierer", "schlafe", "Blockierer.kt", 42))
 
-    private val watchdog = AnrWatchdog(
-        postAufMainThread = { offeneSignale.add(it) },
-        mainThreadStacktrace = { stack },
-        onHaenger = { befunde.add(it) },
-        onErholt = { erholungen++ },
-        uhrMs = { uhr },
-        schwelleMs = 5_000L,
-    )
+    private val watchdog =
+        AnrWatchdog(
+            postAufMainThread = { offeneSignale.add(it) },
+            mainThreadStacktrace = { stack },
+            onHaenger = { befunde.add(it) },
+            onErholt = { erholungen++ },
+            uhrMs = { uhr },
+            schwelleMs = 5_000L,
+        )
 
     private fun mainThreadArbeitetAb() {
         offeneSignale.toList().forEach { it.run() }
@@ -62,7 +62,14 @@ class AnrWatchdogTest {
 
         assertEquals(1, befunde.size)
         assertEquals(5_000L, befunde.single().dauerMs)
-        assertEquals("schlafe", befunde.single().mainThreadStack.single().methodName)
+        assertEquals(
+            "schlafe",
+            befunde
+                .single()
+                .mainThreadStack
+                .single()
+                .methodName,
+        )
     }
 
     @Test

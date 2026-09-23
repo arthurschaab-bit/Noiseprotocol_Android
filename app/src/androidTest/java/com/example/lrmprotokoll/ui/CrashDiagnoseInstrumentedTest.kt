@@ -135,35 +135,45 @@ class CrashDiagnoseInstrumentedTest {
         val mitschnitt = File(app.filesDir, "process_exit_traces/$ANR_WATCHDOG_DATEINAME")
         mitschnitt.delete()
         val outbox = File(app.filesDir, SUPPORT_OUTBOX_DIR)
-        val vorher = outbox.listFiles()?.map { it.name }?.toSet().orEmpty()
+        val vorher =
+            outbox
+                .listFiles()
+                ?.map { it.name }
+                ?.toSet()
+                .orEmpty()
 
         ausloesen("Main-Thread blockieren (ANR)")
 
         var gefunden: String? = null
         val deadline = SystemClock.elapsedRealtime() + 90_000
         while (gefunden == null && SystemClock.elapsedRealtime() < deadline) {
-            gefunden = outbox.listFiles().orEmpty()
-                .filter { it.name !in vorher && it.name.endsWith("_anr.zip") }
-                .firstNotNullOfOrNull { datei ->
-                    runCatching {
-                        ZipFile(datei).use { zip ->
-                            zip.getEntry("crash/anr_watchdog.txt")?.let { eintrag ->
-                                zip.getInputStream(eintrag).bufferedReader().use { it.readText() }
+            gefunden =
+                outbox
+                    .listFiles()
+                    .orEmpty()
+                    .filter { it.name !in vorher && it.name.endsWith("_anr.zip") }
+                    .firstNotNullOfOrNull { datei ->
+                        runCatching {
+                            ZipFile(datei).use { zip ->
+                                zip.getEntry("crash/anr_watchdog.txt")?.let { eintrag ->
+                                    zip.getInputStream(eintrag).bufferedReader().use { it.readText() }
+                                }
                             }
+                        }.getOrNull()?.takeIf { text ->
+                            val erkanntUm = Regex("erkanntUm: (\\S+)").find(text)?.groupValues?.get(1)
+                            erkanntUm != null && Instant.parse(erkanntUm).toEpochMilli() >= start
                         }
-                    }.getOrNull()?.takeIf { text ->
-                        val erkanntUm = Regex("erkanntUm: (\\S+)").find(text)?.groupValues?.get(1)
-                        erkanntUm != null && Instant.parse(erkanntUm).toEpochMilli() >= start
                     }
-                }
             if (gefunden == null) SystemClock.sleep(500)
         }
 
         // Diagnose fuer den Fehlerfall: haengt es an der Erkennung (kein Mitschnitt) oder an
         // der Erholung (Mitschnitt da, aber kein Bundle - etwa weil das System den Prozess
         // doch beendet hat)?
-        val exit = SystemProcessExitSource(app).historischeExits()
-            .firstOrNull { it.timestamp >= start && it.processName.endsWith(":crashprobe") }
+        val exit =
+            SystemProcessExitSource(app)
+                .historischeExits()
+                .firstOrNull { it.timestamp >= start && it.processName.endsWith(":crashprobe") }
         assertTrue(
             "Neues ANR-Bundle mit Watchdog-Mitschnitt fehlt (Mitschnitt vorhanden: ${mitschnitt.exists()}, " +
                 "Prozess-Exit von :crashprobe seit Teststart: ${exit?.reason})",

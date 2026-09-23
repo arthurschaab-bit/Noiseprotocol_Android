@@ -46,7 +46,6 @@ class AnrWatchdog(
     private val schwelleMs: Long = ANR_WATCHDOG_SCHWELLE_MS,
     private val pruefintervallMs: Long = ANR_WATCHDOG_PRUEFINTERVALL_MS,
 ) {
-
     /** Uptime, zu der das noch nicht abgearbeitete Signal gepostet wurde; -1 = keins offen. */
     private val signalGepostetUm = AtomicLong(-1L)
 
@@ -80,20 +79,21 @@ class AnrWatchdog(
     @Synchronized
     fun start() {
         if (thread != null) return
-        thread = Thread({
-            while (!Thread.currentThread().isInterrupted) {
-                // Ein Fehler im Callback darf den Watchdog nicht beenden.
-                runCatching { pruefen() }.onFailure { Log.w(TAG, "Pruefschritt fehlgeschlagen", it) }
-                try {
-                    Thread.sleep(pruefintervallMs)
-                } catch (_: InterruptedException) {
-                    return@Thread
+        thread =
+            Thread({
+                while (!Thread.currentThread().isInterrupted) {
+                    // Ein Fehler im Callback darf den Watchdog nicht beenden.
+                    runCatching { pruefen() }.onFailure { Log.w(TAG, "Pruefschritt fehlgeschlagen", it) }
+                    try {
+                        Thread.sleep(pruefintervallMs)
+                    } catch (_: InterruptedException) {
+                        return@Thread
+                    }
                 }
+            }, "AnrWatchdog").apply {
+                isDaemon = true
+                start()
             }
-        }, "AnrWatchdog").apply {
-            isDaemon = true
-            start()
-        }
     }
 
     @Synchronized

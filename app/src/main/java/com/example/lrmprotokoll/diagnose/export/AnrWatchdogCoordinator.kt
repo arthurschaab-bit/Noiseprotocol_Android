@@ -10,12 +10,12 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.HaengerBefund
 import com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR
-import java.io.File
-import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
+import java.time.Instant
 
 /** Obergrenze fuer den Mitschnitt, unkomprimiert (wie die Einzelobergrenzen in Konzept 4.5). */
 internal const val ANR_WATCHDOG_MAX_BYTES = 256L * 1024
@@ -52,7 +52,6 @@ class AnrWatchdogCoordinator(
         SupportBundleUploadPlanung.planeFallbackOhneNetzbeschraenkung(it)
     },
 ) {
-
     private val bundleMutex = Mutex()
 
     private val mitschnitt: File get() = File(verzeichnis, ANR_WATCHDOG_DATEINAME)
@@ -94,51 +93,55 @@ class AnrWatchdogCoordinator(
     }
 
     /** @return die Datei in der Outbox, oder `null`, wenn nichts ansteht oder der Bau scheitert. */
-    internal suspend fun bundleErstellen(ausloeser: String): File? = bundleMutex.withLock {
-        if (!mitschnitt.exists()) return null
-        // Ein neuer Haenger kann den Mitschnitt ueberschreiben, waehrend dieses Bundle entsteht -
-        // dann gehoert er zum naechsten Bundle und darf unten nicht mit geloescht werden.
-        val stand = mitschnitt.lastModified() to mitschnitt.length()
+    internal suspend fun bundleErstellen(ausloeser: String): File? =
+        bundleMutex.withLock {
+            if (!mitschnitt.exists()) return null
+            // Ein neuer Haenger kann den Mitschnitt ueberschreiben, waehrend dieses Bundle entsteht -
+            // dann gehoert er zum naechsten Bundle und darf unten nicht mit geloescht werden.
+            val stand = mitschnitt.lastModified() to mitschnitt.length()
 
-        val ziel = runCatching {
-            val bundleDatei = exporter.createBundle(BundleKontext(typ = BundleTyp.ANR, ausloeser = ausloeser))
-            val outboxDir = File(context.filesDir, SUPPORT_OUTBOX_DIR).apply { mkdirs() }
-            File(outboxDir, bundleDatei.name).also {
-                bundleDatei.copyTo(it, overwrite = true)
-                bundleDatei.delete()
-            }
-        }.getOrElse {
-            // Mitschnitt bleibt liegen - der naechste Start versucht es erneut.
-            Log.w(TAG, "ANR-Bundle konnte nicht erstellt werden", it)
-            return null
+            val ziel =
+                runCatching {
+                    val bundleDatei = exporter.createBundle(BundleKontext(typ = BundleTyp.ANR, ausloeser = ausloeser))
+                    val outboxDir = File(context.filesDir, SUPPORT_OUTBOX_DIR).apply { mkdirs() }
+                    File(outboxDir, bundleDatei.name).also {
+                        bundleDatei.copyTo(it, overwrite = true)
+                        bundleDatei.delete()
+                    }
+                }.getOrElse {
+                    // Mitschnitt bleibt liegen - der naechste Start versucht es erneut.
+                    Log.w(TAG, "ANR-Bundle konnte nicht erstellt werden", it)
+                    return null
+                }
+            loescheFallsUnveraendert(stand)
+            uploadEinplanen(context)
+            ziel
         }
-        loescheFallsUnveraendert(stand)
-        uploadEinplanen(context)
-        ziel
-    }
 
     private fun loescheFallsUnveraendert(stand: Pair<Long, Long>) {
         if (mitschnitt.lastModified() == stand.first && mitschnitt.length() == stand.second) mitschnitt.delete()
     }
 
-    private fun mitschnittText(befund: HaengerBefund): String = buildString {
-        appendLine("ANR-Watchdog (Laermprotokoll)")
-        appendLine("erkanntUm: ${Instant.ofEpochMilli(jetztMs())}")
-        appendLine("mainThreadOhneReaktionMs: ${befund.dauerMs}")
-        appendLine("sdk: ${Build.VERSION.SDK_INT}")
-        appendLine()
-        appendLine("---- main ----")
-        befund.mainThreadStack.forEach { appendLine("\tat $it") }
-        appendLine()
-        appendLine("---- weitere Threads ----")
-        runCatching { weitereThreads() }.getOrDefault(emptyMap())
-            .filterKeys { it.name != "main" }
-            .forEach { (thread, stack) ->
-                appendLine("\"${thread.name}\" ${thread.state}")
-                stack.forEach { appendLine("\tat $it") }
-                appendLine()
-            }
-    }
+    private fun mitschnittText(befund: HaengerBefund): String =
+        buildString {
+            appendLine("ANR-Watchdog (Laermprotokoll)")
+            appendLine("erkanntUm: ${Instant.ofEpochMilli(jetztMs())}")
+            appendLine("mainThreadOhneReaktionMs: ${befund.dauerMs}")
+            appendLine("sdk: ${Build.VERSION.SDK_INT}")
+            appendLine()
+            appendLine("---- main ----")
+            befund.mainThreadStack.forEach { appendLine("\tat $it") }
+            appendLine()
+            appendLine("---- weitere Threads ----")
+            runCatching { weitereThreads() }
+                .getOrDefault(emptyMap())
+                .filterKeys { it.name != "main" }
+                .forEach { (thread, stack) ->
+                    appendLine("\"${thread.name}\" ${thread.state}")
+                    stack.forEach { appendLine("\tat $it") }
+                    appendLine()
+                }
+        }
 
     private companion object {
         const val TAG = "AnrWatchdogCoordinator"
