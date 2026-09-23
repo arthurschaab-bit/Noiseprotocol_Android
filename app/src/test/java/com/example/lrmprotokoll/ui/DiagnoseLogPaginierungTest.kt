@@ -3,11 +3,8 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
@@ -59,24 +56,17 @@ class DiagnoseLogPaginierungTest {
         val headerBeiStartgrenze = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_header, 200)
         val ladeKnopf = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_load_more)
 
-        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(headerBeiStartgrenze))
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(headerBeiStartgrenze).fetchSemanticsNodes().isNotEmpty()
-        }
+        // CI-Fund (23.09.2026, PR #187): Kopfzeile (diagnoseLog.size) und Knopf haengen an der
+        // Room-Emission - erst warten, dann scrollen, siehe scrolleZuSobaldGeladen.
+        composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(headerBeiStartgrenze))
         composeRule.onNodeWithText(headerBeiStartgrenze).assertExists()
 
-        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(ladeKnopf))
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(ladeKnopf).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(ladeKnopf))
         composeRule.onNodeWithText(ladeKnopf).performClick()
         composeRule.waitForIdle()
 
         val headerNachWeitereLaden = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_log_header, 400)
-        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(headerNachWeitereLaden))
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(headerNachWeitereLaden).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(headerNachWeitereLaden))
         composeRule.onNodeWithText(headerNachWeitereLaden).assertExists()
     }
 }

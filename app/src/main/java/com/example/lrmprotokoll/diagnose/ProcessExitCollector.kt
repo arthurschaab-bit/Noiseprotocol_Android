@@ -82,8 +82,8 @@ class SystemProcessExitSource(private val context: Context) : ProcessExitSource 
  * `REASON_CRASH_NATIVE` das native Tombstone liegen.
  *
  * Geloest aus [com.example.lrmprotokoll.LaermprotokollApp.checkPreviousProcessExit] (vorher dort
- * inline) - dieselbe Ausloese-Logik (Breadcrumb + Report bei CRASH/ANR), jetzt fuer ALLE seit dem
- * letzten Start neuen Eintraege statt nur den einen zuletzt gesehenen.
+ * inline) - dieselbe Ausloese-Logik (Breadcrumb + Report bei CRASH/CRASH_NATIVE/ANR), jetzt fuer
+ * ALLE seit dem letzten Start neuen Eintraege statt nur den einen zuletzt gesehenen.
  */
 class ProcessExitCollector(
     private val source: ProcessExitSource,
@@ -118,7 +118,13 @@ class ProcessExitCollector(
 
     private fun verarbeiteEinzelnenExit(exit: ProcessExitInfo) {
         val reasonDesc = reasonBeschreibung(exit.reason)
-        val unnormal = exit.reason == ApplicationExitInfo.REASON_CRASH || exit.reason == ApplicationExitInfo.REASON_ANR
+        // Review-Fund (Folge-PR zu #182): REASON_CRASH_NATIVE fehlte hier - aus der alten
+        // Implementierung in LaermprotokollApp uebernommen. Ein nativer Absturz (MediaPipe,
+        // Chaquopy, CameraX) erzeugte damit nur einen INFO-Breadcrumb und kein Report-Event,
+        // obwohl ACRA native Abstuerze gar nicht sieht und dies der einzige Hinweis darauf ist.
+        val unnormal = exit.reason == ApplicationExitInfo.REASON_CRASH ||
+            exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+            exit.reason == ApplicationExitInfo.REASON_ANR
 
         diagnosticsReporter.breadcrumb(
             category = "Process",

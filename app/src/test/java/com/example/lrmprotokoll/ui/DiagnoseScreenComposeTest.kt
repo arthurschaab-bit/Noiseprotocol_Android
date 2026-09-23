@@ -4,12 +4,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
-import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
@@ -74,11 +72,8 @@ class DiagnoseScreenComposeTest {
 
         composeRule.setContent { DiagnoseScreen(onBack = {}) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText("DEGRADED: Testeintrag", substring = true))
-
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("DEGRADED: Testeintrag", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
+        // CI-Fund (23.09.2026, PR #187): erst warten, dann scrollen - siehe scrolleZuSobaldGeladen.
+        composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText("DEGRADED: Testeintrag", substring = true))
         composeRule.onNodeWithText("DEGRADED: Testeintrag", substring = true).assertExists()
     }
 
