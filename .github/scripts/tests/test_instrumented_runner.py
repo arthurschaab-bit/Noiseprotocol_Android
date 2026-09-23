@@ -41,11 +41,24 @@ case "$*" in
     echo 'instrumentation:com.example.lrmprotokoll.test/androidx.test.runner.AndroidJUnitRunner (target=com.example.lrmprotokoll)'
     ;;
   'shell dumpsys package '*)
-    for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT; do
-      granted=false
-      if [ "$SCENARIO" = revoke_failure ]; then granted=true; fi
-      printf 'android.permission.%s: granted=%s\n  flags=[]\n' "$permission" "$granted"
-    done
+    case "$SCENARIO" in
+      revoke_failure)
+        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT; do
+          printf 'android.permission.%s: granted=true\n' "$permission"
+        done
+        ;;
+      revoke_following_permission_false)
+        printf 'android.permission.CAMERA: granted=true\n'
+        printf 'android.permission.ACCESS_COARSE_LOCATION: granted=false\n'
+        printf 'android.permission.BLUETOOTH_SCAN: granted=false\n'
+        printf 'android.permission.BLUETOOTH_CONNECT: granted=false\n'
+        ;;
+      *)
+        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT; do
+          printf 'android.permission.%s: granted=false\n  flags=[]\n' "$permission"
+        done
+        ;;
+    esac
     ;;
   'shell am instrument '*)
     case "$*" in
@@ -223,6 +236,12 @@ exec bash .github/scripts/run-instrumented-tests.sh "$API_LEVEL"
 
     def test_failed_revoke_cannot_produce_false_green_permission_test(self):
         self.assertEqual(self.run_scenario("revoke_failure"), 1, self.output)
+        self.assert_live_diagnostics(1)
+        self.assertIn("nach zwei Versuchen", self.output)
+        self.assertFalse(any(line.startswith("adb shell am instrument") for line in self.calls))
+
+    def test_following_permission_granted_false_cannot_make_unrevoked_permission_green(self):
+        self.assertEqual(self.run_scenario("revoke_following_permission_false"), 1, self.output)
         self.assert_live_diagnostics(1)
         self.assertIn("nach zwei Versuchen", self.output)
         self.assertFalse(any(line.startswith("adb shell am instrument") for line in self.calls))

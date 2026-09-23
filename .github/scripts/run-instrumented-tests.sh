@@ -157,7 +157,7 @@ revoke_und_pruefe() {
       echo "::warning::pm revoke fuer $berechtigung fehlgeschlagen; pruefe tatsaechlichen Berechtigungszustand."
     fi
     paket_status=$(adb shell dumpsys package "$APP_ID")
-    status_ausschnitt=$(printf '%s\n' "$paket_status" | sed -n "/$berechtigung:/{N;p;}" | tr -d '\r')
+    status_ausschnitt=$(printf '%s\n' "$paket_status" | sed -n "/^[[:space:]]*${berechtigung}:/p" | tr -d '\r')
     echo "pm revoke $berechtigung (Versuch $versuch) - dumpsys-Ausschnitt: $status_ausschnitt"
     if echo "$status_ausschnitt" | grep -q "granted=false"; then
       return 0
