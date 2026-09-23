@@ -11,7 +11,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -94,5 +96,36 @@ class DiagnoseSupportBundlesAbschnittTest {
         }
         val dateien = outboxDir(app).listFiles { f -> f.name.endsWith(".zip") }.orEmpty()
         assertTrue("Der Knopf muss ein Bundle in die Outbox legen", dateien.isNotEmpty())
+    }
+
+    /**
+     * Owner-Freigabe 23.09.2026 (Folge-PR zu #182): der Fehlerzweig des Sofortupload-Knopfs
+     * zeigte nur einen Toast - die eigentliche Ausnahme blieb unsichtbar (unter Robolectric warf
+     * der Toast selbst eine NullPointerException und verdeckte sie). Jetzt muss sie gemeldet und
+     * ueber denselben Snackbar-Weg wie im Erfolgsfall angezeigt werden.
+     */
+    @Test
+    fun fehlerBeimSofortuploadWirdGemeldetUndAngezeigt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        // Eine Datei an der Stelle des Outbox-Ordners laesst das Kopieren in die Outbox
+        // scheitern - ein reproduzierbarer Fehler im try-Zweig des Knopfs.
+        outboxDir(app).writeText("keine Outbox")
+        val meldungen = CopyOnWriteArrayList<String>()
+
+        composeRule.setContent { DiagnoseScreen(onBack = {}, onShowSnackbar = { meldungen.add(it) }) }
+        composeRule.waitForIdle()
+
+        val knopf = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_support_bundles_create_and_upload)
+        composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(knopf))
+        composeRule.onNodeWithText(knopf).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.waitForIdle()
+            meldungen.any { it.startsWith("Fehlgeschlagen") }
+        }
+        assertTrue(
+            "Die Ausnahme muss als SUPPORT_BUNDLE_FAILED gemeldet werden",
+            app.container.diagnosticsReporter.recentEvents().any { it.code == DiagnosticCode.SUPPORT_BUNDLE_FAILED },
+        )
     }
 }

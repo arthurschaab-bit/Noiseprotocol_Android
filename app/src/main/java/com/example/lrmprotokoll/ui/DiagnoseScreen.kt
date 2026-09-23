@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +55,7 @@ import com.example.lrmprotokoll.ui.theme.statusColors
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -423,8 +425,24 @@ fun DiagnoseScreen(
                                         supportBundleOutboxAnzahl = withContext(Dispatchers.IO) { zaehleSupportOutbox(context) }
                                         val msg = context.getString(R.string.diagnose_support_bundles_upload_queued)
                                         onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    } catch (e: CancellationException) {
+                                        throw e
                                     } catch (e: Exception) {
-                                        Toast.makeText(context, "Fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
+                                        // Owner-Freigabe 23.09.2026 (Folge-PR zu #182): bisher nur ein
+                                        // Toast - die Ausnahme selbst stand nirgends (unter Robolectric
+                                        // warf der Toast sogar selbst und verdeckte sie). Jetzt Log und
+                                        // Report-Event, Hinweis ueber denselben Weg wie im Erfolgsfall.
+                                        Log.w("DiagnoseScreen", "Support-Bundle-Sofortupload fehlgeschlagen", e)
+                                        container.diagnosticsReporter.report(
+                                            code = DiagnosticCode.SUPPORT_BUNDLE_FAILED,
+                                            component = "DiagnoseScreen",
+                                            operation = "supportBundleSofortupload",
+                                            severity = DiagnosticSeverity.ERROR,
+                                            cause = e,
+                                            message = "Support-Bundle konnte nicht erstellt oder eingereiht werden",
+                                        )
+                                        val msg = "Fehlgeschlagen: ${e.message}"
+                                        onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                     } finally {
                                         supportBundleAktionLaeuft = false
                                     }
