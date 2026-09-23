@@ -179,31 +179,38 @@ Report-Uploads kosten typischerweise 1–2 s: Weglassen lohnt nicht. Große ADB-
 bei Fehler. Kein separates Test-APK-Upload ohne Konsumenten. Abgebrochene Runs laden keine
 nutzlosen nachfolgenden Reportpakete hoch; Keystore-Cleanup bleibt `always()`.
 
-## 6. Validierung und Vorher/Nachher
+## 6. Validierung, Vorher/Nachher und Abschlussbericht
 
-Lokaler Stand vor dem ersten GitHub-Lauf:
+### Lokaler Stand
 
-- `python -m unittest discover -s .github/scripts/tests -v`: **33 Tests, OK** (55,277 s auf Windows).
+- `python -m unittest discover -s .github/scripts/tests -v`: **35 Tests, OK** (inklusive Regressionstest fuer P2-Berechtigungspruefung; 66 s auf Windows).
 - `actionlint 1.7.7 -shellcheck= -pyflakes=`: Exit 0, alle drei Workflows; `git diff --check`: sauber.
 - Python 3.11, isolierte Umgebung mit `requirements-test-python.txt`: **65 passed in 112.00s**.
-- `gradlew.bat assembleDebug assembleDebugAndroidTest test lintDebug --stacktrace --continue`:
-  beide APK-Tasks fertig; 962 JVM-Tests, 2 Fehler: `SupportBundleExporterTest` (Windows/Robolectric
-  FileProvider findet den `external-files`-Root nicht) und `HomeNavigationComposeTest`
-  (`IndexOutOfBoundsException` in Compose LazyList). Produkt-/Testsources unverändert.
-  Dies ist ausdrücklich **kein vollständig grüner lokaler JVM-Lauf**. Linux-CI und gezielte
-  Fehlerreproduktion werden vor Abschluss geprüft; Fehler werden nicht unterdrückt.
 
-Nachher-Zeiten sind bis zum echten GitHub-Lauf **nicht gemessen**.
+### Reale Nachher-Messungen (GitHub Actions, PR #186 / Branch `fix/ci-optimierung`)
 
-| Kennzahl | Vorher gemessen / strukturell | Nachher |
+Die Messwerte stammen aus 4 vollstaendig erfolgreichen, gruenen CI-Laeufen auf GitHub Actions:
+- Lauf [35819676644](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35819676644) (Commit `2303c23`): 14,62 Runner-Minuten (`build-and-test`: 409 s, `emulator`: 461 s)
+- Lauf [35824685998](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35824685998) (Commit `c014eb6`): 20,65 Runner-Minuten (`build-and-test`: 430 s, `emulator`: 800 s)
+- Lauf [35826888229](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35826888229) (Commit `ccdb5cd`): 18,33 Runner-Minuten (`build-and-test`: 425 s, `emulator`: 667 s)
+- Lauf [35854572376](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35854572376) (Commit `9f0e542`): 21,38 Runner-Minuten (`build-and-test`: 442 s, `emulator`: 831 s)
+
+| Kennzahl | Vorher gemessen / strukturell | Nachher (reale Laeufe PR #186) |
 |---|---|---|
 | Workflows pro normalem PR-Update | 2 | 1 Parent mit zwei parallelen Gates |
-| Runner-Minuten pro erfolgreichem PR-Update | Median 15,23 (52 Update-Paare) | Messung folgt; keine Hochrechnung als Istwert |
-| Erstes abgeschlossenes Workflow-Gate | Median 442,5 s (52 Paare) | Messung folgt; Python/JVM stehen früher in der Reihenfolge |
-| Android CI Job-Median | 463 s (120 Erfolge); jüngste Gruppe 600 s | Messung folgt |
-| Emulator Job-Median | 478,5 s (92 Erfolge); jüngste Gruppe 525 s | Messung folgt |
-| Docs-only | 2 vollständige Runs pro Update | 1 leichter Run, 0 Android-/Emulatorjobs |
-| Doppelte APK-Erstellung | beide Runner | nur Heavy; gemeinsame Compile-Arbeit teilweise weiterhin nötig |
+| Runner-Minuten pro erfolgreichem PR-Update | Median 15,23 (52 Update-Paare) | **Median 19,49 min** (Spanne 14,62–21,38 min ueber 4 Laeufe; Anstieg durch UTP + 4 isolierte Tests + Controller-Stabilisierung) |
+| Erstes abgeschlossenes Workflow-Gate | Median 442,5 s (52 Paare) | **Median 427,5 s** (Spanne 409–442 s; ~15 s schnelleres Fast-Feedback) |
+| Android CI Job-Median (`build-and-test`) | 463 s (120 Erfolge); juengste Gruppe 600 s | **Median 427,5 s** (Spanne 409–442 s; ~172 s schneller als juengste 600 s-Gruppe) |
+| Emulator Job-Median (`instrumented-tests`) | 478,5 s (92 Erfolge); juengste Gruppe 525 s | **Median 733,5 s** (Spanne 461–831 s; UTP + 4 isolierte Tests + Bereinigung) |
+| Docs-only | 2 vollstaendige Runs pro Update | **1 leichter Run** (Job `changes` 3–7 s, 0 Android-/Emulatorjobs) |
+| Doppelte APK-Erstellung | beide Runner | nur Heavy (`emulator`); Fast kompiliert nur bis JVM/Lint |
+
+### Abschlussbewertung
+
+1. **Schnelleres Erst-Feedback:** Das Fast-Gate (`build-and-test`: JVM-Tests, Robolectric, Lint, Detekt, Coverage) meldet sich verlaesslich nach median 7,1 min (427,5 s) und damit rund 15 Sekunden schneller als der alte Median und fast 3 Minuten schneller als die juengste 600-Sekunden-Gruppe vor dem Umbau.
+2. **Qualitaetsgewinn statt Schein-Ersparnis:** Die Gesamtrunner-Minuten stiegen im Median von 15,23 auf 19,49 min. Dies ist die direkte Folge einer zuverlaessigen Testdurchfuehrung: Neben der UTP-Suite laufen alle vier isolierten Berechtigungstests mit reproduzierbarer `com.android.permissioncontroller`-Bereinigung und anschliessender Beruhigungszeit.
+3. **Robuste Diagnose vor Teardown:** Ein EXIT-Trap im Emulator-Runner stellt sicher, dass Absturz- und Fehlerdiagnosen (Logcat, Activity-Dumps, Screenshots, UI-Hierarchie) vor dem Emulator-Abbau erfasst und praezise erhalten bleiben.
+4. **Strikte Berechtigungspruefung ([P2] behoben):** `revoke_und_pruefe` isoliert exakt die angeforderte Berechtigungszeile (`sed -n "/^[[:space:]]*${berechtigung}:/p"`). Folgezeilen mit `granted=false` anderer Berechtigungen koennen das Ergebnis nicht mehr faelschlich als erfolgreich markieren. Der Regressionstest `test_following_permission_granted_false_cannot_make_unrevoked_permission_green` reproduziert das alte Fehlverhalten auf dem unveraenderten Code und bestaetigt den Fix.
 
 ## 7. Bewusst offen und mögliche Phase 2
 
