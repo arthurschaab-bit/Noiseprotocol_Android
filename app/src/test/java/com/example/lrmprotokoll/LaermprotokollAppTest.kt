@@ -68,4 +68,21 @@ class LaermprotokollAppTest {
         // wiederholt ohne Fehler benutzbar ist (z.B. bei einem erneuten manuellen Trigger).
         app.container.processExitCollector.auswerten()
     }
+
+    /**
+     * O-8: unter Robolectric darf der ANR-Watchdog nicht starten (siehe
+     * [LaermprotokollApp.laeuftUnterRobolectric]) - belegt zugleich, dass die Erkennung ueber
+     * `Build.FINGERPRINT` in dieser Umgebung tatsaechlich greift.
+     */
+    @Test
+    fun anrWatchdogStartetUnterRobolectricNicht() {
+        val app = LaermprotokollApp()
+        app.acraSenderProcessOverride = false
+
+        app.attachBaseContext(ApplicationProvider.getApplicationContext())
+        app.onCreate()
+
+        assertTrue(app.laeuftUnterRobolectric())
+        assertFalse(app.container.anrWatchdog.laeuft)
+    }
 }

@@ -10,6 +10,9 @@ enum class DiagnosticCode {
     APP_PREVIOUS_EXIT,
     APP_STARTUP_FAILED,
 
+    /** Der Main-Thread hat laenger als die Watchdog-Schwelle nicht reagiert (O-8, [AnrWatchdog]). */
+    APP_ANR_WATCHDOG,
+
     // Audio & Aufnahme
     AUDIO_INIT_FAILED,
     AUDIO_READ_FAILED,
