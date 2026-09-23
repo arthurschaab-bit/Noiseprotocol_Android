@@ -166,14 +166,24 @@ for eintrag in "${faelle[@]}"; do
     revoke_und_pruefe "$p"
   done
 
-  ausgabe=$(adb shell am instrument -w -e class "$klasse_methode" "$RUNNER" 2>&1)
+  instrument_status=0
+  ausgabe=$(adb shell am instrument -w -e class "$klasse_methode" "$RUNNER" 2>&1) || instrument_status=$?
   echo "$ausgabe"
+  mkdir -p app/build/outputs/androidTest-results/permission-logs
+  erstversuch_log="app/build/outputs/androidTest-results/permission-logs/${klasse_methode//\#/_}.txt"
+  printf '%s\n' "$ausgabe" > "$erstversuch_log"
+  if [ "$instrument_status" -eq 0 ] && printf '%s\n' "$ausgabe" | tr -d '\r' | grep -Eq '^OK \(1 test\)$'; then
+    erstversuch_status=PASSED
+  else
+    erstversuch_status=FAILED
+  fi
+  python3 .github/scripts/testbericht.py --record-direct "$klasse_methode" "$erstversuch_status" "$erstversuch_log"
 
   for p in "${perms[@]}"; do
     adb shell pm grant "$APP_ID" "$p" || true
   done
 
-  if ! echo "$ausgabe" | grep -q "OK (1 test)"; then
+  if [ "$erstversuch_status" = FAILED ]; then
     # Auch fuer die separat ausgefuehrten Berechtigungstests genau ein Retry.
     ziel="diagnose/${klasse_methode//\#/_}"
     mkdir -p "$ziel"
@@ -205,7 +215,7 @@ fi
 
 # Die JUnit-XML-Dateien liefern die tatsaechlich fehlgeschlagenen Methoden.
 # Jede wird exakt einmal in einem frischen Prozess erneut ausgefuehrt.
-mapfile -t fehlende_tests < <(python3 .github/scripts/testbericht.py --failed app/build/outputs/androidTest-results)
+mapfile -t fehlende_tests < <(python3 .github/scripts/testbericht.py --failed app/build/outputs/androidTest-results/connected)
 for klasse_methode in "${fehlende_tests[@]}"; do
   echo "::group::Wiederholung $klasse_methode"
   adb shell am force-stop "$APP_ID" || true

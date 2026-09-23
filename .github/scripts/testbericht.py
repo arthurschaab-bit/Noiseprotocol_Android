@@ -75,6 +75,19 @@ def wiederholungen_lesen(pfad):
     return ergebnisse
 
 
+def schreibe_einzeltest(pfad, kennung, bestanden, ausgabe):
+    """Ergaenzt die separat gestarteten Berechtigungstests zur JUnit-Testanzahl."""
+    klasse, methode = kennung.split('#', 1)
+    suite = ET.Element('testsuite', name=klasse, tests='1',
+                       failures='0' if bestanden else '1', errors='0')
+    fall = ET.SubElement(suite, 'testcase', classname=klasse, name=methode)
+    if not bestanden:
+        ET.SubElement(fall, 'failure', message='Erstversuch fehlgeschlagen').text = ausgabe
+    ET.SubElement(fall, 'system-out').text = ausgabe
+    os.makedirs(os.path.dirname(pfad), exist_ok=True)
+    ET.ElementTree(suite).write(pfad, encoding='utf-8', xml_declaration=True)
+
+
 def quarantaene_lesen(pfad):
     eintraege = {}
     warnungen = []
@@ -116,6 +129,18 @@ def instrumentierte_auswertung(suchpfad, retries, quarantine):
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+
+    if len(sys.argv) == 5 and sys.argv[1] == '--record-direct':
+        _, _, kennung, status, ausgabepfad = sys.argv
+        if '#' not in kennung or status not in ('PASSED', 'FAILED'):
+            sys.exit('Ungueltiger direkter Testfall.')
+        with open(ausgabepfad, encoding='utf-8', errors='replace') as datei:
+            ausgabe = ''.join(c for c in datei.read() if c in '\t\n\r' or ord(c) >= 32)
+        klasse = kennung.split('#', 1)[0]
+        pfad = os.path.join('app/build/outputs/androidTest-results/permission',
+                            f'TEST-{klasse}.xml')
+        schreibe_einzeltest(pfad, kennung, status == 'PASSED', ausgabe)
+        return
 
     if len(sys.argv) > 1 and sys.argv[1] in ('--failed', '--status', '--count'):
         modus = sys.argv[1]

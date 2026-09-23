@@ -11,6 +11,20 @@ spec.loader.exec_module(testbericht)
 
 
 class InstrumentierteAuswertungTest(unittest.TestCase):
+    def test_direkter_test_zaehlt_und_bleibt_bei_retry_flaky(self):
+        with tempfile.TemporaryDirectory() as basis:
+            basis = Path(basis)
+            kennung = 'com.example.lrmprotokoll.ui.PermissionTest#ohneBerechtigung'
+            ziel = basis / 'permission' / 'TEST-PermissionTest.xml'
+            testbericht.schreibe_einzeltest(str(ziel), kennung, False, 'zuerst rot')
+            self.assertEqual({kennung: 'FAILED'}, testbericht.faelle(str(basis)))
+            retries = basis / 'retries.tsv'
+            retries.write_text(kennung + '\tPASSED\n', encoding='utf-8')
+            _, flaky, failed, _, _ = testbericht.instrumentierte_auswertung(
+                str(basis), str(retries), None)
+            self.assertEqual([kennung], flaky)
+            self.assertEqual([], failed)
+
     def test_eindeutige_methoden_und_policy(self):
         with tempfile.TemporaryDirectory() as basis:
             basis = Path(basis)
