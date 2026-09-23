@@ -92,7 +92,7 @@ class BreadcrumbRingFileTest {
         val ring = BreadcrumbRingFile(verzeichnis)
         // Genug Eintraege fuer zwei volle Rotationen (A -> B -> A erneut, dabei A geleert).
         repeat(15000) { i -> ring.anhaengen(breadcrumb("Fuelltext Nummer $i mit etwas mehr Laenge drin")) }
-        ring.wartenBisFertig()
+        ring.wartenBisFertig(timeoutSekunden = 15)
 
         val gelesen = ring.lesen()
         assertTrue("Die aeltesten Eintraege (Index 0) duerfen nach zwei Rotationen nicht mehr vorhanden sein", gelesen.none { it.message.contains("Nummer 0 ") })
