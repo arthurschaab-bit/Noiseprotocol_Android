@@ -104,8 +104,18 @@ class ReportConfigSettingsTest {
     fun ungepruefteGebieteKoennenNichtAusgewaehltWerden() {
         composeRule.setContent { ReportAreaSelection(value = "WA", enabled = true, onSelect = { error("Keine Auswahl erwartet") }) }
         composeRule.onNodeWithTag("input_report_gebietseinstufung").performClick()
-        composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
-        composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
+
+        // In Robolectric erzeugt ExposedDropdownMenu (Popup) eine permanente Recomposition/Layout-
+        // Schleife, solange autoAdvance = true ist (RobolectricIdlingStrategy wartet 60 s vergebens).
+        // Mit autoAdvance = false wird der Semantics-Zustand des geoeffneten Menues sofort geprueft.
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.mainClock.advanceTimeBy(100)
+            composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
+            composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
     }
 
     @Test

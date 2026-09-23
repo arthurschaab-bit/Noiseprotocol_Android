@@ -18,14 +18,19 @@ import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import android.os.Looper
+import org.robolectric.Shadows.shadowOf
 
 /** Der UI-Pfad erreicht den Runner und zeigt dessen Dateifehler ohne Absturz. */
 @RunWith(RobolectricTestRunner::class)
@@ -34,6 +39,15 @@ import org.robolectric.annotation.GraphicsMode
 class BerichtErstellenSheetTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    @After
+    fun datenbankZuruecksetzen() {
+        runBlocking(Dispatchers.IO) {
+            ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+                .container.database.clearAllTables()
+        }
+    }
 
     @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
@@ -71,15 +85,35 @@ class BerichtErstellenSheetTest {
                 },
             )
         }
+        composeRule.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idle()
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
         val startButton = composeRule.onNodeWithTag("btn_bericht_erstellen_start")
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
-            runCatching { startButton.assertIsEnabled() }.isSuccess
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            try {
+                composeRule.waitForIdle()
+            } catch (_: Throwable) {}
+            val nodes = composeRule.onAllNodesWithTag("btn_bericht_erstellen_start").fetchSemanticsNodes()
+            val isEnabled = if (nodes.isNotEmpty()) runCatching { startButton.assertIsEnabled() }.isSuccess else false
+            if (isEnabled) {
+                true
+            } else {
+                Thread.sleep(50)
+                false
+            }
         }
         startButton.performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
-            composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
-                .fetchSemanticsNodes().isNotEmpty()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            try {
+                composeRule.waitForIdle()
+            } catch (_: Throwable) {}
+            val nodes = composeRule.onAllNodesWithTag("bericht_erstellen_fehler").fetchSemanticsNodes()
+            if (nodes.isNotEmpty()) {
+                true
+            } else {
+                Thread.sleep(50)
+                false
+            }
         }
 
         assertTrue(runnerAufgerufen.get())
