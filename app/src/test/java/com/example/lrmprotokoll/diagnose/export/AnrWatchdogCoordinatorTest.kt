@@ -9,6 +9,8 @@ import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.HaengerBefund
 import com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR
 import java.io.File
@@ -79,13 +81,16 @@ class AnrWatchdogCoordinatorTest {
         File(context.filesDir, SUPPORT_OUTBOX_DIR).deleteRecursively()
     }
 
-    private fun coordinator(scope: CoroutineScope = TestScope()) = AnrWatchdogCoordinator(
+    private fun coordinator(
+        scope: CoroutineScope = TestScope(),
+        exporterReporter: DiagnosticsReporter = reporter,
+    ) = AnrWatchdogCoordinator(
         context = context,
         verzeichnis = verzeichnis,
         reporter = reporter,
         exporter = SupportBundleExporter(
             context = context,
-            reporter = reporter,
+            reporter = exporterReporter,
             diagnosticLogDao = LeeresDiagnosticLogDao,
             breadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
             settingsManager = container.settingsManager,
@@ -178,5 +183,25 @@ class AnrWatchdogCoordinatorTest {
         assertFalse(mitschnitt.exists())
         val outbox = File(context.filesDir, SUPPORT_OUTBOX_DIR).listFiles().orEmpty()
         assertEquals(1, outbox.count { it.name.endsWith("_anr.zip") })
+    }
+
+    @Test
+    fun einNeuerHaengerWaehrendDesBundlesBleibtFuerDasNaechsteBundleErhalten() = runTest {
+        // Der Exporter meldet zu Beginn einen Breadcrumb "SupportBundle" - genau dann "haengt"
+        // der Main-Thread erneut und ueberschreibt den Mitschnitt.
+        lateinit var zweiter: AnrWatchdogCoordinator
+        val zweiterBefund = HaengerBefund(dauerMs = 77_777L, mainThreadStack = befund.mainThreadStack)
+        val exporterReporter = object : DiagnosticsReporter by reporter {
+            override fun breadcrumb(category: String, message: String, data: Map<String, Any?>, level: DiagnosticSeverity) {
+                if (category == "SupportBundle") zweiter.haengerErkannt(zweiterBefund)
+            }
+        }
+        zweiter = coordinator(exporterReporter = exporterReporter)
+        zweiter.haengerErkannt(befund)
+
+        assertNotNull(zweiter.bundleErstellen(ausloeser = "Watchdog"))
+
+        assertTrue("Der Mitschnitt des zweiten Haengers muss liegen bleiben", mitschnitt.exists())
+        assertTrue(mitschnitt.readText().contains("mainThreadOhneReaktionMs: 77777"))
     }
 }

@@ -37,7 +37,8 @@ internal const val ANR_WATCHDOG_MAX_BYTES = 256L * 1024
  *   ([ausstehendesBundleNachholen]). Waehrend des Haengers wird bewusst nichts gebaut - das
  *   wuerde Speicher und CPU genau im schlechtesten Moment belasten.
  * - Ausstehend heisst: die Mitschnitt-Datei existiert. Nach dem Bundle (oder wenn die
- *   Obergrenze greift) wird sie geloescht.
+ *   Obergrenze greift) wird sie geloescht - ausser ein neuer Haenger hat sie inzwischen
+ *   ueberschrieben.
  * - Hoechstens [ANR_WATCHDOG_MAX_BUNDLES_JE_24H] Bundles je 24 h. Der Upload folgt demselben
  *   Schalter wie bei Abstuerzen ([SettingsManager.absturzAutoUploadAktiv]), inklusive
  *   6-h-Fallback ohne WLAN (Konzept 4.7 nennt Absturz- und ANR-Bundles gemeinsam).
@@ -100,6 +101,9 @@ class AnrWatchdogCoordinator(
     /** @return die Datei in der Outbox, oder `null`, wenn nichts ansteht oder die Obergrenze greift. */
     internal suspend fun bundleErstellen(ausloeser: String): File? = bundleMutex.withLock {
         if (!mitschnitt.exists()) return null
+        // Ein neuer Haenger kann den Mitschnitt ueberschreiben, waehrend dieses Bundle entsteht -
+        // dann gehoert er zum naechsten Bundle und darf unten nicht mit geloescht werden.
+        val stand = mitschnitt.lastModified() to mitschnitt.length()
 
         val jetzt = jetztMs()
         val imFenster = settingsManager.anrWatchdogBundleZeitstempel
@@ -111,7 +115,7 @@ class AnrWatchdogCoordinator(
                 message = "Kein Bundle: Obergrenze $ANR_WATCHDOG_MAX_BUNDLES_JE_24H je 24 h erreicht",
                 level = DiagnosticSeverity.WARN,
             )
-            mitschnitt.delete()
+            loescheFallsUnveraendert(stand)
             settingsManager.anrWatchdogBundleZeitstempel = imFenster
             return null
         }
@@ -128,10 +132,14 @@ class AnrWatchdogCoordinator(
             Log.w(TAG, "ANR-Bundle konnte nicht erstellt werden", it)
             return null
         }
-        mitschnitt.delete()
+        loescheFallsUnveraendert(stand)
         settingsManager.anrWatchdogBundleZeitstempel = imFenster + jetzt
         if (settingsManager.absturzAutoUploadAktiv) uploadEinplanen(context)
         ziel
+    }
+
+    private fun loescheFallsUnveraendert(stand: Pair<Long, Long>) {
+        if (mitschnitt.lastModified() == stand.first && mitschnitt.length() == stand.second) mitschnitt.delete()
     }
 
     private fun mitschnittText(befund: HaengerBefund): String = buildString {
