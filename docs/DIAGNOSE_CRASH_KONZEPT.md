@@ -2,7 +2,7 @@
 
 **Stand:** 23.09.2026
 **Status:** Umgesetzt (alle acht Schritte, Etappen A-C) - siehe Abschnitt 8b für die weiterhin
-offenen Punkte O-1, O-8 und die Geräteverifikation (`CHECKLISTE_GERAETETEST.md` Teil F). Die
+offenen Punkte O-1, O-8 (nur noch der native Teil) und die Geräteverifikation (`CHECKLISTE_GERAETETEST.md` Teil F). Die
 instrumentierten Absturztests laufen auf dem CI-Emulator (API 34) grün; auf echter Hardware ist
 nichts geprüft - das bleibt Aufgabe der Geräteverifikation.
 **Anlass:** Owner-Meldung 17.09.2026 — „Die App crasht während des Aufzeichnungsbetriebs, gerade
@@ -290,6 +290,7 @@ Entsprechend nehmen wir alle vier Bausteine auf. Alles läuft durch `DiagnosticR
 | `crash/exit_info.json` | Bis zu 16 `ApplicationExitInfo`-Einträge mit Grund, Status, Importance, RSS/PSS | Zeigt auch die Abstürze, die ACRA *nicht* sieht (Kill durch das System, LOW_MEMORY) |
 | `crash/anr_trace.txt` | `getTraceInputStream()` bei `REASON_ANR` | Vollständiger Thread-Dump vom OS |
 | `crash/native_tombstone.pb` | `getTraceInputStream()` bei `REASON_CRASH_NATIVE` (API 31+) | Native Abstürze aus MediaPipe/Chaquopy/CameraX |
+| `crash/anr_watchdog.txt` | Mitschnitt des ANR-Watchdogs (O-8): Main-Thread-Stack zuerst, dann die weiteren Threads | Der einzige ANR-Beleg auf Android 10; ab Android 11 auch für Hänger, von denen sich die App erholt |
 | `log/logcat.txt` | Logcat des eigenen Prozesses, **vollständig**; einzige Filterung ist `DiagnosticRedactor` (Owner-Entscheidung O-2, Abschnitt 8a) | Die Sekunden vor dem Absturz |
 | `log/breadcrumbs.jsonl` | Ringdatei, zusammengeführt | Strukturierter App-Kontext |
 | `log/events.jsonl` | Diagnose-Events aus Room, **gestreamt und begrenzt** | Fehlerhistorie |
@@ -323,6 +324,7 @@ ist hier der Hauptverdächtige. Daher verbindlich:
   | `log/breadcrumbs.jsonl` | 512 KB (Ringdatei-Obergrenze) | 512 KB |
   | `crash/anr_trace.txt` | 4 MB | — |
   | `crash/native_tombstone.pb` | 8 MB | — |
+  | `crash/anr_watchdog.txt` | 256 KB | — |
   | **Fertiges ZIP** | **10 MB** | **2 MB** |
 
   Wird eine Grenze erreicht, wird abgeschnitten und eine Abschlusszeile vermerkt, wie viel fehlt.
@@ -483,6 +485,7 @@ Ein Diagnosesystem, das nur im Ernstfall getestet wird, ist kein getestetes Syst
 |---|---|---|
 | **O-2** | **Ja.** `logcat.txt` kommt vollständig ins Bundle, einzige Filterung ist `DiagnosticRedactor`. Begründung: Ziel ist der private Drive-Ordner des Owners, kein fremder Dienst — und Logcat ist der Inhalt mit dem höchsten Analysewert. | 17.09.2026 |
 | **O-6** | **Budget angehoben** (Owner: „passt, kannst auch gerne erhöhen"): 10 MB je Absturz-Bundle, 2 MB je periodischem Bundle, jeweils als fertiges ZIP. Einzelobergrenzen siehe Abschnitt 4.5. | 17.09.2026 |
+| **O-8 (ANR-Teil)** | **ANR-Watchdog im App-Prozess, auf allen Android-Versionen.** Schwelle 5 s ohne Reaktion des Main-Threads (wie Androids Eingabe-ANR). Beim Erkennen sofort ein Stacktrace-Mitschnitt (`crash/anr_watchdog.txt`), das Bundle (Typ `anr`) erst, wenn der Main-Thread wieder reagiert, spätestens beim nächsten Start. Getestet mit Unit-Tests und einem instrumentierten Test der ganzen Kette (AGENTS.md 8b). Ohne ausdrückliche Owner-Vorgabe gesetzt und im PR vermerkt: höchstens 3 ANR-Bundles je 24 h, Upload über den Schalter „Automatischer Upload bei Absturz" inkl. 6-h-Fallback, keine Meldung mit angehängtem Debugger. | 23.09.2026 |
 | **O-7** | **`crash/` wird nie gekürzt**, das Budget aus O-6 ist für Absturz-Bundles ein Richtwert. Der Code tat das schon seit Schritt 4, wich damit aber still von der ursprünglichen Kürzungsreihenfolge in 4.5 („zuletzt `crash/`") ab - aufgefallen im Copilot-Review zu PR #182. Owner wählte, die Abweichung zur Vorgabe zu machen statt `crash/` zu kürzen. | 23.09.2026 |
 
 Aus O-2 folgt unmittelbar eine Änderung an Schritt 1: `logcatArguments` wird nicht auf wenige
@@ -504,7 +507,7 @@ nicht selbst entschieden:
 | # | Frage | Warum offen |
 |---|---|---|
 | **O-1** | Sentry aktivieren, und wenn ja wann? | Owner am 17.09.2026: „langfristig geplant, noch offen". Betrifft die Handler-Reihenfolge (Abschnitt 5). Wiedervorlage: nach Schritt 5. |
-| **O-8** | ANRs und native Abstürze unter Android 10 erfassen? | Betrifft das Owner-Gerät (Huawei P30, letzte Version EMUI 12 auf Basis von Android 10 = API 29). `ApplicationExitInfo` gibt es erst ab API 30, Tombstones erst ab API 31 - dort liefert `ProcessExitCollector` nichts (siehe Fund unten). Schließen hieße eine neue Komponente (z. B. ANR-Watchdog im App-Prozess, Marker für unsaubere Beendigung, nativer Signal-Handler) - nach AGENTS.md 8a erst mit dem Owner klären. Wiedervorlage: Vorschlag vor der Geräteverifikation F14 auf dem P30, vom Owner zu bestätigen. |
+| **O-8 (nativer Teil)** | Native Abstürze unter Android 10/11 erfassen? | Betrifft das Owner-Gerät (Huawei P30, letzte Version EMUI 12 auf Basis von Android 10 = API 29). Tombstones gibt es erst ab API 31. Der ANR-Teil ist entschieden und umgesetzt (8a). Für native Abstürze bräuchte es einen nativen Signal-Handler (NDK/Crashpad) - deutlich mehr Aufwand. Wiedervorlage (Vorschlag, vom Owner zu bestätigen): sobald es Hinweise auf native Abstürze gibt, etwa Breadcrumbs, die ohne ACRA-Bundle und ohne Watchdog-Mitschnitt abbrechen. |
 
 **Entschieden (Owner, 17./18.09.2026 - zur Nachvollziehbarkeit hier belassen, keine offenen Punkte mehr):**
 
@@ -530,12 +533,18 @@ ANRs und native Abstürze (MediaPipe, Chaquopy, CameraX) hinterlassen außer der
 Breadcrumb-Ringdatei keine Spur. Die Annahme in Abschnitt 9 trifft für das Owner-Gerät deshalb
 nicht zu. Offener Punkt O-8.
 
+**Nachtrag 23.09.2026:** Für ANRs geschlossen durch den ANR-Watchdog (O-8, ANR-Teil in 8a). Er
+liefert auf allen Versionen einen Main-Thread-Stack und baut selbst ein `anr`-Bundle - damit gibt
+es jetzt auch einen automatischen Bundle-/Upload-Pfad für ANRs. Ab Android 11 nimmt ein beim
+Neustart nachgeholtes Bundle zusätzlich den System-ANR-Trace mit. Offen bleiben native Abstürze
+unter Android 10/11.
+
 ---
 
 ## 9. Abgrenzung
 
 Nicht Teil von M12: Wechsel des Crash-Backends, native Absturzerfassung mit eigenem
 Signal-Handler (das leistet `getTraceInputStream()` ab API 31 bereits ausreichend - für
-Android 10/11 nicht, siehe O-8 in Abschnitt 8b), Umbau der
+Android 10/11 nicht, siehe O-8 (nativer Teil) in Abschnitt 8b), Umbau der
 Room-Diagnosetabelle auf ein strukturiertes Schema (wünschenswert wegen L7, aber ein eigener
 Schritt mit Migration), Änderungen an der Messdaten-Ablage in Drive, Aktivierung von Sentry.
