@@ -86,8 +86,8 @@ class ProcessExitCollectorTest {
         collector.auswerten()
 
         assertEquals(3, reporter.recentBreadcrumbs().size)
-        // Nur CRASH und ANR gelten als "unnormal" und erzeugen zusaetzlich ein Report-Event
-        // (Verhaltensparitaet zur alten Implementierung in LaermprotokollApp).
+        // Nur CRASH, CRASH_NATIVE und ANR gelten als "unnormal" und erzeugen zusaetzlich ein
+        // Report-Event - LOW_MEMORY nicht.
         assertEquals(2, reporter.recentEvents().size)
         assertEquals(300L, gespeicherterZeitstempel)
     }
@@ -176,6 +176,23 @@ class ProcessExitCollectorTest {
         collector.auswerten()
 
         assertFalse(File(verzeichnis, NATIVE_TOMBSTONE_DATEINAME).exists())
+    }
+
+    @Test
+    fun nativerAbsturzErzeugtReportEventAuchOhneTombstone() {
+        // Review-Fund (Folge-PR zu #182): ACRA sieht native Abstuerze nicht - das Report-Event
+        // ist der einzige Hinweis, auch unter API 31, wo es kein Tombstone gibt.
+        val (reporter, collector) = reporterUndCollector(
+            listOf(exitInfo(ApplicationExitInfo.REASON_CRASH_NATIVE, timestamp = 100)),
+            sdkInt = Build.VERSION_CODES.R,
+        )
+
+        collector.auswerten()
+
+        val events = reporter.recentEvents()
+        assertEquals(1, events.size)
+        assertEquals(DiagnosticCode.APP_PREVIOUS_EXIT, events.single().code)
+        assertEquals(DiagnosticSeverity.WARN, reporter.recentBreadcrumbs().single().level)
     }
 
     @Test
