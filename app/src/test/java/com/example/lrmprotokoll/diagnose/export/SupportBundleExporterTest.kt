@@ -10,6 +10,8 @@ import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
 import java.security.MessageDigest
@@ -17,6 +19,7 @@ import java.util.zip.ZipFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -63,6 +66,7 @@ class SupportBundleExporterTest {
             initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
         ),
         ringFile: BreadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+        traceVerzeichnis: File = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
     ) = SupportBundleExporter(
         context = context,
         reporter = reporter,
@@ -70,7 +74,7 @@ class SupportBundleExporterTest {
         breadcrumbRingFile = ringFile,
         settingsManager = container.settingsManager,
         database = container.database,
-        traceVerzeichnis = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
+        traceVerzeichnis = traceVerzeichnis,
     )
 
     private fun logEintrag(id: Long, nachricht: String) =
@@ -293,5 +297,31 @@ class SupportBundleExporterTest {
                 manifest.contains("\"kuerzungsstufe\": 0") || manifest.contains("Budget ueberschritten"),
             )
         }
+    }
+
+    @Test
+    fun crashOrdnerWirdNieGekuerztAuchWennBudgetUeberschritten() = runTest {
+        // Owner-Entscheidung O-7 (Konzept 4.5): crash/ bleibt vollstaendig, das 10-MB-Budget ist
+        // fuer Absturz-Bundles ein Richtwert. Zufallsbytes komprimieren praktisch nicht -
+        // ANR-Trace und Tombstone an ihren Einzelobergrenzen (4 MB + 8 MB) reissen das Budget
+        // allein, auch nachdem events.jsonl und logcat.txt weggekuerzt sind.
+        val zufall = java.util.Random(42)
+        val anrTrace = ByteArray(4 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val tombstone = ByteArray(8 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val traces = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}").apply { mkdirs() }
+        File(traces, ANR_TRACE_DATEINAME).writeBytes(anrTrace)
+        File(traces, NATIVE_TOMBSTONE_DATEINAME).writeBytes(tombstone)
+
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()), traceVerzeichnis = traces)
+            .createBundle(BundleKontext(typ = BundleTyp.ABSTURZ, ausloeser = "Test"))
+
+        assertTrue("Budget darf hier ueberschritten sein", zipFile.length() > 10L * 1024 * 1024)
+        ZipFile(zipFile).use { zip ->
+            assertArrayEquals(anrTrace, zip.getInputStream(zip.getEntry("crash/anr_trace.txt")).readBytes())
+            assertArrayEquals(tombstone, zip.getInputStream(zip.getEntry("crash/native_tombstone.pb")).readBytes())
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            assertTrue(manifest.contains("\"kuerzungsstufe\": 2"))
+        }
+        traces.deleteRecursively()
     }
 }

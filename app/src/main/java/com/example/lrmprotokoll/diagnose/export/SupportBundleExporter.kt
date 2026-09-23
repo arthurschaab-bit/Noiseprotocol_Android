@@ -123,7 +123,8 @@ class SupportBundleExporter(
         val istPeriodisch = kontext.typ == BundleTyp.PERIODISCH
         val zipBudget = if (istPeriodisch) ZIP_BUDGET_PERIODISCH else ZIP_BUDGET_ABSTURZ
         // Kuerzungsreihenfolge (Konzept 4.5): zuerst events.jsonl, dann zusaetzlich logcat.txt,
-        // crash/ wird nie gekuerzt - dafuer existiert das Bundle.
+        // crash/ wird nie gekuerzt - dafuer existiert das Bundle (Owner-Entscheidung O-7: das
+        // Budget ist fuer Absturz-Bundles damit ein Richtwert, keine harte Grenze).
         val eventsMax = if (kuerzungsstufe >= 1) 0L else if (istPeriodisch) EVENTS_MAX_PERIODISCH else EVENTS_MAX_ABSTURZ
         val logcatMax = if (kuerzungsstufe >= 2) 0L else if (istPeriodisch) LOGCAT_MAX_PERIODISCH else LOGCAT_MAX_ABSTURZ
 
