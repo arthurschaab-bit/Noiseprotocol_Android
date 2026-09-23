@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -39,6 +40,28 @@ class DiagnoseSupportBundlesAbschnittTest {
 
     private fun outboxDir(context: Context) =
         File(context.filesDir, com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR)
+
+    /**
+     * CI-Fund (23.09.2026, PR #187): ein Knopf-Test darf erst enden, wenn die Knopf-Coroutine
+     * fertig ist. Sie laeuft nach dem Kopieren in die Outbox weiter (Upload-Planung,
+     * Outbox-Zaehlung, Hinweis) und setzt zuletzt im `finally` `supportBundleAktionLaeuft = false`
+     * - unter Robolectric aus einem Hintergrund-Thread, und bei Testende sogar trotz Abbruch.
+     * Faellt dieser Schreibzugriff in den Wechsel zum naechsten Test, werden die folgenden
+     * Compose-Tests derselben JVM nicht mehr idle (`AppNotIdleException`), so im Volllauf gesehen:
+     * direkt danach scheiterten `HomeNavigationComposeTest`, `MeterScreenComposeTest`,
+     * `MeterScreenPermissionAndScanTest` und `ReportConfigSettingsTest` - dasselbe Muster wie auf
+     * `main` seit #182. Belegt mit einer (nicht committeten) Sonde: Schreibzugriff aus einem
+     * Hintergrund-Thread nach Testende -> nachfolgender `HomeNavigationComposeTest` 4/4
+     * `AppNotIdleException`, ohne ihn 4/4 gruen.
+     *
+     * Wieder aktiv mit dem Ausgangstext heisst: der letzte Schreibzugriff ist angewendet.
+     */
+    private fun warteBisKnopfWiederBereit(knopf: String) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.waitForIdle()
+            runCatching { composeRule.onNodeWithText(knopf).assertIsEnabled() }.isSuccess
+        }
+    }
 
     @Before
     fun aufbauen() {
@@ -83,17 +106,21 @@ class DiagnoseSupportBundlesAbschnittTest {
         // NullPointerException ("Can't toast on a thread that has not called Looper.prepare()").
         // Ein echter Aufrufer (siehe Navigationsgraph) uebergibt ohnehin immer einen echten
         // Snackbar-Callback - der Toast-Rueckfall ist nur fuer Vorschauen/Tests ohne Host gedacht.
-        composeRule.setContent { DiagnoseScreen(onBack = {}, onShowSnackbar = {}) }
+        val meldungen = CopyOnWriteArrayList<String>()
+        composeRule.setContent { DiagnoseScreen(onBack = {}, onShowSnackbar = { meldungen.add(it) }) }
         composeRule.waitForIdle()
 
         val knopf = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_support_bundles_create_and_upload)
         composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(knopf))
         composeRule.onNodeWithText(knopf).performClick()
 
+        // Der Hinweis kommt erst nach Upload-Planung und Outbox-Zaehlung - danach nur noch das
+        // finally der Knopf-Coroutine, auf das warteBisKnopfWiederBereit wartet.
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.waitForIdle()
-            outboxDir(app).listFiles { f -> f.name.endsWith(".zip") }?.isNotEmpty() == true
+            meldungen.isNotEmpty()
         }
+        warteBisKnopfWiederBereit(knopf)
         val dateien = outboxDir(app).listFiles { f -> f.name.endsWith(".zip") }.orEmpty()
         assertTrue("Der Knopf muss ein Bundle in die Outbox legen", dateien.isNotEmpty())
     }
@@ -123,6 +150,7 @@ class DiagnoseSupportBundlesAbschnittTest {
             composeRule.waitForIdle()
             meldungen.any { it.startsWith("Fehlgeschlagen") }
         }
+        warteBisKnopfWiederBereit(knopf)
         assertTrue(
             "Die Ausnahme muss als SUPPORT_BUNDLE_FAILED gemeldet werden",
             app.container.diagnosticsReporter.recentEvents().any { it.code == DiagnosticCode.SUPPORT_BUNDLE_FAILED },
