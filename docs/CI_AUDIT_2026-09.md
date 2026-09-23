@@ -179,7 +179,7 @@ Report-Uploads kosten typischerweise 1–2 s: Weglassen lohnt nicht. Große ADB-
 bei Fehler. Kein separates Test-APK-Upload ohne Konsumenten. Abgebrochene Runs laden keine
 nutzlosen nachfolgenden Reportpakete hoch; Keystore-Cleanup bleibt `always()`.
 
-## 6. Validierung, Vorher/Nachher und Abschlussbericht
+## 6. Validierung, Vorher/Nachher und Messbericht
 
 ### Lokaler Stand
 
@@ -189,28 +189,32 @@ nutzlosen nachfolgenden Reportpakete hoch; Keystore-Cleanup bleibt `always()`.
 
 ### Reale Nachher-Messungen (GitHub Actions, PR #186 / Branch `fix/ci-optimierung`)
 
-Die Messwerte stammen aus 4 vollstaendig erfolgreichen, gruenen CI-Laeufen auf GitHub Actions:
-- Lauf [35819676644](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35819676644) (Commit `2303c23`): 14,62 Runner-Minuten (`build-and-test`: 409 s, `emulator`: 461 s)
-- Lauf [35824685998](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35824685998) (Commit `c014eb6`): 20,65 Runner-Minuten (`build-and-test`: 430 s, `emulator`: 800 s)
-- Lauf [35826888229](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35826888229) (Commit `ccdb5cd`): 18,33 Runner-Minuten (`build-and-test`: 425 s, `emulator`: 667 s)
-- Lauf [35854572376](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35854572376) (Commit `9f0e542`): 21,38 Runner-Minuten (`build-and-test`: 442 s, `emulator`: 831 s)
+Dokumentierte Einzelmessungen erfolgreicher Jobversuche auf GitHub Actions (mit getrennter Ausweisung von Erstversuchen und Wiederholungslaeufen):
 
-| Kennzahl | Vorher gemessen / strukturell | Nachher (reale Laeufe PR #186) |
+- **Erstversuche (Attempt 1):**
+  - Lauf [35824685998](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35824685998) (Commit `c014eb6`): Erstversuch erfolgreich; 20,65 Runner-Minuten (`build-and-test`: 430 s, `emulator`: 800 s).
+  - Lauf [35826888229](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35826888229) (Commit `ccdb5cd`): Erstversuch erfolgreich; 18,33 Runner-Minuten (`build-and-test`: 425 s, `emulator`: 667 s).
+  - Lauf [35904345536](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35904345536) (Commit `f8f4f23`): Erstversuch erfolgreich; 21,52 Runner-Minuten (`build-and-test`: 378 s, `emulator`: 903 s).
+- **Wiederholungslaeufe (Attempt 2, Re-Run nach Testfehlschlag):**
+  - Lauf [35819676644](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35819676644) (Commit `2303c23`): Wiederholungslauf erfolgreich; 14,62 Runner-Minuten (`build-and-test`: 409 s, `emulator`: 461 s).
+  - Lauf [35854572376](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/35854572376) (Commit `9f0e542`): Wiederholungslauf erfolgreich; 21,38 Runner-Minuten (`build-and-test`: 442 s, `emulator`: 831 s).
+
+| Kennzahl | Vorher gemessen / strukturell | Nachher (dokumentierte Einzelmessungen erfolgreicher Versuche in PR #186) |
 |---|---|---|
 | Workflows pro normalem PR-Update | 2 | 1 Parent mit zwei parallelen Gates |
-| Runner-Minuten pro erfolgreichem PR-Update | Median 15,23 (52 Update-Paare) | **Median 19,49 min** (Spanne 14,62–21,38 min ueber 4 Laeufe; Anstieg durch UTP + 4 isolierte Tests + Controller-Stabilisierung) |
-| Erstes abgeschlossenes Workflow-Gate | Median 442,5 s (52 Paare) | **Median 427,5 s** (Spanne 409–442 s; ~15 s schnelleres Fast-Feedback) |
-| Android CI Job-Median (`build-and-test`) | 463 s (120 Erfolge); juengste Gruppe 600 s | **Median 427,5 s** (Spanne 409–442 s; ~172 s schneller als juengste 600 s-Gruppe) |
-| Emulator Job-Median (`instrumented-tests`) | 478,5 s (92 Erfolge); juengste Gruppe 525 s | **Median 733,5 s** (Spanne 461–831 s; UTP + 4 isolierte Tests + Bereinigung) |
+| Runner-Minuten pro erfolgreichem PR-Update | Median 15,23 (52 Update-Paare) | Einzelwerte: 14,62 / 18,33 / 20,65 / 21,38 / 21,52 min (Median 20,65 min) |
+| Erstes abgeschlossenes Workflow-Gate (`build-and-test`) | Median 442,5 s (52 Paare) | Einzelwerte erfolgreicher Versuche: 378 s, 409 s, 425 s, 430 s, 442 s (Median 425,0 s); gilt nur bei direktem Erfolg, da Wiederholungen die Entwickler-Feedbackzeit verlaengern |
+| Android CI Job (`build-and-test`) | 463 s (120 Erfolge); juengste Gruppe 600 s | Einzelwerte: 378 s, 409 s, 425 s, 430 s, 442 s (Median 425,0 s) |
+| Emulator Job (`instrumented-tests`) | 478,5 s (92 Erfolge); juengste Gruppe 525 s | Einzelwerte: 461 s, 667 s, 800 s, 831 s, 903 s (Median 800,0 s) |
 | Docs-only | 2 vollstaendige Runs pro Update | **1 leichter Run** (Job `changes` 3–7 s, 0 Android-/Emulatorjobs) |
 | Doppelte APK-Erstellung | beide Runner | nur Heavy (`emulator`); Fast kompiliert nur bis JVM/Lint |
 
 ### Abschlussbewertung
 
-1. **Schnelleres Erst-Feedback:** Das Fast-Gate (`build-and-test`: JVM-Tests, Robolectric, Lint, Detekt, Coverage) meldet sich verlaesslich nach median 7,1 min (427,5 s) und damit rund 15 Sekunden schneller als der alte Median und fast 3 Minuten schneller als die juengste 600-Sekunden-Gruppe vor dem Umbau.
-2. **Qualitaetsgewinn statt Schein-Ersparnis:** Die Gesamtrunner-Minuten stiegen im Median von 15,23 auf 19,49 min. Dies ist die direkte Folge einer zuverlaessigen Testdurchfuehrung: Neben der UTP-Suite laufen alle vier isolierten Berechtigungstests mit reproduzierbarer `com.android.permissioncontroller`-Bereinigung und anschliessender Beruhigungszeit.
-3. **Robuste Diagnose vor Teardown:** Ein EXIT-Trap im Emulator-Runner stellt sicher, dass Absturz- und Fehlerdiagnosen (Logcat, Activity-Dumps, Screenshots, UI-Hierarchie) vor dem Emulator-Abbau erfasst und praezise erhalten bleiben.
-4. **Strikte Berechtigungspruefung ([P2] behoben):** `revoke_und_pruefe` isoliert exakt die angeforderte Berechtigungszeile (`sed -n "/^[[:space:]]*${berechtigung}:/p"`). Folgezeilen mit `granted=false` anderer Berechtigungen koennen das Ergebnis nicht mehr faelschlich als erfolgreich markieren. Der Regressionstest `test_following_permission_granted_false_cannot_make_unrevoked_permission_green` reproduziert das alte Fehlverhalten auf dem unveraenderten Code und bestaetigt den Fix.
+1. **Feedback-Dauer erfolgreicher Joblaeufe:** Bei erfolgreichen Einzellaeufen liefert das Fast-Gate (`build-and-test`) nach 378–442 s Rueckmeldung zu JVM-Tests, Lint und Coverage. Zu beachten ist, dass dies keine garantierte PR-Feedbackzeit darstellt: Schlaegt ein Lauf fehl und muss wiederholt werden (wie bei den Laeufen 35819676644 und 35854572376), erhoeht sich die reale Wartezeit bis zum gruenen Gesamtergebnis erheblich.
+2. **Runner-Minuten & Testumfang:** Die gemessenen erfolgreichen Versuche verbrauchten 14,62 bis 21,52 Runner-Minuten (Median 20,65 min gegenueber Vorher-Median 15,23 min). Die parallele Struktur entlastet nicht die CPU-Gesamtzeit, sondern entkoppelt schnelles Feedback fuer JVM/Lint von den laenger laufenden Emulator-Tests. Die Emulator-Joblaufzeiten (461–903 s) spiegeln die gewachsene Testbasis und Ausfuehrungsumgebung wider.
+3. **Robuste Diagnose vor Teardown:** Ein EXIT-Trap im Emulator-Runner stellt sicher, dass bei Testfehlern Logcat, Activity-Dumps, Screenshots und UI-Hierarchie vor dem Abbau des Emulators gesichert werden.
+4. **Strikte Berechtigungspruefung ([P2] behoben):** `revoke_und_pruefe` isoliert exakt die angeforderte Berechtigungszeile (`sed -n "/^[[:space:]]*${berechtigung}:/p"`). Folgezeilen mit `granted=false` anderer Berechtigungen koennen das Revoke nicht mehr faelschlich als erfolgreich werten (abgesichert durch `test_following_permission_granted_false_cannot_make_unrevoked_permission_green`).
 
 ## 7. Bewusst offen und mögliche Phase 2
 
