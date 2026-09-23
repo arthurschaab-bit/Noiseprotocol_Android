@@ -320,7 +320,7 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 | „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | |
 | Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `state/runtime.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | |
 | Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | |
-| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog; nach dem nächsten App-Start liegt ein lesbarer Thread-Dump in den Diagnosedaten (aktuell **kein** automatischer Bundle-Upload dafür, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 8b) | |
+| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog; nach dem nächsten App-Start liegt ein lesbarer Thread-Dump in den Diagnosedaten (aktuell **kein** automatischer Bundle-Upload dafür, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 8b). **Nur ab Android 11:** auf Android 10 (z. B. Huawei P30) entsteht kein Thread-Dump - das ist erwartet, kein Fehler, siehe O-8 | |
 | 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | |
 | Absturz auslösen, danach WLAN ausschalten, 6+ h warten, dann WLAN wieder anschalten | Der Upload wird nachgeholt (Fallback-Job ohne Netzbeschränkung nach 6 h) | |
 | Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | |
