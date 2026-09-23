@@ -23,9 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.meter.ConnectionState
@@ -62,25 +62,16 @@ fun BluetoothStatusBadge(
         state == ConnectionState.SUBSCRIBING ||
         state == ConnectionState.RECONNECTING
 
-    val infiniteTransition = rememberInfiniteTransition(label = "badgePulse")
-    val pulseAlpha by if (isAnimating) {
-        infiniteTransition.animateFloat(
-            initialValue = 0.3f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseAlpha"
-        )
-    } else {
-        rememberInfiniteTransition(label = "static").animateFloat(
-            initialValue = 1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1000)),
-            label = "staticAlpha"
-        )
-    }
+    val infiniteTransition = if (isAnimating) rememberInfiniteTransition(label = "badgePulse") else null
+    val pulseAlpha = infiniteTransition?.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -97,7 +88,13 @@ fun BluetoothStatusBadge(
                     .size(8.dp)
                     .clip(CircleShape)
                     .background(statusColor)
-                    .then(if (isAnimating) Modifier.alpha(pulseAlpha) else Modifier)
+                    .then(
+                        if (pulseAlpha != null) {
+                            Modifier.graphicsLayer { alpha = pulseAlpha.value }
+                        } else {
+                            Modifier
+                        }
+                    )
             )
             Spacer(modifier = Modifier.width(6.dp))
 
