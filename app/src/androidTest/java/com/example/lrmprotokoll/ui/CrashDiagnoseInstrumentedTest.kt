@@ -1,8 +1,6 @@
 package com.example.lrmprotokoll.ui
 
-import android.app.ActivityManager
 import android.app.ApplicationExitInfo
-import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
@@ -132,15 +130,6 @@ class CrashDiagnoseInstrumentedTest {
     fun anrWatchdogErkenntHaengerUndBautAnrBundle() {
         val start = System.currentTimeMillis()
         device.executeShellCommand("settings put global hide_error_dialogs 0")
-        // Ein noch laufender :crashprobe-Prozess (etwa aus einem frueheren Lauf auf demselben
-        // Geraet) haette die Einstellungen - samt Bundle-Obergrenze - schon im Speicher.
-        val am = app.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        am.runningAppProcesses.orEmpty().filter { it.processName.endsWith(":crashprobe") }
-            .forEach { android.os.Process.killProcess(it.pid) }
-        // Obergrenze (3 Bundles je 24 h) aus frueheren Laeufen zuruecksetzen - synchron, damit
-        // der neue :crashprobe-Prozess den leeren Stand von der Platte liest.
-        app.getSharedPreferences("noise_settings", Context.MODE_PRIVATE).edit()
-            .remove("anr_watchdog_bundle_zeitstempel").commit()
         // Ein Mitschnitt aus einem frueheren Test (etwa dem ANR-Test, dessen Prozess das System
         // beendet) darf hier nicht als Beleg durchgehen.
         val mitschnitt = File(app.filesDir, "process_exit_traces/$ANR_WATCHDOG_DATEINAME")

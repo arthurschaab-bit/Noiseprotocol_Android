@@ -208,7 +208,6 @@ class AppContainer(
             verzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
             reporter = diagnosticsReporter,
             exporter = supportBundleExporter,
-            settingsManager = settingsManager,
             scope = anrWatchdogScope,
         )
     }

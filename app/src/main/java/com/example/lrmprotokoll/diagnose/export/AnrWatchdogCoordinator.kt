@@ -3,7 +3,6 @@ package com.example.lrmprotokoll.diagnose.export
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
@@ -13,14 +12,10 @@ import com.example.lrmprotokoll.diagnose.HaengerBefund
 import com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR
 import java.io.File
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-
-/** Obergrenze fuer ANR-Watchdog-Bundles (O-8) - schuetzt vor einer Haenger-Schleife. */
-internal const val ANR_WATCHDOG_MAX_BUNDLES_JE_24H = 3
 
 /** Obergrenze fuer den Mitschnitt, unkomprimiert (wie die Einzelobergrenzen in Konzept 4.5). */
 internal const val ANR_WATCHDOG_MAX_BYTES = 256L * 1024
@@ -36,19 +31,19 @@ internal const val ANR_WATCHDOG_MAX_BYTES = 256L * 1024
  *   reagiert ([erholt]) oder, falls Android den Prozess beendet hat, beim naechsten Start
  *   ([ausstehendesBundleNachholen]). Waehrend des Haengers wird bewusst nichts gebaut - das
  *   wuerde Speicher und CPU genau im schlechtesten Moment belasten.
- * - Ausstehend heisst: die Mitschnitt-Datei existiert. Nach dem Bundle (oder wenn die
- *   Obergrenze greift) wird sie geloescht - ausser ein neuer Haenger hat sie inzwischen
- *   ueberschrieben.
- * - Hoechstens [ANR_WATCHDOG_MAX_BUNDLES_JE_24H] Bundles je 24 h. Der Upload folgt demselben
- *   Schalter wie bei Abstuerzen ([SettingsManager.absturzAutoUploadAktiv]), inklusive
- *   6-h-Fallback ohne WLAN (Konzept 4.7 nennt Absturz- und ANR-Bundles gemeinsam).
+ * - Ausstehend heisst: die Mitschnitt-Datei existiert. Nach dem Bundle wird sie geloescht -
+ *   ausser ein neuer Haenger hat sie inzwischen ueberschrieben.
+ * - Owner-Entscheidung O-8 (23.09.2026): keine Obergrenze, jeder Haenger ergibt ein Bundle,
+ *   und der Upload wird immer eingeplant - unabhaengig vom Schalter "Automatischer Upload bei
+ *   Absturz", inklusive 6-h-Fallback ohne WLAN (Konzept 4.7). Die Outbox-Grenze aus Schritt 5
+ *   ([raeumeSupportOutboxAuf], 20 Dateien / 100 MB) begrenzt dabei nur den Rueckstau wartender
+ *   Bundles, nicht die Zahl der Uploads.
  */
 class AnrWatchdogCoordinator(
     private val context: Context,
     private val verzeichnis: File,
     private val reporter: DiagnosticsReporter,
     private val exporter: SupportBundleExporter,
-    private val settingsManager: SettingsManager,
     private val scope: CoroutineScope,
     private val jetztMs: () -> Long = { System.currentTimeMillis() },
     private val weitereThreads: () -> Map<Thread, Array<StackTraceElement>> = { Thread.getAllStackTraces() },
@@ -98,27 +93,12 @@ class AnrWatchdogCoordinator(
         scope.launch { bundleErstellen(ausloeser = "Watchdog, nach Neustart") }
     }
 
-    /** @return die Datei in der Outbox, oder `null`, wenn nichts ansteht oder die Obergrenze greift. */
+    /** @return die Datei in der Outbox, oder `null`, wenn nichts ansteht oder der Bau scheitert. */
     internal suspend fun bundleErstellen(ausloeser: String): File? = bundleMutex.withLock {
         if (!mitschnitt.exists()) return null
         // Ein neuer Haenger kann den Mitschnitt ueberschreiben, waehrend dieses Bundle entsteht -
         // dann gehoert er zum naechsten Bundle und darf unten nicht mit geloescht werden.
         val stand = mitschnitt.lastModified() to mitschnitt.length()
-
-        val jetzt = jetztMs()
-        val imFenster = settingsManager.anrWatchdogBundleZeitstempel
-            .filter { jetzt - it < TimeUnit.HOURS.toMillis(24) }
-        if (imFenster.size >= ANR_WATCHDOG_MAX_BUNDLES_JE_24H) {
-            // Breadcrumb und Report-Event bleiben - nur kein weiteres Bundle.
-            reporter.breadcrumb(
-                category = "AnrWatchdog",
-                message = "Kein Bundle: Obergrenze $ANR_WATCHDOG_MAX_BUNDLES_JE_24H je 24 h erreicht",
-                level = DiagnosticSeverity.WARN,
-            )
-            loescheFallsUnveraendert(stand)
-            settingsManager.anrWatchdogBundleZeitstempel = imFenster
-            return null
-        }
 
         val ziel = runCatching {
             val bundleDatei = exporter.createBundle(BundleKontext(typ = BundleTyp.ANR, ausloeser = ausloeser))
@@ -133,8 +113,7 @@ class AnrWatchdogCoordinator(
             return null
         }
         loescheFallsUnveraendert(stand)
-        settingsManager.anrWatchdogBundleZeitstempel = imFenster + jetzt
-        if (settingsManager.absturzAutoUploadAktiv) uploadEinplanen(context)
+        uploadEinplanen(context)
         ziel
     }
 

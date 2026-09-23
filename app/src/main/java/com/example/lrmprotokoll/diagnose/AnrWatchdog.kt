@@ -1,6 +1,5 @@
 package com.example.lrmprotokoll.diagnose
 
-import android.os.Debug
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -35,8 +34,8 @@ class HaengerBefund(
  * [onErholt], sobald er wieder reagiert. Beide Callbacks laufen im Watchdog-Thread.
  *
  * Gemessen wird mit [SystemClock.uptimeMillis] - die Uhr steht im Tiefschlaf des Geraets still,
- * ein schlafendes Geraet ist also kein Haenger. Mit angehaengtem Debugger wird nichts gemeldet
- * (ein Haltepunkt ist kein Haenger).
+ * ein schlafendes Geraet ist also kein Haenger. Auch mit angehaengtem Debugger wird gemeldet
+ * (Owner-Entscheidung O-8, 23.09.2026) - ein Haltepunkt erzeugt dann bewusst einen Befund.
  */
 class AnrWatchdog(
     private val postAufMainThread: (Runnable) -> Unit,
@@ -44,7 +43,6 @@ class AnrWatchdog(
     private val onHaenger: (HaengerBefund) -> Unit,
     private val onErholt: () -> Unit,
     private val uhrMs: () -> Long = { SystemClock.uptimeMillis() },
-    private val debuggerVerbunden: () -> Boolean = { Debug.isDebuggerConnected() || Debug.waitingForDebugger() },
     private val schwelleMs: Long = ANR_WATCHDOG_SCHWELLE_MS,
     private val pruefintervallMs: Long = ANR_WATCHDOG_PRUEFINTERVALL_MS,
 ) {
@@ -73,7 +71,7 @@ class AnrWatchdog(
             }
             signalGepostetUm.set(jetzt)
             postAufMainThread(Runnable { signalGepostetUm.set(-1L) })
-        } else if (!haengerGemeldet && jetzt - gepostetUm >= schwelleMs && !debuggerVerbunden()) {
+        } else if (!haengerGemeldet && jetzt - gepostetUm >= schwelleMs) {
             haengerGemeldet = true
             onHaenger(HaengerBefund(dauerMs = jetzt - gepostetUm, mainThreadStack = mainThreadStacktrace()))
         }

@@ -14,7 +14,6 @@ import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.HaengerBefund
 import com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR
 import java.io.File
-import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -35,8 +34,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * O-8: [AnrWatchdogCoordinator] - Mitschnitt, Report-Event, ANR-Bundle in der Outbox,
- * Obergrenze je 24 h, Upload-Schalter. Echter [SupportBundleExporter] (Bundle-Inhalt wird
+ * O-8: [AnrWatchdogCoordinator] - Mitschnitt, Report-Event, ANR-Bundle in der Outbox, keine
+ * Obergrenze und Upload unabhaengig vom Absturz-Schalter (Owner-Entscheidung 23.09.2026). Echter [SupportBundleExporter] (Bundle-Inhalt wird
  * geprueft), Datenbank/Einstellungen aus dem Robolectric-Container wie in
  * [SupportBundleExporterTest]; Log-DAO und Upload-Planung als handgeschriebene Fakes.
  */
@@ -71,8 +70,6 @@ class AnrWatchdogCoordinatorTest {
     @Before
     fun aufbauen() {
         verzeichnis = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}")
-        container.settingsManager.anrWatchdogBundleZeitstempel = emptyList()
-        container.settingsManager.absturzAutoUploadAktiv = true
     }
 
     @After
@@ -97,7 +94,6 @@ class AnrWatchdogCoordinatorTest {
             database = container.database,
             traceVerzeichnis = verzeichnis,
         ),
-        settingsManager = container.settingsManager,
         scope = scope,
         jetztMs = { jetzt },
         weitereThreads = { mapOf(Thread("DefaultDispatcher-worker-1") to arrayOf(StackTraceElement("Worker", "arbeite", "Worker.kt", 1))) },
@@ -134,7 +130,6 @@ class AnrWatchdogCoordinatorTest {
         }
         assertFalse("Der Mitschnitt ist abgearbeitet", mitschnitt.exists())
         assertEquals(1, uploadsEingeplant)
-        assertEquals(listOf(jetzt), container.settingsManager.anrWatchdogBundleZeitstempel)
     }
 
     @Test
@@ -144,30 +139,23 @@ class AnrWatchdogCoordinatorTest {
     }
 
     @Test
-    fun obergrenzeDreiBundlesJe24h() = runTest {
-        val stunde = TimeUnit.HOURS.toMillis(1)
-        container.settingsManager.anrWatchdogBundleZeitstempel = listOf(jetzt - 3 * stunde, jetzt - 2 * stunde, jetzt - stunde)
+    fun keineObergrenzeJederHaengerErgibtEinBundle() = runTest {
         val coordinator = coordinator()
-        coordinator.haengerErkannt(befund)
-
-        assertNull(coordinator.bundleErstellen(ausloeser = "Watchdog"))
-        assertFalse("Auch ohne Bundle wird der Mitschnitt verworfen, sonst folgt bei jedem Start ein neuer Versuch", mitschnitt.exists())
-        assertEquals(0, uploadsEingeplant)
-
-        // Faellt der aelteste aus dem 24-h-Fenster, ist wieder Platz.
-        jetzt += 21 * stunde + 1
-        coordinator.haengerErkannt(befund)
-        assertNotNull(coordinator.bundleErstellen(ausloeser = "Watchdog"))
+        repeat(5) {
+            coordinator.haengerErkannt(befund)
+            assertNotNull("Haenger ${it + 1} muss ein Bundle bekommen", coordinator.bundleErstellen(ausloeser = "Watchdog"))
+        }
+        assertEquals(5, uploadsEingeplant)
     }
 
     @Test
-    fun ohneAutoUploadBleibtDasBundleNurInDerOutbox() = runTest {
+    fun uploadWirdAuchBeiAusgeschaltetemAbsturzSchalterEingeplant() = runTest {
         container.settingsManager.absturzAutoUploadAktiv = false
         val coordinator = coordinator()
         coordinator.haengerErkannt(befund)
 
         assertNotNull(coordinator.bundleErstellen(ausloeser = "Watchdog"))
-        assertEquals(0, uploadsEingeplant)
+        assertEquals(1, uploadsEingeplant)
     }
 
     @Test

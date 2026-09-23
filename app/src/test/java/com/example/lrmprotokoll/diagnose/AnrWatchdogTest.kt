@@ -9,7 +9,7 @@ import org.junit.Test
  * Mocking-Bibliothek). Der "Main-Thread" ist hier nur eine Liste geposteter Signale - der Test
  * entscheidet, ob und wann er sie abarbeitet, also ob der Main-Thread reagiert oder haengt.
  *
- * Plain JUnit: alle Android-Abhaengigkeiten (SystemClock, Debug, Looper) stecken nur in
+ * Plain JUnit: alle Android-Abhaengigkeiten (SystemClock, Looper) stecken nur in
  * Default-Parametern, die hier ersetzt werden.
  */
 class AnrWatchdogTest {
@@ -18,7 +18,6 @@ class AnrWatchdogTest {
     private val offeneSignale = mutableListOf<Runnable>()
     private val befunde = mutableListOf<HaengerBefund>()
     private var erholungen = 0
-    private var debugger = false
     private val stack = arrayOf(StackTraceElement("com.example.Blockierer", "schlafe", "Blockierer.kt", 42))
 
     private val watchdog = AnrWatchdog(
@@ -27,7 +26,6 @@ class AnrWatchdogTest {
         onHaenger = { befunde.add(it) },
         onErholt = { erholungen++ },
         uhrMs = { uhr },
-        debuggerVerbunden = { debugger },
         schwelleMs = 5_000L,
     )
 
@@ -99,16 +97,5 @@ class AnrWatchdogTest {
 
         assertTrue(befunde.isEmpty())
         assertEquals(0, erholungen)
-    }
-
-    @Test
-    fun mitDebuggerWirdNichtsGemeldet() {
-        debugger = true
-        repeat(10) { takt() }
-        assertTrue(befunde.isEmpty())
-
-        debugger = false
-        takt()
-        assertEquals("Ohne Debugger wird der noch andauernde Haenger gemeldet", 1, befunde.size)
     }
 }

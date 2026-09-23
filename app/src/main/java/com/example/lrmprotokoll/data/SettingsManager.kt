@@ -573,15 +573,6 @@ class SettingsManager(
         set(value) = prefs.edit().putBoolean("absturz_auto_upload_aktiv", value).apply()
 
     /**
-     * O-8 (23.09.2026): Erstellungszeitpunkte (epoch ms) der ANR-Watchdog-Bundles - Grundlage
-     * fuer die Obergrenze je 24 h in [com.example.lrmprotokoll.diagnose.export.AnrWatchdogCoordinator].
-     */
-    var anrWatchdogBundleZeitstempel: List<Long>
-        get() = prefs.getString("anr_watchdog_bundle_zeitstempel", "").orEmpty()
-            .split(',').mapNotNull { it.toLongOrNull() }
-        set(value) = prefs.edit().putString("anr_watchdog_bundle_zeitstempel", value.joinToString(",")).apply()
-
-    /**
      * Abschalter fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 4).
      * Bedienoberflaeche folgt in Schritt 8 - der Schalter selbst und seine Auswertung im
      * [com.example.lrmprotokoll.diagnose.export.SupportBundleHealthCoordinator] entstehen bereits
