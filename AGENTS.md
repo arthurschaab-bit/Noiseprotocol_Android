@@ -69,6 +69,19 @@ If no Android SDK is present (cloud sandboxes):
   milestones, no drive-by refactoring, no "while I'm here" cleanups.
 - **Branches:** New branch from `main`, name `feature/m<N>-<short-description>` (or
   `fix/<short-description>`). **Never commit or push directly to `main`.**
+- **Sync before you start** (owner decision 23.09.2026). Several agents work on this
+  repository at the same time, some in local clones, some in the cloud. Any clone can fall
+  behind, including a long-running cloud session.
+  - **New task:** run `git fetch origin` and branch from the fresh remote state with
+    `git switch -c <branch> origin/main`, never from a local `main` that may be stale.
+  - **Continuing an existing branch:** run `git fetch origin`, then
+    `git pull --ff-only origin <branch>` first. Another agent or the owner may have pushed to
+    it, for example a merge commit that resolved a conflict. If the fast-forward fails, stop
+    and look at what diverged before doing anything else.
+  - **Merge `main` into an existing branch only when needed:** on a merge conflict, when a fix
+    on `main` is required, or before the PR is merged. Do not merge it at every start. Never
+    rebase or force-push a branch someone else is working on.
+  - **Never pull over unsaved work:** commit or stash local changes first.
 - **Commits:** Small, one per completed sub-step. Format **Conventional Commits** with the
   type prefix in English and the description in **German** (owner decision 23.09.2026):
   `<type>(<optional scope>): <Beschreibung>`, type one of `feat`, `fix`, `test`, `docs`,
