@@ -5,19 +5,59 @@ on:
     branches: [main]
   push:
     branches: [main]
-  # Manuell ausloesbar, damit ein Lauf nicht erst einen Commit braucht.
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.changes.outputs.android }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Vollstaendiger Git-Diff ohne Dateilimit, inklusive PR-Merge-Base.
+          fetch-depth: 0
+      - name: CI-Umfang bestimmen
+        id: changes
+        run: python3 .github/scripts/ci-changes.py
+
+  build-and-test:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Konstante Versionsinputs in ALLEN Gradle-Aufrufen verhindern Neukompilierung.
+      ORG_GRADLE_PROJECT_buildSha: ${{ github.event.pull_request.head.sha || github.sha }}
+      ORG_GRADLE_PROJECT_buildPrNumber: ${{ github.event.pull_request.number }}
+      ORG_GRADLE_PROJECT_buildCiRun: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zeitmessung starten
+        run: python3 .github/scripts/ci-timing.py init
+
+      - name: CI-Skripte testen
+        run: python3 -m unittest discover -s .github/scripts/tests -v
+
+      - name: Set up Python 3.11 (Chaquopy build requirement)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-test-python.txt
+
+      - name: Portable Python-Berichtslogik testen
+        run: |
+          python .github/scripts/ci-timing.py run "Python-Abhaengigkeiten" -- python -m pip install -r requirements-test-python.txt
+          python .github/scripts/ci-timing.py run "Python-Tests" -- python -m pytest app/src/test/python/ --junitxml=logs/python-tests.xml
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -25,107 +65,51 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # Chaquopy (Bericht-Umbau) braucht auf der Baumaschine selbst ein Python 3.11, um pip
-      # waehrend des Gradle-Builds auszufuehren - unabhaengig vom Python, das spaeter in die APK
-      # eingebettet wird. Ohne diesen Schritt bricht installDebugPythonRequirements mit
-      # "Couldn't find Python 3.11" ab, weil ubuntu-latest keine feste 3.11 vorinstalliert hat.
-      - name: Set up Python 3.11 (Chaquopy build requirement)
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platforms;android-36 build-tools;36.0.0 platform-tools
 
-      - name: Portable Python-Berichtslogik testen
-        run: |
-          python -m pip install -r requirements-test-python.txt
-          python --version
-          python -m pytest app/src/test/python/
-
       - name: Set up Gradle (with cache)
+        id: gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Debug-Keystore aus Secret wiederherstellen
-        if: env.DEBUG_KEYSTORE_BASE64 != ''
-        env:
-          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-        run: echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > debug.keystore
-
-      # Pruefprotokoll C-6-Rest: nur mit dem Secret ist die Debug-SHA-1 ueber CI-Laeufe hinweg
-      # stabil und passt zur in der Google Cloud Console registrierten Android-OAuth-Client-SHA-1.
-      # Fehlt das Secret (z.B. auf einem Fork), faellt AGP sauber auf sein eigenes
-      # ~/.android/debug.keystore zurueck (siehe debugStoreFile in app/build.gradle.kts).
-      # Saubere Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md Abschnitt 4.3): buildSha kommt
-      # bewusst aus dem Workflow statt aus einer eigenen Git-Abfrage in build.gradle.kts -
-      # actions/checkout checkt bei pull_request-Laeufen einen Merge-Commit aus, dessen SHA in
-      # keinem PR/Branch auffindbar waere. buildPrNumber bleibt bei Push auf main leer, dann
-      # greift die main-Variante des Versionsschemas.
-      - name: Build Debug & Test APKs
-        env:
-          BUILD_SHA_FULL: ${{ github.event.pull_request.head.sha || github.sha }}
-          BUILD_PR_NUMBER: ${{ github.event.pull_request.number }}
-          BUILD_CI_RUN: ${{ github.run_number }}
-        run: |
-          BUILD_SHA=${BUILD_SHA_FULL:0:7}
-          if [ -f "debug.keystore" ]; then
-            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PdebugStoreFile=$(pwd)/debug.keystore -PbuildSha=$BUILD_SHA -PbuildPrNumber=$BUILD_PR_NUMBER -PbuildCiRun=$BUILD_CI_RUN
-          else
-            ./gradlew assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin --no-daemon --stacktrace -PbuildSha=$BUILD_SHA -PbuildPrNumber=$BUILD_PR_NUMBER -PbuildCiRun=$BUILD_CI_RUN
-          fi
-
-      - name: Debug-Keystore-Kopie löschen
-        if: always()
-        run: rm -f debug.keystore
+      # Gemessener Taskgraph: test enthaelt testDebugUnitTest UND checkUnusedDaoMethods.
+      # APK-Paketierung und AndroidTest-Kompilierung erfolgen ausschliesslich im Heavy Gate.
+      - name: Unit & Robolectric Tests
+        id: unit
+        run: python .github/scripts/ci-timing.py run "JVM/Robolectric inklusive Compile" -- ./gradlew test --stacktrace --continue
 
       - name: Run Android Lint
-        run: ./gradlew lintDebug --no-daemon --stacktrace
+        if: ${{ !cancelled() && steps.gradle.outcome == 'success' }}
+        run: python .github/scripts/ci-timing.py run "Android Lint" -- ./gradlew lintDebug --stacktrace
 
-      # Testluecken-Auftrag Stufe 1: eigener Kotlin-Stil-Linter neben Android Lint (der prueft
-      # Android-spezifische Dinge wie Ressourcen/API-Level, nicht Formatierung/Stil). Bestand hat
-      # aktuell mehrere tausend Verstoesse (nie zuvor gegen ktlint gelaufen) - ein Vollformat-Pass
-      # ist eine eigene, bewusst zu treffende Entscheidung, keine Nebenwirkung dieses Auftrags.
-      # continue-on-error haelt den Schritt deshalb sichtbar (roter Status auf der Actions-Seite,
-      # Report als Artefakt), blockiert aber den Job nicht.
+      # Bekannte Stil-Verstoesse bleiben wie bisher sichtbar und nicht blockierend.
       - name: Run ktlint
-        id: ktlint
+        if: ${{ !cancelled() && steps.gradle.outcome == 'success' }}
         continue-on-error: true
-        run: ./gradlew ktlintCheck --no-daemon --stacktrace
+        run: python .github/scripts/ci-timing.py run "ktlint (informativ)" -- ./gradlew ktlintCheck --stacktrace
 
-      # testDebugUnitTest bleibt explizit sichtbar, weil der instrumentierte Testplan dieses Gate
-      # fordert. `test` laeuft zusaetzlich und behaelt damit auch Release-Unit-Tests als Pflichtgate.
-      # --continue, damit ein fehlgeschlagener Test die uebrigen nicht abschneidet: Sonst zeigt
-      # der Bericht nur den ersten Fehler und man braucht mehrere Laeufe, um das ganze Bild zu sehen.
-      - name: Unit & Robolectric Tests
-        run: ./gradlew testDebugUnitTest test --no-daemon --stacktrace --continue
-
-      # Ohne diesen Schritt steht das Ergebnis nur im hochgeladenen Artefakt - man muss es
-      # herunterladen und entpacken, um zu erfahren, welcher Test warum gescheitert ist. Hier
-      # landet es direkt auf der Zusammenfassungsseite des Laufs.
       - name: Testbericht in die Zusammenfassung schreiben
-        if: always()
-        run: python3 .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY"
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY"
 
-      # Testluecken-Auftrag Stufe 1: Line-Coverage messen, damit die weiteren Stufen gegen eine
-      # echte Zahl arbeiten statt zu schaetzen. continue-on-error: schlaegt schon
-      # testDebugUnitTest fehl, soll das nicht als zweiter, redundanter roter Schritt erscheinen -
-      # der Testbericht oben zeigt die eigentliche Ursache bereits.
+      # Keine Wiederholung fehlgeschlagener Tests fuer einen rein informativen Report.
+      # Nach erfolgreichen Tests verwendet Kover dieselben UP-TO-DATE-Ergebnisse.
       - name: Coverage-Report erzeugen
-        if: always()
+        if: ${{ !cancelled() && steps.unit.outcome == 'success' }}
         continue-on-error: true
-        run: ./gradlew koverXmlReportDebug koverHtmlReportDebug --no-daemon --stacktrace
+        run: python .github/scripts/ci-timing.py run "Coverage (informativ)" -- ./gradlew koverXmlReportDebug koverHtmlReportDebug --stacktrace
 
       - name: Coverage in die Zusammenfassung schreiben
-        if: always()
-        run: python3 .github/scripts/coverage.py app/build/reports/kover/reportDebug.xml >> "$GITHUB_STEP_SUMMARY"
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/coverage.py app/build/reports/kover/reportDebug.xml >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Lint Reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: lint-reports
@@ -135,7 +119,7 @@ jobs:
           retention-days: 7
 
       - name: Upload ktlint Reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ktlint-reports
@@ -143,15 +127,18 @@ jobs:
           retention-days: 7
 
       - name: Upload test reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: app/build/reports/tests/
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+            logs/python-tests.xml
           retention-days: 7
 
       - name: Upload Coverage-Report
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -160,15 +147,39 @@ jobs:
             app/build/reports/kover/htmlDebug/
           retention-days: 7
 
-      # Erlaubt, eine PR-Fassung auf dem Telefon zu installieren, ohne sie selbst zu bauen:
-      # Artefakt herunterladen, entpacken, `adb install -r laermprotokoll-<versionName>-debug.apk`
-      # (Abschnitt 4.2 - der Dateiname traegt jetzt die volle Versionskennung). Der Artefaktname
-      # selbst haengt zusaetzlich die Laufnummer an, damit mehrere Laeufe im Downloads-Ordner
-      # unterscheidbar bleiben (Abschnitt 4.3).
-      - name: Debug-APK bereitstellen
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk-${{ github.run_number }}
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+      - name: Laufzeiten zusammenfassen
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/ci-timing.py summary >> "$GITHUB_STEP_SUMMARY"
+
+  emulator:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    uses: ./.github/workflows/emulator-tests.yml
+    secrets:
+      DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+
+  ci-result:
+    name: CI
+    if: always()
+    needs: [changes, build-and-test, emulator]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Stabiles Gesamtgate auch bei Docs-only; Fehler/Abbrueche bleiben rot.
+      - name: Ergebnis pruefen
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          ANDROID: ${{ needs.changes.outputs.android }}
+          FAST_RESULT: ${{ needs.build-and-test.result }}
+          HEAVY_RESULT: ${{ needs.emulator.result }}
+        run: |
+          printf 'Fast Gate: %s; Heavy Gate: %s\n' "$FAST_RESULT" "$HEAVY_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          test "$SCOPE_RESULT" = success
+          if [ "$ANDROID" = true ]; then
+            test "$FAST_RESULT" = success
+            test "$HEAVY_RESULT" = success
+          else
+            test "$ANDROID" = false
+            test "$FAST_RESULT" = skipped
+            test "$HEAVY_RESULT" = skipped
+          fi
