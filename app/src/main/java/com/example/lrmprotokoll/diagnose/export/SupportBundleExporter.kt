@@ -14,6 +14,7 @@ import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
@@ -167,6 +168,10 @@ class SupportBundleExporter(
             }
             File(traceVerzeichnis, ANR_TRACE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/anr_trace.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
+            }
+            // O-8: Mitschnitt des ANR-Watchdogs - der einzige ANR-Beleg auf Android 10.
+            File(traceVerzeichnis, ANR_WATCHDOG_DATEINAME).takeIf { it.exists() }?.let { quelle ->
+                schreibeEintrag("crash/anr_watchdog.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
             }
             File(traceVerzeichnis, NATIVE_TOMBSTONE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/native_tombstone.pb") { out -> quelle.inputStream().use { it.copyTo(out) } }
