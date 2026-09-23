@@ -62,8 +62,8 @@ fun BluetoothStatusBadge(
         state == ConnectionState.SUBSCRIBING ||
         state == ConnectionState.RECONNECTING
 
-    val infiniteTransition = rememberInfiniteTransition(label = "badgePulse")
-    val pulseAlpha by if (isAnimating) {
+    val pulseAlpha = if (isAnimating) {
+        val infiniteTransition = rememberInfiniteTransition(label = "badgePulse")
         infiniteTransition.animateFloat(
             initialValue = 0.3f,
             targetValue = 1.0f,
@@ -72,14 +72,9 @@ fun BluetoothStatusBadge(
                 repeatMode = RepeatMode.Reverse
             ),
             label = "pulseAlpha"
-        )
+        ).value
     } else {
-        rememberInfiniteTransition(label = "static").animateFloat(
-            initialValue = 1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1000)),
-            label = "staticAlpha"
-        )
+        1.0f
     }
 
     Surface(
