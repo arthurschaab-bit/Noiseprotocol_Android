@@ -69,7 +69,24 @@ If no Android SDK is present (cloud sandboxes):
   milestones, no drive-by refactoring, no "while I'm here" cleanups.
 - **Branches:** New branch from `main`, name `feature/m<N>-<short-description>` (or
   `fix/<short-description>`). **Never commit or push directly to `main`.**
-- **Commits:** Small, one per completed sub-step. Commit messages in **German**.
+- **Sync before you start** (owner decision 23.09.2026). Several agents work on this
+  repository at the same time, some in local clones, some in the cloud. Any clone can fall
+  behind, including a long-running cloud session.
+  - **New task:** run `git fetch origin` and branch from the fresh remote state with
+    `git switch -c <branch> origin/main`, never from a local `main` that may be stale.
+  - **Continuing an existing branch:** run `git fetch origin`, then
+    `git pull --ff-only origin <branch>` first. Another agent or the owner may have pushed to
+    it, for example a merge commit that resolved a conflict. If the fast-forward fails, stop
+    and look at what diverged before doing anything else.
+  - **Merge `main` into an existing branch only when needed:** on a merge conflict, when a fix
+    on `main` is required, or before the PR is merged. Do not merge it at every start. Never
+    rebase or force-push a branch someone else is working on.
+  - **Never pull over unsaved work:** commit or stash local changes first.
+- **Commits:** Small, one per completed sub-step. Format **Conventional Commits** with the
+  type prefix in English and the description in **German** (owner decision 23.09.2026):
+  `<type>(<optional scope>): <Beschreibung>`, type one of `feat`, `fix`, `test`, `docs`,
+  `refactor`, `chore`, `ci`, `build`. Example:
+  `fix(diagnose): Export-Knopf meldet Fehler statt sie zu verschlucken`.
 - **Style:** Match the existing code — comment density, naming, formatting. English
   identifiers, German UI strings.
 - **Room:** Table names, column names and `identityHash` must never change accidentally.
@@ -96,6 +113,17 @@ If no Android SDK is present (cloud sandboxes):
 - **Never claim something works without having run it.** If you could not verify something
   (no device, no SDK, no hardware), write exactly that.
 - Show command output in the PR, not a summary of it.
+- **After finishing a change: check, then commit, then push** (owner instruction 23.09.2026):
+  1. Run the tests and linters. In this repository (Gradle, no npm) that is
+     `./gradlew assembleDebug lintDebug test` (the CI runs the same tasks). Also run
+     `./gradlew ktlintCheck`. It is already red on `main` because of thousands of old
+     findings, so the requirement is **no new findings in the files you changed**, not a
+     green task.
+  2. Only if everything passes: create a commit (format as in section 5) and push it to the
+     **current branch** with `git push -u origin <branch>`. **Never push to `main`**
+     (section 5).
+  3. If something is red: do not commit it as done. Fix it, or report the failure with its
+     output. Never skip, disable or weaken a test to get to green.
 
 ## 7. Definition of Done for any task
 

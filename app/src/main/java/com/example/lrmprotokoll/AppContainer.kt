@@ -192,6 +192,41 @@ class AppContainer(
         )
     }
 
+    // ---------------------------------------------------------------- O-8: ANR-Watchdog
+
+    /** Eigener Scope fuer den Bundle-Bau nach einem Haenger - wird mit [close] beendet. */
+    private val anrWatchdogScope: CoroutineScope by lazy {
+        val exceptionHandler =
+            CoroutineExceptionHandler { _, throwable ->
+                Log.w("AppContainer", "Unerwarteter Fehler im ANR-Watchdog-Scope", throwable)
+            }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+    }
+
+    val anrWatchdogCoordinator: com.example.lrmprotokoll.diagnose.export.AnrWatchdogCoordinator by lazy {
+        com.example.lrmprotokoll.diagnose.export.AnrWatchdogCoordinator(
+            context = context.applicationContext,
+            verzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
+            reporter = diagnosticsReporter,
+            exporter = supportBundleExporter,
+            scope = anrWatchdogScope,
+        )
+    }
+
+    private val anrWatchdogLazy =
+        lazy {
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            com.example.lrmprotokoll.diagnose.AnrWatchdog(
+                postAufMainThread = { mainHandler.post(it) },
+                mainThreadStacktrace = com.example.lrmprotokoll.diagnose.AnrWatchdog::echterMainThreadStack,
+                onHaenger = anrWatchdogCoordinator::haengerErkannt,
+                onErholt = anrWatchdogCoordinator::erholt,
+            )
+        }
+
+    /** Gestartet von [LaermprotokollApp.onCreate], ausser unter Robolectric (siehe dort). */
+    val anrWatchdog: com.example.lrmprotokoll.diagnose.AnrWatchdog by anrWatchdogLazy
+
     val connectionSupervisor: ConnectionSupervisor by lazy {
         ConnectionSupervisor(
             transport = meterTransport,
@@ -347,5 +382,7 @@ class AppContainer(
     fun close() {
         connectionSupervisorScope.cancel()
         videobeweisAbschlussScope.cancel()
+        if (anrWatchdogLazy.isInitialized()) anrWatchdog.stop()
+        anrWatchdogScope.cancel()
     }
 }

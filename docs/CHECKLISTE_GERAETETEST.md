@@ -316,17 +316,20 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Im Diagnose-Screen (Debug-Build) „RuntimeException auslösen" drücken | App stürzt ab; beim nächsten Start liegt in `support_outbox/` kurz ein `..._absturz.zip`, das automatisch nach Drive hochgeladen wird | |
-| „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | |
-| Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `state/runtime.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | |
-| Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | |
-| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog; nach dem nächsten App-Start liegt ein lesbarer Thread-Dump in den Diagnosedaten (aktuell **kein** automatischer Bundle-Upload dafür, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 8b) | |
-| 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | |
+| Im Diagnose-Screen (Debug-Build) „RuntimeException auslösen" drücken | App stürzt ab; beim nächsten Start liegt in `support_outbox/` kurz ein `..._absturz.zip`, das automatisch nach Drive hochgeladen wird | ◐ 23.09.2026, P30: Um 15:59:00 entstand laut Breadcrumb ein ACRA-Bundle; welcher Knopf, und ob es in Drive ankam, ist nicht belegt |
+| „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | ✅ 23.09.2026, P30: `2026-09-23_155924_absturz.zip` mit `OutOfMemoryError: Testabsturz (Debug)…` |
+| Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `state/runtime.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | ❌ 23.09.2026: nicht prüfbar. `runtime.json` zeigt den Zustand beim Bundle-Bau, nicht beim Absturz (`BEFUNDE_P30_2026-09-23.md`, Befund C) |
+| Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | ✅ 23.09.2026, P30: `…_absturz.zip` vorhanden |
+| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog. **ANR-Watchdog (O-8):** bei „Warten" entsteht nach den 30 s ein `..._anr.zip` in `support_outbox/` und wird hochgeladen (auch wenn „Automatischer Upload bei Absturz" aus ist); bei „App schließen" beim nächsten App-Start. Das Bundle enthält `crash/anr_watchdog.txt`, im Abschnitt `---- main ----` steht `Thread.sleep`. **Ab Android 11** zusätzlich, nur wenn das System die App beendet hat: `crash/anr_trace.txt` (System-Thread-Dump) - auf Android 10 (z. B. Huawei P30) fehlt dieser erwartungsgemäß | ◐ 23.09.2026, P30: Pfad „App schließen“ ✅ (erkannt nach 5002 ms, Bundle beim Neustart, `---- main ----` enthält `Thread.sleep`, kein `anr_trace.txt` wie erwartet). Pfad „Warten“ nicht belegt |
+| Nach dem ANR-Test in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei `JJJJ-MM-TT_HHMMSS_anr.zip` ist angekommen | ✅ 23.09.2026, P30: `2026-09-23_160014_anr.zip` vorhanden |
+| 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | ◐ 23.09.2026: Erzeugung belegt (Breadcrumb „Erstelle Bundle (periodisch, periodisch)“), Upload nicht belegt |
 | Absturz auslösen, danach WLAN ausschalten, 6+ h warten, dann WLAN wieder anschalten | Der Upload wird nachgeholt (Fallback-Job ohne Netzbeschränkung nach 6 h) | |
-| Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | |
+| Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | ✅ 23.09.2026, P30: Sofortupload „Erfolgreich: 2026-09-23_160035_manuell.zip“ |
 | Einstellungen → „Automatischer Upload bei Absturz" ausschalten, dann Absturz auslösen | Bundle entsteht weiterhin lokal, wird aber **nicht** automatisch hochgeladen | |
 | Einstellungen → „Tägliches Gesundheits-Bundle" ausschalten | Weder Erzeugung noch Upload finden mehr statt | |
-| DiagnoseScreen mit vielen (>200) Diagnose-Log-Einträgen öffnen, im Aufzeichnungsbetrieb | Bildschirm bleibt bedienbar (behebt den ursprünglich gemeldeten Absturz - **unbestätigter Verdacht, kein Befund**, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 2/Schritt 7) | |
+| DiagnoseScreen mit vielen (>200) Diagnose-Log-Einträgen öffnen, im Aufzeichnungsbetrieb | Bildschirm bleibt bedienbar (behebt den ursprünglich gemeldeten Absturz - **unbestätigter Verdacht, kein Befund**, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 2/Schritt 7) | ◐ 23.09.2026, P30: bedienbar mit 10.427 Einträgen, aber **ohne** laufende Aufzeichnung |
+
+**Gerätetest 23.09.2026 (Huawei P30, Build `1.0.0-pr188.ci602+119d2a4`):** Die Absturzdiagnose funktioniert. Sie hat dabei ein massives Speicherproblem im Normalbetrieb sichtbar gemacht (89 Abstürze in einer Woche, 88 davon Speichermangel). Siehe [`BEFUNDE_P30_2026-09-23.md`](BEFUNDE_P30_2026-09-23.md).
 
 ---
 

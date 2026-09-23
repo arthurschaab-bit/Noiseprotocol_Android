@@ -14,6 +14,7 @@ import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
@@ -123,7 +124,8 @@ class SupportBundleExporter(
         val istPeriodisch = kontext.typ == BundleTyp.PERIODISCH
         val zipBudget = if (istPeriodisch) ZIP_BUDGET_PERIODISCH else ZIP_BUDGET_ABSTURZ
         // Kuerzungsreihenfolge (Konzept 4.5): zuerst events.jsonl, dann zusaetzlich logcat.txt,
-        // crash/ wird nie gekuerzt - dafuer existiert das Bundle.
+        // crash/ wird nie gekuerzt - dafuer existiert das Bundle (Owner-Entscheidung O-7: das
+        // Budget ist fuer Absturz-Bundles damit ein Richtwert, keine harte Grenze).
         val eventsMax = if (kuerzungsstufe >= 1) 0L else if (istPeriodisch) EVENTS_MAX_PERIODISCH else EVENTS_MAX_ABSTURZ
         val logcatMax = if (kuerzungsstufe >= 2) 0L else if (istPeriodisch) LOGCAT_MAX_PERIODISCH else LOGCAT_MAX_ABSTURZ
 
@@ -166,6 +168,10 @@ class SupportBundleExporter(
             }
             File(traceVerzeichnis, ANR_TRACE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/anr_trace.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
+            }
+            // O-8: Mitschnitt des ANR-Watchdogs - der einzige ANR-Beleg auf Android 10.
+            File(traceVerzeichnis, ANR_WATCHDOG_DATEINAME).takeIf { it.exists() }?.let { quelle ->
+                schreibeEintrag("crash/anr_watchdog.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
             }
             File(traceVerzeichnis, NATIVE_TOMBSTONE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/native_tombstone.pb") { out -> quelle.inputStream().use { it.copyTo(out) } }

@@ -1,10 +1,10 @@
 # Konzept: Absturzsichere Diagnose mit automatischem Drive-Upload (M12)
 
-**Stand:** 18.09.2026
+**Stand:** 23.09.2026
 **Status:** Umgesetzt (alle acht Schritte, Etappen A-C) - siehe Abschnitt 8b für die weiterhin
-offenen Punkte O-1 und O-5-Nachfolgearbeit (Geräteverifikation, `CHECKLISTE_GERAETETEST.md`
-Teil F). Nicht auf echter Hardware/Emulator geprüft (keine solche Umgebung bei der Umsetzung
-verfügbar) - das bleibt Aufgabe der Geräteverifikation.
+offenen Punkte O-1, O-8 (nur noch der native Teil) und die Geräteverifikation (`CHECKLISTE_GERAETETEST.md` Teil F). Die
+instrumentierten Absturztests laufen auf dem CI-Emulator (API 34) grün; auf echter Hardware ist
+nichts geprüft - das bleibt Aufgabe der Geräteverifikation.
 **Anlass:** Owner-Meldung 17.09.2026 — „Die App crasht während des Aufzeichnungsbetriebs, gerade
 beim Durchsehen der Diagnoselogs."
 **Vorgängerdokument:** [DIAGNOSE_OBSERVABILITY_KONZEPT.md](DIAGNOSE_OBSERVABILITY_KONZEPT.md)
@@ -290,6 +290,7 @@ Entsprechend nehmen wir alle vier Bausteine auf. Alles läuft durch `DiagnosticR
 | `crash/exit_info.json` | Bis zu 16 `ApplicationExitInfo`-Einträge mit Grund, Status, Importance, RSS/PSS | Zeigt auch die Abstürze, die ACRA *nicht* sieht (Kill durch das System, LOW_MEMORY) |
 | `crash/anr_trace.txt` | `getTraceInputStream()` bei `REASON_ANR` | Vollständiger Thread-Dump vom OS |
 | `crash/native_tombstone.pb` | `getTraceInputStream()` bei `REASON_CRASH_NATIVE` (API 31+) | Native Abstürze aus MediaPipe/Chaquopy/CameraX |
+| `crash/anr_watchdog.txt` | Mitschnitt des ANR-Watchdogs (O-8): Main-Thread-Stack zuerst, dann die weiteren Threads | Der einzige ANR-Beleg auf Android 10; ab Android 11 auch für Hänger, von denen sich die App erholt |
 | `log/logcat.txt` | Logcat des eigenen Prozesses, **vollständig**; einzige Filterung ist `DiagnosticRedactor` (Owner-Entscheidung O-2, Abschnitt 8a) | Die Sekunden vor dem Absturz |
 | `log/breadcrumbs.jsonl` | Ringdatei, zusammengeführt | Strukturierter App-Kontext |
 | `log/events.jsonl` | Diagnose-Events aus Room, **gestreamt und begrenzt** | Fehlerhistorie |
@@ -323,13 +324,21 @@ ist hier der Hauptverdächtige. Daher verbindlich:
   | `log/breadcrumbs.jsonl` | 512 KB (Ringdatei-Obergrenze) | 512 KB |
   | `crash/anr_trace.txt` | 4 MB | — |
   | `crash/native_tombstone.pb` | 8 MB | — |
+  | `crash/anr_watchdog.txt` | 256 KB | — |
   | **Fertiges ZIP** | **10 MB** | **2 MB** |
 
   Wird eine Grenze erreicht, wird abgeschnitten und eine Abschlusszeile vermerkt, wie viel fehlt.
   Textinhalte komprimieren im ZIP typisch um Faktor 8 bis 15 — die unkomprimierten Grenzen sind
-  deshalb bewusst großzügiger als das ZIP-Budget. Reißt das fertige ZIP die 10 MB dennoch, wird
-  in dieser Reihenfolge gekürzt: `events.jsonl`, dann `logcat.txt`, zuletzt `crash/` — der
-  Absturzteil ist das, wofür das Bundle existiert.
+  deshalb bewusst großzügiger als das ZIP-Budget. Reißt das fertige ZIP das Budget dennoch, wird
+  in dieser Reihenfolge gekürzt: `events.jsonl`, dann `logcat.txt`. `crash/` wird **nie**
+  gekürzt (Owner-Entscheidung O-7, 23.09.2026, Abschnitt 8a) — der Absturzteil ist das, wofür
+  das Bundle existiert, und ein abgeschnittenes Tombstone-Protobuf wäre unlesbar. Das ZIP-Budget
+  ist für Absturz-Bundles damit ein Richtwert, keine harte Grenze: liegt allein `crash/` darüber
+  (Obergrenze 4 MB ANR-Trace + 8 MB Tombstone), bleibt das Bundle größer. Das Budget begrenzt die
+  Upload-Größe, nicht den Speicher — den OOM-Schutz leisten das Streaming und die
+  Einzelobergrenzen. Bekannte Folge: ist `crash/` allein für die Überschreitung verantwortlich,
+  fallen `events.jsonl` und `logcat.txt` trotzdem weg, ohne dass das Bundle dadurch ins Budget
+  passt.
 - **Jeder Sammelschritt ist einzeln abgesichert.** Scheitert `logcat.txt`, entsteht das Bundle
   trotzdem — mit einem Fehlervermerk in `manifest.json` statt gar keinem Bundle.
 
@@ -476,6 +485,8 @@ Ein Diagnosesystem, das nur im Ernstfall getestet wird, ist kein getestetes Syst
 |---|---|---|
 | **O-2** | **Ja.** `logcat.txt` kommt vollständig ins Bundle, einzige Filterung ist `DiagnosticRedactor`. Begründung: Ziel ist der private Drive-Ordner des Owners, kein fremder Dienst — und Logcat ist der Inhalt mit dem höchsten Analysewert. | 17.09.2026 |
 | **O-6** | **Budget angehoben** (Owner: „passt, kannst auch gerne erhöhen"): 10 MB je Absturz-Bundle, 2 MB je periodischem Bundle, jeweils als fertiges ZIP. Einzelobergrenzen siehe Abschnitt 4.5. | 17.09.2026 |
+| **O-8 (ANR-Teil)** | **ANR-Watchdog im App-Prozess, auf allen Android-Versionen.** Schwelle 5 s ohne Reaktion des Main-Threads (wie Androids Eingabe-ANR). Beim Erkennen sofort ein Stacktrace-Mitschnitt (`crash/anr_watchdog.txt`), das Bundle (Typ `anr`) erst, wenn der Main-Thread wieder reagiert, spätestens beim nächsten Start. Getestet mit Unit-Tests und einem instrumentierten Test der ganzen Kette (AGENTS.md 8b). Weiter vom Owner entschieden: **keine Obergrenze** (jeder Hänger ergibt ein Bundle), **Upload immer** – unabhängig vom Schalter „Automatischer Upload bei Absturz", inkl. 6-h-Fallback ohne WLAN –, **Meldung auch mit angehängtem Debugger**, Mitschnitt mit **allen Threads** (höchstens 256 KB). Bei einer Hänger-Schleife gibt es damit keine Bremse für die Zahl der Bundles und Uploads; die Outbox-Grenze aus Schritt 5 (20 Dateien / 100 MB, älteste zuerst gelöscht) begrenzt nur den Rückstau wartender Bundles. | 23.09.2026 |
+| **O-7** | **`crash/` wird nie gekürzt**, das Budget aus O-6 ist für Absturz-Bundles ein Richtwert. Der Code tat das schon seit Schritt 4, wich damit aber still von der ursprünglichen Kürzungsreihenfolge in 4.5 („zuletzt `crash/`") ab - aufgefallen im Copilot-Review zu PR #182. Owner wählte, die Abweichung zur Vorgabe zu machen statt `crash/` zu kürzen. | 23.09.2026 |
 
 Aus O-2 folgt unmittelbar eine Änderung an Schritt 1: `logcatArguments` wird nicht auf wenige
 hundert Zeilen begrenzt, sondern liest den Puffer so weit aus, wie er hergibt (Vorschlag
@@ -496,6 +507,7 @@ nicht selbst entschieden:
 | # | Frage | Warum offen |
 |---|---|---|
 | **O-1** | Sentry aktivieren, und wenn ja wann? | Owner am 17.09.2026: „langfristig geplant, noch offen". Betrifft die Handler-Reihenfolge (Abschnitt 5). Wiedervorlage: nach Schritt 5. |
+| **O-8 (nativer Teil)** | Native Abstürze unter Android 10/11 erfassen? | Betrifft das Owner-Gerät (Huawei P30, letzte Version EMUI 12 auf Basis von Android 10 = API 29). Tombstones gibt es erst ab API 31. Der ANR-Teil ist entschieden und umgesetzt (8a). Für native Abstürze bräuchte es einen nativen Signal-Handler (NDK/Crashpad) - deutlich mehr Aufwand. Wiedervorlage (Owner, 23.09.2026): erst, sobald es Hinweise auf native Abstürze gibt, etwa Breadcrumbs, die ohne ACRA-Bundle und ohne Watchdog-Mitschnitt abbrechen. |
 
 **Entschieden (Owner, 17./18.09.2026 - zur Nachvollziehbarkeit hier belassen, keine offenen Punkte mehr):**
 
@@ -503,7 +515,7 @@ nicht selbst entschieden:
 |---|---|---|
 | O-3 | Automatische Aufbewahrungsfrist in Drive? | Kein automatisches Löschen - weder für periodische noch für Absturz-Bundles. Umgesetzt: Schritt 6 baut keine Retention-Löschlogik. |
 | O-4 | Soll ein Absturz zusätzlich per ntfy melden? | Nein, der Konzept-Empfehlung folgend (Abschnitt 1: Softwarefehler ≠ fachlicher Alarm). Umgesetzt: Schritt 5 löst keinen ntfy-Alarm bei Absturz aus. |
-| O-5 | Instrumentierter Absturztest auf dem Emulator? | Breitere Testabdeckung als der im Konzept vorgeschlagene Minimaltest: RuntimeException-, ANR- und OOM-Pfad. Umgesetzt in Schritt 8 (`CrashDiagnoseInstrumentedTest`) - **auf keiner echten Hardware/Emulator verifiziert**, siehe Testdatei-KDoc für die dabei entdeckten Risiken (Test-Prozessisolation) und die Notwendigkeit einer manuellen Gegenprobe. |
+| O-5 | Instrumentierter Absturztest auf dem Emulator? | Breitere Testabdeckung als der im Konzept vorgeschlagene Minimaltest: RuntimeException-, ANR- und OOM-Pfad. Umgesetzt in Schritt 8 (`CrashDiagnoseInstrumentedTest`) - **auf dem CI-Emulator (API 34, `aosp_atd`) grün** (PR #182, Lauf 35780960479), **auf echter Hardware nicht verifiziert**. Der ANR-Pfad ist dabei nur ab API 30 abgedeckt (siehe O-8); Test-Prozessisolation siehe Testdatei-KDoc. |
 
 **Fund während Schritt 8, kein eigener offener Punkt, aber vermerkt:** Anders als bei einem
 ACRA-Absturz (der automatisch ein `_absturz.zip`-Bundle baut und hochlädt) gibt es für einen ANR
@@ -513,11 +525,26 @@ entsteht dafür erst bei einem nachfolgenden manuellen oder periodischen Export.
 Bundeln/Hochladen speziell für ANRs war kein Teil des Auftrags für M12 und wurde deshalb nicht
 gebaut - falls gewünscht, wäre das ein eigener, kleiner Folgeschritt.
 
+**Fund 23.09.2026 (Folge-PR zu #182) - alles oben gilt erst ab Android 11:** `ProcessExitCollector`
+kehrt unter API 30 sofort zurück, weil es `ApplicationExitInfo` dort nicht gibt; Tombstones gibt
+es erst ab API 31. Auf Android 10 - minSdk 29 und das Owner-Gerät Huawei P30 - gibt es damit
+weder Exit-Grund noch ANR-Thread-Dump noch Tombstone. Dort erfasst nur ACRA Java-/Kotlin-Abstürze;
+ANRs und native Abstürze (MediaPipe, Chaquopy, CameraX) hinterlassen außer der
+Breadcrumb-Ringdatei keine Spur. Die Annahme in Abschnitt 9 trifft für das Owner-Gerät deshalb
+nicht zu. Offener Punkt O-8.
+
+**Nachtrag 23.09.2026:** Für ANRs geschlossen durch den ANR-Watchdog (O-8, ANR-Teil in 8a). Er
+liefert auf allen Versionen einen Main-Thread-Stack und baut selbst ein `anr`-Bundle - damit gibt
+es jetzt auch einen automatischen Bundle-/Upload-Pfad für ANRs. Ab Android 11 nimmt ein beim
+Neustart nachgeholtes Bundle zusätzlich den System-ANR-Trace mit. Offen bleiben native Abstürze
+unter Android 10/11.
+
 ---
 
 ## 9. Abgrenzung
 
 Nicht Teil von M12: Wechsel des Crash-Backends, native Absturzerfassung mit eigenem
-Signal-Handler (das leistet `getTraceInputStream()` ab API 31 bereits ausreichend), Umbau der
+Signal-Handler (das leistet `getTraceInputStream()` ab API 31 bereits ausreichend - für
+Android 10/11 nicht, siehe O-8 (nativer Teil) in Abschnitt 8b), Umbau der
 Room-Diagnosetabelle auf ein strukturiertes Schema (wünschenswert wegen L7, aber ein eigener
 Schritt mit Migration), Änderungen an der Messdaten-Ablage in Drive, Aktivierung von Sentry.

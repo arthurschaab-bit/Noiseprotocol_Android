@@ -19,3 +19,7 @@ __pycache__/
 # app/build.gradle.kts. Dieser Eintrag verhindert, dass eine lokal an den alten Pfad kopierte
 # Datei aus Versehen erneut eingecheckt wird.
 /app/debug.keystore
+
+# Isolierte Git-Worktrees von Hintergrund-Agents (Claude Code) - Laufzeit-Scratch, kein
+# Projektinhalt.
+/.claude/worktrees/
