@@ -33,12 +33,14 @@ class DiagnosticLogCleanupWorkerTest {
         var loeschenAufrufe = 0
         var letzteGrenze: Long? = null
         override suspend fun insert(eintrag: DiagnosticLogEntity) {}
-        override fun alle(): Flow<List<DiagnosticLogEntity>> = flowOf(emptyList())
+        override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(emptyList())
         override suspend fun loescheAelterAls(grenze: Long) {
             loeschenAufrufe++
             letzteGrenze = grenze
             if (beimLoeschenFehlschlagen) error("Simulierter DB-Fehler fuer den Retry-Test")
         }
+        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
+        override suspend fun anzahlSeit(von: Long): Long = 0L
     }
 
     private lateinit var context: Context

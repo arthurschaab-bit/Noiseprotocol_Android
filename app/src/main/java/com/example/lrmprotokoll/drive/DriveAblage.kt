@@ -80,6 +80,17 @@ class DriveOrdnerbaum(private val api: DriveApiClient) {
         return unterordner(tagesId, kategorie.ordnername)
     }
 
+    /**
+     * Liefert die Ordner-ID fuer `<wurzelId>/Support-Bundle` (M12 Schritt 5, Konzept 4.6) -
+     * Owner-Vorgabe: Support-Bundles liegen DIREKT unter der Wurzel, NICHT unter einem
+     * Tagesordner wie [ordnerFuer]/[DriveKategorie]. Das ist beabsichtigt: Support-Bundles
+     * gehoeren nicht zum Messprotokoll eines Tages, sondern zur App-Historie. Deshalb eine eigene
+     * Auflösungsfunktion statt eines weiteren [DriveKategorie]-Werts, der die Invariante
+     * "Kategorie liegt unter dem Tagesordner" brechen wuerde.
+     */
+    suspend fun ordnerFuerSupportBundles(wurzelId: String): Result<String> =
+        unterordner(wurzelId, SUPPORT_BUNDLE_ORDNERNAME)
+
     private suspend fun unterordner(elternId: String, name: String): Result<String> {
         val schluessel = "$elternId/$name"
         zwischenspeicher[schluessel]?.let { return Result.success(it) }
@@ -97,4 +108,8 @@ class DriveOrdnerbaum(private val api: DriveApiClient) {
 
     /** Fuer Tests und den Fall, dass der Nutzer den Zielordner wechselt. */
     fun leereZwischenspeicher() = zwischenspeicher.clear()
+
+    companion object {
+        const val SUPPORT_BUNDLE_ORDNERNAME = "Support-Bundle"
+    }
 }

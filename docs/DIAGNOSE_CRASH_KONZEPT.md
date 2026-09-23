@@ -1,7 +1,10 @@
 # Konzept: Absturzsichere Diagnose mit automatischem Drive-Upload (M12)
 
-**Stand:** 17.09.2026
-**Status:** Konzept, vom Owner noch nicht abgenommen
+**Stand:** 18.09.2026
+**Status:** Umgesetzt (alle acht Schritte, Etappen A-C) - siehe Abschnitt 8b für die weiterhin
+offenen Punkte O-1 und O-5-Nachfolgearbeit (Geräteverifikation, `CHECKLISTE_GERAETETEST.md`
+Teil F). Nicht auf echter Hardware/Emulator geprüft (keine solche Umgebung bei der Umsetzung
+verfügbar) - das bleibt Aufgabe der Geräteverifikation.
 **Anlass:** Owner-Meldung 17.09.2026 — „Die App crasht während des Aufzeichnungsbetriebs, gerade
 beim Durchsehen der Diagnoselogs."
 **Vorgängerdokument:** [DIAGNOSE_OBSERVABILITY_KONZEPT.md](DIAGNOSE_OBSERVABILITY_KONZEPT.md)
@@ -493,9 +496,22 @@ nicht selbst entschieden:
 | # | Frage | Warum offen |
 |---|---|---|
 | **O-1** | Sentry aktivieren, und wenn ja wann? | Owner am 17.09.2026: „langfristig geplant, noch offen". Betrifft die Handler-Reihenfolge (Abschnitt 5). Wiedervorlage: nach Schritt 5. |
-| **O-3** | Automatische Aufbewahrungsfrist in Drive? | Löschen fremder Daten entscheide ich nicht. Vorschlag: periodische Bundles 30 Tage, Absturz-Bundles unbegrenzt. Entscheidung vor Schritt 6. |
-| **O-4** | Soll ein Absturz zusätzlich per ntfy melden? | Die Alarminfrastruktur ist vorhanden. Aber: Ein Softwarefehler ist kein fachlicher Alarm — das Vorgängerkonzept trennt das bewusst (Abschnitt 1). Vermischung wäre eine Konzeptabweichung. Entscheidung vor Schritt 5. |
-| **O-5** | Instrumentierter Absturztest auf dem Emulator? | AGENTS.md 8b verlangt Freigabe zum Testumfang. Entscheidung vor Schritt 8. |
+
+**Entschieden (Owner, 17./18.09.2026 - zur Nachvollziehbarkeit hier belassen, keine offenen Punkte mehr):**
+
+| # | Frage | Entscheidung |
+|---|---|---|
+| O-3 | Automatische Aufbewahrungsfrist in Drive? | Kein automatisches Löschen - weder für periodische noch für Absturz-Bundles. Umgesetzt: Schritt 6 baut keine Retention-Löschlogik. |
+| O-4 | Soll ein Absturz zusätzlich per ntfy melden? | Nein, der Konzept-Empfehlung folgend (Abschnitt 1: Softwarefehler ≠ fachlicher Alarm). Umgesetzt: Schritt 5 löst keinen ntfy-Alarm bei Absturz aus. |
+| O-5 | Instrumentierter Absturztest auf dem Emulator? | Breitere Testabdeckung als der im Konzept vorgeschlagene Minimaltest: RuntimeException-, ANR- und OOM-Pfad. Umgesetzt in Schritt 8 (`CrashDiagnoseInstrumentedTest`) - **auf keiner echten Hardware/Emulator verifiziert**, siehe Testdatei-KDoc für die dabei entdeckten Risiken (Test-Prozessisolation) und die Notwendigkeit einer manuellen Gegenprobe. |
+
+**Fund während Schritt 8, kein eigener offener Punkt, aber vermerkt:** Anders als bei einem
+ACRA-Absturz (der automatisch ein `_absturz.zip`-Bundle baut und hochlädt) gibt es für einen ANR
+aktuell **keinen** automatischen Bundle-/Upload-Pfad - `ProcessExitCollector` (Schritt 3) sichert
+nur den rohen Thread-Dump in `process_exit_traces/anr_trace.txt`. Ein vollständiges Bundle
+entsteht dafür erst bei einem nachfolgenden manuellen oder periodischen Export. Automatisches
+Bundeln/Hochladen speziell für ANRs war kein Teil des Auftrags für M12 und wurde deshalb nicht
+gebaut - falls gewünscht, wäre das ein eigener, kleiner Folgeschritt.
 
 ---
 

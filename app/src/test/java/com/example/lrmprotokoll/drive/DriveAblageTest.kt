@@ -140,6 +140,33 @@ class DriveAblageTest {
         )
     }
 
+    // ------------------------------------------------------------------ M12 Schritt 5: Support-Bundle-Ordner
+
+    @Test
+    fun supportBundleOrdnerLiegtDirektUnterDerWurzelNichtUnterEinemTagesordner() = runTest {
+        val api = FakeOrdnerApi()
+        val baum = DriveOrdnerbaum(api)
+
+        baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
+
+        assertEquals(
+            "Der Support-Ordner darf nicht unter einem Tagesordner liegen (Konzept 4.6)",
+            listOf("Support-Bundle" to "wurzel"),
+            api.angelegt,
+        )
+    }
+
+    @Test
+    fun supportBundleOrdnerWirdWiederverwendetStattDupliziert() = runTest {
+        val api = FakeOrdnerApi(mutableMapOf("wurzel/Support-Bundle" to "support-1"))
+        val baum = DriveOrdnerbaum(api)
+
+        val id = baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
+
+        assertEquals("support-1", id)
+        assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
+    }
+
     @Test
     fun einFehlerBeimAnlegenWirdDurchgereichtStattStillInDieWurzelAbzulegen() = runTest {
         val api = object : DriveApiClient by FakeOrdnerApi() {

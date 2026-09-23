@@ -7,9 +7,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.ReportConfigEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +35,24 @@ class ReportConfigSettingsTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    // CI-Fund (22.09.2026, PR #182): AppDatabase.getDatabase() ist ein @Volatile
+    // Klassen-Singleton auf einer benannten Datei ("noise_database"), kein In-Memory-/Pro-Test-
+    // Handle. Gradle fasst mehrere Testklassen im selben JVM-Fork zusammen - das Singleton
+    // ueberlebt also den Wechsel zwischen Testmethoden UND -klassen, unabhaengig von Robolectrics
+    // sonst frischer Application pro Test. Ohne expliziten Reset lecken reportConfigDao()-Werte
+    // aus vorherigen Tests (auch aus anderen Klassen, z.B. BerichtErstellenSheetTest) hier hinein.
+    @Before
+    @After
+    fun reportConfigZuruecksetzen() {
+        // clearAllTables() ist im Gegensatz zu den suspend-DAO-Methoden NICHT automatisch
+        // thread-verlagert und prueft explizit, nicht auf dem Hauptthread zu laufen -
+        // Dispatchers.IO hier ist deshalb noetig, nicht nur Stil.
+        runBlocking(Dispatchers.IO) {
+            ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+                .container.database.clearAllTables()
+        }
+    }
+
     @Test
     fun gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
@@ -47,6 +68,14 @@ class ReportConfigSettingsTest {
             .performClick()
         composeRule.onNodeWithTag("report_area_WA").performClick()
         composeRule.waitForIdle()
+
+        // CI-Fund (22.09.2026, PR #182): waitForIdle() wartet nur auf Komposition/Layout, nicht
+        // auf die durch den State-Wechsel ausgeloeste asynchrone DB-Speicherung (eigene
+        // Coroutine, kein Teil des Compose-Idle-Begriffs) - direkt danach lesen kann deshalb
+        // noch den alten Wert liefern. Explizit auf den geschriebenen Wert pollen statt zu raten.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }?.gebietseinstufung == "WA"
+        }
 
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
@@ -100,6 +129,12 @@ class ReportConfigSettingsTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(100f) }
         composeRule.waitForIdle()
 
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
+                ?.let { kotlin.math.abs(it.tierSchwelleVollmessungProzent - 100.0) < 0.0001 } == true
+        }
+
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals(100.0, gespeichert?.tierSchwelleVollmessungProzent ?: 0.0, 0.0001)
@@ -123,6 +158,12 @@ class ReportConfigSettingsTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(17f) }
         composeRule.waitForIdle()
 
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
+                ?.let { it.konservativFensterStartStunde == 19 && it.konservativFensterEndeStunde == 19 } == true
+        }
+
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()
             assertEquals(19, gespeichert?.konservativFensterStartStunde)
@@ -143,6 +184,13 @@ class ReportConfigSettingsTest {
             .performScrollTo()
             .performClick()
         composeRule.waitForIdle()
+
+        // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking(Dispatchers.IO) {
+                app.container.database.reportConfigDao().get()
+            }?.erzwingeBerichtOhneBestaetigteBewertung == true
+        }
 
         runBlocking {
             val gespeichert = app.container.database.reportConfigDao().get()

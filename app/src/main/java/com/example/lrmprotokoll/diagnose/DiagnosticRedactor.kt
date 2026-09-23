@@ -19,12 +19,26 @@ object DiagnosticRedactor {
     private val URL_WITH_QUERY_PATTERN = Regex("https?://[^\\s]+[?#][^\\s]*")
     private val FILE_PATH_PATTERN = Regex("(?:[A-Za-z]:\\\\[^\\s:\"'<>|?*]+|(?<![/a-zA-Z0-9_.-])/(?:[a-zA-Z0-9_.-]+/)+[a-zA-Z0-9_.-]+)")
 
+    // M12 Schritt 4 (Konzept Aufgabe 4): Logcat kommt seit Owner-Entscheidung O-2 vollstaendig
+    // ins Bundle - der Redactor ist die einzige verbliebene Schutzschicht davor, deshalb hier um
+    // Muster erweitert, die in echten OkHttp-Logzeilen auftauchen (HttpLoggingInterceptor
+    // schreibt Header-Zeilen wortwoertlich mit).
+    // ".*" matcht standardmaessig kein "\n" - die Ersetzung endet damit an der Zeilengrenze
+    // einer mehrzeiligen Logcat-Ausgabe, statt den Rest der Datei zu verschlucken.
+    private val AUTH_HEADER_PATTERN = Regex("(?i)(authorization\\s*:\\s*).*")
+    private val BEARER_TOKEN_PATTERN = Regex("(?i)bearer\\s+\\S+")
+
     /**
      * Bereinigt einen beliebigen Freitext-String von sensiblen Mustern.
      */
     fun redactString(input: String?): String? {
         if (input == null) return null
         var result = input
+
+        // Authorization-Header/Bearer-Tokens zuerst - OkHttps HttpLoggingInterceptor schreibt
+        // Header-Zeilen wortwoertlich mit, u.a. "Authorization: Bearer <token>".
+        result = AUTH_HEADER_PATTERN.replace(result) { match -> "${match.groupValues[1]}[REDACTED]" }
+        result = BEARER_TOKEN_PATTERN.replace(result, "Bearer [REDACTED]")
 
         // MAC-Adressen kuerzen auf Prefix (z. B. "AA:BB:CC:XX:XX:XX")
         result = MAC_PATTERN.replace(result) { match ->

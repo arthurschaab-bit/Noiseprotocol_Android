@@ -6,6 +6,7 @@ coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
+androidxTestOrchestrator = "1.4.2"
 appcompat = "1.6.1"
 material = "1.10.0"
 activity = "1.9.0"
@@ -24,6 +25,9 @@ camerax = "1.4.1"
 kover = "0.9.9"
 ktlint = "14.2.0"
 chaquopy = "17.0.0"
+acra = "5.13.1"
+autoServiceAnnotations = "1.1.1"
+autoServiceKsp = "1.2.0"
 
 [libraries]
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
@@ -36,6 +40,7 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-espresso-intents = { group = "androidx.test.espresso", name = "espresso-intents", version.ref = "espressoCore" }
+androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version.ref = "androidxTestOrchestrator" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
@@ -55,6 +60,11 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "sentry" }
+acra-core = { group = "ch.acra", name = "acra-core", version.ref = "acra" }
+acra-advanced-scheduler = { group = "ch.acra", name = "acra-advanced-scheduler", version.ref = "acra" }
+acra-limiter = { group = "ch.acra", name = "acra-limiter", version.ref = "acra" }
+autoservice-annotations = { group = "com.google.auto.service", name = "auto-service-annotations", version.ref = "autoServiceAnnotations" }
+autoservice-ksp = { group = "dev.zacsweers.autoservice", name = "auto-service-ksp", version.ref = "autoServiceKsp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

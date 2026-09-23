@@ -153,7 +153,7 @@ class HomeBerichtZipDialogInstrumentedTest {
         setzeInhalt()
 
         val datum = datumsTag(tagZeit)
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("btn_day_report_$datum"))
+        composeRule.warteUndScrolleZu(hasTestTag("btn_day_report_$datum"))
         composeRule.onNodeWithTag("btn_day_report_$datum").performClick()
         composeRule.waitForIdle()
 

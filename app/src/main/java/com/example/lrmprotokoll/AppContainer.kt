@@ -35,6 +35,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -142,9 +143,30 @@ class AppContainer(
         )
     }
 
+    /** M12 Schritt 2 (Konzept 4.3): behebt Luecke L3 - Breadcrumbs ueberleben jetzt den Prozesstod. */
+    val breadcrumbRingFile: com.example.lrmprotokoll.diagnose.BreadcrumbRingFile by lazy {
+        com.example.lrmprotokoll.diagnose.BreadcrumbRingFile(context.applicationContext.filesDir)
+    }
+
+    /** M12 Schritt 3 (Konzept 4, behebt Luecke L5): vollstaendige ExitInfo-Auswertung. */
+    val processExitSource: com.example.lrmprotokoll.diagnose.ProcessExitSource by lazy {
+        com.example.lrmprotokoll.diagnose.SystemProcessExitSource(context.applicationContext)
+    }
+
+    val processExitCollector: com.example.lrmprotokoll.diagnose.ProcessExitCollector by lazy {
+        com.example.lrmprotokoll.diagnose.ProcessExitCollector(
+            source = processExitSource,
+            diagnosticsReporter = diagnosticsReporter,
+            verzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
+            zuletztVerarbeitet = { settingsManager.letzterVerarbeiteterProzessExitZeitstempel },
+            setzeZuletztVerarbeitet = { settingsManager.letzterVerarbeiteterProzessExitZeitstempel = it },
+        )
+    }
+
     val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter by lazy {
         com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
             sinks = listOf(localDiagnosticSink, sentryDiagnosticSink),
+            ringFile = breadcrumbRingFile,
             initialContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(
                 appVersion = "1.0",
                 buildType = "debug",
@@ -159,7 +181,14 @@ class AppContainer(
     val supportBundleExporter: com.example.lrmprotokoll.diagnose.export.SupportBundleExporter by lazy {
         com.example.lrmprotokoll.diagnose.export.SupportBundleExporter(
             context = context.applicationContext,
-            reporter = diagnosticsReporter
+            reporter = diagnosticsReporter,
+            diagnosticLogDao = database.diagnosticLogDao(),
+            breadcrumbRingFile = breadcrumbRingFile,
+            settingsManager = settingsManager,
+            database = database,
+            traceVerzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
+            bleVerbindungszustandProvider = { connectionSupervisor.state.value.toString() },
+            aufnahmeAktivProvider = { com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv.value },
         )
     }
 
@@ -301,5 +330,22 @@ class AppContainer(
             measurementDao = database.measurementDao(),
             minuteAggregateDao = database.minuteAggregateDao(),
         )
+    }
+
+    /**
+     * CI-Fund (22.09.2026, PR #182): produktiv wird nie mehr als ein [AppContainer] pro
+     * Prozesslauf gebraucht (die App ersetzt ihren Container nie - [LaermprotokollApp.setCustomContainer]/
+     * [LaermprotokollApp.resetContainer] sind reine Test-Seams, siehe dort), deshalb hatte
+     * [connectionSupervisorScope]/[videobeweisAbschlussScope] nie einen Abschluss noetig. In
+     * Tests entsteht dagegen pro Testmethode oft ein neuer Container - ohne Abschluss laeuft der
+     * alte Scope einfach weiter, angehaeuft ueber Hunderte Testmethoden im selben Gradle-Test-
+     * JVM-Fork. Vermuteter Beitrag zu den sporadischen AppNotIdleException-Flakes in
+     * MeterScreenComposeTest/MeterScreenPermissionAndScanTest (Issue #160, PR #179) - jener Fix
+     * adressierte nur die Aktivitaet im eigenen Test, nicht die Ansammlung aus frueheren Tests.
+     * Aufruf aus [LaermprotokollApp.setCustomContainer]/[LaermprotokollApp.resetContainer].
+     */
+    fun close() {
+        connectionSupervisorScope.cancel()
+        videobeweisAbschlussScope.cancel()
     }
 }

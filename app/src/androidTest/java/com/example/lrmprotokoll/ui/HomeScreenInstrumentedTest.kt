@@ -147,7 +147,7 @@ class HomeScreenInstrumentedTest {
     // (der Knoten existiert ja noch gar nicht) - performScrollToNode() auf dem Listen-Container
     // scrollt gezielt bis der Treffer komponiert ist, das ist die dafuer vorgesehene API.
     private fun scrolleZuUndPruefeVorhanden(record: NoiseRecord) {
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(record)))
+        composeRule.warteUndScrolleZu(hasText(labelText(record)))
         composeRule.onNodeWithText(labelText(record)).assertExists()
     }
 

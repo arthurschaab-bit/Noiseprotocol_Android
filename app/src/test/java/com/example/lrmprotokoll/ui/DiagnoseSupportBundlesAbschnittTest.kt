@@ -1,0 +1,98 @@
+package com.example.lrmprotokoll.ui
+
+import android.content.Context
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.LaermprotokollApp
+import java.io.File
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * M12 Schritt 8 (Konzept Aufgabe 1): "Support-Bundles"-Abschnitt im DiagnoseScreen - Zeitpunkt/
+ * Ergebnis des letzten Uploads, Anzahl wartender Bundles in der Outbox, Knopf fuer sofortigen
+ * Export + Upload.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class DiagnoseSupportBundlesAbschnittTest {
+
+    @get:Rule
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    private fun outboxDir(context: Context) =
+        File(context.filesDir, com.example.lrmprotokoll.diagnose.acra.SUPPORT_OUTBOX_DIR)
+
+    @Before
+    fun aufbauen() {
+        outboxDir(ApplicationProvider.getApplicationContext()).deleteRecursively()
+    }
+
+    @After
+    fun aufraeumen() {
+        outboxDir(ApplicationProvider.getApplicationContext()).deleteRecursively()
+    }
+
+    @Test
+    fun zeigtLetztenUploadUndAnzahlWartenderBundlesAn() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.settingsManager.supportBundleLastUploadAt = 1_700_000_000_000L
+        app.container.settingsManager.supportBundleLastUploadMessage = "Erfolgreich: 2026-09-17_230000_absturz.zip"
+        outboxDir(app).mkdirs()
+        File(outboxDir(app), "2026-09-18_010000_periodisch.zip").writeText("x")
+
+        composeRule.setContent { DiagnoseScreen(onBack = {}) }
+        composeRule.waitForIdle()
+
+        val header = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_support_bundles_header)
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(header))
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText(header).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(header).assertExists()
+
+        val outboxText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_support_bundles_outbox_count, 1)
+        composeRule.onNodeWithText(outboxText).assertExists()
+        composeRule.onNodeWithText("Erfolgreich: 2026-09-17_230000_absturz.zip", substring = true).assertExists()
+    }
+
+    @Test
+    fun knopfErstelltEinBundleUndErhoehtDieOutboxAnzahl() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        // Mit uebergebenem onShowSnackbar statt des Toast-Rueckfalls: Robolectrics Compose-Test-
+        // Coroutine-Umgebung hat auf dem nach withContext(Dispatchers.IO) wiederaufgenommenen
+        // Dispatcher keinen vorbereiteten Looper, Toast.makeText() wirft dort eine
+        // NullPointerException ("Can't toast on a thread that has not called Looper.prepare()").
+        // Ein echter Aufrufer (siehe Navigationsgraph) uebergibt ohnehin immer einen echten
+        // Snackbar-Callback - der Toast-Rueckfall ist nur fuer Vorschauen/Tests ohne Host gedacht.
+        composeRule.setContent { DiagnoseScreen(onBack = {}, onShowSnackbar = {}) }
+        composeRule.waitForIdle()
+
+        val knopf = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_support_bundles_create_and_upload)
+        composeRule.onNodeWithTag(DIAGNOSE_LAZY_COLUMN_TAG).performScrollToNode(hasText(knopf))
+        composeRule.onNodeWithText(knopf).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.waitForIdle()
+            outboxDir(app).listFiles { f -> f.name.endsWith(".zip") }?.isNotEmpty() == true
+        }
+        val dateien = outboxDir(app).listFiles { f -> f.name.endsWith(".zip") }.orEmpty()
+        assertTrue("Der Knopf muss ein Bundle in die Outbox legen", dateien.isNotEmpty())
+    }
+}

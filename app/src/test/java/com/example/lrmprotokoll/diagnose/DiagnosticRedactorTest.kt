@@ -101,4 +101,52 @@ class DiagnosticRedactorTest {
         assertEquals("Discovered device AA:BB:CC:XX:XX:XX", cleanBreadcrumb.message)
         assertEquals("[REDACTED]", cleanBreadcrumb.data["authToken"])
     }
+
+    /** M12 Schritt 4 Aufgabe 4: OkHttp-Zeilen mit Authorization-Header. */
+    @Test
+    fun redactsAuthorizationHeaderLines() {
+        val input = "--> GET https://www.googleapis.com/drive/v3/files\nAuthorization: Bearer ya29.a0AfH6SMC_verylongtoken1234\nContent-Type: application/json"
+        val redacted = DiagnosticRedactor.redactString(input)!!
+
+        assertTrue(redacted.contains("Authorization: [REDACTED]"))
+        assertFalse(redacted.contains("ya29.a0AfH6SMC"))
+        // Die Folgezeile darf nicht mitgeloescht werden - ".*" matcht kein "\n".
+        assertTrue(redacted.contains("Content-Type: application/json"))
+    }
+
+    /** M12 Schritt 4 Aufgabe 4: ein Bearer-Token ohne "Authorization:"-Praefix. */
+    @Test
+    fun redactsStandaloneBearerToken() {
+        val input = "Token im Log: Bearer secretTokenValue123"
+        val redacted = DiagnosticRedactor.redactString(input)
+        assertEquals("Token im Log: Bearer [REDACTED]", redacted)
+    }
+
+    /**
+     * M12 Schritt 4 Akzeptanzkriterium (Owner-Entscheidung O-2): weil Logcat jetzt vollstaendig
+     * ins Bundle geht, ist dieser Test die eigentliche Schutzschicht, keine Formalie - ein
+     * realistischer, mehrzeiliger Ausschnitt mit OkHttp-Authorization-Header, BLE-Scanergebnis
+     * mit MAC, Drive-Pfaden und einer Google-Konto-Adresse.
+     */
+    @Test
+    fun redactsRealistischenMehrzeiligenLogcatAusschnitt() {
+        val logcat = """
+            09-17 12:00:01.123  1234  1234 D OkHttp  : --> POST https://www.googleapis.com/upload/drive/v3/files
+            09-17 12:00:01.124  1234  1234 D OkHttp  : Authorization: Bearer ya29.a0AfH6SMC_geheimesToken9876543210
+            09-17 12:00:01.200  1234  1234 D BleMeterTransport: Scan result: device AA:BB:CC:11:22:33 rssi=-58
+            09-17 12:00:02.001  1234  1234 I DriveSync: Uploading /storage/emulated/0/Android/data/com.example.lrmprotokoll/files/2026-09-17/WAV/event.wav
+            09-17 12:00:02.500  1234  1234 W GoogleAuth: signed in as arthur.schaab@googlemail.com
+        """.trimIndent()
+
+        val redacted = DiagnosticRedactor.redactString(logcat)!!
+
+        assertFalse(redacted.contains("ya29.a0AfH6SMC"))
+        assertTrue(redacted.contains("Authorization: [REDACTED]"))
+        assertFalse(redacted.contains("AA:BB:CC:11:22:33"))
+        assertTrue(redacted.contains("AA:BB:CC:XX:XX:XX"))
+        assertFalse(redacted.contains("/storage/emulated/0/Android/data/com.example.lrmprotokoll/files/2026-09-17/WAV/event.wav"))
+        assertTrue(redacted.contains(".../event.wav"))
+        assertFalse(redacted.contains("arthur.schaab@googlemail.com"))
+        assertTrue(redacted.contains("[REDACTED_EMAIL]"))
+    }
 }

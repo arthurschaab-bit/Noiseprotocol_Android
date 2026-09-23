@@ -111,12 +111,12 @@ class HomeTagHeaderCollapseInstrumentedTest {
 
         // Tag A hat zwei Aufnahmen - der Header muss das auch anzeigen, bevor irgendetwas
         // eingeklappt wird.
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("day_header_$tagA"))
+        composeRule.warteUndScrolleZu(hasTestTag("day_header_$tagA"))
         composeRule.onNodeWithTag("day_header_$tagA").assertIsDisplayed()
         composeRule.onNodeWithText(aufnahmenCountText(2)).assertExists()
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagA1)))
+        composeRule.warteUndScrolleZu(hasText(labelText(aufnahmeTagA1)))
         composeRule.onNodeWithText(labelText(aufnahmeTagA1)).assertExists()
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagA2)))
+        composeRule.warteUndScrolleZu(hasText(labelText(aufnahmeTagA2)))
         composeRule.onNodeWithText(labelText(aufnahmeTagA2)).assertExists()
 
         // Tag A einklappen. Nach den beiden vorherigen performScrollToNode()-Aufrufen (zu den
@@ -124,7 +124,7 @@ class HomeTagHeaderCollapseInstrumentedTest {
         // Komposition entfernt worden sein - LazyColumn disponiert Eintraege, die aus dem
         // Sichtbereich hinausscrollen, in BEIDE Richtungen, nicht nur "noch nicht erreicht".
         // Deshalb erst zurueckscrollen, dann klicken (wie beim zweiten Klick weiter unten).
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("day_header_$tagA"))
+        composeRule.warteUndScrolleZu(hasTestTag("day_header_$tagA"))
         composeRule.onNodeWithTag("day_header_$tagA").performClick()
         composeRule.waitForIdle()
 
@@ -132,17 +132,17 @@ class HomeTagHeaderCollapseInstrumentedTest {
         composeRule.onNodeWithText(labelText(aufnahmeTagA2)).assertDoesNotExist()
 
         // Tag B (fremde Gruppe) darf davon unberuehrt bleiben.
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagB1)))
+        composeRule.warteUndScrolleZu(hasText(labelText(aufnahmeTagB1)))
         composeRule.onNodeWithText(labelText(aufnahmeTagB1)).assertExists()
 
         // Tag A wieder aufklappen.
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasTestTag("day_header_$tagA"))
+        composeRule.warteUndScrolleZu(hasTestTag("day_header_$tagA"))
         composeRule.onNodeWithTag("day_header_$tagA").performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagA1)))
+        composeRule.warteUndScrolleZu(hasText(labelText(aufnahmeTagA1)))
         composeRule.onNodeWithText(labelText(aufnahmeTagA1)).assertExists()
-        composeRule.onNodeWithTag("home_lazy_column").performScrollToNode(hasText(labelText(aufnahmeTagA2)))
+        composeRule.warteUndScrolleZu(hasText(labelText(aufnahmeTagA2)))
         composeRule.onNodeWithText(labelText(aufnahmeTagA2)).assertExists()
     }
 }

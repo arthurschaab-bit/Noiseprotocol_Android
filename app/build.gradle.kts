@@ -122,6 +122,10 @@ android {
         versionName = berechneteVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Der Orchestrator isoliert den Runner pro Test. Echte Abstuerze laufen zusaetzlich
+        // im Debug-Prozess :crashprobe, damit Ausloesen und Pruefen EIN Test bleiben.
+        // Persistente Daten werden nicht global geloescht; Tests setzen ihre Voraussetzungen
+        // selbst und pruefen bei Absturz-Bundles nur neu erzeugte Dateien.
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -211,6 +215,10 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+        // M12 Schritt 8: siehe Begruendung bei testInstrumentationRunner oben - jeder
+        // instrumentierte Test bekommt einen eigenen Prozess, ein Absturz in einem Test reisst
+        // die uebrigen nicht mehr mit.
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
     sourceSets {
         // Robolectric liest fuer lokale Unit-Tests die zusammengefuehrten Assets des
@@ -309,6 +317,24 @@ dependencies {
     // Diagnose & Fehleranalyse (Konzept DIAGNOSE_OBSERVABILITY_KONZEPT.md)
     implementation(libs.sentry.android)
 
+    // M12 Schritt 1: ACRA faengt Abstuerze VOR dem Prozesstod ab (Konzept 3.1). Bewusst nur
+    // acra-core, acra-limiter und acra-advanced-scheduler - kein acra-http/-mail/-dialog/
+    // -notification/-toast: die App laeuft unbeaufsichtigt, es gibt keinen eigenen Versandweg
+    // (der Sender/Worker liegt in diesem Repository) und keinen Nutzerdialog.
+    implementation(libs.acra.core)
+    implementation(libs.acra.advanced.scheduler)
+    implementation(libs.acra.limiter)
+    // ACRA registriert ReportSenderFactory/Collector per ServiceLoader, klassischerweise ueber
+    // die @AutoService-Annotation + einen Annotationsprozessor. Der offizielle Prozessor
+    // (com.google.auto.service:auto-service) ist ein reiner javax.annotation.processing-
+    // Prozessor (APT) und wird von KSP NICHT ausgefuehrt - dieses Projekt nutzt aber KSP, nicht
+    // kapt (AGENTS.md Abschnitt 3). Deshalb hier die KSP-kompatible Community-Portierung
+    // (dev.zacsweers.autoservice:auto-service-ksp), die dieselbe @AutoService-Annotation liest
+    // und denselben META-INF/services-Eintrag erzeugt wie der Original-Prozessor - nur eben
+    // ueber KSP statt APT. Die Annotation selbst kommt weiterhin von Google.
+    compileOnly(libs.autoservice.annotations)
+    ksp(libs.autoservice.ksp)
+
     // Testen
     testImplementation(libs.junit)
     // Testluecken-Auftrag Stufe 2: TestListenableWorkerBuilder fuer die WorkManager-Worker.
@@ -335,6 +361,10 @@ dependencies {
     // Berechtigungsdialog im Emulator zu bedienen (Allow/Deny antippen), siehe
     // BerechtigungsTestHelfer.kt. Reines Testdependency, nicht Teil der App.
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // M12 Schritt 8: der Test Orchestrator selbst - siehe testOptions.execution oben. Kein
+    // "implementation", weil er als eigene APK neben der Test-APK installiert und vom
+    // Testrunner aus gestartet wird, nicht in die Test-APK hineingelinkt.
+    androidTestUtil(libs.androidx.test.orchestrator)
 }
 
 // Praefprotokoll Frage 5 (Owner-Entscheidung vom 11.09.2026: "Pruefe das selber und ueberlege

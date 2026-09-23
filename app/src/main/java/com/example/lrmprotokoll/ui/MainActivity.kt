@@ -379,8 +379,14 @@ fun NoiseProtocolApp(
     val db = container.database
     val dao = db.noiseDao()
     val rohdatenDao = db.klassifikationsRohdatenDao()
-    val records by dao.getAll().collectAsState(initial = emptyList())
-    val references by dao.getAllReferences().collectAsState(initial = emptyList())
+    // CI-Fund (22.09.2026, PR #182): .value hier im Kompositions-Scope lesen, nicht per `by` erst
+    // im LazyColumn-Builder unten. Wird ein State NUR dort gelesen, beobachtet ihn allein der
+    // abgeleitete Zustand der LazyColumn, der in der ersten Messphase entsteht - im Emulator
+    // belegt: kam die erste Room-Emission 2-3 ms nach dieser ersten Auswertung an, wurde der
+    // Inhalt nie neu ausgewertet und die Liste blieb leer, bis eine spaetere Aenderung neu zeichnen
+    // liess. Hier gelesen, loest jede Aenderung eine normale Rekomposition aus.
+    val records = dao.getAll().collectAsState(initial = emptyList()).value
+    val references = dao.getAllReferences().collectAsState(initial = emptyList()).value
     val scope = rememberCoroutineScope()
     val reportManager = remember { ReportManager(context) }
 

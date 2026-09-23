@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.diagnose
 
 import android.os.SystemClock
+import android.util.Log
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -13,6 +14,12 @@ class CompositeDiagnosticsReporter(
     private val rateLimiter: DiagnosticRateLimiter = DiagnosticRateLimiter(),
     initialContext: DiagnosticContext = DiagnosticContext(),
     private val maxHistorySize: Int = 100,
+    /**
+     * Absturzfeste Breadcrumb-Ablage (M12 Schritt 2, Konzept 4.3). `null` (z.B. in bestehenden
+     * Tests) heisst schlicht "keine Ringdatei" - die RAM-Historie und [recentBreadcrumbs] bleiben
+     * davon unberuehrt, anderer Code haengt daran ([com.example.lrmprotokoll.diagnose.export.SupportBundleExporter]).
+     */
+    private val ringFile: BreadcrumbRingFile? = null,
     private val elapsedRealtimeProvider: () -> Long = {
         try {
             SystemClock.elapsedRealtime()
@@ -47,6 +54,12 @@ class CompositeDiagnosticsReporter(
                 breadcrumbsHistory.removeAt(0)
             }
         }
+        // Logcat-Spiegelung (M12 Schritt 2, Konzept 4.3): ergaenzend, nicht ersetzend - ACRAs
+        // Logcat-Collector faengt dieselben Spuren dann als zweites Netz ein. Der Logcat-Puffer
+        // ist klein und wird von anderen Apps mitbenutzt, taugt also nur als Netz, nicht als
+        // Primärquelle - das bleibt die Ringdatei unten.
+        runCatching { Log.i("Breadcrumb", "[${clean.category}] ${clean.message}") }
+        ringFile?.anhaengen(clean)
         for (sink in sinks) {
             runCatching { sink.recordBreadcrumb(clean) }
         }
