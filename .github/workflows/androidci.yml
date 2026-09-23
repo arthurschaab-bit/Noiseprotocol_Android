@@ -83,6 +83,7 @@ jobs:
         id: unit
         run: python .github/scripts/ci-timing.py run "JVM/Robolectric inklusive Compile" -- ./gradlew test --stacktrace --continue
 
+      # Lint und Testbericht laufen auch nach Unit-Test-Fehlern weiter, um vollstaendige Fehlerdiagnosen bereitzustellen.
       - name: Run Android Lint
         if: ${{ !cancelled() && steps.gradle.outcome == 'success' }}
         run: python .github/scripts/ci-timing.py run "Android Lint" -- ./gradlew lintDebug --stacktrace
@@ -97,8 +98,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: python .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY"
 
-      # Keine Wiederholung fehlgeschlagener Tests fuer einen rein informativen Report.
+      # Keine Wiederholung fehlgeschlagener Tests fuer einen rein informativen Report:
       # Nach erfolgreichen Tests verwendet Kover dieselben UP-TO-DATE-Ergebnisse.
+      # Bei fehlgeschlagenen Unit-Tests wird Kover uebersprungen, da ein unvollstaendiger Report keinen Mehrwert bietet.
       - name: Coverage-Report erzeugen
         if: ${{ !cancelled() && steps.unit.outcome == 'success' }}
         continue-on-error: true

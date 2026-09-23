@@ -161,6 +161,17 @@ class GitChangesTest(unittest.TestCase):
         self.assertEqual("android=false\n", output_file.read_text(encoding="utf-8"))
         self.assertIn("ausschließlich Markdown", summary_file.read_text(encoding="utf-8"))
 
+    def test_cli_appends_to_existing_output_and_handles_pull_request_payload(self):
+        self.write("docs/architecture.md")
+        head = self.save()
+        event_file = self.repo / "event.json"
+        output_file = self.repo / "output.txt"
+        output_file.write_text("existing_var=foo\n", encoding="utf-8")
+        event_file.write_text(json.dumps({"pull_request": {"base": {"sha": self.base}, "head": {"sha": head}}}), encoding="utf-8")
+        env = dict(os.environ, GITHUB_EVENT_NAME="pull_request", GITHUB_EVENT_PATH=str(event_file), GITHUB_OUTPUT=str(output_file), PYTHONIOENCODING="utf-8")
+        subprocess.run([sys.executable, str(SCRIPT)], cwd=self.repo, env=env, check=True, capture_output=True)
+        self.assertEqual("existing_var=foo\nandroid=false\n", output_file.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
