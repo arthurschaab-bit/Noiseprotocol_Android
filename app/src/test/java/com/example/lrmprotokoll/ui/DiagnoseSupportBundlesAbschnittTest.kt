@@ -156,4 +156,41 @@ class DiagnoseSupportBundlesAbschnittTest {
             app.container.diagnosticsReporter.recentEvents().any { it.code == DiagnosticCode.SUPPORT_BUNDLE_FAILED },
         )
     }
+
+    /**
+     * Owner-Freigabe 23.09.2026: derselbe Fehlerzweig wie beim Sofortupload auch fuer den Knopf
+     * "Support-Bundle exportieren (ZIP)" - bisher nur ein Toast, jetzt Log, Report-Event und
+     * Hinweis ueber onShowSnackbar.
+     */
+    @Test
+    fun fehlerBeimExportWirdGemeldetUndAngezeigt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        // Eine Datei an der Stelle des Bundle-Ordners laesst schon das Anlegen der ZIP scheitern.
+        val bundleOrdner = File(app.getExternalFilesDir(null) ?: app.cacheDir, "support_bundles")
+        bundleOrdner.deleteRecursively()
+        bundleOrdner.writeText("kein Ordner")
+        try {
+            val meldungen = CopyOnWriteArrayList<String>()
+            composeRule.setContent { DiagnoseScreen(onBack = {}, onShowSnackbar = { meldungen.add(it) }) }
+            composeRule.waitForIdle()
+
+            val knopf = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_export_bundle)
+            composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(knopf))
+            composeRule.onNodeWithText(knopf).performClick()
+
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                composeRule.waitForIdle()
+                meldungen.any { it.startsWith("Export fehlgeschlagen") }
+            }
+            warteBisKnopfWiederBereit(knopf)
+            assertTrue(
+                "Die Ausnahme muss als SUPPORT_BUNDLE_FAILED (Export) gemeldet werden",
+                app.container.diagnosticsReporter.recentEvents().any {
+                    it.code == DiagnosticCode.SUPPORT_BUNDLE_FAILED && it.operation == "supportBundleExport"
+                },
+            )
+        } finally {
+            bundleOrdner.delete()
+        }
+    }
 }

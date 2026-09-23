@@ -357,8 +357,22 @@ fun DiagnoseScreen(
                                 }
                                 val shareIntent = container.supportBundleExporter.createShareIntent(zipFile)
                                 context.startActivity(Intent.createChooser(shareIntent, "Support-Bundle teilen…"))
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Export fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
+                                // Owner-Freigabe 23.09.2026: wie beim Sofortupload unten - Log und
+                                // Report-Event statt nur eines Toasts, Hinweis ueber onShowSnackbar.
+                                Log.w("DiagnoseScreen", "Support-Bundle-Export fehlgeschlagen", e)
+                                container.diagnosticsReporter.report(
+                                    code = DiagnosticCode.SUPPORT_BUNDLE_FAILED,
+                                    component = "DiagnoseScreen",
+                                    operation = "supportBundleExport",
+                                    severity = DiagnosticSeverity.ERROR,
+                                    cause = e,
+                                    message = "Support-Bundle konnte nicht erstellt oder geteilt werden",
+                                )
+                                val msg = "Export fehlgeschlagen: ${e.message}"
+                                onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             } finally {
                                 exportiertGerade = false
                             }
