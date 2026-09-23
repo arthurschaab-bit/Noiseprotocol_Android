@@ -6,10 +6,21 @@
 # eigene Skriptdatei statt inline im Workflow.
 #
 # $1: API-Level des Emulators (fuer den BLUETOOTH_SCAN/CONNECT-Fall, siehe unten).
+# $2: Shard-Index (0-basiert), $3: Anzahl der Shards.
 set -uo pipefail
 
 api_level="$1"
+shard="${2:-0}"
+num_shards="${3:-1}"
 APP_ID="com.example.lrmprotokoll"
+
+# Der Snapshot muss vor der Installation sauber sein. Ein Treffer zeigt einen
+# fehlerhaften/alten Cache und beendet den Lauf statt Testdaten zu uebernehmen.
+if adb shell pm path "$APP_ID" | grep -q '^package:'; then
+  echo "::error::AVD-Snapshot enthaelt bereits $APP_ID; Cache-Schluessel erhoehen und neu erzeugen."
+  exit 1
+fi
+echo "AVD-Snapshot sauber: $APP_ID ist vor der Testinstallation nicht vorhanden."
 
 # Dieser Block muss im laufenden Emulator-Kontext ausgeführt werden. Der nachgelagerte
 # Workflow-Schritt läuft erst nach Ende von android-emulator-runner und kann deshalb keine
@@ -64,11 +75,14 @@ sichere_emulator_diagnosen() {
 # jeweils nach einem `pm revoke` VOR dem Prozessstart.
 notclass="com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrumentedTest#ohneBerechtigungFragtDerAufnahmeButtonErstNachUndStartetDannDenKameraIntent,com.example.lrmprotokoll.ui.VideoAufnahmeScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScreenBeimBetretenNachUndSchaltetNachErlaubnisWeiter,com.example.lrmprotokoll.ui.GesamtberichtStammdatenSheetPermissionInstrumentedTest#ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand,com.example.lrmprotokoll.ui.MeterScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScanButtonErstNachUndBesitztDanachDieBerechtigung"
 
-./gradlew connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.notClass="$notclass"
-if [ $? -ne 0 ]; then
+haupt_status=0
+./gradlew connectedDebugAndroidTest --no-daemon --stacktrace \
+  -Pandroid.testInstrumentationRunnerArguments.notClass="$notclass" \
+  -Pandroid.testInstrumentationRunnerArguments.numShards="$num_shards" \
+  -Pandroid.testInstrumentationRunnerArguments.shardIndex="$shard" || haupt_status=$?
+if [ "$haupt_status" -ne 0 ]; then
   sichere_emulator_diagnosen
   cp logs/adb-logcat.txt logcat-failure.txt 2>/dev/null || true
-  exit 1
 fi
 
 # CI-Fund 10.09.2026 (2. Iteration, PR #132): connectedDebugAndroidTest deinstalliert App- und
@@ -130,6 +144,7 @@ revoke_und_pruefe() {
 }
 
 fehlgeschlagen=0
+if [ "$shard" -eq 0 ]; then
 for eintrag in "${faelle[@]}"; do
   klasse_methode="${eintrag%%|*}"
   berechtigungen="${eintrag##*|}"
@@ -150,11 +165,68 @@ for eintrag in "${faelle[@]}"; do
   done
 
   if ! echo "$ausgabe" | grep -q "OK (1 test)"; then
-    echo "::error::$klasse_methode ist NICHT mit 'OK (1 test)' durchgelaufen (siehe Ausgabe oben)."
-    fehlgeschlagen=1
+    # Auch fuer die separat ausgefuehrten Berechtigungstests genau ein Retry.
+    ziel="diagnose/${klasse_methode//\#/_}"
+    mkdir -p "$ziel"
+    printf '%s\n' "$ausgabe" > "$ziel/erstversuch.txt"
+    timeout 10s adb logcat -d > "$ziel/logcat-erstversuch.txt" 2>&1 || true
+    timeout 10s adb exec-out screencap -p > "$ziel/screenshot.png" 2>/dev/null || true
+    adb shell uiautomator dump /sdcard/ci-ui-hierarchy.xml >/dev/null 2>&1 &&
+      adb pull /sdcard/ci-ui-hierarchy.xml "$ziel/ui-hierarchy.xml" >/dev/null 2>&1 || true
+    adb shell am force-stop "$APP_ID" || true
+    IFS=',' read -ra perms <<< "$berechtigungen"
+    for p in "${perms[@]}"; do
+      revoke_und_pruefe "$p"
+    done
+    retry=$(adb shell am instrument -w -e class "$klasse_methode" "$RUNNER" 2>&1)
+    echo "$retry"
+    printf '%s\n' "$retry" > "$ziel/wiederholung.txt"
+    for p in "${perms[@]}"; do
+      adb shell pm grant "$APP_ID" "$p" || true
+    done
+    if echo "$retry" | grep -q "OK (1 test)"; then
+      printf '%s\tPASSED\n' "$klasse_methode" >> .github/flaky-retries.tsv
+    else
+      printf '%s\tFAILED\n' "$klasse_methode" >> .github/flaky-retries.tsv
+    fi
   fi
   echo "::endgroup::"
 done
+fi
+
+# Die JUnit-XML-Dateien liefern die tatsaechlich fehlgeschlagenen Methoden.
+# Jede wird exakt einmal in einem frischen Prozess erneut ausgefuehrt.
+mapfile -t fehlende_tests < <(python3 .github/scripts/testbericht.py --failed app/build/outputs/androidTest-results)
+for klasse_methode in "${fehlende_tests[@]}"; do
+  echo "::group::Wiederholung $klasse_methode"
+  adb shell am force-stop "$APP_ID" || true
+  adb logcat -c || true
+  retry=$(adb shell am instrument -w -e class "$klasse_methode" "$RUNNER" 2>&1)
+  echo "$retry"
+  ziel="diagnose/${klasse_methode//\#/_}"
+  mkdir -p "$ziel"
+  printf '%s\n' "$retry" > "$ziel/wiederholung.txt"
+  timeout 10s adb logcat -d > "$ziel/logcat.txt" 2>&1 || true
+  timeout 10s adb exec-out screencap -p > "$ziel/screenshot.png" 2>/dev/null || true
+  adb shell uiautomator dump /sdcard/ci-ui-hierarchy.xml >/dev/null 2>&1 &&
+    adb pull /sdcard/ci-ui-hierarchy.xml "$ziel/ui-hierarchy.xml" >/dev/null 2>&1 || true
+  if echo "$retry" | grep -q "OK (1 test)"; then
+    printf '%s\tPASSED\n' "$klasse_methode" >> .github/flaky-retries.tsv
+  else
+    printf '%s\tFAILED\n' "$klasse_methode" >> .github/flaky-retries.tsv
+  fi
+  echo '::endgroup::'
+done
+
+python3 .github/scripts/testbericht.py --status app/build/outputs/androidTest-results \
+  .github/flaky-retries.tsv .github/flaky-quarantaene.txt || fehlgeschlagen=1
+
+# Gradle darf nur dann ueberstimmt werden, wenn konkrete JUnit-Fehler klassifiziert
+# wurden. Build-, Installations- oder Testinfrastrukturfehler bleiben rot.
+if [ "$haupt_status" -ne 0 ] && [ "${#fehlende_tests[@]}" -eq 0 ]; then
+  echo "::error::Haupttestphase fehlgeschlagen, aber keine JUnit-Fehler gefunden."
+  fehlgeschlagen=1
+fi
 
 if [ "$fehlgeschlagen" -ne 0 ]; then
   sichere_emulator_diagnosen

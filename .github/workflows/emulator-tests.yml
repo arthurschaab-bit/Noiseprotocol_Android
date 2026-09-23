@@ -16,8 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
+      fail-fast: false
       matrix:
         api-level: [34]
+        shard: [0, 1, 2]
 
     steps:
       - name: Checkout
@@ -48,6 +50,43 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # Der Cache wird ausschliesslich vor der APK-Installation erzeugt. Der Schluessel
+      # enthaelt Image und Emulator-Optionen; geaenderte Images erzeugen einen neuen Cache.
+      - name: Cache clean AVD snapshot
+        id: avd-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-${{ matrix.api-level }}-aosp_atd-x86_64-2core-2048ram-512heap-swiftshader-noaudio-nobootanim-cameraoff-v1
+
+      - name: Create clean AVD snapshot on cache miss
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: aosp_atd
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          script: echo 'Clean AVD snapshot booted before app installation'
+
+      # Vor dem Testlauf sichern: actions/cache@v4 wuerde erst am Job-Ende auch
+      # die waehrend der Tests veraenderte Userdata sichern. Nur Shard 0 schreibt.
+      - name: Save clean AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true' && matrix.shard == 0
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-${{ matrix.api-level }}-aosp_atd-x86_64-2core-2048ram-512heap-swiftshader-noaudio-nobootanim-cameraoff-v1
+
       - name: Pre-build Debug and Test APKs
         run: ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
 
@@ -58,7 +97,7 @@ jobs:
           target: aosp_atd
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           cores: 2
           ram-size: 2048M
@@ -67,11 +106,11 @@ jobs:
             adb wait-for-device
             adb shell input keyevent 82 || true
             adb logcat -c
-            bash .github/scripts/run-instrumented-tests.sh ${{ matrix.api-level }}
+            bash .github/scripts/run-instrumented-tests.sh ${{ matrix.api-level }} ${{ matrix.shard }} 3
 
       - name: Testbericht in die Zusammenfassung schreiben
         if: always()
-        run: python3 .github/scripts/testbericht.py "Instrumentierte Tests (Emulator API ${{ matrix.api-level }})" "app/build/outputs/androidTest-results" >> "$GITHUB_STEP_SUMMARY" || true
+        run: python3 .github/scripts/testbericht.py "Instrumentierte Tests (Emulator API ${{ matrix.api-level }}, Shard ${{ matrix.shard }})" "app/build/outputs/androidTest-results" --retries .github/flaky-retries.tsv --quarantine .github/flaky-quarantaene.txt >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Collect ADB Logs
         if: always()
@@ -84,18 +123,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: instrumented-test-reports-api-${{ matrix.api-level }}
+          name: instrumented-test-reports-api-${{ matrix.api-level }}-shard-${{ matrix.shard }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            .github/flaky-retries.tsv
+            diagnose/
           retention-days: 7
 
       - name: Upload ADB Diagnostics on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-diagnostics-api-${{ matrix.api-level }}
+          name: emulator-diagnostics-api-${{ matrix.api-level }}-shard-${{ matrix.shard }}
           path: |
             logs/
             logcat-failure.txt
+            diagnose/
           retention-days: 7
