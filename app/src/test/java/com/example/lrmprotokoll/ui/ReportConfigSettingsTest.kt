@@ -104,7 +104,6 @@ class ReportConfigSettingsTest {
     fun ungepruefteGebieteKoennenNichtAusgewaehltWerden() {
         composeRule.setContent { ReportAreaSelection(value = "WA", enabled = true, onSelect = { error("Keine Auswahl erwartet") }) }
         composeRule.onNodeWithTag("input_report_gebietseinstufung").performClick()
-        composeRule.waitForIdle()
         composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
         composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
     }
