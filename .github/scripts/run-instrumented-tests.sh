@@ -119,6 +119,13 @@ if [ -z "$RUNNER" ]; then
 fi
 echo "Instrumentation-Komponente: $RUNNER"
 
+# Nach der Neuinstallation braucht der System-PermissionController Zeit, um das neu installierte
+# Paket und dessen Berechtigungsgruppen vollstaendig im Cache zu erfassen ("Updating user sensitive").
+# Ein kurzer Reset und 2 Sekunden Wartezeit verhindern "Group <pkg> <group> invalid" beim ersten Test.
+adb shell am force-stop com.android.permissioncontroller || true
+adb shell am force-stop com.google.android.permissioncontroller || true
+sleep 2
+
 # Format je Eintrag: "<Klasse>#<Methode>|<Berechtigung1>[,<Berechtigung2>]"
 faelle=(
   "com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrumentedTest#ohneBerechtigungFragtDerAufnahmeButtonErstNachUndStartetDannDenKameraIntent|android.permission.CAMERA"
@@ -172,6 +179,8 @@ for eintrag in "${faelle[@]}"; do
 
   # Kein laufender Prozess = kein Kill-Risiko beim Revoke (siehe Kommentar oben).
   adb shell am force-stop "$APP_ID"
+  adb shell am force-stop com.android.permissioncontroller || true
+  adb shell am force-stop com.google.android.permissioncontroller || true
   IFS=',' read -ra perms <<< "$berechtigungen"
   for p in "${perms[@]}"; do
     revoke_und_pruefe "$p"
