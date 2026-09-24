@@ -73,6 +73,11 @@ class SupportOutboxReportSender : ReportSender {
                     acraReportJson = runCatching { errorContent.toJSON() }.getOrNull(),
                     threadDetails = errorContent.getString(ReportField.THREAD_DETAILS),
                     logcatText = errorContent.getString(ReportField.LOGCAT),
+                    // Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: das
+                    // benutzerdefinierte Feld von LaufzeitzustandCollector - kein ReportField,
+                    // deshalb ueber CrashReportData.get(String) statt getString(ReportField),
+                    // wie schon bei BREADCRUMB_RING_REPORT_KEY (siehe BreadcrumbRingCollector).
+                    laufzeitzustandJson = runCatching { errorContent.get(LAUFZEITZUSTAND_REPORT_KEY) as? String }.getOrNull(),
                 )
             )
         }

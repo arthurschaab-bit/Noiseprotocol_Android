@@ -170,6 +170,90 @@ class SupportBundleExporterTest {
         }
     }
 
+    /**
+     * Test 3 aus docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Abschnitt 3: enthaelt der
+     * ACRA-Report (hier bereits als [BundleKontext.laufzeitzustandJson] durchgereicht, siehe
+     * [com.example.lrmprotokoll.diagnose.acra.SupportOutboxReportSender]) den Schluessel, landet
+     * er als eigene Datei im Bundle.
+     */
+    @Test
+    fun crashBundleEnthaeltLaufzeitzustandWennImKontextVorhanden() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext =
+                BundleKontext(
+                    typ = BundleTyp.ABSTURZ,
+                    ausloeser = "ACRA",
+                    laufzeitzustandJson = "{\"aufnahmeAktiv\":true,\"heapMaxBytes\":123456,\"bleVerbindungszustand\":\"STREAMING\"}",
+                )
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                assertNotNull(zip.getEntry("crash/laufzeitzustand_beim_absturz.json"))
+                val inhalt = zip.getInputStream(zip.getEntry("crash/laufzeitzustand_beim_absturz.json")).bufferedReader().readText()
+                assertTrue(inhalt.contains("aufnahmeAktiv"))
+                assertTrue(inhalt.contains("STREAMING"))
+            }
+        }
+
+    /** Gegenprobe zu Test 3: ohne den Schluessel entsteht die Datei nicht. */
+    @Test
+    fun crashBundleOhneLaufzeitzustandHatKeineDieserDatei() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext = BundleKontext(typ = BundleTyp.ABSTURZ, ausloeser = "ACRA")
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                assertTrue(zip.getEntry("crash/laufzeitzustand_beim_absturz.json") == null)
+            }
+        }
+
+    /**
+     * Schritt 2 des Auftrags: "Er laeuft durch den DiagnosticRedactor, wie crash/acra_report.json."
+     * Vorbild ist [crashBundleRedigiertPiiImAcraReportJson].
+     */
+    @Test
+    fun crashBundleRedigiertPiiImLaufzeitzustand() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext =
+                BundleKontext(
+                    typ = BundleTyp.ABSTURZ,
+                    ausloeser = "ACRA",
+                    laufzeitzustandJson = "{\"hinweis\":\"Geraet AA:BB:CC:DD:EE:FF fuer user@example.com\"}",
+                )
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                val inhalt = zip.getInputStream(zip.getEntry("crash/laufzeitzustand_beim_absturz.json")).bufferedReader().readText()
+                assertTrue(inhalt.contains("AA:BB:CC:XX:XX:XX"))
+                assertTrue(inhalt.contains("[REDACTED_EMAIL]"))
+                assertTrue(!inhalt.contains("user@example.com"))
+            }
+        }
+
+    /**
+     * Test 4 aus docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Abschnitt 3: state/runtime.json muss
+     * als "danach" gebaut erkennbar sein, damit niemand es mit dem Absturzmoment verwechselt
+     * (Befund C, docs/BEFUNDE_P30_2026-09-23.md Abschnitt 3a).
+     */
+    @Test
+    fun runtimeJsonMarkiertZeitpunktAlsBeiBundleErstellung() =
+        runTest {
+            val zipFile =
+                exporter(FakeDiagnosticLogDao(emptyList()))
+                    .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+            ZipFile(zipFile).use { zip ->
+                val runtimeJson = zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText()
+                assertTrue(runtimeJson.contains("\"erfasst\": \"bei Bundle-Erstellung\""))
+            }
+        }
+
     @Test
     fun createBundleSanitizesPiiInEventsAndBreadcrumbs() = runTest {
         val ringFile = BreadcrumbRingFile(File(context.cacheDir, "ring_pii_${System.nanoTime()}").apply { mkdirs() })

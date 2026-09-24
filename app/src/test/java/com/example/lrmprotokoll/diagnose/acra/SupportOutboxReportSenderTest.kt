@@ -108,6 +108,34 @@ class SupportOutboxReportSenderTest {
         assertTrue("Bei aktiviertem Schalter (Standard) muss der Upload eingereiht werden", ausstehendeUploads.isNotEmpty())
     }
 
+    /**
+     * Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: end-to-end - enthaelt der
+     * ACRA-Report den LAUFZEITZUSTAND-Schluessel (von LaufzeitzustandCollector gesetzt), muss er
+     * im gebauten Bundle als eigene Datei landen.
+     */
+    @Test
+    fun bautEinBundleMitLaufzeitzustandWennImReportVorhanden() {
+        val outboxDir = File(context.filesDir, SUPPORT_OUTBOX_DIR)
+        outboxDir.deleteRecursively()
+
+        val report =
+            CrashReportData().apply {
+                put(ReportField.STACK_TRACE, "java.lang.OutOfMemoryError: Testabsturz")
+                put(LAUFZEITZUSTAND_REPORT_KEY, "{\"aufnahmeAktiv\":true,\"heapMaxBytes\":402653184}")
+            }
+
+        SupportOutboxReportSender().send(context, report)
+
+        val dateien = outboxDir.listFiles().orEmpty()
+        assertEquals(1, dateien.size)
+        ZipFile(dateien[0]).use { zip ->
+            assertTrue(zip.getEntry("crash/laufzeitzustand_beim_absturz.json") != null)
+            val inhalt = zip.getInputStream(zip.getEntry("crash/laufzeitzustand_beim_absturz.json")).bufferedReader().readText()
+            assertTrue(inhalt.contains("aufnahmeAktiv"))
+            assertTrue(inhalt.contains("402653184"))
+        }
+    }
+
     @Test
     fun factoryLiefertEinenSupportOutboxReportSender() {
         val factory = SupportOutboxReportSenderFactory()
