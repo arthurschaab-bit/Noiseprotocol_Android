@@ -131,6 +131,19 @@ class DriveSyncCoordinatorTest {
         override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> =
             throw NotImplementedError("im Test nicht benoetigt")
 
+        override suspend fun dateiHerunterladenNach(fileId: String, ziel: java.io.File): Result<Unit> =
+            throw NotImplementedError("im Test nicht benoetigt")
+
+        var resumableNeuanlagenErgebnis: Result<String> = Result.success("resumable-neue-datei-id")
+        var resumableAktualisierenErgebnis: Result<Unit> = Result.success(Unit)
+        var resumableNeuanlagenAufrufe = 0
+        var resumableAktualisierenAufrufe = 0
+        var letzteResumableAktualisierteFileId: String? = null
+        // Bewusst der INHALT (nicht die File-Referenz): der Koordinator loescht die temporaere
+        // Sicherungsdatei im finally, SOBALD dateiHochladenResumable/dateiAktualisierenResumable
+        // zurueckgekehrt sind - eine spaetere Pruefung der Datei selbst wuerde ins Leere laufen.
+        var letzterSicherungsInhalt: ByteArray? = null
+
         override suspend fun dateiHochladenResumable(
             name: String,
             ordnerId: String,
@@ -139,7 +152,25 @@ class DriveSyncCoordinatorTest {
             fortsetzenAb: String?,
             sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
-        ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
+        ): Result<String> {
+            resumableNeuanlagenAufrufe++
+            letzterSicherungsInhalt = datei.readBytes()
+            return resumableNeuanlagenErgebnis
+        }
+
+        override suspend fun dateiAktualisierenResumable(
+            fileId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): Result<Unit> {
+            resumableAktualisierenAufrufe++
+            letzteResumableAktualisierteFileId = fileId
+            letzterSicherungsInhalt = datei.readBytes()
+            return resumableAktualisierenErgebnis
+        }
     }
 
     /** M11 Etappe B: Beweisvideos - dieselbe Fake-Disziplin wie bei den anderen DAOs. */

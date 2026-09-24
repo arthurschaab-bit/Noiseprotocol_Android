@@ -12,7 +12,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -28,6 +30,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class GoogleDriveApiClientTest {
+
+    @get:Rule
+    val ordner = TemporaryFolder()
 
     private lateinit var server: MockWebServer
     private lateinit var client: GoogleDriveApiClient
@@ -290,6 +295,40 @@ class GoogleDriveApiClientTest {
 
         assertTrue(ergebnis.isFailure)
         assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
+    }
+
+    /**
+     * PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3: [GoogleDriveApiClient.dateiHerunterladenNach]
+     * schreibt STREAMEND in eine Datei - Gegenstueck zu [dateiHerunterladenSendetAltMediaUndLiefertRoheBytes],
+     * ebenfalls mit binaeren, nicht UTF-8-gueltigen Bytes, damit ein versteckter String-Umweg
+     * auffiele.
+     */
+    @Test
+    fun dateiHerunterladenNachSchreibtDenRohenInhaltStreamendInDieZieldatei() = runTest {
+        val roheBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0xFF.toByte(), 0x00, 0x7A, 0x69, 0x70)
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(roheBytes)))
+        val ziel = ordner.newFile("herunter.zip")
+
+        val ergebnis = client.dateiHerunterladenNach("datei-1", ziel)
+
+        assertTrue(ergebnis.isSuccess)
+        assertArrayEquals(roheBytes, ziel.readBytes())
+        val anfrage = server.takeRequest()
+        assertEquals("GET", anfrage.method)
+        assertEquals("/drive/v3/files/datei-1?alt=media", anfrage.path)
+        assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
+    }
+
+    @Test
+    fun dateiHerunterladenNachBeiHttpFehlerLiefertDriveApiExceptionUndLaesstDieZieldateiLeer() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404))
+        val ziel = ordner.newFile("herunter.zip")
+
+        val ergebnis = client.dateiHerunterladenNach("weg", ziel)
+
+        assertTrue(ergebnis.isFailure)
+        assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
+        assertEquals(0L, ziel.length())
     }
 
     @Test

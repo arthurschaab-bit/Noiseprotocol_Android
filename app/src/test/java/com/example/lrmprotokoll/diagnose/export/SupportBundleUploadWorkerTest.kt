@@ -56,6 +56,10 @@ class SupportBundleUploadWorkerTest {
         ) = kotlin.Result.success(Unit)
         override suspend fun dateiHerunterladen(fileId: String): kotlin.Result<ByteArray> =
             throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun dateiHerunterladenNach(
+            fileId: String,
+            ziel: File,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun dateiHochladenResumable(
             name: String, ordnerId: String, datei: File, mimeType: String,
             fortsetzenAb: String?, sessionGestartet: suspend (String) -> Unit,
@@ -66,6 +70,14 @@ class SupportBundleUploadWorkerTest {
             vorhandeneDateien += name
             return kotlin.Result.success("hochgeladen-id")
         }
+        override suspend fun dateiAktualisierenResumable(
+            fileId: String,
+            datei: File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private lateinit var context: Context

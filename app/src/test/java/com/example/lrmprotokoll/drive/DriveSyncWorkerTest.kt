@@ -119,6 +119,11 @@ class DriveSyncWorkerTest {
         override suspend fun dateiHerunterladen(fileId: String): kotlin.Result<ByteArray> =
             throw NotImplementedError("im Test nicht benoetigt")
 
+        override suspend fun dateiHerunterladenNach(
+            fileId: String,
+            ziel: java.io.File,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun dateiHochladenResumable(
             name: String,
             ordnerId: String,
@@ -128,6 +133,15 @@ class DriveSyncWorkerTest {
             sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
         ): kotlin.Result<String> = throw NotImplementedError("im Test nicht benoetigt")
+
+        override suspend fun dateiAktualisierenResumable(
+            fileId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private lateinit var context: Context
