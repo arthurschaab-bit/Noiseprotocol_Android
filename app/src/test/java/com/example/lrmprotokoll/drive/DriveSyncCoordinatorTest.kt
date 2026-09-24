@@ -985,4 +985,157 @@ class DriveSyncCoordinatorTest {
                 gleichzeitigkeitsDao.maxGleichzeitigeAufrufe,
             )
         }
+
+    // ---------------------------------------------------------------- OOM-Bugfix Schritt 3: endgueltige Tage ueberspringen
+
+    /** Protokolliert jeden [zwischen]-Aufruf mit seinem `(von, bis)`-Zeitraum (Test 1/2). */
+    private class ProtokollierendesLevelSampleDao : LevelSampleDao {
+        val eingefuegt = mutableListOf<LevelSampleEntity>()
+        val zwischenAufrufe = mutableListOf<Pair<Long, Long>>()
+
+        override suspend fun insert(sample: LevelSampleEntity) {
+            eingefuegt += sample
+        }
+
+        override suspend fun insertAll(samples: List<LevelSampleEntity>) {
+            eingefuegt += samples
+        }
+
+        override suspend fun zwischen(
+            von: Long,
+            bis: Long,
+        ): List<LevelSampleEntity> {
+            zwischenAufrufe += von to bis
+            return eingefuegt.filter { it.at in von until bis }
+        }
+
+        override suspend fun loescheVor(vor: Long) {
+            eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun anzahl(): Int = eingefuegt.size
+    }
+
+    /** True, wenn ein protokollierter `(von, bis)`-Aufruf den Zeitraum [tagVon, tagBis) beruehrt. */
+    private fun ueberschneidetTag(
+        aufruf: Pair<Long, Long>,
+        tagVon: Instant,
+        tagBis: Instant,
+    ): Boolean {
+        val (von, bis) = aufruf
+        return von < tagBis.toEpochMilli() && bis > tagVon.toEpochMilli()
+    }
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 1: Ein Tag, der NACH seinem Tagesende
+     * erfolgreich synchronisiert wurde, ist endgueltig fertig - Rohwerte eines vergangenen Tages
+     * kommen nicht nachtraeglich hinzu (Befund A1: bislang lud `holeVersaeumteTageNach()` fuer
+     * jeden der letzten 29 Tage erst die komplette Rohwerteliste, bevor es ueberhaupt prueft, ob
+     * der Tag schon fertig ist).
+     */
+    @Test
+    fun nachTagesendeSynchronisierterTagWirdOhneRohwertAbfrageUebersprungen() =
+        runTest {
+            val protokollDao = ProtokollierendesLevelSampleDao()
+            val tag =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .minusDays(5)
+            val tagVon = tag.atStartOfDay(zone).toInstant()
+            val tagBis = tag.plusDays(1).atStartOfDay(zone).toInstant()
+            val schluessel = DriveAblage.tagesordner(tagVon, zone)
+            // Ein Sample ist absichtlich vorhanden - selbst WENN der Tag geladen wuerde, gaebe es
+            // etwas zu finden. Der Test soll gerade zeigen, dass gar nicht erst geladen wird.
+            protokollDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = tagVon.plusSeconds(3600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            dailyFileDao.zeilen[schluessel] =
+                DriveDailyFileEntity(
+                    date = schluessel,
+                    fileId = "schon-da",
+                    lastSyncedAt = tagBis.toEpochMilli() + 1,
+                    lastRowCount = 1,
+                    state = DriveSyncState.SYNCED,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = protokollDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus()
+
+            assertTrue(
+                "Ein nach Tagesende synchronisierter Tag darf keine Rohwerte-Abfrage fuer seinen " +
+                    "eigenen Zeitraum ausloesen",
+                protokollDao.zwischenAufrufe.none { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+        }
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 2: Ein noch nicht registrierter Tag wird
+     * beim ersten Lauf ganz normal nachgeholt (inkl. Rohwerte-Laden) - danach ist er endgueltig
+     * und ein zweiter Lauf darf ihn nicht mehr laden.
+     */
+    @Test
+    fun versaeumterTagWirdEinmalNachgeholtDanachEndgueltigUebersprungen() =
+        runTest {
+            val protokollDao = ProtokollierendesLevelSampleDao()
+            val tag =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .minusDays(5)
+            val tagVon = tag.atStartOfDay(zone).toInstant()
+            val tagBis = tag.plusDays(1).atStartOfDay(zone).toInstant()
+            val schluessel = DriveAblage.tagesordner(tagVon, zone)
+            protokollDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = tagVon.plusSeconds(3600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = protokollDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus() // erster Lauf: der Tag ist noch nicht registriert
+
+            assertTrue(
+                "Der erste Lauf muss den bislang unregistrierten Tag tatsaechlich laden",
+                protokollDao.zwischenAufrufe.any { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+            assertEquals(DriveSyncState.SYNCED, dailyFileDao.zeilen[schluessel]?.state)
+            assertTrue(
+                "lastSyncedAt muss nach Tagesende liegen - der Sync fand HEUTE statt, der Tag " +
+                    "liegt 5 Tage zurueck",
+                (dailyFileDao.zeilen[schluessel]?.lastSyncedAt ?: 0L) >= tagBis.toEpochMilli(),
+            )
+
+            protokollDao.zwischenAufrufe.clear()
+            koordinator.syncEinenZyklus() // zweiter Lauf: derselbe Tag ist jetzt endgueltig
+
+            assertTrue(
+                "Der zweite Lauf darf denselben, jetzt endgueltig synchronisierten Tag nicht mehr laden",
+                protokollDao.zwischenAufrufe.none { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+        }
 }

@@ -366,8 +366,22 @@ class DriveSyncCoordinator(
             val tagesSchluessel = DriveAblage.tagesordner(tagVon, zone)
 
             runCatching {
-                val samples = levelSampleDao.zwischen(tagVon.toEpochMilli(), tagBis.toEpochMilli())
-                if (samples.isEmpty()) return@runCatching
+                // OOM-Bugfix Schritt 3 (PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Registry ZUERST
+                // pruefen, VOR jeglichem Rohwerte-Laden. Ein Tag, der NACH seinem eigenen
+                // Tagesende erfolgreich synchronisiert wurde, ist endgueltig fertig - Rohwerte
+                // eines vergangenen Tages kommen nicht nachtraeglich hinzu, die Messung laeuft
+                // live. lastSyncedAt ist bei BEIDEN Schreibstellen (hier unten und in
+                // [syncEinenZyklus]) der Zeitpunkt des SYNCS, nicht des Tages - "lastSyncedAt >=
+                // tagBis" heisst also praezise "nach Tagesende erfolgreich synchronisiert".
+                // Ohne diese Pruefung lud jeder Zyklus erneut die volle Tagesliste (bei ~290.000
+                // Zeilen/Tag auf dem Owner-Geraet), nur um dasselbe wie beim letzten Mal
+                // festzustellen.
+                val registry = dailyFileDao.byDate(tagesSchluessel)
+                if (registry != null && registry.state == DriveSyncState.SYNCED &&
+                    registry.lastSyncedAt >= tagBis.toEpochMilli()
+                ) {
+                    return@runCatching // nach Tagesende synchronisiert -> endgueltig, nichts zu tun
+                }
 
                 val ereignisse = noiseDao.zwischenZeitpunkt(tagVon.toEpochMilli(), tagBis.toEpochMilli())
                     .map {
@@ -380,12 +394,14 @@ class DriveSyncCoordinator(
                         )
                     }
                 val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
+                val samples = levelSampleDao.zwischen(tagVon.toEpochMilli(), tagBis.toEpochMilli())
+                if (samples.isEmpty()) return@runCatching
+
                 val zeilen = PegelAggregator.aggregiere(samples, ereignisse, tagVon, tagBis, fensterDauer)
                 if (zeilen.isEmpty()) return@runCatching
 
-                val registry = dailyFileDao.byDate(tagesSchluessel)
                 if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
-                    return@runCatching // dieser Tag ist bereits vollstaendig synchronisiert
+                    return@runCatching // Zeilenzahl unveraendert seit dem letzten (nicht-endgueltigen) Sync
                 }
 
                 val dateiName = "laermprotokoll_$tagesSchluessel.csv"
