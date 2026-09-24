@@ -227,23 +227,43 @@ class AppContainer(
     /** Gestartet von [LaermprotokollApp.onCreate], ausser unter Robolectric (siehe dort). */
     val anrWatchdog: com.example.lrmprotokoll.diagnose.AnrWatchdog by anrWatchdogLazy
 
-    val connectionSupervisor: ConnectionSupervisor by lazy {
-        ConnectionSupervisor(
-            transport = meterTransport,
-            scope = connectionSupervisorScope,
-            adapterEnabled = bluetoothAdapterStateObserver.enabled,
-            // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
-            // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
-            expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
-            // Owner-Entscheidung nach Geraetetest ("Toleranz lockern"): Der urspruengliche
-            // ±20%-Default (ConnectionSupervisor-KDoc) loeste bei nahezu jedem Reconnect
-            // faelschlich DEGRADED aus - das Diagnose-Log zeigte reale Deltas von ~180-630ms um
-            // die erwarteten 515ms. ±50% deckt das ab, ohne die Kadenzpruefung ganz abzuschalten.
-            cadenceTolerance = 0.5,
-            diagnosticLogger = diagnosticLogger,
-            diagnosticsReporter = diagnosticsReporter,
-        )
-    }
+    // Als eigener benannter Lazy statt eines anonymen "by lazy {}" (Bugfix
+    // docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md, Schritt 1/2): nur so laesst sich von aussen
+    // pruefen, ob der ConnectionSupervisor schon gebaut wurde, OHNE ihn dabei anzustossen - siehe
+    // connectionSupervisorFallsBereitsInitialisiert() weiter unten.
+    private val connectionSupervisorLazy: Lazy<ConnectionSupervisor> =
+        lazy {
+            ConnectionSupervisor(
+                transport = meterTransport,
+                scope = connectionSupervisorScope,
+                adapterEnabled = bluetoothAdapterStateObserver.enabled,
+                // Plan Abschnitt 6, Stream-Plausibilisierung: nur hier ist die geraetespezifische
+                // Erwartung bekannt, ConnectionSupervisor selbst bleibt frei von BLE-Details.
+                expectedFramePeriod = Duration.ofMillis(Pce323Profile.EXPECTED_FRAME_PERIOD_MS),
+                // Owner-Entscheidung nach Geraetetest ("Toleranz lockern"): Der urspruengliche
+                // ±20%-Default (ConnectionSupervisor-KDoc) loeste bei nahezu jedem Reconnect
+                // faelschlich DEGRADED aus - das Diagnose-Log zeigte reale Deltas von ~180-630ms um
+                // die erwarteten 515ms. ±50% deckt das ab, ohne die Kadenzpruefung ganz abzuschalten.
+                cadenceTolerance = 0.5,
+                diagnosticLogger = diagnosticLogger,
+                diagnosticsReporter = diagnosticsReporter,
+            )
+        }
+    val connectionSupervisor: ConnectionSupervisor by connectionSupervisorLazy
+
+    /**
+     * [connectionSupervisor], aber NUR wenn es schon gebaut wurde - loest das `lazy` selbst nicht
+     * aus. Fuer den Absturzmoment (Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md, Befund C /
+     * docs/BEFUNDE_P30_2026-09-23.md Abschnitt 3a):
+     * [com.example.lrmprotokoll.diagnose.acra.LaufzeitzustandCollector] laeuft im abstuerzenden
+     * Prozess und darf dort unter keinen Umstaenden die schwere BLE-Kette (BleMeterTransport,
+     * BluetoothAdapterStateObserver, ConnectionSupervisor selbst) neu anstossen - das waere
+     * frische Allokation genau in dem Moment, in dem der Prozess laut Verdacht schon knapp am
+     * Speicherlimit ist (BEFUNDE_P30_2026-09-23.md Abschnitt 2). Ist der Supervisor noch nicht
+     * gebaut, liefert diese Funktion `null`, statt ihn zu bauen.
+     */
+    internal fun connectionSupervisorFallsBereitsInitialisiert(): ConnectionSupervisor? =
+        if (connectionSupervisorLazy.isInitialized()) connectionSupervisorLazy.value else null
 
     // ---------------------------------------------------------------- M7b: Google-Drive-Sync
 
