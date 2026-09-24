@@ -104,6 +104,17 @@ class SupportBundleExporter(
     private val traceVerzeichnis: File,
     private val bleVerbindungszustandProvider: () -> String = { "UNBEKANNT" },
     private val aufnahmeAktivProvider: () -> Boolean = { false },
+    /** Bugfix (Geraetetest P30 23.09.2026, PROMPT_FIX_BUNDLE_INHALT.md Teil 2): ob die
+     * Plattform eine angeforderte Berechtigung ueberhaupt kennt (z. B. POST_NOTIFICATIONS ist
+     * erst API 33+ - auf einem API-29-Geraet lieferte [PackageManager.getPermissionInfo] dafuer
+     * bislang stets `false` = "verweigert", was bei der Fehlersuche in die Irre fuehrt statt
+     * "gibt es auf diesem Geraet nicht" zu zeigen). Als injizierbare Funktion statt direktem
+     * [PackageManager]-Aufruf in [buildRuntimeJson], weil Robolectrics PackageManager echte
+     * Plattform-Berechtigungen mitunter nicht kennt (siehe SupportBundleExporterTest).
+     */
+    private val berechtigungExistiertProvider: (String) -> Boolean = { name ->
+        runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
+    },
 ) {
 
     suspend fun createBundle(kontext: BundleKontext): File {
@@ -386,14 +397,25 @@ class SupportBundleExporter(
 
         runCatching {
             val berechtigungen = JSONObject()
+            // Bugfix (Geraetetest P30 23.09.2026, PROMPT_FIX_BUNDLE_INHALT.md Teil 2): Geraete-
+            // und API-Level-abhaengige Berechtigungen (z. B. POST_NOTIFICATIONS, BLUETOOTH_SCAN/
+            // -CONNECT, SCHEDULE_EXACT_ALARM), die die Plattform auf diesem Geraet gar nicht
+            // kennt, stehen separat statt unter "berechtigungen" mit dem irrefuehrenden Wert
+            // `false` ("verweigert").
+            val nichtVorhanden = JSONArray()
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
             val namen = packageInfo.requestedPermissions
             val flags = packageInfo.requestedPermissionsFlags
             namen?.forEachIndexed { i, name ->
-                val gewaehrt = ((flags?.getOrNull(i) ?: 0) and android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED) != 0
-                berechtigungen.put(name, gewaehrt)
+                if (berechtigungExistiertProvider(name)) {
+                    val gewaehrt = ((flags?.getOrNull(i) ?: 0) and android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED) != 0
+                    berechtigungen.put(name, gewaehrt)
+                } else {
+                    nichtVorhanden.put(name)
+                }
             }
             json.put("berechtigungen", berechtigungen)
+            json.put("berechtigungenNichtVorhanden", nichtVorhanden)
         }
 
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
