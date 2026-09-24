@@ -11,7 +11,13 @@ object DiagnosticRedactor {
     private val SENSITIVE_KEYS = setOf(
         "token", "secret", "authorization", "password", "apikey", "api_key", "private_key",
         "topic", "heartbeat", "bearer", "credential", "auth", "refresh", "access_token",
-        "ping_url", "heartbeat_url"
+        "ping_url", "heartbeat_url",
+        // Bugfix (Geraetetest P30 23.09.2026, PROMPT_FIX_BUNDLE_INHALT.md Teil 1): deckt per
+        // Substring-Treffer "google_account_name" (SettingsManager, Klarname aus Google-Sign-In)
+        // ab. Bewusst "account_name" statt des breiten "account" - Letzteres wuerde auch
+        // Schluessel treffen, die nichts Persoenliches enthalten (z. B. ein rein technisches
+        // "drive_account_status").
+        "account_name",
     )
 
     private val MAC_PATTERN = Regex("(?i)([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})")

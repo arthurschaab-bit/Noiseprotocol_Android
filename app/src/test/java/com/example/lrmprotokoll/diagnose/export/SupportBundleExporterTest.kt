@@ -288,6 +288,34 @@ class SupportBundleExporterTest {
         }
     }
 
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 1):
+     * "google_account_name" landete im Klartext in state/settings.json, obwohl die gepaarte
+     * "google_account_email" bereits geschwaerzt wurde. Prueft den vollen Weg
+     * SettingsManager -> unverschluesselteEinstellungenSnapshot() -> DiagnosticRedactor ->
+     * state/settings.json im fertigen Bundle - nicht nur den Redactor isoliert.
+     */
+    @Test
+    fun settingsJsonSchwaertGoogleKontoAnzeigenamenAberNichtUnverdaechtigeSchluessel() = runTest {
+        container.settingsManager.googleAccountName = "Max Mustermann"
+        container.settingsManager.googleAccountEmail = "max.mustermann@example.com"
+        container.settingsManager.driveFolderName = "Laermprotokolle 2026"
+
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val settingsJson = zip.getInputStream(zip.getEntry("state/settings.json")).bufferedReader().readText()
+            assertTrue(!settingsJson.contains("Max Mustermann"))
+            assertTrue(settingsJson.contains("\"google_account_name\": \"[REDACTED]\""))
+            assertTrue(!settingsJson.contains("max.mustermann@example.com"))
+            assertTrue(settingsJson.contains("\"google_account_email\": \"[REDACTED_EMAIL]\""))
+            // Unverdaechtiger Schluessel bleibt unveraendert - der neue SENSITIVE_KEYS-Eintrag
+            // ("account_name") darf nicht breiter matchen als noetig.
+            assertTrue(settingsJson.contains("\"drive_folder_name\": \"Laermprotokolle 2026\""))
+        }
+    }
+
     @Test
     fun createBundleVerwendetLesbarenDateinamenMitZeitstempelUndTyp() = runTest {
         val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
