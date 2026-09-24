@@ -8,6 +8,7 @@ import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.meter.InstantSource
+import kotlinx.coroutines.sync.Mutex
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -73,7 +74,34 @@ class DriveSyncCoordinator(
         data class Fehlgeschlagen(val grund: String, val httpCode: Int?) : SyncErgebnis
     }
 
+    /**
+     * Sorgt dafuer, dass niemals zwei Sync-Zyklen gleichzeitig laufen (OOM-Bugfix Schritt 1,
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Der periodische und der sofortige Worker
+     * (verschiedene WorkManager-Namen, siehe [DriveSyncPlanung]) sowie die manuellen "Jetzt
+     * synchronisieren"-Knoepfe (Diagnose-/Einstellungen-Screen) konnten bisher gleichzeitig
+     * laufen und dabei mehrfach riesige Rohwertlisten aus `level_samples` laden - auf dem
+     * Owner-Geraet bis zu vier Zyklen innerhalb einer Zehntelsekunde, kurz vor einem
+     * OutOfMemoryError. Der Coordinator ist ein Singleton im
+     * [com.example.lrmprotokoll.AppContainer] (`by lazy`), das Mutex-Feld gilt also fuer die
+     * gesamte App-Laufzeit.
+     */
+    private val zyklusMutex = Mutex()
+
     suspend fun syncEinenZyklus(): SyncErgebnis {
+        if (!zyklusMutex.tryLock()) {
+            // Nur EIN Breadcrumb pro wartendem Lauf, VOR dem eigentlichen (potenziell langen)
+            // Warten - tryLock() liefert das direkt, ohne selbst zu blockieren.
+            diagnosticsReporter?.breadcrumb("DriveSync", "Drive-Sync wartet auf laufenden Zyklus")
+            zyklusMutex.lock()
+        }
+        try {
+            return fuehreSyncZyklusAus()
+        } finally {
+            zyklusMutex.unlock()
+        }
+    }
+
+    private suspend fun fuehreSyncZyklusAus(): SyncErgebnis {
         if (!settings.driveSyncEnabled) {
             settings.driveSyncLastMessage = "Synchronisation pausiert"
             return SyncErgebnis.SyncAusgeschaltet

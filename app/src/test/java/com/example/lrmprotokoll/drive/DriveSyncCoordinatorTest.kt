@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.drive
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
@@ -12,11 +13,9 @@ import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.data.SettingsManager
-import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.meter.InstantSource
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -28,6 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Prueft die Sync-Entscheidungslogik aus Plan 8.4 gegen einen Fake-[DriveApiClient] - kein
@@ -895,4 +897,92 @@ class DriveSyncCoordinatorTest {
 
         assertEquals(2, quelleAufrufe)
     }
+
+    // ---------------------------------------------------------------- OOM-Bugfix Schritt 1: nur ein Zyklus gleichzeitig
+
+    /**
+     * Zaehlt, wie viele [zwischen]-Aufrufe gleichzeitig aktiv sind, und legt dabei eine echte
+     * (kurze) Verzoegerung ein - so wird ein fehlender Mutex in
+     * [DriveSyncCoordinator.syncEinenZyklus] sichtbar (PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3,
+     * Test 5), ohne echte Nebenlaeufigkeit auf echten Threads zu brauchen: [runTest] fuehrt alles
+     * kooperativ auf einem Thread aus, Ueberlappung entsteht rein durch die Suspension in
+     * [delay]. Kein `AtomicInteger` noetig - ohne echte Parallelitaet sind die Zaehler-Zugriffe
+     * bereits sicher.
+     */
+    private class GleichzeitigkeitZaehlendesLevelSampleDao : LevelSampleDao {
+        val eingefuegt = mutableListOf<LevelSampleEntity>()
+        private var aktiveAufrufe = 0
+        var maxGleichzeitigeAufrufe = 0
+            private set
+
+        override suspend fun insert(sample: LevelSampleEntity) {
+            eingefuegt += sample
+        }
+
+        override suspend fun insertAll(samples: List<LevelSampleEntity>) {
+            eingefuegt += samples
+        }
+
+        override suspend fun zwischen(
+            von: Long,
+            bis: Long,
+        ): List<LevelSampleEntity> {
+            aktiveAufrufe++
+            if (aktiveAufrufe > maxGleichzeitigeAufrufe) maxGleichzeitigeAufrufe = aktiveAufrufe
+            delay(10)
+            aktiveAufrufe--
+            return eingefuegt.filter { it.at in von until bis }
+        }
+
+        override suspend fun loescheVor(vor: Long) {
+            eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun anzahl(): Int = eingefuegt.size
+    }
+
+    /**
+     * Regressionstest fuer Befund A1 (BEFUNDE_P30_2026-09-23.md): Auf dem Owner-Geraet liefen bis
+     * zu vier Sync-Zyklen gleichzeitig, jeder mit einer bis zu 29-taegigen Rohwerte-Nachhol-
+     * Schleife - der Heap lief voll (CursorWindow-Ueberlauf, anschliessend OutOfMemoryError).
+     */
+    @Test
+    fun syncEinenZyklusLaeuftNieParallel() =
+        runTest {
+            val gleichzeitigkeitsDao = GleichzeitigkeitZaehlendesLevelSampleDao()
+            val mitternacht =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .atStartOfDay(zone)
+                    .toInstant()
+            gleichzeitigkeitsDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = mitternacht.toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = gleichzeitigkeitsDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            val ersterLauf = async { koordinator.syncEinenZyklus() }
+            val zweiterLauf = async { koordinator.syncEinenZyklus() }
+            ersterLauf.await()
+            zweiterLauf.await()
+
+            assertEquals(
+                "syncEinenZyklus() darf level_samples nie aus zwei gleichzeitigen Laeufen heraus lesen",
+                1,
+                gleichzeitigkeitsDao.maxGleichzeitigeAufrufe,
+            )
+        }
 }
