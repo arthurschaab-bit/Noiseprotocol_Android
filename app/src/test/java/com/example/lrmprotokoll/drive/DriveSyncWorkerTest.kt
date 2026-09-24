@@ -3,9 +3,11 @@ package com.example.lrmprotokoll.drive
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker.Result
+import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
+import androidx.work.testing.WorkManagerTestInitHelper
 import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
@@ -264,4 +266,51 @@ class DriveSyncWorkerTest {
         )
         assertEquals(0, driveApi.anlegenAufrufe)
     }
+
+    // ------------------------------------------------------- OOM-Bugfix Schritt 2: KEEP statt REPLACE
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 6: [DriveSyncPlanung.starteSofort] muss
+     * [androidx.work.ExistingWorkPolicy.KEEP] verwenden - ein zweiter Aufruf waehrend ein
+     * Sofortlauf noch eingeplant/nicht abgeschlossen ist, darf ihn nicht mehr abbrechen (Befund
+     * A1: `REPLACE` brach das 30-Tage-Nachholen jedes Mal ab, wenn waehrenddessen ein neues
+     * Laermereignis eintraf - das Nachholen wurde nie fertig).
+     *
+     * `driveWlanOnly = true` erzwingt eine `UNMETERED`-Netzbedingung, die Robolectrics
+     * Standard-Netzzustand nicht erfuellt - der eingeplante Lauf bleibt also ENQUEUED, statt
+     * synchron durchzulaufen (was ihn sofort abschliessen und KEEP/REPLACE ununterscheidbar
+     * machen wuerde, da beide Policies nur auf einen noch UNVOLLSTAENDIGEN Lauf wirken).
+     */
+    @Test
+    fun starteSofortErsetztKeinenNochNichtAbgeschlossenenSofortlauf() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        try {
+            SettingsManager(context).driveWlanOnly = true
+
+            DriveSyncPlanung.starteSofort(context)
+            val ersteWorkInfos = WorkManager.getInstance(context).getWorkInfosForUniqueWork(SOFORT_WORK_NAME).get()
+            assertEquals("Es muss genau ein Sofortlauf eingeplant sein", 1, ersteWorkInfos.size)
+            val ersteId = ersteWorkInfos.single().id
+
+            DriveSyncPlanung.starteSofort(context)
+            val zweiteWorkInfos = WorkManager.getInstance(context).getWorkInfosForUniqueWork(SOFORT_WORK_NAME).get()
+
+            assertEquals(
+                "Ein zweiter starteSofort()-Aufruf darf einen noch nicht abgeschlossenen " +
+                    "Sofortlauf nicht ersetzen (KEEP statt REPLACE)",
+                1,
+                zweiteWorkInfos.size,
+            )
+            assertEquals(
+                "Die WorkRequest-ID muss dieselbe bleiben - REPLACE wuerde eine neue erzeugen",
+                ersteId,
+                zweiteWorkInfos.single().id,
+            )
+        } finally {
+            WorkManagerTestInitHelper.closeWorkDatabase()
+        }
+    }
 }
+
+/** Muss mit der privaten `"${WORK_NAME}_immediate"`-Konstante in [DriveSyncPlanung] uebereinstimmen. */
+private const val SOFORT_WORK_NAME = "drive_sync_immediate"

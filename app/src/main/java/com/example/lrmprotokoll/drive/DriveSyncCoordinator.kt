@@ -8,6 +8,7 @@ import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.meter.InstantSource
+import kotlinx.coroutines.sync.Mutex
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -81,7 +82,34 @@ class DriveSyncCoordinator(
         data class Fehlgeschlagen(val grund: String, val httpCode: Int?) : SyncErgebnis
     }
 
+    /**
+     * Sorgt dafuer, dass niemals zwei Sync-Zyklen gleichzeitig laufen (OOM-Bugfix Schritt 1,
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Der periodische und der sofortige Worker
+     * (verschiedene WorkManager-Namen, siehe [DriveSyncPlanung]) sowie die manuellen "Jetzt
+     * synchronisieren"-Knoepfe (Diagnose-/Einstellungen-Screen) konnten bisher gleichzeitig
+     * laufen und dabei mehrfach riesige Rohwertlisten aus `level_samples` laden - auf dem
+     * Owner-Geraet bis zu vier Zyklen innerhalb einer Zehntelsekunde, kurz vor einem
+     * OutOfMemoryError. Der Coordinator ist ein Singleton im
+     * [com.example.lrmprotokoll.AppContainer] (`by lazy`), das Mutex-Feld gilt also fuer die
+     * gesamte App-Laufzeit.
+     */
+    private val zyklusMutex = Mutex()
+
     suspend fun syncEinenZyklus(): SyncErgebnis {
+        if (!zyklusMutex.tryLock()) {
+            // Nur EIN Breadcrumb pro wartendem Lauf, VOR dem eigentlichen (potenziell langen)
+            // Warten - tryLock() liefert das direkt, ohne selbst zu blockieren.
+            diagnosticsReporter?.breadcrumb("DriveSync", "Drive-Sync wartet auf laufenden Zyklus")
+            zyklusMutex.lock()
+        }
+        try {
+            return fuehreSyncZyklusAus()
+        } finally {
+            zyklusMutex.unlock()
+        }
+    }
+
+    private suspend fun fuehreSyncZyklusAus(): SyncErgebnis {
         if (!settings.driveSyncEnabled) {
             settings.driveSyncLastMessage = "Synchronisation pausiert"
             return SyncErgebnis.SyncAusgeschaltet
@@ -122,7 +150,6 @@ class DriveSyncCoordinator(
         runCatching { levelSampleDao.loescheVor(jetzt.minus(Duration.ofDays(30)).toEpochMilli()) }
             .onFailure { Log.w(TAG, "Puffer-Bereinigung (loescheVor) fehlgeschlagen: ${it.message}") }
 
-        val samples = levelSampleDao.zwischen(von.toEpochMilli(), jetzt.toEpochMilli())
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
             .map {
                 ProtokollEreignis(
@@ -135,7 +162,9 @@ class DriveSyncCoordinator(
             }
 
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
-        val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
+        // OOM-Bugfix Schritt 4 (PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Rohwerte stueckweise
+        // statt als eine bis zu ~290.000 Zeilen grosse Tagesliste laden.
+        val zeilen = aggregiereInAbschnitten(von, jetzt, ereignisse, fensterDauer).zeilen
 
         var zipPackagesUploadedCount = 0
         var totalWavCountInZips = 0
@@ -346,8 +375,22 @@ class DriveSyncCoordinator(
             val tagesSchluessel = DriveAblage.tagesordner(tagVon, zone)
 
             runCatching {
-                val samples = levelSampleDao.zwischen(tagVon.toEpochMilli(), tagBis.toEpochMilli())
-                if (samples.isEmpty()) return@runCatching
+                // OOM-Bugfix Schritt 3 (PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Registry ZUERST
+                // pruefen, VOR jeglichem Rohwerte-Laden. Ein Tag, der NACH seinem eigenen
+                // Tagesende erfolgreich synchronisiert wurde, ist endgueltig fertig - Rohwerte
+                // eines vergangenen Tages kommen nicht nachtraeglich hinzu, die Messung laeuft
+                // live. lastSyncedAt ist bei BEIDEN Schreibstellen (hier unten und in
+                // [syncEinenZyklus]) der Zeitpunkt des SYNCS, nicht des Tages - "lastSyncedAt >=
+                // tagBis" heisst also praezise "nach Tagesende erfolgreich synchronisiert".
+                // Ohne diese Pruefung lud jeder Zyklus erneut die volle Tagesliste (bei ~290.000
+                // Zeilen/Tag auf dem Owner-Geraet), nur um dasselbe wie beim letzten Mal
+                // festzustellen.
+                val registry = dailyFileDao.byDate(tagesSchluessel)
+                if (registry != null && registry.state == DriveSyncState.SYNCED &&
+                    registry.lastSyncedAt >= tagBis.toEpochMilli()
+                ) {
+                    return@runCatching // nach Tagesende synchronisiert -> endgueltig, nichts zu tun
+                }
 
                 val ereignisse = noiseDao.zwischenZeitpunkt(tagVon.toEpochMilli(), tagBis.toEpochMilli())
                     .map {
@@ -360,12 +403,15 @@ class DriveSyncCoordinator(
                         )
                     }
                 val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
-                val zeilen = PegelAggregator.aggregiere(samples, ereignisse, tagVon, tagBis, fensterDauer)
+                // OOM-Bugfix Schritt 4: stueckweise statt als eine ~290.000-Zeilen-Liste laden.
+                val abschnitte = aggregiereInAbschnitten(tagVon, tagBis, ereignisse, fensterDauer)
+                if (!abschnitte.hatteRohwerte) return@runCatching // wie zuvor: keine Rohwerte -> nichts zu tun
+
+                val zeilen = abschnitte.zeilen
                 if (zeilen.isEmpty()) return@runCatching
 
-                val registry = dailyFileDao.byDate(tagesSchluessel)
                 if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
-                    return@runCatching // dieser Tag ist bereits vollstaendig synchronisiert
+                    return@runCatching // Zeilenzahl unveraendert seit dem letzten (nicht-endgueltigen) Sync
                 }
 
                 val dateiName = "laermprotokoll_$tagesSchluessel.csv"
@@ -389,6 +435,136 @@ class DriveSyncCoordinator(
                 Log.w(TAG, "Nachholen von $tagesSchluessel fehlgeschlagen: ${fehler.message}")
             }
         }
+    }
+
+    /** Ergebnis von [aggregiereInAbschnitten]: die verdichteten Zeilen plus ob ueberhaupt
+     * Rohwerte gefunden wurden (siehe dortiges KDoc, Absatz zu `hatteRohwerte`). */
+    private data class AbschnittsAggregation(val zeilen: List<AggregatZeile>, val hatteRohwerte: Boolean)
+
+    /**
+     * Aggregiert `[von, bis)` stueckweise in Abschnitten von rund einer Stunde, statt die
+     * kompletten Rohwerte des Zeitraums als eine Liste zu laden (OOM-Bugfix Schritt 4,
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1 - `level_samples` hat auf dem Owner-Geraet rund
+     * 290.000 Zeilen/Tag). Die Abschnittslaenge ist ein ganzzahliges Vielfaches von
+     * [fensterDauer], ab [von] gerechnet, damit keine Fenstergrenze mitten in einen Abschnitt
+     * faellt.
+     *
+     * **Warum nicht einfach [PegelAggregator.aggregiere] separat je Abschnitt aufrufen und die
+     * Ergebnislisten aneinanderhaengen?** Dessen eigentliche Fensterberechnung (`bildeZeile`) ist
+     * rein lokal - das Ergebnis EINES Fensters haengt nur von den Samples/Ereignissen in genau
+     * diesem Fenster ab, keine gleitenden Mittel, kein Uebertrag zwischen Fenstern IM WERT. Aber
+     * `aggregiere()` trimmt Fuehrungs- und Schlusszeilen OHNE jegliche Daten auf den EIGENEN
+     * Datenumfang des jeweiligen Aufrufs (Test `leereZeitenVorUndNachMessungWerdenNichtAls
+     * LeereZeilenErzeugt`: eine Messung nur von Minute 10-12 erzeugt bei `bis=3600s` KEINE 60
+     * Zeilen, nur die eine mit echten Daten). Luecken DAZWISCHEN, innerhalb des Datenumfangs,
+     * werden dagegen als KEINE_VERBINDUNG-Zeilen gefuellt (Test
+     * `fensterOhneSampleWirdAlsLueckeAusgegebenNichtAusgelassen`). Ruft man das isoliert pro
+     * Abschnitt auf, gilt "eigener Datenumfang" ploetzlich pro ABSCHNITT statt pro ganzem Tag -
+     * eine Bluetooth-Aussetzer-Luecke, die eine Abschnittsgrenze beruehrt oder einen ganzen
+     * Abschnitt fuellt, wuerde dabei faelschlich verschluckt statt als KEINE_VERBINDUNG zu
+     * erscheinen. Deshalb ueberbrueckt diese Funktion fehlende Fenster ZWISCHEN zwei Abschnitten
+     * mit echten Zeilen explizit selbst, mit demselben "keine Daten"-Wert, den [AggregatZeile]s
+     * eigene Default-Parameter ohnehin fuer ein leeres Fenster liefern wuerden (siehe dessen
+     * Feld-Dokumentation) - keine Neuimplementierung der (privaten) `bildeZeile()`-Logik, nur
+     * deren dokumentiertes Leerfenster-Ergebnis als Literal.
+     *
+     * **Zweite, subtilere Abhaengigkeit von Werten ausserhalb des Fensters, gefunden beim
+     * Testen mit einer 3600 nicht teilenden Fensterdauer (7s, wie von Test 3 verlangt):**
+     * `aggregiere()` waehlt die AUSGEGEBENEN `fensterStart`-Zeitstempel auf dem absoluten
+     * Millisekunden-Raster (`floor(minTs/fensterMillis)*fensterMillis`, unabhaengig vom
+     * `von`-Parameter), gruppiert Rohwerte in Buckets aber RELATIV zum eigenen `von`-Parameter
+     * des jeweiligen Aufrufs. Beides faellt nur zusammen, wenn `von` selbst exakt auf das
+     * Fensterdauer-Raster ausgerichtet ist. Bei genau EINEM Aufruf ueber den ganzen Tag ist das
+     * Ergebnis trotzdem wohldefiniert (nur eine einzige, ueber den ganzen Aufruf konstante
+     * Verschiebung) - bei MEHREREN Aufrufen mit unterschiedlichen `von`-Werten (wie beim
+     * Aufteilen in Abschnitte) wuerde aber JEDER Abschnitt eine EIGENE, unterschiedliche
+     * Verschiebung bekommen, wodurch Rohwerte unter einem anderen `fensterStart` als beim
+     * Gesamtaufruf landen wuerden. Ein Versuch, das ueber einen auf das Raster abgerundeten
+     * `von`-Wert je Abschnitt zu kompensieren, hat das Symptom verschoben, aber nicht behoben -
+     * die genaue Ursache war innerhalb der fuer diesen Auftrag vorgesehenen Zeit nicht
+     * abschliessend zu klaeren, ohne [PegelAggregator.aggregiere] selbst umzubauen, was der
+     * Auftrag fuer genau diesen Fall ausdruecklich untersagt ("anhalten und melden, nicht
+     * umbauen").
+     *
+     * Deshalb: Ist [von] selbst NICHT exakt auf das Fensterdauer-Raster ausgerichtet
+     * (`von.toEpochMilli() % fensterMillis != 0`), faellt diese Funktion auf EINEN einzigen
+     * Aufruf ueber den GESAMTEN Zeitraum zurueck (das unveraenderte Verhalten von vor diesem
+     * Bugfix), um Korrektheit ueber den Speichervorteil zu stellen. [von] ist bei beiden
+     * Aufrufern immer Mitternacht in der konfigurierten Zeitzone - fuer alle Fensterdauern, die
+     * 60s glatt teilen (u. a. der Default 1s), UND fuer volle Stunden (z. B. 3600s) ist
+     * Mitternacht in praktisch jeder Zeitzone rasterausgerichtet, die stueckweise Aggregation
+     * greift dort unveraendert. Nur bei absichtlich exotischen Werten wie 7s (die weder 60s noch
+     * eine Stunde glatt teilen) oder in den seltenen Zeitzonen mit Nicht-Stunden-Versatz (z. B.
+     * UTC+5:30) fuer eine 3600s-Fensterdauer wird (weiterhin, wie vor Schritt 4) die volle
+     * Tagesliste geladen - siehe Abschlussbericht.
+     *
+     * `hatteRohwerte` bildet nach, was der bisherige Code implizit tat: War samples.isEmpty()
+     * (VOR jeder Ereignis-Betrachtung), wurde der Tag in [holeVersaeumteTageNach] uebersprungen -
+     * ein Tag ganz ohne Rohwerte, aber mit Ereignissen, wurde nie hochgeladen. Dieses bestehende
+     * Verhalten wird hier bewusst 1:1 fortgefuehrt, nicht nebenbei mitkorrigiert.
+     */
+    private suspend fun aggregiereInAbschnitten(
+        von: Instant,
+        bis: Instant,
+        ereignisse: List<ProtokollEreignis>,
+        fensterDauer: Duration,
+    ): AbschnittsAggregation {
+        if (!bis.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
+
+        val fensterMillis = fensterDauer.toMillis().coerceAtLeast(1)
+        if (von.toEpochMilli() % fensterMillis != 0L) {
+            // Siehe KDoc oben: ohne Garantie, dass [von] auf das Fensterdauer-Raster ausgerichtet
+            // ist, waere stueckweises Aggregieren nicht nachweislich identisch mit einem
+            // Gesamtaufruf. Direkte Pruefung an [von] selbst (statt einer fixen Millisekunden-
+            // Konstante) deckt sowohl kurze Fensterdauern, die 60s nicht teilen (z. B. 7s), als
+            // auch lange, die eine volle Stunde ueberschreiten, korrekt ab - Mitternacht ist
+            // nicht in jeder Zeitzone auf volle Stunden ausgerichtet (z. B. UTC+5:30). Fallback
+            // auf das unveraenderte Vor-Schritt-4-Verhalten.
+            val samples = levelSampleDao.zwischen(von.toEpochMilli(), bis.toEpochMilli())
+            val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, bis, fensterDauer)
+            return AbschnittsAggregation(zeilen, hatteRohwerte = samples.isNotEmpty())
+        }
+
+        val fensterSekunden = fensterDauer.seconds.coerceAtLeast(1)
+        val vielfaches = Math.round(3600.0 / fensterSekunden).coerceAtLeast(1)
+        val abschnittDauer = fensterDauer.multipliedBy(vielfaches)
+
+        val zeilen = mutableListOf<AggregatZeile>()
+        var hatteRohwerte = false
+        var letztesFensterEnde: Instant? = null
+        var abschnittVon = von
+
+        while (abschnittVon.isBefore(bis)) {
+            val abschnittBis = minOf(abschnittVon.plus(abschnittDauer), bis)
+            val abschnittSamples = levelSampleDao.zwischen(abschnittVon.toEpochMilli(), abschnittBis.toEpochMilli())
+            if (abschnittSamples.isNotEmpty()) hatteRohwerte = true
+            val abschnittEreignisse = ereignisse.filter {
+                !it.at.isBefore(abschnittVon) && it.at.isBefore(abschnittBis)
+            }
+
+            if (abschnittSamples.isNotEmpty() || abschnittEreignisse.isNotEmpty()) {
+                val abschnittZeilen = PegelAggregator.aggregiere(
+                    abschnittSamples, abschnittEreignisse, abschnittVon, abschnittBis, fensterDauer,
+                )
+                if (abschnittZeilen.isNotEmpty()) {
+                    val ersteZeile = abschnittZeilen.first()
+                    letztesFensterEnde?.let { ende ->
+                        // Luecke zwischen dem letzten Abschnitt mit Daten und diesem hier -
+                        // beide liegen innerhalb des Gesamt-Datenumfangs, muss also wie bei
+                        // einem einzigen aggregiere()-Aufruf als KEINE_VERBINDUNG erscheinen.
+                        var lueckenFenster = ende
+                        while (lueckenFenster.isBefore(ersteZeile.fensterStart)) {
+                            zeilen += AggregatZeile(fensterStart = lueckenFenster)
+                            lueckenFenster = lueckenFenster.plus(fensterDauer)
+                        }
+                    }
+                    zeilen += abschnittZeilen
+                    letztesFensterEnde = abschnittZeilen.last().fensterStart.plus(fensterDauer)
+                }
+            }
+            abschnittVon = abschnittBis
+        }
+        return AbschnittsAggregation(zeilen, hatteRohwerte)
     }
 
     /**
