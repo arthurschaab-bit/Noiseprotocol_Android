@@ -86,6 +86,16 @@ enum class DiagnosticCode {
 
     // Sicherung & Wiederherstellung
     /**
+     * Erstellen einer Datenbanksicherung ist fehlgeschlagen - beim Bauen der ZIP (z. B. zu wenig
+     * Speicherplatz) oder beim Hochladen (lokal ueber SAF oder automatisch nach Google Drive).
+     * Ging bis 23.09.2026 nur an eine INFO-Breadcrumb (automatische Drive-Sicherung) bzw.
+     * ueberhaupt nirgends hin (lokale Sicherung, [com.example.lrmprotokoll.ui.SettingsScreen]) -
+     * 95 gescheiterte Sicherungsversuche zwischen dem 16. und 23.09.2026 blieben deshalb
+     * unbemerkt (siehe `docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 2/A2).
+     */
+    BACKUP_CREATE_FAILED,
+
+    /**
      * Einspielen einer Sicherung (lokal ueber SAF oder aus Drive heruntergeladen) ist
      * fehlgeschlagen. Ging bis 12.09.2026 nur an eine fluechtige Snackbar
      * ([com.example.lrmprotokoll.ui.SettingsScreen]) - ein Fehlschlag tauchte damit nie im

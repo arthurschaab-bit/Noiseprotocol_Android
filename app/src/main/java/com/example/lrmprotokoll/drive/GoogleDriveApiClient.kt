@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.drive
 
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import java.util.zip.GZIPOutputStream
 import kotlin.coroutines.resumeWithException
@@ -243,6 +244,29 @@ class GoogleDriveApiClient(
         fuehreAusBytes(request)
     }
 
+    override suspend fun dateiHerunterladenNach(
+        fileId: String,
+        ziel: File,
+    ): Result<Unit> =
+        mitToken { token ->
+            val url =
+                "$basisUrl/drive/v3/files/$fileId"
+                    .toHttpUrl()
+                    .newBuilder()
+                    .addQueryParameter("alt", "media")
+                    .build()
+
+            val request =
+                Request
+                    .Builder()
+                    .url(url)
+                    .get()
+                    .header("Authorization", "Bearer $token")
+                    .build()
+
+            fuehreAusInDatei(request, ziel)
+        }
+
     override suspend fun dateiHochladenResumable(
         name: String,
         ordnerId: String,
@@ -252,6 +276,90 @@ class GoogleDriveApiClient(
         sessionGestartet: suspend (String) -> Unit,
         fortschritt: suspend (Long, Long) -> Unit,
     ): Result<String> = mitToken { token ->
+        val antwort =
+            fuehreResumableUebertragungDurch(
+                datei = datei,
+                mimeType = mimeType,
+                fortsetzenAb = fortsetzenAb,
+                sessionGestartet = sessionGestartet,
+                fortschritt = fortschritt,
+                token = token,
+                sitzungEroeffnen = { starteUploadSession(name, ordnerId, mimeType, token) },
+            )
+        leseDateiId(antwort)
+    }
+
+    override suspend fun dateiAktualisierenResumable(
+        fileId: String,
+        datei: File,
+        mimeType: String,
+        fortsetzenAb: String?,
+        sessionGestartet: suspend (String) -> Unit,
+        fortschritt: suspend (Long, Long) -> Unit,
+    ): Result<Unit> =
+        mitToken { token ->
+            fuehreResumableUebertragungDurch(
+                datei = datei,
+                mimeType = mimeType,
+                fortsetzenAb = fortsetzenAb,
+                sessionGestartet = sessionGestartet,
+                fortschritt = fortschritt,
+                token = token,
+                sitzungEroeffnen = { starteAktualisierungsSession(fileId, mimeType, token) },
+            )
+            Unit
+        }
+
+    /**
+     * Ergebnis der Serverstand-Abfrage - ein leeres PUT, dessen Content-Range statt eines
+     * Bereichs nur ein Sternchen traegt und damit fragt: "Wie viel hast du wirklich?"
+     */
+    private sealed interface Serverstand {
+        data class Fertig(val antwort: RohAntwort) : Serverstand
+        data class Offen(val bestaetigt: Long) : Serverstand
+        data object Verfallen : Serverstand
+    }
+
+    private suspend fun frageServerstandAb(sessionUri: String, token: String, gesamt: Long): Serverstand {
+        val request =
+            Request
+                .Builder()
+                .url(sessionUri)
+                .put(ByteArray(0).toRequestBody(null))
+                .header("Authorization", "Bearer $token")
+                .header("Content-Range", "bytes */$gesamt")
+                .build()
+
+        val antwort = fuehreAusRoh(request)
+        return when (antwort.code) {
+            200, 201 -> Serverstand.Fertig(antwort)
+            308 -> Serverstand.Offen(bytesAusRange(antwort.range) ?: 0L)
+            404 -> Serverstand.Verfallen
+            else -> throw DriveApiException("Drive antwortete mit HTTP ${antwort.code}", httpCode = antwort.code)
+        }
+    }
+
+    /**
+     * Gemeinsamer Kern beider resumable Uebertragungswege - [dateiHochladenResumable] (neue
+     * Datei per `POST`) und [dateiAktualisierenResumable] (bestehende Datei per `PATCH`). Beide
+     * unterscheiden sich nur darin, WIE die Sitzung eroeffnet wird ([sitzungEroeffnen]); die
+     * Block-fuer-Block-Uebertragung danach (Content-Range, `308` als Normalfall, Wiederaufnahme
+     * an der vom Server bestaetigten Position, Neuanfang nach einem verfallenen Session-URI) ist
+     * identisch - deshalb hier einmal statt zweimal (Bugfix 23.09.2026,
+     * docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3: "gemeinsame Chunk-Logik moeglichst
+     * wiederverwenden statt kopieren"). Liefert die rohe Schlussantwort zurueck, damit der
+     * Aufrufer selbst entscheidet, was er daraus braucht (Datei-ID beim Upload, nichts beim
+     * Update).
+     */
+    private suspend fun fuehreResumableUebertragungDurch(
+        datei: File,
+        mimeType: String,
+        fortsetzenAb: String?,
+        sessionGestartet: suspend (String) -> Unit,
+        fortschritt: suspend (Long, Long) -> Unit,
+        token: String,
+        sitzungEroeffnen: suspend () -> String,
+    ): RohAntwort {
         val gesamt = datei.length()
 
         var sessionUri = fortsetzenAb
@@ -259,7 +367,7 @@ class GoogleDriveApiClient(
 
         if (sessionUri != null) {
             when (val stand = frageServerstandAb(sessionUri, token, gesamt)) {
-                is Serverstand.Fertig -> return@mitToken stand.fileId
+                is Serverstand.Fertig -> return stand.antwort
                 is Serverstand.Offen -> bestaetigt = stand.bestaetigt
                 // Ein Session-URI ist rund eine Woche gueltig. Ist er weg, ist der einzige
                 // sinnvolle Weg ein Neuanfang - genau EINMAL, nicht in einer Schleife.
@@ -268,7 +376,7 @@ class GoogleDriveApiClient(
         }
 
         if (sessionUri == null) {
-            sessionUri = starteUploadSession(name, ordnerId, mimeType, token)
+            sessionUri = sitzungEroeffnen()
             bestaetigt = 0L
             // Vor dem ersten Datenblock, nicht danach: Stirbt der Prozess zwischen Sitzungsstart
             // und erstem Block, soll der naechste Versuch diese Sitzung fortsetzen koennen.
@@ -278,8 +386,7 @@ class GoogleDriveApiClient(
         // Eine leere Datei hat keinen Block zu senden; Drive schliesst sie ueber die
         // Nullbytes-Anfrage ab. Ohne diesen Zweig liefe die Schleife unten nie durch.
         if (gesamt == 0L) {
-            val antwort = sendeBlock(sessionUri, token, datei, von = 0L, laenge = 0L, gesamt = 0L, mimeType = mimeType)
-            return@mitToken leseDateiId(antwort)
+            return sendeBlock(sessionUri, token, datei, von = 0L, laenge = 0L, gesamt = 0L, mimeType = mimeType)
         }
 
         while (bestaetigt < gesamt) {
@@ -288,7 +395,7 @@ class GoogleDriveApiClient(
             when (antwort.code) {
                 200, 201 -> {
                     fortschritt(gesamt, gesamt)
-                    return@mitToken leseDateiId(antwort)
+                    return antwort
                 }
                 // 308 ist zwischen den Bloecken der Normalfall, kein Fehler.
                 308 -> {
@@ -310,36 +417,9 @@ class GoogleDriveApiClient(
         }
 
         // Alle Bytes bestaetigt, aber kein 200/201 gesehen - der Serverstand entscheidet.
-        when (val stand = frageServerstandAb(sessionUri, token, gesamt)) {
-            is Serverstand.Fertig -> stand.fileId
-            else -> throw DriveApiException("Upload endete ohne Datei-ID")
-        }
-    }
-
-    /**
-     * Ergebnis der Serverstand-Abfrage - ein leeres PUT, dessen Content-Range statt eines
-     * Bereichs nur ein Sternchen traegt und damit fragt: "Wie viel hast du wirklich?"
-     */
-    private sealed interface Serverstand {
-        data class Fertig(val fileId: String) : Serverstand
-        data class Offen(val bestaetigt: Long) : Serverstand
-        data object Verfallen : Serverstand
-    }
-
-    private suspend fun frageServerstandAb(sessionUri: String, token: String, gesamt: Long): Serverstand {
-        val request = Request.Builder()
-            .url(sessionUri)
-            .put(ByteArray(0).toRequestBody(null))
-            .header("Authorization", "Bearer $token")
-            .header("Content-Range", "bytes */$gesamt")
-            .build()
-
-        val antwort = fuehreAusRoh(request)
-        return when (antwort.code) {
-            200, 201 -> Serverstand.Fertig(leseDateiId(antwort))
-            308 -> Serverstand.Offen(bytesAusRange(antwort.range) ?: 0L)
-            404 -> Serverstand.Verfallen
-            else -> throw DriveApiException("Drive antwortete mit HTTP ${antwort.code}", httpCode = antwort.code)
+        return when (val stand = frageServerstandAb(sessionUri, token, gesamt)) {
+            is Serverstand.Fertig -> stand.antwort
+            else -> throw DriveApiException("Uebertragung endete ohne Bestaetigung")
         }
     }
 
@@ -366,6 +446,42 @@ class GoogleDriveApiClient(
         }
         return antwort.location
             ?: throw DriveApiException("Upload-Sitzung ohne Location-Header")
+    }
+
+    /**
+     * PATCH-Gegenstueck zu [starteUploadSession] fuer [dateiAktualisierenResumable] - eroeffnet
+     * die resumable Sitzung fuer eine BESTEHENDE [fileId] statt eine neue Datei anzulegen. Anders
+     * als bei der Neuanlage gibt es hier nichts an Metadaten zu setzen: Name und Elternordner der
+     * bestehenden Datei bleiben unveraendert, nur der Inhalt wird ersetzt - ein leerer JSON-Rumpf
+     * reicht der Drive-API dafuer.
+     */
+    private suspend fun starteAktualisierungsSession(
+        fileId: String,
+        mimeType: String,
+        token: String,
+    ): String {
+        val url =
+            "$basisUrl/upload/drive/v3/files/$fileId"
+                .toHttpUrl()
+                .newBuilder()
+                .addQueryParameter("uploadType", "resumable")
+                .build()
+
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .patch(JSONObject().toString().toRequestBody(JSON))
+                .header("Authorization", "Bearer $token")
+                .header("X-Upload-Content-Type", mimeType)
+                .build()
+
+        val antwort = fuehreAusRoh(request)
+        if (antwort.code !in 200..299) {
+            throw DriveApiException("Update-Sitzung abgelehnt (HTTP ${antwort.code})", httpCode = antwort.code)
+        }
+        return antwort.location
+            ?: throw DriveApiException("Update-Sitzung ohne Location-Header")
     }
 
     private suspend fun sendeBlock(
@@ -500,6 +616,60 @@ class GoogleDriveApiClient(
                     }
                 }
             })
+        }
+
+    /**
+     * Wie [fuehreAus], schreibt den Antwortkoerper aber STREAMEND nach [ziel], statt ihn als
+     * String oder `ByteArray` zurueckzugeben - fuer die Datenbank-Sicherung (~500 MB, siehe
+     * [dateiHerunterladenNach]) waere selbst [fuehreAusBytes] derselbe OutOfMemoryError wie beim
+     * Hochladen.
+     */
+    private suspend fun fuehreAusInDatei(
+        request: Request,
+        ziel: File,
+    ): Unit =
+        suspendCancellableCoroutine { fortsetzung ->
+            val call = client.newCall(request)
+            fortsetzung.invokeOnCancellation { runCatching { call.cancel() } }
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(
+                        call: Call,
+                        e: java.io.IOException,
+                    ) {
+                        fortsetzung.resumeWithException(DriveApiException("Drive nicht erreichbar", cause = e))
+                    }
+
+                    override fun onResponse(
+                        call: Call,
+                        response: Response,
+                    ) {
+                        response.use {
+                            if (it.isSuccessful) {
+                                val ergebnis =
+                                    runCatching {
+                                        val koerper = it.body ?: throw java.io.IOException("Antwort ohne Koerper")
+                                        koerper.byteStream().use { eingang ->
+                                            FileOutputStream(ziel).use { ausgang -> eingang.copyTo(ausgang) }
+                                        }
+                                    }
+                                ergebnis.fold(
+                                    onSuccess = { fortsetzung.resumeWith(Result.success(Unit)) },
+                                    onFailure = { fehler ->
+                                        fortsetzung.resumeWithException(
+                                            DriveApiException("Herunterladen fehlgeschlagen: ${fehler.message}", cause = fehler),
+                                        )
+                                    },
+                                )
+                            } else {
+                                fortsetzung.resumeWithException(
+                                    DriveApiException("Drive antwortete mit HTTP ${it.code}", httpCode = it.code),
+                                )
+                            }
+                        }
+                    }
+                },
+            )
         }
 
     /**

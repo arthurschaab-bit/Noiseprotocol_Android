@@ -341,6 +341,21 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 
 Root Cause war Befund A1 (`BEFUNDE_P30_2026-09-23.md`): `DriveSyncCoordinator.holeVersaeumteTageNach()` lud für jeden der letzten 29 Tage die komplette Rohwerteliste (~290.000 Zeilen/Tag auf dem Owner-Gerät), bevor es prüfte, ob der Tag überhaupt fehlte, und `DriveSyncPlanung.starteSofort()` brach mit `ExistingWorkPolicy.REPLACE` einen noch laufenden Sofortlauf ab, sodass das Nachholen nie fertig wurde. Siehe [`PROMPT_FIX_OOM_DRIVE_SYNC.md`](PROMPT_FIX_OOM_DRIVE_SYNC.md).
 
+### F16 — Datenbank-Sicherung streamend statt im Speicher (Bugfix 23.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_DATENBANK_SICHERUNG.md`), aber **noch nicht auf echter Hardware
+gesehen** — auf dem Owner-Gerät (Huawei P30) gab es laut `BEFUNDE_P30_2026-09-23.md` Abschnitt
+2/A2 seit dem 16.09.2026 95 gescheiterte Sicherungsversuche mit `OutOfMemoryError`
+(Datenbankgröße ~492 MB, Heap-Grenze 402 MB), weil jeder Sicherungs- und
+Wiederherstellungsweg die komplette Datenbank als `ByteArray` im Speicher hielt.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach spätestens einem Sync-Zyklus (Drive-Sync aktiv, „Datenbank-Sicherung nach Drive“ an) in `<gewählter Ordner>/BACKUP/` nachsehen | `laermprotokoll_datenbank.zip` liegt dort, Änderungsdatum ist heute, Dateigröße ist plausibel (ungefähr die Größe der lokalen Datenbankdatei) | |
+| Diagnose-Screen/nächstes Support-Bundle nach einem Sync-Zyklus mit Datenbank-Sicherung prüfen | Keine neuen Einträge „Datenbank-Sicherung konnte nicht erstellt werden" und kein `OutOfMemoryError` zu den Sicherungszeitpunkten im Logcat-Ausschnitt | |
+| Sicherung einspielen (lokal über SAF oder „Von Drive wiederherstellen") auf einem Testgerät oder Emulator | Die App startet mit den zuvor gesicherten Daten neu, kein Absturz, keine Speicherwarnung während des Einspielens | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

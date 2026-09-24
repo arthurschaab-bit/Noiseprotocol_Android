@@ -49,13 +49,21 @@ class DriveSyncCoordinator(
     private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
     private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
     /**
-     * Liefert die Datenbanksicherung als ZIP-Bytes (siehe [DriveDatenbankSicherung]). `null`
-     * heisst "keine automatische Datenbank-Sicherung" - wie [dokumentationsFotoDao]/
-     * [beweisVideoDao] optional, damit bestehende Test-Aufbauten nicht alle ein weiteres Fake
-     * mitschleppen muessen. Als Funktion statt eines direkten [android.content.Context]-Zugriffs,
-     * damit der Koordinator selbst ohne Android-Abhaengigkeit bleibt und testbar.
+     * Baut die Datenbanksicherung STREAMEND in eine selbstgewaehlte Datei und liefert diese
+     * zurueck (Bugfix 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md - siehe
+     * [DriveDatenbankSicherung]). `null` heisst "keine automatische Datenbank-Sicherung" - wie
+     * [dokumentationsFotoDao]/[beweisVideoDao] optional, damit bestehende Test-Aufbauten nicht
+     * alle ein weiteres Fake mitschleppen muessen. Als Funktion statt eines direkten
+     * [android.content.Context]-Zugriffs, damit der Koordinator selbst ohne Android-Abhaengigkeit
+     * bleibt und testbar - die Wahl DES Verzeichnisses (in der Praxis `cacheDir`, siehe
+     * `AppContainer.kt`) liegt deshalb bei der Quelle, nicht beim Koordinator. Vorher lieferte
+     * diese Funktion ein `ByteArray` - auf dem Owner-Geraet eine ~492-MB-Allokation bei einer
+     * Heap-Grenze von 402 MB, Ursache von 95 gescheiterten `OutOfMemoryError`-Versuchen zwischen
+     * dem 16. und 23.09.2026 (`docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 2/A2). Der Koordinator
+     * loescht die zurueckgelieferte Datei in JEDEM Fall (Erfolg wie Fehlschlag) im `finally` von
+     * [ladeDatenbankSicherungHoch] - sie gehoert nur diesem einen Versuch.
      */
-    private val datenbankSicherungQuelle: (suspend () -> ByteArray)? = null,
+    private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
 ) {
 
     /**
@@ -695,10 +703,16 @@ class DriveSyncCoordinator(
      * Owner-Meldung 16.09.2026, "Upload schmiert nach 1-2h ab" - siehe
      * [SettingsManager.datenbankSicherungLastAttemptAt]-KDoc fuer die volle Herleitung): ohne
      * das baute [datenbankSicherungQuelle] die komplette Datenbank bei jedem einzelnen, per
-     * [DriveSyncWorker.starteSofort] durch ein Laermereignis ausgeloesten Zyklus neu als ZIP im
-     * Speicher auf - bei haeufigen Ereignissen genug wiederholte, mehrere zehn MB grosse
-     * Allokationen, um den Heap eines kleinen Geraets binnen unter einer Stunde zu OOM zu
-     * treiben. Die Pruefung steht VOR dem teuren [quelle]-Aufruf, nicht erst vor dem Upload.
+     * [DriveSyncWorker.starteSofort] durch ein Laermereignis ausgeloesten Zyklus neu auf und lud
+     * sie hoch - bei haeufigen Ereignissen unnoetig wiederholter Festplatten-I/O und
+     * Upload-Traffic fuer eine mehrere hundert MB grosse Datei. Die Pruefung steht VOR dem teuren
+     * [quelle]-Aufruf, nicht erst vor dem Upload.
+     *
+     * Fehlschlaege (Bauen wie Hochladen) werden seit dem Streaming-Umbau (Bugfix 23.09.2026,
+     * docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 4) als
+     * [com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED] gemeldet, nicht
+     * mehr nur als INFO-Breadcrumb - genau dieser stille Breadcrumb-Pfad war der Grund, warum die
+     * 95 gescheiterten Sicherungsversuche vom 16.-23.09.2026 niemandem aufgefallen sind.
      */
     private suspend fun ladeDatenbankSicherungHoch(ordnerId: String) {
         if (!settings.datenbankSicherungDriveUpload) return
@@ -710,18 +724,36 @@ class DriveSyncCoordinator(
         }
         settings.datenbankSicherungLastAttemptAt = now.now().toEpochMilli()
 
-        val bytes = runCatching { quelle() }.getOrElse { fehler ->
-            diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung konnte nicht erstellt werden: ${fehler.message}")
+        val tempDatei = runCatching { quelle() }.getOrElse { fehler ->
+            diagnosticsReporter?.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                component = "DriveSyncCoordinator",
+                operation = "ladeDatenbankSicherungHoch.bauen",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                cause = fehler,
+                message = fehler.message,
+            )
             return
         }
-        DriveDatenbankSicherung.hochladen(driveApi, ordnerId, bytes)
-            .onSuccess {
-                settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
-                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${bytes.size} Bytes)")
-            }
-            .onFailure { fehler ->
-                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung-Upload fehlgeschlagen: ${fehler.message}")
-            }
+        try {
+            DriveDatenbankSicherung.hochladen(driveApi, ordnerId, tempDatei)
+                .onSuccess {
+                    settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
+                    diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${tempDatei.length()} Bytes)")
+                }
+                .onFailure { fehler ->
+                    diagnosticsReporter?.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                        component = "DriveSyncCoordinator",
+                        operation = "ladeDatenbankSicherungHoch.hochladen",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        cause = fehler,
+                        message = fehler.message,
+                    )
+                }
+        } finally {
+            tempDatei.delete()
+        }
     }
 
     private suspend fun schreibeDatei(

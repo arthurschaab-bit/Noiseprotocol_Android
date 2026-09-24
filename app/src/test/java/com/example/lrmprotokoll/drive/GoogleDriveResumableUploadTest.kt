@@ -239,6 +239,69 @@ class GoogleDriveResumableUploadTest {
         assertTrue(ergebnis.exceptionOrNull() is DriveApiException)
     }
 
+    // ------------------------------------------------------------------ dateiAktualisierenResumable (PATCH)
+    //
+    // PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3: dieselbe Block-fuer-Block-Uebertragung wie
+    // dateiHochladenResumable oben (gemeinsamer Kern, fuehreResumableUebertragungDurch) - hier
+    // nur die Punkte, die sich WIRKLICH unterscheiden: PATCH statt POST, die fileId in der URL,
+    // kein Name/Elternordner im Sitzungsstart-Rumpf, kein Rueckgabewert.
+
+    @Test
+    fun aktualisierenSendetDiePatchSitzungGegenDieBestehendeFileId() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setHeader("Location", sessionUri()))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"id":"bestehend-1"}"""))
+
+        val ergebnis = client.dateiAktualisierenResumable("bestehend-1", datei(1024), "application/zip")
+
+        assertTrue(ergebnis.isSuccess)
+        val start = server.takeRequest()
+        assertEquals("PATCH", start.method)
+        assertEquals("/upload/drive/v3/files/bestehend-1?uploadType=resumable", start.path)
+        assertEquals("application/zip", start.getHeader("X-Upload-Content-Type"))
+
+        val block = server.takeRequest()
+        assertEquals("PUT", block.method)
+        assertEquals("bytes 0-1023/1024", block.getHeader("Content-Range"))
+        assertEquals(1024, block.bodySize)
+    }
+
+    @Test
+    fun aktualisierenUeberMehrereBloeckeFunktioniertWieDieNeuanlage() = runTest {
+        // Beweist, dass der gemeinsame Kern (Content-Range, 308 als Normalfall, Wiederaufnahme an
+        // der vom Server bestaetigten Position) tatsaechlich wiederverwendet wird, nicht kopiert.
+        val groesse = BLOCK + 4096
+        server.enqueue(MockResponse().setResponseCode(200).setHeader("Location", sessionUri()))
+        server.enqueue(MockResponse().setResponseCode(308).setHeader("Range", "bytes=0-${BLOCK - 1}"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"id":"bestehend-2"}"""))
+
+        val ergebnis = client.dateiAktualisierenResumable("bestehend-2", datei(groesse), "application/zip")
+
+        assertTrue(ergebnis.isSuccess)
+        server.takeRequest() // Sitzungsstart (PATCH)
+        assertEquals("bytes 0-${BLOCK - 1}/$groesse", server.takeRequest().getHeader("Content-Range"))
+        assertEquals("bytes $BLOCK-${groesse - 1}/$groesse", server.takeRequest().getHeader("Content-Range"))
+    }
+
+    @Test
+    fun aktualisierenNimmtEineUnterbrocheneUebertragungAmGemeldetenStandWiederAuf() = runTest {
+        val groesse = BLOCK + 4096
+        server.enqueue(MockResponse().setResponseCode(308).setHeader("Range", "bytes=0-${BLOCK - 1}"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"id":"bestehend-3"}"""))
+
+        val gestartet = mutableListOf<String>()
+        val ergebnis = client.dateiAktualisierenResumable(
+            "bestehend-3", datei(groesse), "application/zip",
+            fortsetzenAb = sessionUri(),
+            sessionGestartet = { gestartet += it },
+        )
+
+        assertTrue(ergebnis.isSuccess)
+        assertTrue("Eine fortgesetzte Uebertragung startet keine neue Sitzung", gestartet.isEmpty())
+        val standAbfrage = server.takeRequest()
+        assertEquals("bytes */$groesse", standAbfrage.getHeader("Content-Range"))
+        assertEquals("bytes $BLOCK-${groesse - 1}/$groesse", server.takeRequest().getHeader("Content-Range"))
+    }
+
     @Test
     fun derHochgeladeneInhaltIstByteGleichZurDatei() = runTest {
         val groesse = BLOCK + 12_345
