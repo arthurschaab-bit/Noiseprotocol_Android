@@ -278,6 +278,13 @@ class GoogleDriveResumableUploadTest {
     // nur die Punkte, die sich WIRKLICH unterscheiden: PATCH statt POST, die fileId in der URL,
     // kein Name/Elternordner im Sitzungsstart-Rumpf, kein Rueckgabewert.
 
+    // ------------------------------------------------------------------ dateiAktualisierenResumable (PATCH)
+    //
+    // PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3: dieselbe Block-fuer-Block-Uebertragung wie
+    // dateiHochladenResumable oben (gemeinsamer Kern, fuehreResumableUebertragungDurch) - hier
+    // nur die Punkte, die sich WIRKLICH unterscheiden: PATCH statt POST, die fileId in der URL,
+    // kein Name/Elternordner im Sitzungsstart-Rumpf, kein Rueckgabewert.
+
     @Test
     fun aktualisierenSendetDiePatchSitzungGegenDieBestehendeFileId() =
         runTest {
