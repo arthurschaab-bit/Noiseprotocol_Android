@@ -302,6 +302,36 @@ class HighEndReportExportTest {
             }
         }
 
+    /**
+     * Test 6 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3): muss ohne die Änderung rot sein.
+     * Owner-Vorgabe, bestätigt 24.09.2026 (siehe PROMPT_FIX_BERICHT_HIGHEND.md Schritt 3):
+     * OutOfMemoryError wird in HighEndReportExport.generate() gezielt gefangen.
+     */
+    @Test
+    fun outOfMemoryErrorWirdAlsMeldungGemeldetUndTempDateienBereinigt() =
+        runBlocking {
+            val tag = tagMit(3)
+            val export = HighEndReportExport(context, db, reporter)
+
+            val ergebnis =
+                export.generate(listOf(tag), config, emptyMap()) {
+                    throw OutOfMemoryError("Test-OOM")
+                }
+
+            assertTrue("$ergebnis", ergebnis is ChaquopyReportRunner.Ergebnis.Fehler)
+            assertEquals(
+                "Bericht konnte nicht erzeugt werden: zu wenig Arbeitsspeicher. Bitte einen kürzeren Zeitraum wählen.",
+                (ergebnis as ChaquopyReportRunner.Ergebnis.Fehler).nachricht,
+            )
+            val gemeldet = reporter.recentEvents().filter { it.code == DiagnosticCode.REPORT_CREATE_FAILED }
+            assertEquals("Genau ein REPORT_CREATE_FAILED", 1, gemeldet.size)
+            val handoffDir = File(context.cacheDir, "report_handoff")
+            assertTrue(
+                "Temp-Dateien müssen gelöscht sein",
+                !handoffDir.exists() || handoffDir.listFiles()?.isEmpty() == true,
+            )
+        }
+
     /** Test 7 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3). */
     @Test
     fun erfolgHinterlaesstBreadcrumbMitTagenRohwertenUndDauer() =

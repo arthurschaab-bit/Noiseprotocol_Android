@@ -153,6 +153,25 @@ class HighEndReportExport(
             endResult
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (oom: OutOfMemoryError) {
+            // Owner-Vorgabe (PROMPT_FIX_BERICHT_HIGHEND.md Schritt 3, bestätigt 24.09.2026): NUR
+            // hier gezielt gefangen, kein allgemeines catch (Throwable). Die großen Listen des
+            // Exports sind an dieser Stelle nicht mehr erreichbar; ein vom Nutzer ausgelöster
+            // Bericht soll die laufende Messung nicht mit in den Absturz reißen.
+            val ergebnis =
+                ChaquopyReportRunner.Ergebnis.Fehler(
+                    "Bericht konnte nicht erzeugt werden: zu wenig Arbeitsspeicher. Bitte einen kürzeren Zeitraum wählen.",
+                )
+            diagnosticsReporter.report(
+                code = DiagnosticCode.REPORT_CREATE_FAILED,
+                component = "HighEndReportExport",
+                operation = "generate",
+                severity = DiagnosticSeverity.WARN,
+                cause = oom,
+                message = ergebnis.nachricht,
+                details = reportDetails(),
+            )
+            ergebnis
         } catch (error: Exception) {
             val ergebnis =
                 ChaquopyReportRunner.Ergebnis.Fehler(
