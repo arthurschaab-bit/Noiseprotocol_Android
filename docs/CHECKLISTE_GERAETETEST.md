@@ -331,6 +331,16 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 
 **Gerätetest 23.09.2026 (Huawei P30, Build `1.0.0-pr188.ci602+119d2a4`):** Die Absturzdiagnose funktioniert. Sie hat dabei ein massives Speicherproblem im Normalbetrieb sichtbar gemacht (89 Abstürze in einer Woche, 88 davon Speichermangel). Siehe [`BEFUNDE_P30_2026-09-23.md`](BEFUNDE_P30_2026-09-23.md).
 
+### F15 — Drive-Sync: OOM-Bugfix (keine parallelen Zyklen, Nachholen wird fertig)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Debug-Build installieren, 24 h laufen lassen, danach ein Support-Bundle erstellen | Im Crash-Puffer (`log/logcat.txt`) keine neuen `OutOfMemoryError` | |
+| Dasselbe Bundle: `state/db_stats.json` prüfen | `drive_daily_files` wächst auf rund 30 Einträge | |
+| Dasselbe Bundle: Breadcrumbs durchsehen | „Drive-Sync wartet auf laufenden Zyklus" taucht auf, aber nie zwei Läufe, die sich überlappen | |
+
+Root Cause war Befund A1 (`BEFUNDE_P30_2026-09-23.md`): `DriveSyncCoordinator.holeVersaeumteTageNach()` lud für jeden der letzten 29 Tage die komplette Rohwerteliste (~290.000 Zeilen/Tag auf dem Owner-Gerät), bevor es prüfte, ob der Tag überhaupt fehlte, und `DriveSyncPlanung.starteSofort()` brach mit `ExistingWorkPolicy.REPLACE` einen noch laufenden Sofortlauf ab, sodass das Nachholen nie fertig wurde. Siehe [`PROMPT_FIX_OOM_DRIVE_SYNC.md`](PROMPT_FIX_OOM_DRIVE_SYNC.md).
+
 ---
 
 ## Was zurückgemeldet werden sollte
