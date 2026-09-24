@@ -67,6 +67,13 @@ class SupportBundleExporterTest {
         ),
         ringFile: BreadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
         traceVerzeichnis: File = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
+        // Default identisch zum Produktionsstandard in SupportBundleExporter selbst - bestehende
+        // Aufrufer dieser Hilfsfunktion bleiben dadurch unveraendert (echter, Robolectric-
+        // gestuetzter PackageManager-Weg); nur Tests, die den Parameter explizit setzen, weichen
+        // davon ab (PROMPT_FIX_BUNDLE_INHALT.md Teil 2).
+        berechtigungExistiertProvider: (String) -> Boolean = { name ->
+            runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
+        },
     ) = SupportBundleExporter(
         context = context,
         reporter = reporter,
@@ -75,6 +82,7 @@ class SupportBundleExporterTest {
         settingsManager = container.settingsManager,
         database = container.database,
         traceVerzeichnis = traceVerzeichnis,
+        berechtigungExistiertProvider = berechtigungExistiertProvider,
     )
 
     private fun logEintrag(id: Long, nachricht: String) =
@@ -254,6 +262,92 @@ class SupportBundleExporterTest {
             }
         }
 
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 2):
+     * Berechtigungen, die es auf dem Geraet gar nicht gibt (z. B. POST_NOTIFICATIONS auf API 29
+     * - erst API 33+), standen bislang als "false" ("verweigert") unter "berechtigungen" - beim
+     * Gerätetest auf dem Huawei P30 irrefuehrend. Fake-Pruefung statt echtem PackageManager
+     * (siehe [berechtigungExistiertProviderEchterWegUnterRobolectricKenntFrameworkBerechtigungenNicht]
+     * fuer den Grund).
+     */
+    @Test
+    fun runtimeJsonTrenntNichtVorhandeneBerechtigungenVonVerweigerten() = runTest {
+        val zipFile = exporter(
+            FakeDiagnosticLogDao(emptyList()),
+            // RECORD_AUDIO "existiert" (Fake), POST_NOTIFICATIONS nicht - unabhaengig davon, ob
+            // es tatsaechlich gewaehrt ist.
+            berechtigungExistiertProvider = { name -> name != "android.permission.POST_NOTIFICATIONS" },
+        ).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val runtimeJson = org.json.JSONObject(zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText())
+            val berechtigungen = runtimeJson.getJSONObject("berechtigungen")
+            val nichtVorhanden = (0 until runtimeJson.getJSONArray("berechtigungenNichtVorhanden").length())
+                .map { runtimeJson.getJSONArray("berechtigungenNichtVorhanden").getString(it) }
+
+            assertTrue(
+                "Eine vorhandene Berechtigung muss weiterhin true/false unter berechtigungen stehen",
+                berechtigungen.has("android.permission.RECORD_AUDIO"),
+            )
+            assertTrue(
+                "Eine nicht vorhandene Berechtigung darf NICHT unter berechtigungen stehen (dort laese sie sich als 'verweigert')",
+                !berechtigungen.has("android.permission.POST_NOTIFICATIONS"),
+            )
+            assertTrue(
+                "Eine nicht vorhandene Berechtigung gehoert nach berechtigungenNichtVorhanden",
+                nichtVorhanden.contains("android.permission.POST_NOTIFICATIONS"),
+            )
+            assertTrue(
+                "Eine vorhandene Berechtigung darf nicht in berechtigungenNichtVorhanden auftauchen",
+                !nichtVorhanden.contains("android.permission.RECORD_AUDIO"),
+            )
+        }
+    }
+
+    /**
+     * Zweite Haelfte von Teil 2 ("wenn moeglich zusaetzlich @Config(sdk = [29]) gegen den echten
+     * Weg"): dieser Test laeuft gegen den echten `PackageManager`-Aufruf (kein Fake), aber er
+     * beweist NICHT, dass POST_NOTIFICATIONS auf einem echten API-29-Geraet fehlt und RECORD_AUDIO
+     * vorhanden ist - er haelt stattdessen fest, WARUM die Pruefung ueberhaupt hinter einer
+     * injizierbaren Funktion versteckt ist: Robolectrics PackageManager kennt unter
+     * `@Config(sdk = [29])` KEINE vom Android-Framework definierte Berechtigung, auch nicht
+     * RECORD_AUDIO/CAMERA, die auf einem echten Geraet seit jeher existieren
+     * (`context.packageManager.getPermissionInfo(name, 0)` wirft fuer jede hier getestete
+     * Framework-Berechtigung `NameNotFoundException`, empirisch geprueft: siehe PR-Beschreibung).
+     * Erkannt wird nur die eine App-eigene Berechtigung, die im gemergten Manifest selbst per
+     * `<permission>` DEFINIERT ist (`com.example.lrmprotokoll.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+     * von AGP eingefuegt) - deshalb hier keine pauschale "berechtigungen ist leer"-Behauptung,
+     * sondern gezielt gegen echte Framework-Berechtigungen geprueft. Ohne den Fake in
+     * [runtimeJsonTrenntNichtVorhandeneBerechtigungenVonVerweigerten] waere also jede echte
+     * Framework-Berechtigung faelschlich als "gibt es auf diesem Geraet nicht" markiert - genau
+     * der Fall, vor dem der Auftrag warnt ("Robolectric kennt Plattform-Berechtigungen womoeglich
+     * nicht"). Sollte ein spaeteres Robolectric-Update das aendern, faellt dieser Test auf und
+     * macht die veraltete Annahme sichtbar.
+     */
+    @Test
+    @Config(sdk = [29])
+    fun berechtigungExistiertProviderEchterWegUnterRobolectricKenntFrameworkBerechtigungenNicht() = runTest {
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val runtimeJson = org.json.JSONObject(zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText())
+            val berechtigungen = runtimeJson.getJSONObject("berechtigungen")
+            val nichtVorhanden = (0 until runtimeJson.getJSONArray("berechtigungenNichtVorhanden").length())
+                .map { runtimeJson.getJSONArray("berechtigungenNichtVorhanden").getString(it) }
+
+            // Keine vom Android-Framework definierte Berechtigung wird unter Robolectric/sdk=29
+            // erkannt - sie landen ausnahmslos in berechtigungenNichtVorhanden statt faelschlich
+            // unter berechtigungen mit "false".
+            assertTrue(nichtVorhanden.contains("android.permission.RECORD_AUDIO"))
+            assertTrue(nichtVorhanden.contains("android.permission.POST_NOTIFICATIONS"))
+            assertTrue(nichtVorhanden.contains("android.permission.CAMERA"))
+            assertTrue(!berechtigungen.has("android.permission.RECORD_AUDIO"))
+            assertTrue(!berechtigungen.has("android.permission.POST_NOTIFICATIONS"))
+            assertTrue(!berechtigungen.has("android.permission.CAMERA"))
+        }
+    }
+
     @Test
     fun createBundleSanitizesPiiInEventsAndBreadcrumbs() = runTest {
         val ringFile = BreadcrumbRingFile(File(context.cacheDir, "ring_pii_${System.nanoTime()}").apply { mkdirs() })
@@ -285,6 +379,34 @@ class SupportBundleExporterTest {
             assertTrue(breadcrumbs.contains("[REDACTED_EMAIL]"))
             assertTrue(!breadcrumbs.contains("user@example.com"))
             assertTrue(!breadcrumbs.contains("supersecret"))
+        }
+    }
+
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 1):
+     * "google_account_name" landete im Klartext in state/settings.json, obwohl die gepaarte
+     * "google_account_email" bereits geschwaerzt wurde. Prueft den vollen Weg
+     * SettingsManager -> unverschluesselteEinstellungenSnapshot() -> DiagnosticRedactor ->
+     * state/settings.json im fertigen Bundle - nicht nur den Redactor isoliert.
+     */
+    @Test
+    fun settingsJsonSchwaertGoogleKontoAnzeigenamenAberNichtUnverdaechtigeSchluessel() = runTest {
+        container.settingsManager.googleAccountName = "Max Mustermann"
+        container.settingsManager.googleAccountEmail = "max.mustermann@example.com"
+        container.settingsManager.driveFolderName = "Laermprotokolle 2026"
+
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val settingsJson = zip.getInputStream(zip.getEntry("state/settings.json")).bufferedReader().readText()
+            assertTrue(!settingsJson.contains("Max Mustermann"))
+            assertTrue(settingsJson.contains("\"google_account_name\": \"[REDACTED]\""))
+            assertTrue(!settingsJson.contains("max.mustermann@example.com"))
+            assertTrue(settingsJson.contains("\"google_account_email\": \"[REDACTED_EMAIL]\""))
+            // Unverdaechtiger Schluessel bleibt unveraendert - der neue SENSITIVE_KEYS-Eintrag
+            // ("account_name") darf nicht breiter matchen als noetig.
+            assertTrue(settingsJson.contains("\"drive_folder_name\": \"Laermprotokolle 2026\""))
         }
     }
 
