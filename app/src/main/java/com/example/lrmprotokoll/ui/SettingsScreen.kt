@@ -370,6 +370,19 @@ fun SettingsScreen(
                 sicherungLaeuft = true
                 val ergebnis = SicherungManager.erstelleSicherung(context, uri, settings)
                 sicherungLaeuft = false
+                if (!ergebnis.erfolg) {
+                    // Bugfix (docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 4): ein
+                    // fehlgeschlagenes Erstellen ging bisher NIRGENDS ins Diagnoseprotokoll/
+                    // Support-Bundle - anders als ein fehlgeschlagenes Einspielen
+                    // (BACKUP_RESTORE_FAILED weiter unten).
+                    container.diagnosticsReporter.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                        component = "SettingsScreen",
+                        operation = "erstelleSicherung",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        message = ergebnis.nachricht,
+                    )
+                }
                 onShowSnackbar?.invoke(ergebnis.nachricht)
             }
         }
@@ -1482,19 +1495,33 @@ fun SettingsScreen(
                                 val ergebnis = if (ordnerId == null) {
                                     com.example.lrmprotokoll.backup.SicherungsErgebnis(false, "Kein Drive-Ordner eingerichtet.")
                                 } else {
-                                    val heruntergeladen = withContext(Dispatchers.IO) {
-                                        com.example.lrmprotokoll.drive.DriveDatenbankSicherung.herunterladen(
-                                            container.driveApiClient, ordnerId,
-                                        )
-                                    }
-                                    heruntergeladen.fold(
-                                        onSuccess = { bytes -> SicherungManager.spieleSicherungBytesEin(context, bytes, settings) },
-                                        onFailure = { fehler ->
-                                            com.example.lrmprotokoll.backup.SicherungsErgebnis(
-                                                false, "Herunterladen fehlgeschlagen: ${fehler.message}",
+                                    // Streamend in eine temporaere Datei herunterladen statt als
+                                    // ByteArray (Bugfix 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md
+                                    // Schritt 3) - dieselbe ~500-MB-Groessenordnung, fuer die auch
+                                    // die Sicherung selbst nicht mehr im Speicher gehalten wird.
+                                    val tempDatei =
+                                        withContext(Dispatchers.IO) {
+                                            java.io.File.createTempFile("drive_wiederherstellung_", ".zip", context.cacheDir)
+                                        }
+                                    try {
+                                        val heruntergeladen = withContext(Dispatchers.IO) {
+                                            com.example.lrmprotokoll.drive.DriveDatenbankSicherung.herunterladen(
+                                                container.driveApiClient,
+                                                ordnerId,
+                                                tempDatei,
                                             )
-                                        },
-                                    )
+                                        }
+                                        heruntergeladen.fold(
+                                            onSuccess = { SicherungManager.spieleSicherungDateiEin(context, tempDatei, settings) },
+                                            onFailure = { fehler ->
+                                                com.example.lrmprotokoll.backup.SicherungsErgebnis(
+                                                    false, "Herunterladen fehlgeschlagen: ${fehler.message}",
+                                                )
+                                            },
+                                        )
+                                    } finally {
+                                        tempDatei.delete()
+                                    }
                                 }
                                 driveWiederherstellungLaeuft = false
                                 if (ergebnis.erfolg) {

@@ -274,7 +274,21 @@ class AppContainer(
             beweisVideoDao = database.beweisVideoDao(),
             diagnosticsReporter = diagnosticsReporter,
             datenbankSicherungQuelle = {
-                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsBytes(context.applicationContext, settingsManager)
+                // Streamend in eine temporaere Datei im cacheDir bauen (Bugfix 23.09.2026,
+                // docs/PROMPT_FIX_DATENBANK_SICHERUNG.md) - der Koordinator loescht sie wieder,
+                // sobald der Upload-Versuch (Erfolg oder Fehlschlag) abgeschlossen ist.
+                val ziel =
+                    java.io.File.createTempFile(
+                        "drive_sicherung_",
+                        ".zip",
+                        context.applicationContext.cacheDir,
+                    )
+                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsDatei(
+                    context.applicationContext,
+                    settingsManager,
+                    ziel,
+                )
+                ziel
             },
         )
     }

@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.drive
 
+import java.io.File
+
 internal const val BACKUP_ORDNERNAME = "BACKUP"
 internal const val BACKUP_DATEINAME = "laermprotokoll_datenbank.zip"
 private const val BACKUP_MIME_TYPE = "application/zip"
@@ -31,27 +33,47 @@ object DriveDatenbankSicherung {
     }
 
     /**
-     * Legt [bytes] als Sicherungsdatei an oder aktualisiert die bestehende - dieselbe
-     * Waisen-Absicherung wie beim CSV-/WAV-/Foto-Upload (erst suchen, nur bei echtem Fehlen neu
-     * anlegen).
+     * Legt [datei] als Sicherungsdatei an oder aktualisiert die bestehende STREAMEND (Bugfix
+     * 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3) - dieselbe Waisen-Absicherung
+     * wie beim CSV-/WAV-/Foto-Upload (erst suchen, nur bei echtem Fehlen neu anlegen). Ersetzt das
+     * frühere `hochladen(bytes: ByteArray)`: [datei] wird nie vollständig eingelesen, genau wie
+     * beim resumable Video-Upload (M11 Etappe B) - eine ~500-MB-Sicherung als `ByteArray` war
+     * genau der `OutOfMemoryError`, der diesen Umbau ausgelöst hat
+     * (`docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 2/A2). Es bleibt in JEDEM Fall genau EINE
+     * Sicherungsdatei in Drive - die alte wird erst durch einen erfolgreichen Upload ersetzt,
+     * nie vorher gelöscht.
      */
-    suspend fun hochladen(client: DriveApiClient, wurzelOrdnerId: String, bytes: ByteArray): Result<Unit> = runCatching {
-        val ordnerId = ordnerSicherstellen(client, wurzelOrdnerId).getOrThrow()
-        val bestehende = client.dateiSuchen(BACKUP_DATEINAME, ordnerId).getOrThrow()
-        if (bestehende != null) {
-            client.dateiAktualisieren(bestehende.id, bytes, BACKUP_MIME_TYPE).getOrThrow()
-        } else {
-            client.dateiAnlegen(BACKUP_DATEINAME, ordnerId, bytes, BACKUP_MIME_TYPE).getOrThrow()
+    suspend fun hochladen(
+        client: DriveApiClient,
+        wurzelOrdnerId: String,
+        datei: File,
+    ): Result<Unit> =
+        runCatching {
+            val ordnerId = ordnerSicherstellen(client, wurzelOrdnerId).getOrThrow()
+            val bestehende = client.dateiSuchen(BACKUP_DATEINAME, ordnerId).getOrThrow()
+            if (bestehende != null) {
+                client.dateiAktualisierenResumable(bestehende.id, datei, BACKUP_MIME_TYPE).getOrThrow()
+            } else {
+                client.dateiHochladenResumable(BACKUP_DATEINAME, ordnerId, datei, BACKUP_MIME_TYPE).getOrThrow()
+            }
+            Unit
         }
-        Unit
-    }
 
-    /** Laedt die aktuelle Sicherung herunter - `null`/Fehler, wenn noch keine hochgeladen wurde. */
-    suspend fun herunterladen(client: DriveApiClient, wurzelOrdnerId: String): Result<ByteArray> = runCatching {
-        val ordner = client.ordnerSuchen(BACKUP_ORDNERNAME, wurzelOrdnerId).getOrThrow()
-            ?: error("Kein Backup-Ordner in Drive gefunden - noch keine Sicherung hochgeladen?")
-        val datei = client.dateiSuchen(BACKUP_DATEINAME, ordner.id).getOrThrow()
-            ?: error("Keine Datenbank-Sicherung in Drive gefunden.")
-        client.dateiHerunterladen(datei.id).getOrThrow()
-    }
+    /**
+     * Laedt die aktuelle Sicherung STREAMEND nach [ziel] herunter - Fehler, wenn noch keine
+     * hochgeladen wurde. Ersetzt das frühere `herunterladen(): Result<ByteArray>`, aus demselben
+     * Grund wie [hochladen].
+     */
+    suspend fun herunterladen(
+        client: DriveApiClient,
+        wurzelOrdnerId: String,
+        ziel: File,
+    ): Result<Unit> =
+        runCatching {
+            val ordner = client.ordnerSuchen(BACKUP_ORDNERNAME, wurzelOrdnerId).getOrThrow()
+                ?: error("Kein Backup-Ordner in Drive gefunden - noch keine Sicherung hochgeladen?")
+            val datei = client.dateiSuchen(BACKUP_DATEINAME, ordner.id).getOrThrow()
+                ?: error("Keine Datenbank-Sicherung in Drive gefunden.")
+            client.dateiHerunterladenNach(datei.id, ziel).getOrThrow()
+        }
 }

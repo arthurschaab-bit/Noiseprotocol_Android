@@ -131,14 +131,17 @@ class DriveSyncCoordinatorTest {
         override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> =
             throw NotImplementedError("im Test nicht benoetigt")
 
-        override suspend fun dateiHerunterladenNach(fileId: String, ziel: java.io.File): Result<Unit> =
-            throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun dateiHerunterladenNach(
+            fileId: String,
+            ziel: java.io.File,
+        ): Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
 
         var resumableNeuanlagenErgebnis: Result<String> = Result.success("resumable-neue-datei-id")
         var resumableAktualisierenErgebnis: Result<Unit> = Result.success(Unit)
         var resumableNeuanlagenAufrufe = 0
         var resumableAktualisierenAufrufe = 0
         var letzteResumableAktualisierteFileId: String? = null
+
         // Bewusst der INHALT (nicht die File-Referenz): der Koordinator loescht die temporaere
         // Sicherungsdatei im finally, SOBALD dateiHochladenResumable/dateiAktualisierenResumable
         // zurueckgekehrt sind - eine spaetere Pruefung der Datei selbst wuerde ins Leere laufen.
@@ -788,12 +791,23 @@ class DriveSyncCoordinatorTest {
     }
 
     // ---------------------------------------------------------------- Datenbank-Sicherung (Drive)
+    //
+    // Bugfix 23.09.2026 (docs/PROMPT_FIX_DATENBANK_SICHERUNG.md): datenbankSicherungQuelle liefert
+    // seitdem eine bereits gebaute Datei statt eines ByteArray - der Koordinator loescht sie nach
+    // dem Versuch wieder. Da die Datei zu diesem Zeitpunkt schon geloescht ist, liest das Fake
+    // ihren Inhalt SOFORT beim Aufruf (letzterSicherungsInhalt), nicht erst in der Testassertion.
 
-    private fun koordinatorMitDatenbankSicherung(quelle: (suspend () -> ByteArray)?) = DriveSyncCoordinator(
+    private fun koordinatorMitDatenbankSicherung(quelle: (suspend () -> java.io.File)?) = DriveSyncCoordinator(
         driveApi = driveApi, levelSampleDao = levelSampleDao, dailyFileDao = dailyFileDao,
         noiseDao = noiseDao, settings = settings, now = uhr, zone = zone,
         datenbankSicherungQuelle = quelle,
     )
+
+    private fun tempSicherungsDatei(inhalt: ByteArray = byteArrayOf(1, 2, 3, 4)) =
+        java.io.File.createTempFile("test_sicherung", ".zip").apply {
+            writeBytes(inhalt)
+            deleteOnExit()
+        }
 
     @Test
     fun ohneQuelleGehtKeineDatenbankSicherungRaus() = runTest {
@@ -801,8 +815,8 @@ class DriveSyncCoordinatorTest {
         // `null` (der Default in AppContainer NICHT gesetzt) darf den Zyklus nicht crashen.
         koordinatorMitDatenbankSicherung(null).syncEinenZyklus()
 
-        assertEquals(0, driveApi.anlegenAufrufe)
-        assertEquals(0, driveApi.aktualisierenAufrufe)
+        assertEquals(0, driveApi.resumableNeuanlagenAufrufe)
+        assertEquals(0, driveApi.resumableAktualisierenAufrufe)
     }
 
     @Test
@@ -810,10 +824,10 @@ class DriveSyncCoordinatorTest {
         settings.datenbankSicherungDriveUpload = false
         var quelleAufgerufen = false
 
-        koordinatorMitDatenbankSicherung({ quelleAufgerufen = true; byteArrayOf(1) }).syncEinenZyklus()
+        koordinatorMitDatenbankSicherung({ quelleAufgerufen = true; tempSicherungsDatei() }).syncEinenZyklus()
 
         assertTrue("Die Quelle darf gar nicht erst aufgerufen werden", !quelleAufgerufen)
-        assertEquals(0, driveApi.anlegenAufrufe)
+        assertEquals(0, driveApi.resumableNeuanlagenAufrufe)
     }
 
     @Test
@@ -821,10 +835,10 @@ class DriveSyncCoordinatorTest {
         settings.datenbankSicherungDriveUpload = true
         val bytes = byteArrayOf(1, 2, 3, 4)
 
-        koordinatorMitDatenbankSicherung({ bytes }).syncEinenZyklus()
+        koordinatorMitDatenbankSicherung({ tempSicherungsDatei(bytes) }).syncEinenZyklus()
 
-        assertEquals(1, driveApi.anlegenAufrufe)
-        assertArrayEquals(bytes, driveApi.letzterAktualisierterInhalt)
+        assertEquals(1, driveApi.resumableNeuanlagenAufrufe)
+        assertArrayEquals(bytes, driveApi.letzterSicherungsInhalt)
     }
 
     @Test
@@ -832,10 +846,11 @@ class DriveSyncCoordinatorTest {
         settings.datenbankSicherungDriveUpload = true
         driveApi.dateiSuchenErgebnis = Result.success(DriveDatei(id = "bestehend", name = BACKUP_DATEINAME))
 
-        koordinatorMitDatenbankSicherung({ byteArrayOf(9) }).syncEinenZyklus()
+        koordinatorMitDatenbankSicherung({ tempSicherungsDatei(byteArrayOf(9)) }).syncEinenZyklus()
 
-        assertEquals(0, driveApi.anlegenAufrufe)
-        assertEquals(1, driveApi.aktualisierenAufrufe)
+        assertEquals(0, driveApi.resumableNeuanlagenAufrufe)
+        assertEquals(1, driveApi.resumableAktualisierenAufrufe)
+        assertEquals("bestehend", driveApi.letzteResumableAktualisierteFileId)
     }
 
     @Test
@@ -849,6 +864,62 @@ class DriveSyncCoordinatorTest {
     }
 
     /**
+     * PROMPT_FIX_DATENBANK_SICHERUNG.md Test 6 (Platzmangel): die Quelle wirft dieselbe Ausnahme,
+     * die [com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsDatei] bei zu wenig
+     * Speicherplatz wirft (die "injizierte Pruefung" fuer diesen Koordinator-Test - die echte
+     * Platz-Pruefung selbst ist in `SicherungManagerTest.baueSicherungsDateiBrichtBeiZuWenigSpeicherplatzAbUndSchreibtNichts`
+     * abgedeckt). Erwartet: BACKUP_CREATE_FAILED mit erkennbarem Grund, kein Upload,
+     * `datenbankSicherungLastAttemptAt` trotzdem gesetzt (Drosselung greift auch nach einem
+     * Fehlschlag).
+     */
+    @Test
+    fun platzmangelBeimBauenMeldetBackupCreateFailedUndLaedtNichtsHoch() = runTest {
+        settings.datenbankSicherungDriveUpload = true
+        val diagnoseContext = com.example.lrmprotokoll.diagnose.DiagnosticContext(appVersion = "1.0", buildType = "debug")
+        val reporter =
+            com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(
+                initialContext = diagnoseContext,
+            )
+        val koordinator =
+            DriveSyncCoordinator(
+                driveApi = driveApi,
+                levelSampleDao = levelSampleDao,
+                dailyFileDao = dailyFileDao,
+                noiseDao = noiseDao,
+                settings = settings,
+                now = uhr,
+                zone = zone,
+                diagnosticsReporter = reporter,
+                datenbankSicherungQuelle = {
+                    throw com.example.lrmprotokoll.backup.UnzureichenderSpeicherplatzException(
+                        freierPlatz = 10_000_000L,
+                        benoetigterPlatz = 541_176_627L,
+                    )
+                },
+            )
+        assertEquals(0L, settings.datenbankSicherungLastAttemptAt)
+
+        koordinator.syncEinenZyklus()
+
+        assertEquals("Ohne genug Platz darf kein Upload versucht werden", 0, driveApi.resumableNeuanlagenAufrufe)
+        assertEquals(0, driveApi.resumableAktualisierenAufrufe)
+        assertTrue(
+            "datenbankSicherungLastAttemptAt muss trotz Fehlschlag gesetzt sein (Drosselung)",
+            settings.datenbankSicherungLastAttemptAt > 0,
+        )
+        val gemeldet =
+            reporter.recentEvents().filter {
+                it.code == com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED
+            }
+        assertTrue("Ein Platzmangel muss als BACKUP_CREATE_FAILED gemeldet werden", gemeldet.isNotEmpty())
+        assertEquals("DriveSyncCoordinator", gemeldet.single().component)
+        assertTrue(
+            "Der Grund muss den Platzmangel erkennen lassen",
+            gemeldet.single().message?.contains("Speicherplatz") == true,
+        )
+    }
+
+    /**
      * Owner-Meldung 12.09.2026 ("Sicherung läuft sporadisch, nicht täglich"): ohne einen eigenen
      * Zeitstempel fuer die Datenbank-Sicherung liess sich in der UI nicht von
      * [SettingsManager.driveSyncLastSuccessAt] unterscheiden, wann die Sicherung selbst zuletzt
@@ -859,7 +930,7 @@ class DriveSyncCoordinatorTest {
         settings.datenbankSicherungDriveUpload = true
         assertEquals(0L, settings.datenbankSicherungLastSuccessAt)
 
-        koordinatorMitDatenbankSicherung({ byteArrayOf(1, 2, 3) }).syncEinenZyklus()
+        koordinatorMitDatenbankSicherung({ tempSicherungsDatei(byteArrayOf(1, 2, 3)) }).syncEinenZyklus()
 
         assertEquals(uhr.now().toEpochMilli(), settings.datenbankSicherungLastSuccessAt)
     }
@@ -867,9 +938,9 @@ class DriveSyncCoordinatorTest {
     @Test
     fun fehlgeschlagenerSicherungsUploadSetztDenZeitstempelNicht() = runTest {
         settings.datenbankSicherungDriveUpload = true
-        driveApi.dateiAnlegenErgebnis = Result.failure(java.io.IOException("Netzwerkfehler"))
+        driveApi.resumableNeuanlagenErgebnis = Result.failure(java.io.IOException("Netzwerkfehler"))
 
-        koordinatorMitDatenbankSicherung({ byteArrayOf(1, 2, 3) }).syncEinenZyklus()
+        koordinatorMitDatenbankSicherung({ tempSicherungsDatei(byteArrayOf(1, 2, 3)) }).syncEinenZyklus()
 
         assertEquals(0L, settings.datenbankSicherungLastSuccessAt)
     }
@@ -878,21 +949,20 @@ class DriveSyncCoordinatorTest {
      * Bugfix-Regressionstest (Owner-Meldung 16.09.2026, "Upload schmiert nach 1-2h ab" - siehe
      * [SettingsManager.datenbankSicherungLastAttemptAt]-KDoc): [DriveSyncWorker.starteSofort]
      * loest bei jedem Laermereignis sofort einen ganzen Sync-Zyklus aus. Ohne Drosselung baute
-     * jeder dieser Zyklen die komplette Datenbank neu als ZIP im Speicher auf - bei Ereignissen
-     * im Minutentakt genug wiederholte, mehrere zehn MB grosse Allokationen fuer einen
-     * OutOfMemoryError auf kleinen Geraeten (Support-Bundle).
+     * jeder dieser Zyklen die komplette Datenbank neu auf und lud sie hoch - bei Ereignissen im
+     * Minutentakt unnoetig wiederholter Festplatten-I/O und Upload-Traffic (Support-Bundle).
      */
     @Test
     fun zweiterVersuchKurzNachDemErstenWirdUebersprungen() = runTest {
         settings.datenbankSicherungDriveUpload = true
         var quelleAufrufe = 0
 
-        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; byteArrayOf(1, 2, 3) }
+        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; tempSicherungsDatei() }
         koordinator.syncEinenZyklus()
         koordinator.syncEinenZyklus()
 
         assertEquals("Die Quelle darf beim zweiten Versuch innerhalb des Intervalls nicht erneut aufgerufen werden", 1, quelleAufrufe)
-        assertEquals(1, driveApi.anlegenAufrufe)
+        assertEquals(1, driveApi.resumableNeuanlagenAufrufe)
     }
 
     /**
@@ -908,7 +978,7 @@ class DriveSyncCoordinatorTest {
 
         koordinatorMitDatenbankSicherung { throw java.io.IOException("Checkpoint fehlgeschlagen") }
             .syncEinenZyklus()
-        koordinatorMitDatenbankSicherung { zweiteQuelleAufgerufen = true; byteArrayOf(1) }
+        koordinatorMitDatenbankSicherung { zweiteQuelleAufgerufen = true; tempSicherungsDatei() }
             .syncEinenZyklus()
 
         assertTrue("Nach einem fehlgeschlagenen Versuch darf der naechste innerhalb des Intervalls nicht erneut versuchen", !zweiteQuelleAufgerufen)
@@ -919,7 +989,7 @@ class DriveSyncCoordinatorTest {
         settings.datenbankSicherungDriveUpload = true
         var quelleAufrufe = 0
 
-        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; byteArrayOf(1, 2, 3) }
+        val koordinator = koordinatorMitDatenbankSicherung { quelleAufrufe++; tempSicherungsDatei() }
         koordinator.syncEinenZyklus()
         uhr.vor(Duration.ofMinutes(31))
         koordinator.syncEinenZyklus()
