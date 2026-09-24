@@ -52,6 +52,40 @@ object PegelAggregator {
      *
      * `laeqDb` ist der energetische Mittelwert, NICHT das arithmetische Mittel der dB-Werte -
      * das waere ein klassischer und im Protokollkontext gravierender Fehler (Plan 8.3).
+     *
+     * Alle Fenstergrenzen - die Bereichsgrenzen `effektiverStartMillis`/`effektivesEndeMillis`
+     * GENAUSO wie die Gruppierung der Rohwerte - liegen auf demselben Raster: Vielfachen von
+     * [fensterDauer] AB [von] (`von + k*fensterMillis`, `k` ganzzahlig), NICHT auf dem absoluten
+     * Millisekunden-Raster ab Epoch 0 (Nachbesserung 24.09.2026). Das ist entscheidend fuer
+     * [com.example.lrmprotokoll.drive.DriveSyncCoordinator.aggregiereInAbschnitten]: dessen
+     * Abschnittsgrenzen sind zwar untereinander alle Vielfache von [fensterDauer] AB dem
+     * gemeinsamen, urspruenglichen [von] entfernt - nicht aber notwendigerweise vom absoluten
+     * Epoch-Raster aus, wenn [von] selbst nicht rasteraligniert ist
+     * (`von.toEpochMilli() % fensterDauer.toMillis()` muss NICHT 0 sein). Ein Aufruf mit
+     * `[von]=abschnittVon` liegt dadurch IMMER auf demselben Raster wie jeder andere Aufruf mit
+     * `[von]=irgendein anderes abschnittVon` DESSELBEN Gesamtaufrufs - unabhaengig davon, ob der
+     * jeweilige Abschnitt seine eigenen Rohwerte dicht ab seinem eigenen `abschnittVon` hat oder
+     * erst spaeter. Nur so kann das Zusammenfuegen mehrerer Aufrufe (`aggregiereInAbschnitten`s
+     * Luecken-Stitching) je zwei benachbarte Abschnitte exakt auf der Fenstergrenze treffen, statt
+     * ausserhalb des Rasters knapp daneben zu landen und dadurch eine zusaetzliche Zeile
+     * einzufuegen.
+     *
+     * Vor der Nachbesserung berechnete `effektiverStartMillis`/`effektivesEndeMillis` ihren
+     * datengetriebenen Anteil auf dem ABSOLUTEN Epoch-Raster
+     * (`floor(minTs/fensterMillis)*fensterMillis`), waehrend die Gruppierung der Rohwerte schon
+     * damals relativ zu [von] arbeitete - beides fiel nur zusammen, wenn [von] selbst
+     * rasteraligniert war. Sonst driftete das Bezugssystem auseinander: Rohwerte landeten unter
+     * einem falschen `fensterStart` oder verschwanden komplett aus der Ausgabe (siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Testfall "Rasterbeginn
+     * datengetrieben"). Zwei Zwischenfassungen dieser Nachbesserung versuchten stattdessen, NUR
+     * die Gruppierung zu reparieren (zuerst auf das absolute Epoch-Raster, dann relativ zu
+     * `effektiverStartMillis`) - beide behoben den EINEN Aufruf fuer sich, aber nicht das
+     * Zusammenspiel MEHRERER Aufrufe mit unterschiedlichem `abschnittVon` in
+     * `aggregiereInAbschnitten`, weil `effektiverStartMillis` je nach Datenlage weiterhin
+     * zwischen "absolut rasteraligniert" (Rasterbeginn datengetrieben) und "auf [von] aligniert"
+     * (Rasterbeginn durch [von] gebunden) wechselte - siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Testfall "Rasterbeginn durch von
+     * gebunden", fuer den dabei uebersehenen Fall.
      */
     fun aggregiere(
         samples: List<LevelSampleEntity>,
@@ -79,19 +113,26 @@ object PegelAggregator {
             ereignisse.maxOfOrNull { it.at.toEpochMilli() } ?: Long.MIN_VALUE
         )
 
-        // Auf Fenster ausrichten und auf [von, bis] begrenzen
-        val effektiverStartMillis = maxOf(vonMillis, (minTs / fensterMillis) * fensterMillis)
-        val effektivesEndeMillis = minOf(bis.toEpochMilli(), ((maxTs / fensterMillis) + 1) * fensterMillis)
+        // Auf Fenster ausrichten und auf [von, bis] begrenzen - VON-RELATIV (Nachbesserung
+        // 24.09.2026, siehe KDoc oben), nicht auf dem absoluten Epoch-Raster: startIndex/
+        // endIndexExklusiv sind die von-relativen Fenster-Indizes von minTs/maxTs, dieselben
+        // Indizes, unter denen die Rohwerte unten gruppiert werden.
+        // coerceAtLeast(0): dieselbe Absicherung, die vorher das `maxOf(vonMillis, ...)` an
+        // effektiverStartMillis leistete - Rohwerte VOR [von] (sollte bei den bestehenden
+        // Aufrufern nie vorkommen, siehe deren eigene [von,bis)-Datenbankabfragen) duerfen
+        // effektiverStartMillis nicht unter [von] druecken.
+        val startIndex = (minTs - vonMillis).floorDiv(fensterMillis).coerceAtLeast(0)
+        val endIndexExklusiv = (maxTs - vonMillis).floorDiv(fensterMillis) + 1
+        val effektiverStartMillis = vonMillis + startIndex * fensterMillis
+        val effektivesEndeMillis = minOf(bis.toEpochMilli(), vonMillis + endIndexExklusiv * fensterMillis)
 
         val samplesNachFenster = samples.groupBy { (it.at - vonMillis).floorDiv(fensterMillis) }
-        val ereignisseNachFenster = ereignisse.groupBy {
-            (it.at.toEpochMilli() - vonMillis).floorDiv(fensterMillis)
-        }
+        val ereignisseNachFenster = ereignisse.groupBy { (it.at.toEpochMilli() - vonMillis).floorDiv(fensterMillis) }
 
         val zeilen = mutableListOf<AggregatZeile>()
         var fensterStart = Instant.ofEpochMilli(effektiverStartMillis)
         val fensterEnde = Instant.ofEpochMilli(effektivesEndeMillis)
-        var index = (effektiverStartMillis - vonMillis) / fensterMillis
+        var index = startIndex
 
         while (fensterStart.isBefore(fensterEnde)) {
             val inDiesemFenster = samplesNachFenster[index].orEmpty()
