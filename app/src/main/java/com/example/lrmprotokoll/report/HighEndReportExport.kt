@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.report
 import android.content.Context
 import androidx.room.withTransaction
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
@@ -16,6 +17,16 @@ import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+
+/**
+ * Größe eines Lese-/Schreibabschnitts beim CSV-Export eines Berichtstages (Bugfix 24.09.2026,
+ * docs/PROMPT_FIX_BERICHT_HIGHEND.md Schritt 2): [HighEndReportExport] hält damit höchstens die
+ * Messwerte einer Stunde gleichzeitig im Speicher statt aller Messwerte eines ganzen Tages.
+ * `measurements` hatte auf dem Owner-Gerät 575.403 Zeilen; ein `OutOfMemoryError` beim Laden
+ * eines ganzen Tages als `List<MeasurementEntity>` war belegt (docs/BEFUNDE_P30_2026-09-23.md,
+ * Abschnitt 3).
+ */
+internal const val HIGH_END_REPORT_ABSCHNITT_MILLIS = 60 * 60 * 1000L
 
 /** Privater Datei-Handoff. Nur Metadaten passieren die JNI-Grenze; CSVs werden immer entfernt. */
 class HighEndReportExport(
@@ -55,7 +66,8 @@ class HighEndReportExport(
                 "Berichtsordner konnte nicht angelegt werden."
             }
             // Ein konsistenter Snapshot verhindert Retention zwischen Vorprüfung und Export.
-            // Rohwerte werden nur für einen Tag gleichzeitig im Speicher gehalten.
+            // Rohwerte werden nur abschnittsweise (HIGH_END_REPORT_ABSCHNITT_MILLIS), nicht als
+            // ganzer Tag gleichzeitig im Speicher gehalten (Bugfix 24.09.2026).
             val transaktionStart = System.currentTimeMillis()
             val parameter = db.withTransaction {
                 phase = "vorpruefung"
@@ -72,19 +84,12 @@ class HighEndReportExport(
                 val jsonDays = json.getJSONArray("days")
                 for ((index, day) in fresh.withIndex()) {
                     val file = File(temporary, "${day.datum}.csv")
-                    val rows = db.measurementDao().zwischen(day.von, day.bis)
-                    file.bufferedWriter(Charsets.UTF_8).use { writer ->
-                        writer.appendLine("timestampMillis,levelDb,flags,sessionId,weighting,timeWeighting")
-                        for (row in rows) {
-                            fun csv(value: String?) = "\"${value.orEmpty().replace("\"", "\"\"")}\""
-                            writer.appendLine("${row.timestamp},${row.levelDb},${row.flags},${row.sessionId},${csv(row.weighting)},${csv(row.timeWeighting)}")
-                        }
-                    }
-                    rawSampleCount += rows.size
+                    val (tagesRohwerte, sessionIdsAusRohwerten) = schreibeTagesRohwerte(day, file)
+                    rawSampleCount += tagesRohwerte
                     val sessions = JSONArray()
                     val photos = JSONArray()
                     // Einschließlich Session-IDs aus Rohwerten, auch bei unvollständigen Altdaten.
-                    for (id in (day.sessionIds + rows.map { it.sessionId }).distinct()) {
+                    for (id in (day.sessionIds + sessionIdsAusRohwerten).distinct()) {
                         val session = db.sessionDao().byId(id)
                         sessions.put(JSONObject().put("id", id)
                             .put("sha256", session?.rohdatenPruefsumme ?: JSONObject.NULL)
@@ -108,7 +113,7 @@ class HighEndReportExport(
                         }
                     }
                     jsonDays.getJSONObject(index).put("samplesPath", file.absolutePath)
-                        .put("rawSampleCount", rows.size).put("sessions", sessions).put("photos", photos)
+                        .put("rawSampleCount", tagesRohwerte).put("sessions", sessions).put("photos", photos)
                 }
                 json.toString()
             }
@@ -168,4 +173,41 @@ class HighEndReportExport(
             if (!succeeded) output.delete()
         }
     }
+
+    /**
+     * Schreibt die Messwerte eines Tages abschnittsweise (siehe [HIGH_END_REPORT_ABSCHNITT_MILLIS])
+     * direkt in [datei], statt sie als kompletten Tag in einer Liste zu halten (Bugfix 24.09.2026,
+     * docs/PROMPT_FIX_BERICHT_HIGHEND.md Schritt 2). Liefert die Anzahl geschriebener Rohwerte und
+     * die dabei gesehenen Session-IDs zurück; kein einzelner Aufruf von
+     * [com.example.lrmprotokoll.data.MeasurementDao.zwischen] umfasst dabei mehr als einen
+     * Abschnitt.
+     */
+    private suspend fun schreibeTagesRohwerte(
+        day: BerichtTag,
+        datei: File,
+    ): Pair<Int, Set<Long>> {
+        val sessionIds = mutableSetOf<Long>()
+        var rohwerte = 0
+        datei.bufferedWriter(Charsets.UTF_8).use { writer ->
+            writer.appendLine("timestampMillis,levelDb,flags,sessionId,weighting,timeWeighting")
+            var abschnittsVon = day.von
+            while (abschnittsVon < day.bis) {
+                val abschnittsBis = minOf(abschnittsVon + HIGH_END_REPORT_ABSCHNITT_MILLIS, day.bis)
+                val rows = db.measurementDao().zwischen(abschnittsVon, abschnittsBis)
+                for (row in rows) {
+                    writer.appendLine(csvZeile(row))
+                    sessionIds += row.sessionId
+                }
+                rohwerte += rows.size
+                abschnittsVon = abschnittsBis
+            }
+        }
+        return rohwerte to sessionIds
+    }
+}
+
+/** Eine Rohwert-Zeile im CSV-Format des Python-Vertrags (Spaltenreihenfolge siehe Header-Zeile). */
+private fun csvZeile(row: MeasurementEntity): String {
+    fun csv(value: String?) = "\"${value.orEmpty().replace("\"", "\"\"")}\""
+    return "${row.timestamp},${row.levelDb},${row.flags},${row.sessionId},${csv(row.weighting)},${csv(row.timeWeighting)}"
 }
