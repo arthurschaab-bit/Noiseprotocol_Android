@@ -468,35 +468,50 @@ class DriveSyncCoordinator(
      * Feld-Dokumentation) - keine Neuimplementierung der (privaten) `bildeZeile()`-Logik, nur
      * deren dokumentiertes Leerfenster-Ergebnis als Literal.
      *
-     * **Zweite, subtilere Abhaengigkeit von Werten ausserhalb des Fensters, gefunden beim
-     * Testen mit einer 3600 nicht teilenden Fensterdauer (7s, wie von Test 3 verlangt):**
-     * `aggregiere()` waehlt die AUSGEGEBENEN `fensterStart`-Zeitstempel auf dem absoluten
+     * **Zweite Abhaengigkeit von Werten ausserhalb des Fensters - urspruenglich hier nur
+     * umgangen, seit der Nachbesserung vom 24.09.2026 an der Wurzel behoben:**
+     * [PegelAggregator.aggregiere] wies bis dahin einen echten Bug auf, keinen bloss kosmetischen
+     * Unterschied: Es waehlte die AUSGEGEBENEN `fensterStart`-Zeitstempel auf dem absoluten
      * Millisekunden-Raster (`floor(minTs/fensterMillis)*fensterMillis`, unabhaengig vom
-     * `von`-Parameter), gruppiert Rohwerte in Buckets aber RELATIV zum eigenen `von`-Parameter
-     * des jeweiligen Aufrufs. Beides faellt nur zusammen, wenn `von` selbst exakt auf das
-     * Fensterdauer-Raster ausgerichtet ist. Bei genau EINEM Aufruf ueber den ganzen Tag ist das
-     * Ergebnis trotzdem wohldefiniert (nur eine einzige, ueber den ganzen Aufruf konstante
-     * Verschiebung) - bei MEHREREN Aufrufen mit unterschiedlichen `von`-Werten (wie beim
-     * Aufteilen in Abschnitte) wuerde aber JEDER Abschnitt eine EIGENE, unterschiedliche
-     * Verschiebung bekommen, wodurch Rohwerte unter einem anderen `fensterStart` als beim
-     * Gesamtaufruf landen wuerden. Ein Versuch, das ueber einen auf das Raster abgerundeten
-     * `von`-Wert je Abschnitt zu kompensieren, hat das Symptom verschoben, aber nicht behoben -
-     * die genaue Ursache war innerhalb der fuer diesen Auftrag vorgesehenen Zeit nicht
-     * abschliessend zu klaeren, ohne [PegelAggregator.aggregiere] selbst umzubauen, was der
-     * Auftrag fuer genau diesen Fall ausdruecklich untersagt ("anhalten und melden, nicht
-     * umbauen").
+     * `von`-Parameter), gruppierte Rohwerte in Buckets aber RELATIV zum eigenen `von`-Parameter
+     * des jeweiligen Aufrufs. War `von` nicht exakt auf das Fensterdauer-Raster ausgerichtet,
+     * fielen beide Bezugssysteme auseinander - je nach Datenlage landeten Rohwerte dadurch unter
+     * einem FALSCHEN `fensterStart` oder verschwanden ganz aus der Ausgabe. Das betraf entgegen
+     * der urspruenglichen Annahme NICHT nur mehrere Aufrufe mit unterschiedlichem `von` (wie beim
+     * Aufteilen in Abschnitte), sondern bereits einen einzigen Aufruf ueber den ganzen Tag - "bei
+     * genau einem Aufruf ist die Verschiebung konstant, also wohldefiniert" beschrieb nur, DASS
+     * das Ergebnis deterministisch war, nicht dass es korrekt war (siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Test
+     * `nichtRasterausgerichtetesVonBeiDatengetriebenemFensterbeginnGruppiertKorrekt`, fuer ein
+     * durchgerechnetes Gegenbeispiel).
      *
-     * Deshalb: Ist [von] selbst NICHT exakt auf das Fensterdauer-Raster ausgerichtet
-     * (`von.toEpochMilli() % fensterMillis != 0`), faellt diese Funktion auf EINEN einzigen
-     * Aufruf ueber den GESAMTEN Zeitraum zurueck (das unveraenderte Verhalten von vor diesem
-     * Bugfix), um Korrektheit ueber den Speichervorteil zu stellen. [von] ist bei beiden
-     * Aufrufern immer Mitternacht in der konfigurierten Zeitzone - fuer alle Fensterdauern, die
-     * 60s glatt teilen (u. a. der Default 1s), UND fuer volle Stunden (z. B. 3600s) ist
-     * Mitternacht in praktisch jeder Zeitzone rasterausgerichtet, die stueckweise Aggregation
-     * greift dort unveraendert. Nur bei absichtlich exotischen Werten wie 7s (die weder 60s noch
-     * eine Stunde glatt teilen) oder in den seltenen Zeitzonen mit Nicht-Stunden-Versatz (z. B.
-     * UTC+5:30) fuer eine 3600s-Fensterdauer wird (weiterhin, wie vor Schritt 4) die volle
-     * Tagesliste geladen - siehe Abschlussbericht.
+     * [PegelAggregator.aggregiere] berechnet seine Fenstergrenzen (`effektiverStartMillis`/
+     * `effektivesEndeMillis`) seitdem VON-RELATIV statt auf dem absoluten Epoch-Raster (siehe
+     * dessen KDoc) - das ist der entscheidende Punkt fuer DIESE Funktion hier: Jeder
+     * `abschnittVon` ist per Konstruktion ein ganzzahliges Vielfaches von [fensterDauer] vom
+     * GEMEINSAMEN, urspruenglichen `von` dieses Gesamtaufrufs entfernt (`abschnittDauer` oben ist
+     * selbst ein Vielfaches von [fensterDauer]) - von-relative Fenstergrenzen liegen deshalb fuer
+     * JEDEN Abschnitt auf demselben Raster wie fuer jeden anderen, unabhaengig davon, ob die
+     * eigenen Rohwerte dieses Abschnitts dicht direkt ab `abschnittVon` beginnen oder erst
+     * spaeter. Zwei Zwischenfassungen dieser Nachbesserung reparierten stattdessen NUR die
+     * Gruppierung der Rohwerte (zuerst auf dem absoluten Epoch-Raster, dann relativ zum
+     * jeweiligen `effektiverStartMillis`) und behoben damit zwar das obige Gegenbeispiel je
+     * EINZELNEM Aufruf - aber nicht das Zusammenspiel MEHRERER Aufrufe hier unten:
+     * `effektiverStartMillis` wechselte je nach Datenlage weiterhin zwischen "absolut
+     * rasteraligniert" und "auf `von` aligniert", wodurch verschiedene Abschnitte auf
+     * UNTERSCHIEDLICHEN Rastern landen konnten. Aufgefallen erst durch
+     * `DriveSyncCoordinatorTest.stueckweiseAggregationLiefertDasselbeErgebnisWieEinAufrufUeberDenGanzenTag`
+     * mit 20.000 dichten Zufallswerten bei Fensterdauer 7s (laengeres CSV als der
+     * Vergleichs-Gesamtaufruf) - siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Test
+     * `nichtRasterausgerichtetesVonAlsBindenderFensterbeginnGruppiertKorrekt`, fuer ein
+     * durchgerechnetes Gegenbeispiel im Kleinen.
+     *
+     * Der vormals hier dokumentierte Fallback auf einen Gesamtaufruf bei nicht rasteraligniertem
+     * `von` ist damit ueberfluessig und entfernt: diese Funktion aggregiert jetzt fuer JEDE
+     * Fensterdauer stueckweise, auch fuer eine, die 3600 nicht glatt teilt (z. B. 7s) oder in
+     * einer Zeitzone mit Nicht-Stunden-Versatz (z. B. UTC+5:30) auf Mitternacht trifft - der volle
+     * Speichervorteil aus Schritt 4 gilt seitdem ausnahmslos.
      *
      * `hatteRohwerte` bildet nach, was der bisherige Code implizit tat: War samples.isEmpty()
      * (VOR jeder Ereignis-Betrachtung), wurde der Tag in [holeVersaeumteTageNach] uebersprungen -
@@ -510,20 +525,6 @@ class DriveSyncCoordinator(
         fensterDauer: Duration,
     ): AbschnittsAggregation {
         if (!bis.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
-
-        val fensterMillis = fensterDauer.toMillis().coerceAtLeast(1)
-        if (von.toEpochMilli() % fensterMillis != 0L) {
-            // Siehe KDoc oben: ohne Garantie, dass [von] auf das Fensterdauer-Raster ausgerichtet
-            // ist, waere stueckweises Aggregieren nicht nachweislich identisch mit einem
-            // Gesamtaufruf. Direkte Pruefung an [von] selbst (statt einer fixen Millisekunden-
-            // Konstante) deckt sowohl kurze Fensterdauern, die 60s nicht teilen (z. B. 7s), als
-            // auch lange, die eine volle Stunde ueberschreiten, korrekt ab - Mitternacht ist
-            // nicht in jeder Zeitzone auf volle Stunden ausgerichtet (z. B. UTC+5:30). Fallback
-            // auf das unveraenderte Vor-Schritt-4-Verhalten.
-            val samples = levelSampleDao.zwischen(von.toEpochMilli(), bis.toEpochMilli())
-            val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, bis, fensterDauer)
-            return AbschnittsAggregation(zeilen, hatteRohwerte = samples.isNotEmpty())
-        }
 
         val fensterSekunden = fensterDauer.seconds.coerceAtLeast(1)
         val vielfaches = Math.round(3600.0 / fensterSekunden).coerceAtLeast(1)
