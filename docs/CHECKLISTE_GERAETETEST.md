@@ -331,6 +331,21 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 
 **Gerätetest 23.09.2026 (Huawei P30, Build `1.0.0-pr188.ci602+119d2a4`):** Die Absturzdiagnose funktioniert. Sie hat dabei ein massives Speicherproblem im Normalbetrieb sichtbar gemacht (89 Abstürze in einer Woche, 88 davon Speichermangel). Siehe [`BEFUNDE_P30_2026-09-23.md`](BEFUNDE_P30_2026-09-23.md).
 
+### F15 — Datenbank-Sicherung streamend statt im Speicher (Bugfix 23.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_DATENBANK_SICHERUNG.md`), aber **noch nicht auf echter Hardware
+gesehen** — auf dem Owner-Gerät (Huawei P30) gab es laut `BEFUNDE_P30_2026-09-23.md` Abschnitt
+2/A2 seit dem 16.09.2026 95 gescheiterte Sicherungsversuche mit `OutOfMemoryError`
+(Datenbankgröße ~492 MB, Heap-Grenze 402 MB), weil jeder Sicherungs- und
+Wiederherstellungsweg die komplette Datenbank als `ByteArray` im Speicher hielt.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach spätestens einem Sync-Zyklus (Drive-Sync aktiv, „Datenbank-Sicherung nach Drive“ an) in `<gewählter Ordner>/BACKUP/` nachsehen | `laermprotokoll_datenbank.zip` liegt dort, Änderungsdatum ist heute, Dateigröße ist plausibel (ungefähr die Größe der lokalen Datenbankdatei) | |
+| Diagnose-Screen/nächstes Support-Bundle nach einem Sync-Zyklus mit Datenbank-Sicherung prüfen | Keine neuen Einträge „Datenbank-Sicherung konnte nicht erstellt werden" und kein `OutOfMemoryError` zu den Sicherungszeitpunkten im Logcat-Ausschnitt | |
+| Sicherung einspielen (lokal über SAF oder „Von Drive wiederherstellen") auf einem Testgerät oder Emulator | Die App startet mit den zuvor gesicherten Daten neu, kein Absturz, keine Speicherwarnung während des Einspielens | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
