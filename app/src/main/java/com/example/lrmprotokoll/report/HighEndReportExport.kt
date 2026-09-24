@@ -4,18 +4,25 @@ import android.content.Context
 import androidx.room.withTransaction
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.ReportConfigEntity
-import java.io.File
-import java.time.LocalDate
-import java.time.ZoneId
-import java.util.UUID
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
 
 /** Privater Datei-Handoff. Nur Metadaten passieren die JNI-Grenze; CSVs werden immer entfernt. */
-class HighEndReportExport(private val context: Context, private val db: AppDatabase) {
+class HighEndReportExport(
+    private val context: Context,
+    private val db: AppDatabase,
+    private val diagnosticsReporter: DiagnosticsReporter,
+) {
     suspend fun generate(
         days: List<BerichtTag>,
         config: ReportConfigEntity,
@@ -26,6 +33,22 @@ class HighEndReportExport(private val context: Context, private val db: AppDatab
         val temporary = File(context.cacheDir, "report_handoff/$runId")
         val output = File(context.filesDir, "reports/Schallbericht_$runId.pdf")
         var succeeded = false
+        val start = System.currentTimeMillis()
+        // Phase, in der ein Fehlschlag entsteht (Bugfix 24.09.2026, siehe REPORT_CREATE_FAILED
+        // unten) - "export" ist der Ausgangswert, da schon das Anlegen der Ordner dazu gehoert.
+        var phase = "export"
+        var rawSampleCount = 0
+
+        // Gemeinsame Details fuer beide REPORT_CREATE_FAILED-Aufrufe unten (Fehler vom Runner
+        // bzw. eine Ausnahme) - eine Stelle statt zweimal derselben Map.
+        fun reportDetails() =
+            mapOf(
+                "phase" to phase,
+                "tage" to days.size,
+                "rawSampleCount" to rawSampleCount,
+                "dauerMs" to (System.currentTimeMillis() - start),
+            )
+        diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht gestartet: ${days.size} Tage")
         try {
             check(temporary.mkdirs()) { "Temporärer Berichtsordner konnte nicht angelegt werden." }
             check(output.parentFile!!.isDirectory || output.parentFile!!.mkdirs()) {
@@ -33,13 +56,16 @@ class HighEndReportExport(private val context: Context, private val db: AppDatab
             }
             // Ein konsistenter Snapshot verhindert Retention zwischen Vorprüfung und Export.
             // Rohwerte werden nur für einen Tag gleichzeitig im Speicher gehalten.
+            val transaktionStart = System.currentTimeMillis()
             val parameter = db.withTransaction {
+                phase = "vorpruefung"
                 require(days.isNotEmpty()) { "Es wurde kein Berichtszeitraum gewählt." }
                 val fresh = ladeBerichtstage(db, BerichtZeitraum(days.first().datum, days.last().datum))
                 val error = retentionFehler(fresh) ?: bewertungsFehler(fresh, config) ?:
                     auswahlFehler(fresh, selectedIds) ?: areaSelectionError(config.gebietseinstufung)
                 require(error == null) { error.orEmpty() }
                 require(fresh.any { it.rohwerte > 0 }) { "Im gewählten Zeitraum liegen keine Rohdaten vor." }
+                phase = "export"
                 val json = JSONObject(vorlaeufigeBerichtsparameter(fresh, config, selectedIds, output.absolutePath))
                     .put("contractVersion", 2)
                     .put("timeZone", ZoneId.systemDefault().id)
@@ -54,6 +80,7 @@ class HighEndReportExport(private val context: Context, private val db: AppDatab
                             writer.appendLine("${row.timestamp},${row.levelDb},${row.flags},${row.sessionId},${csv(row.weighting)},${csv(row.timeWeighting)}")
                         }
                     }
+                    rawSampleCount += rows.size
                     val sessions = JSONArray()
                     val photos = JSONArray()
                     // Einschließlich Session-IDs aus Rohwerten, auch bei unvollständigen Altdaten.
@@ -85,20 +112,57 @@ class HighEndReportExport(private val context: Context, private val db: AppDatab
                 }
                 json.toString()
             }
+            val transaktionDauerMs = System.currentTimeMillis() - transaktionStart
+            phase = "python"
             val result = runner(parameter)
-            if (result is ChaquopyReportRunner.Ergebnis.Erfolg) {
-                check(File(result.pdfPfad).canonicalFile == output.canonicalFile && output.length() > 0) {
-                    "Die Berichtserzeugung hat keine gültige PDF-Datei zurückgegeben."
+            val endResult =
+                when (result) {
+                    is ChaquopyReportRunner.Ergebnis.Erfolg -> {
+                        phase = "pdfpruefung"
+                        check(File(result.pdfPfad).canonicalFile == output.canonicalFile && output.length() > 0) {
+                            "Die Berichtserzeugung hat keine gültige PDF-Datei zurückgegeben."
+                        }
+                        succeeded = true
+                        result
+                    }
+                    is ChaquopyReportRunner.Ergebnis.Fehler -> {
+                        diagnosticsReporter.report(
+                            code = DiagnosticCode.REPORT_CREATE_FAILED,
+                            component = "HighEndReportExport",
+                            operation = "generate",
+                            severity = DiagnosticSeverity.WARN,
+                            cause = result.ursache,
+                            message = result.nachricht,
+                            details = reportDetails(),
+                        )
+                        result
+                    }
                 }
-                succeeded = true
+            if (succeeded) {
+                diagnosticsReporter.breadcrumb(
+                    "Bericht",
+                    "High-End-Bericht erzeugt: ${days.size} Tage, $rawSampleCount Rohwerte, " +
+                        "$transaktionDauerMs ms, PDF ${output.length() / 1024} KB",
+                )
             }
-            result
+            endResult
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            ChaquopyReportRunner.Ergebnis.Fehler(
-                "Bericht konnte nicht erzeugt werden: ${error.message ?: "Dateifehler"}", error,
+            val ergebnis =
+                ChaquopyReportRunner.Ergebnis.Fehler(
+                    "Bericht konnte nicht erzeugt werden: ${error.message ?: "Dateifehler"}", error,
+                )
+            diagnosticsReporter.report(
+                code = DiagnosticCode.REPORT_CREATE_FAILED,
+                component = "HighEndReportExport",
+                operation = "generate",
+                severity = DiagnosticSeverity.WARN,
+                cause = error,
+                message = ergebnis.nachricht,
+                details = reportDetails(),
             )
+            ergebnis
         } finally {
             temporary.deleteRecursively()
             if (!succeeded) output.delete()

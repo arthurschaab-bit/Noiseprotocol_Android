@@ -12,6 +12,7 @@ import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SessionEntity
+import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -26,6 +27,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ChaquopyReportRunnerInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val diagnosticsReporter = CompositeDiagnosticsReporter()
 
     @Test
     fun roomExportErzeugtLesbareTeilbarePdfUndEntferntTemporaereDateien() = runBlocking {
@@ -48,7 +50,7 @@ class ChaquopyReportRunnerInstrumentedTest {
             val config = ReportConfigEntity(gebietseinstufung = "MI")
             val runner = ChaquopyReportRunner(context)
             var temporary: File? = null
-            val result = HighEndReportExport(context, db).generate(days, config, emptyMap()) { json ->
+            val result = HighEndReportExport(context, db, diagnosticsReporter).generate(days, config, emptyMap()) { json ->
                 val parameter = JSONObject(json)
                 val day = parameter.getJSONArray("days").getJSONObject(0)
                 assertEquals(240, day.getInt("rawSampleCount"))
@@ -78,7 +80,7 @@ class ChaquopyReportRunnerInstrumentedTest {
                 assertEquals("%PDF-", String(signature, Charsets.US_ASCII))
             }
             // Fehler nach erfolgreichem Handoff: Cleanup ist auch dann zwingend.
-            val failed = HighEndReportExport(context, db).generate(days, config, emptyMap()) { json ->
+            val failed = HighEndReportExport(context, db, diagnosticsReporter).generate(days, config, emptyMap()) { json ->
                 temporary = File(JSONObject(json).getJSONArray("days").getJSONObject(0).getString("samplesPath")).parentFile
                 throw IllegalStateException("Absichtlicher Testfehler")
             }
@@ -86,7 +88,7 @@ class ChaquopyReportRunnerInstrumentedTest {
             assertFalse(temporary!!.exists())
 
             // Nur die für diesen Lauf erzeugte Zieldatei darf als Erfolg gelten.
-            val unexpected = HighEndReportExport(context, db).generate(days, config, emptyMap()) { json ->
+            val unexpected = HighEndReportExport(context, db, diagnosticsReporter).generate(days, config, emptyMap()) { json ->
                 temporary = File(JSONObject(json).getJSONArray("days").getJSONObject(0).getString("samplesPath")).parentFile
                 unexpectedOutput = File(context.filesDir, "reports/unexpected-output.pdf").apply {
                     parentFile!!.mkdirs()
