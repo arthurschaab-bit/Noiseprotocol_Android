@@ -149,6 +149,42 @@ object SicherungManager {
         }
     }
 
+    /**
+     * Wie [baueSicherungsDatei], legt die Zieldatei aber selbst per [File.createTempFile] im
+     * `cacheDir` an - fuer Aufrufer wie die automatische Drive-Sicherung
+     * ([com.example.lrmprotokoll.AppContainer]s `datenbankSicherungQuelle`), die nur an dem
+     * fertigen [File] interessiert sind, nicht an dessen Lebenszyklus bei einem Fehlschlag.
+     *
+     * Nachbesserung (Review-Befund zu #194, 24.09.2026): Vorher legte der Aufrufer die Temp-Datei
+     * selbst per `createTempFile` an und rief [baueSicherungsDatei] direkt auf - warf DAS
+     * unterwegs (Platzmangel, I/O-Fehler mitten im Schreiben), blieb die bereits angelegte, leere
+     * oder teilbeschriebene Temp-Datei fuer immer im `cacheDir` liegen: Die Lambda gab in diesem
+     * Fall nie ein [File] zurueck, also bekam
+     * [com.example.lrmprotokoll.drive.DriveSyncCoordinator.ladeDatenbankSicherungHoch] auch nie
+     * etwas, das es in seinem eigenen `finally` haette loeschen koennen. Auf einem Geraet, das
+     * wiederholt an Speicherproblemen scheitert (genau der Fall, den der Streaming-Umbau oben
+     * beheben soll), hinterliess das bei jedem Fehlschlag eine Leiche. Diese Funktion kapselt
+     * Anlegen + Bauen + Aufraeumen-bei-Fehlschlag an einer Stelle, damit kein Aufrufer das
+     * Zusammenspiel selbst nachbauen muss.
+     */
+    suspend fun baueSicherungsDateiMitAufraeumen(
+        context: Context,
+        settings: SettingsManager,
+        freierPlatzErmitteln: (File) -> Long = { it.usableSpace },
+    ): File {
+        val ziel = File.createTempFile("drive_sicherung_", ".zip", context.cacheDir)
+        var erfolgreich = false
+        try {
+            baueSicherungsDatei(context, settings, ziel, freierPlatzErmitteln)
+            erfolgreich = true
+            return ziel
+        } finally {
+            // Nur bei einem Fehlschlag aufraeumen - im Erfolgsfall gehoert [ziel] jetzt dem
+            // Aufrufer (siehe KDoc oben), der es nach seinem eigenen Upload-Versuch loescht.
+            if (!erfolgreich) ziel.delete()
+        }
+    }
+
     suspend fun spieleSicherungEin(
         context: Context,
         quelle: Uri,

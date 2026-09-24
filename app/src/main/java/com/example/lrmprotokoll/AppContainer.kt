@@ -277,18 +277,17 @@ class AppContainer(
                 // Streamend in eine temporaere Datei im cacheDir bauen (Bugfix 23.09.2026,
                 // docs/PROMPT_FIX_DATENBANK_SICHERUNG.md) - der Koordinator loescht sie wieder,
                 // sobald der Upload-Versuch (Erfolg oder Fehlschlag) abgeschlossen ist.
-                val ziel =
-                    java.io.File.createTempFile(
-                        "drive_sicherung_",
-                        ".zip",
-                        context.applicationContext.cacheDir,
-                    )
-                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsDatei(
+                // baueSicherungsDateiMitAufraeumen() raeumt zusaetzlich selbst auf, wenn schon
+                // das BAUEN fehlschlaegt (Nachbesserung, Review-Befund zu #194, 24.09.2026) -
+                // vorher blieb genau in diesem Fall die hier per createTempFile() angelegte
+                // Temp-Datei fuer immer im cacheDir liegen, weil diese Lambda dann nie ein File
+                // zurueckgab, das der Koordinator in seinem eigenen finally haette loeschen
+                // koennen: auf einem Geraet, das wiederholt an Speicherproblemen scheitert (der
+                // Fall, den der Streaming-Umbau oben beheben soll), eine Leiche pro Fehlschlag.
+                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsDateiMitAufraeumen(
                     context.applicationContext,
                     settingsManager,
-                    ziel,
                 )
-                ziel
             },
         )
     }
