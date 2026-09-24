@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.drive
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
@@ -12,11 +13,9 @@ import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.data.SettingsManager
-import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.meter.InstantSource
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -28,6 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Prueft die Sync-Entscheidungslogik aus Plan 8.4 gegen einen Fake-[DriveApiClient] - kein
@@ -895,4 +897,521 @@ class DriveSyncCoordinatorTest {
 
         assertEquals(2, quelleAufrufe)
     }
+
+    // ---------------------------------------------------------------- OOM-Bugfix Schritt 1: nur ein Zyklus gleichzeitig
+
+    /**
+     * Zaehlt, wie viele [zwischen]-Aufrufe gleichzeitig aktiv sind, und legt dabei eine echte
+     * (kurze) Verzoegerung ein - so wird ein fehlender Mutex in
+     * [DriveSyncCoordinator.syncEinenZyklus] sichtbar (PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3,
+     * Test 5), ohne echte Nebenlaeufigkeit auf echten Threads zu brauchen: [runTest] fuehrt alles
+     * kooperativ auf einem Thread aus, Ueberlappung entsteht rein durch die Suspension in
+     * [delay]. Kein `AtomicInteger` noetig - ohne echte Parallelitaet sind die Zaehler-Zugriffe
+     * bereits sicher.
+     */
+    private class GleichzeitigkeitZaehlendesLevelSampleDao : LevelSampleDao {
+        val eingefuegt = mutableListOf<LevelSampleEntity>()
+        private var aktiveAufrufe = 0
+        var maxGleichzeitigeAufrufe = 0
+            private set
+
+        override suspend fun insert(sample: LevelSampleEntity) {
+            eingefuegt += sample
+        }
+
+        override suspend fun insertAll(samples: List<LevelSampleEntity>) {
+            eingefuegt += samples
+        }
+
+        override suspend fun zwischen(
+            von: Long,
+            bis: Long,
+        ): List<LevelSampleEntity> {
+            aktiveAufrufe++
+            if (aktiveAufrufe > maxGleichzeitigeAufrufe) maxGleichzeitigeAufrufe = aktiveAufrufe
+            delay(10)
+            aktiveAufrufe--
+            return eingefuegt.filter { it.at in von until bis }
+        }
+
+        override suspend fun loescheVor(vor: Long) {
+            eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun anzahl(): Int = eingefuegt.size
+    }
+
+    /**
+     * Regressionstest fuer Befund A1 (BEFUNDE_P30_2026-09-23.md): Auf dem Owner-Geraet liefen bis
+     * zu vier Sync-Zyklen gleichzeitig, jeder mit einer bis zu 29-taegigen Rohwerte-Nachhol-
+     * Schleife - der Heap lief voll (CursorWindow-Ueberlauf, anschliessend OutOfMemoryError).
+     */
+    @Test
+    fun syncEinenZyklusLaeuftNieParallel() =
+        runTest {
+            val gleichzeitigkeitsDao = GleichzeitigkeitZaehlendesLevelSampleDao()
+            val mitternacht =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .atStartOfDay(zone)
+                    .toInstant()
+            gleichzeitigkeitsDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = mitternacht.toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = gleichzeitigkeitsDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            val ersterLauf = async { koordinator.syncEinenZyklus() }
+            val zweiterLauf = async { koordinator.syncEinenZyklus() }
+            ersterLauf.await()
+            zweiterLauf.await()
+
+            assertEquals(
+                "syncEinenZyklus() darf level_samples nie aus zwei gleichzeitigen Laeufen heraus lesen",
+                1,
+                gleichzeitigkeitsDao.maxGleichzeitigeAufrufe,
+            )
+        }
+
+    // ---------------------------------------------------------------- OOM-Bugfix Schritt 3: endgueltige Tage ueberspringen
+
+    /** Protokolliert jeden [zwischen]-Aufruf mit seinem `(von, bis)`-Zeitraum (Test 1/2). */
+    private class ProtokollierendesLevelSampleDao : LevelSampleDao {
+        val eingefuegt = mutableListOf<LevelSampleEntity>()
+        val zwischenAufrufe = mutableListOf<Pair<Long, Long>>()
+
+        override suspend fun insert(sample: LevelSampleEntity) {
+            eingefuegt += sample
+        }
+
+        override suspend fun insertAll(samples: List<LevelSampleEntity>) {
+            eingefuegt += samples
+        }
+
+        override suspend fun zwischen(
+            von: Long,
+            bis: Long,
+        ): List<LevelSampleEntity> {
+            zwischenAufrufe += von to bis
+            return eingefuegt.filter { it.at in von until bis }
+        }
+
+        override suspend fun loescheVor(vor: Long) {
+            eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun anzahl(): Int = eingefuegt.size
+    }
+
+    /** True, wenn ein protokollierter `(von, bis)`-Aufruf den Zeitraum [tagVon, tagBis) beruehrt. */
+    private fun ueberschneidetTag(
+        aufruf: Pair<Long, Long>,
+        tagVon: Instant,
+        tagBis: Instant,
+    ): Boolean {
+        val (von, bis) = aufruf
+        return von < tagBis.toEpochMilli() && bis > tagVon.toEpochMilli()
+    }
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 1: Ein Tag, der NACH seinem Tagesende
+     * erfolgreich synchronisiert wurde, ist endgueltig fertig - Rohwerte eines vergangenen Tages
+     * kommen nicht nachtraeglich hinzu (Befund A1: bislang lud `holeVersaeumteTageNach()` fuer
+     * jeden der letzten 29 Tage erst die komplette Rohwerteliste, bevor es ueberhaupt prueft, ob
+     * der Tag schon fertig ist).
+     */
+    @Test
+    fun nachTagesendeSynchronisierterTagWirdOhneRohwertAbfrageUebersprungen() =
+        runTest {
+            val protokollDao = ProtokollierendesLevelSampleDao()
+            val tag =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .minusDays(5)
+            val tagVon = tag.atStartOfDay(zone).toInstant()
+            val tagBis = tag.plusDays(1).atStartOfDay(zone).toInstant()
+            val schluessel = DriveAblage.tagesordner(tagVon, zone)
+            // Ein Sample ist absichtlich vorhanden - selbst WENN der Tag geladen wuerde, gaebe es
+            // etwas zu finden. Der Test soll gerade zeigen, dass gar nicht erst geladen wird.
+            protokollDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = tagVon.plusSeconds(3600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            dailyFileDao.zeilen[schluessel] =
+                DriveDailyFileEntity(
+                    date = schluessel,
+                    fileId = "schon-da",
+                    lastSyncedAt = tagBis.toEpochMilli() + 1,
+                    lastRowCount = 1,
+                    state = DriveSyncState.SYNCED,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = protokollDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus()
+
+            assertTrue(
+                "Ein nach Tagesende synchronisierter Tag darf keine Rohwerte-Abfrage fuer seinen " +
+                    "eigenen Zeitraum ausloesen",
+                protokollDao.zwischenAufrufe.none { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+        }
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 2: Ein noch nicht registrierter Tag wird
+     * beim ersten Lauf ganz normal nachgeholt (inkl. Rohwerte-Laden) - danach ist er endgueltig
+     * und ein zweiter Lauf darf ihn nicht mehr laden.
+     */
+    @Test
+    fun versaeumterTagWirdEinmalNachgeholtDanachEndgueltigUebersprungen() =
+        runTest {
+            val protokollDao = ProtokollierendesLevelSampleDao()
+            val tag =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .minusDays(5)
+            val tagVon = tag.atStartOfDay(zone).toInstant()
+            val tagBis = tag.plusDays(1).atStartOfDay(zone).toInstant()
+            val schluessel = DriveAblage.tagesordner(tagVon, zone)
+            protokollDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = tagVon.plusSeconds(3600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = protokollDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus() // erster Lauf: der Tag ist noch nicht registriert
+
+            assertTrue(
+                "Der erste Lauf muss den bislang unregistrierten Tag tatsaechlich laden",
+                protokollDao.zwischenAufrufe.any { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+            assertEquals(DriveSyncState.SYNCED, dailyFileDao.zeilen[schluessel]?.state)
+            assertTrue(
+                "lastSyncedAt muss nach Tagesende liegen - der Sync fand HEUTE statt, der Tag " +
+                    "liegt 5 Tage zurueck",
+                (dailyFileDao.zeilen[schluessel]?.lastSyncedAt ?: 0L) >= tagBis.toEpochMilli(),
+            )
+
+            protokollDao.zwischenAufrufe.clear()
+            koordinator.syncEinenZyklus() // zweiter Lauf: derselbe Tag ist jetzt endgueltig
+
+            assertTrue(
+                "Der zweite Lauf darf denselben, jetzt endgueltig synchronisierten Tag nicht mehr laden",
+                protokollDao.zwischenAufrufe.none { ueberschneidetTag(it, tagVon, tagBis) },
+            )
+        }
+
+    // ---------------------------------------------------------------- OOM-Bugfix Schritt 4: stueckweise Aggregation
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 4: Kein einzelner `zwischen()`-Aufruf darf
+     * mehr als eine Abschnittslaenge (rund eine Stunde) umfassen - Speichergrenze als Proxy,
+     * siehe Testklasse. Deckt sowohl den heutigen Tag als auch alle 29 Nachhol-Tage ab (die 29
+     * Tage sind leer, werden aber trotzdem stueckweise angefragt statt als ein Aufruf pro Tag).
+     *
+     * Bewusst NUR Fensterdauern, die 60s glatt teilen (siehe `aggregiereInAbschnitten()`-KDoc,
+     * Abschnitt zum Bucket/Label-Fund): Fuer eine nicht teilende Fensterdauer (z. B. 7s) faellt
+     * die Implementierung absichtlich auf einen einzigen Aufruf ueber den ganzen Zeitraum
+     * zurueck, um nachweisbare Korrektheit ueber den Speichervorteil zu stellen - fuer DIESEN
+     * schmalen Fall gilt die Abschnittslaengen-Grenze also bewusst NICHT, siehe Test 3.
+     */
+    @Test
+    fun keinRohwertAufrufUeberschreitetEineAbschnittslaenge() =
+        runTest {
+            for (fensterSekunden in listOf(1, 10, 60, 3600)) {
+                val protokollDao = ProtokollierendesLevelSampleDao()
+                val mitternacht =
+                    uhr
+                        .now()
+                        .atZone(zone)
+                        .toLocalDate()
+                        .atStartOfDay(zone)
+                        .toInstant()
+                for (stunde in 0 until 9) {
+                    protokollDao.eingefuegt +=
+                        LevelSampleEntity(
+                            at = mitternacht.plusSeconds(stunde * 3600L + 60).toEpochMilli(),
+                            levelDb = 55.0,
+                            source = LevelSource.PCE_323,
+                        )
+                }
+                settings.driveAggregationSekunden = fensterSekunden
+                val koordinator =
+                    DriveSyncCoordinator(
+                        driveApi = FakeDriveApiClient(),
+                        levelSampleDao = protokollDao,
+                        dailyFileDao = FakeDailyFileDao(),
+                        noiseDao = noiseDao,
+                        settings = settings,
+                        now = uhr,
+                        zone = zone,
+                    )
+
+                koordinator.syncEinenZyklus()
+
+                val vielfaches = Math.round(3600.0 / fensterSekunden.coerceAtLeast(1)).coerceAtLeast(1)
+                val maxAbschnittMillis = fensterSekunden * 1000L * vielfaches
+                assertTrue(
+                    "Kein zwischen()-Aufruf darf bei Fensterdauer ${fensterSekunden}s mehr als " +
+                        "eine Abschnittslaenge ($maxAbschnittMillis ms) umfassen - war " +
+                        "${protokollDao.zwischenAufrufe.maxOfOrNull { it.second - it.first }}",
+                    protokollDao.zwischenAufrufe.all { (von, bis) -> (bis - von) <= maxAbschnittMillis },
+                )
+            }
+        }
+
+    /**
+     * Gegenprobe zum dokumentierten Fallback (siehe `aggregiereInAbschnitten()`-KDoc): Bei einer
+     * Fensterdauer, die 60s NICHT glatt teilt, muss tatsaechlich EIN Aufruf ueber den ganzen
+     * angeforderten Zeitraum erfolgen (nicht stueckweise) - sonst waere die Korrektheitsgarantie
+     * aus Test 3 fuer diesen Fall unbelegt.
+     */
+    @Test
+    fun beiNichtTeilenderFensterdauerFaelltDieAggregationAufEinenGesamtaufrufZurueck() =
+        runTest {
+            val protokollDao = ProtokollierendesLevelSampleDao()
+            protokollDao.eingefuegt +=
+                LevelSampleEntity(
+                    at = uhr.now().minusSeconds(3600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            settings.driveAggregationSekunden = 7
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = protokollDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+            val von =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .atStartOfDay(zone)
+                    .toInstant()
+
+            koordinator.syncEinenZyklus()
+
+            assertTrue(
+                "Bei 7s (teilt 60s nicht) muss der heutige Tag als EIN Aufruf ueber [von, jetzt) " +
+                    "geladen werden (dokumentierter Fallback), nicht stueckweise",
+                protokollDao.zwischenAufrufe.any { (a, b) -> a == von.toEpochMilli() && b == uhr.now().toEpochMilli() },
+            )
+        }
+
+    /**
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md Abschnitt 3, Test 3: Stueckweise Aggregation muss fuer
+     * dieselben Rohwerte exakt dasselbe Ergebnis liefern wie ein einziger Aufruf von
+     * [PegelAggregator.aggregiere] ueber den gesamten Zeitraum - verglichen ueber die
+     * tatsaechlich hochgeladene CSV (identischer Text = identische Zeilen, Reihenfolge und
+     * Werte). Geprueft fuer mehrere Fensterdauern, darunter eine (7s), die 3600 nicht teilt.
+     */
+    @Test
+    fun stueckweiseAggregationLiefertDasselbeErgebnisWieEinAufrufUeberDenGanzenTag() =
+        runTest {
+            val zufall = kotlin.random.Random(42)
+            uhr = TestUhr(Instant.parse("2026-08-19T21:59:50Z")) // kurz vor Mitternacht MESZ
+            val mitternacht =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .atStartOfDay(zone)
+                    .toInstant()
+            val tagesspanneMillis = Duration.between(mitternacht, uhr.now()).toMillis()
+
+            val samples =
+                (1..20_000).map {
+                    LevelSampleEntity(
+                        at = mitternacht.toEpochMilli() + zufall.nextLong(tagesspanneMillis),
+                        levelDb = 30.0 + zufall.nextDouble() * 50.0,
+                        source = if (zufall.nextBoolean()) LevelSource.PCE_323 else LevelSource.MIKROFON,
+                    )
+                }
+            val ereignisRecords =
+                (0 until 5).map { i ->
+                    NoiseRecord(
+                        id = i.toLong() + 1,
+                        timestamp = mitternacht.toEpochMilli() + zufall.nextLong(tagesspanneMillis),
+                        amplitude = 50.0,
+                        dbValue = 60.0 + i,
+                        filePath = "/pfad/nicht/relevant_$i.wav",
+                        detectedLabel = "Ereignis $i",
+                    )
+                }
+            val ereignisseDao =
+                object : FakeNoiseDao() {
+                    override suspend fun zwischenZeitpunkt(
+                        von: Long,
+                        bis: Long,
+                    ): List<NoiseRecord> = ereignisRecords.filter { it.timestamp in von until bis }
+                }
+            val erwarteteEreignisse =
+                ereignisRecords.map {
+                    ProtokollEreignis(
+                        at = Instant.ofEpochMilli(it.timestamp),
+                        pegelDb = it.calibratedDbA ?: it.dbValue,
+                        klassifikation = it.detectedLabel ?: it.label,
+                        notes = it.notes,
+                        weighting = it.meterWeighting,
+                    )
+                }
+
+            for (fensterSekunden in listOf(1, 10, 60, 300, 3600, 7)) {
+                val dao = FakeLevelSampleDao().apply { eingefuegt += samples }
+                settings.driveAggregationSekunden = fensterSekunden
+                val eigenerDriveApi = FakeDriveApiClient()
+                val koordinator =
+                    DriveSyncCoordinator(
+                        driveApi = eigenerDriveApi,
+                        levelSampleDao = dao,
+                        dailyFileDao = FakeDailyFileDao(),
+                        noiseDao = ereignisseDao,
+                        settings = settings,
+                        now = uhr,
+                        zone = zone,
+                    )
+
+                koordinator.syncEinenZyklus()
+
+                val erwartet =
+                    PegelAggregator.aggregiere(
+                        samples,
+                        erwarteteEreignisse,
+                        mitternacht,
+                        uhr.now(),
+                        Duration.ofSeconds(fensterSekunden.toLong()),
+                    )
+                val erwarteteCsv = DriveCsv.schreibe(erwartet, zone).toByteArray(Charsets.UTF_8)
+
+                assertArrayEquals(
+                    "Stueckweise Aggregation muss bei Fensterdauer ${fensterSekunden}s identisch " +
+                        "mit einem Aufruf ueber den ganzen Tag sein",
+                    erwarteteCsv,
+                    eigenerDriveApi.letzterAktualisierterInhalt,
+                )
+            }
+        }
+
+    /**
+     * Ueber die im Prompt geforderten Tests hinaus (siehe `aggregiereInAbschnitten()`-KDoc in
+     * [DriveSyncCoordinator]): belegt konkret den Fall, auf den dieser Bugfix in der Praxis
+     * abzielt - eine mehrstuendige Luecke (BLE-Aussetzer, Geraete-Neustart) MITTEN im Tag muss
+     * stueckweise genauso als KEINE_VERBINDUNG erscheinen wie bei einem einzigen Aufruf ueber
+     * den ganzen Tag. Dichte Zufallsdaten (Test 3) allein wuerden diesen Fall nie erzeugen - die
+     * Luecke faengt und endet hier ABSICHTLICH nicht auf einer Abschnittsgrenze, um auch eine
+     * Luecke zu pruefen, die einen Abschnitt nur teilweise fuellt.
+     */
+    @Test
+    fun mehrstuendigeLueckeMittenImTagWirdGenauWieBeimGesamtaufrufBehandelt() =
+        runTest {
+            uhr = TestUhr(Instant.parse("2026-08-19T21:59:50Z"))
+            val mitternacht =
+                uhr
+                    .now()
+                    .atZone(zone)
+                    .toLocalDate()
+                    .atStartOfDay(zone)
+                    .toInstant()
+            val samples = mutableListOf<LevelSampleEntity>()
+            var t = 6 * 3600L
+            while (t < 10 * 3600L + 900) {
+                samples +=
+                    LevelSampleEntity(
+                        at = mitternacht.plusSeconds(t).toEpochMilli(),
+                        levelDb = 50.0 + t % 10,
+                        source = LevelSource.PCE_323,
+                    )
+                t += 5
+            }
+            t = 14 * 3600L + 2400
+            while (t < 22 * 3600L) {
+                samples +=
+                    LevelSampleEntity(
+                        at = mitternacht.plusSeconds(t).toEpochMilli(),
+                        levelDb = 55.0 + t % 7,
+                        source = LevelSource.PCE_323,
+                    )
+                t += 5
+            }
+
+            for (fensterSekunden in listOf(10, 7)) {
+                val dao = FakeLevelSampleDao().apply { eingefuegt += samples }
+                settings.driveAggregationSekunden = fensterSekunden
+                val eigenerDriveApi = FakeDriveApiClient()
+                val koordinator =
+                    DriveSyncCoordinator(
+                        driveApi = eigenerDriveApi,
+                        levelSampleDao = dao,
+                        dailyFileDao = FakeDailyFileDao(),
+                        noiseDao = noiseDao,
+                        settings = settings,
+                        now = uhr,
+                        zone = zone,
+                    )
+
+                koordinator.syncEinenZyklus()
+
+                val erwartet =
+                    PegelAggregator.aggregiere(
+                        samples,
+                        emptyList(),
+                        mitternacht,
+                        uhr.now(),
+                        Duration.ofSeconds(fensterSekunden.toLong()),
+                    )
+                val erwarteteCsv = DriveCsv.schreibe(erwartet, zone).toByteArray(Charsets.UTF_8)
+
+                assertArrayEquals(
+                    "Eine mehrstuendige Luecke mitten im Tag muss stueckweise identisch mit " +
+                        "einem Aufruf ueber den ganzen Tag behandelt werden (Fensterdauer " +
+                        "${fensterSekunden}s)",
+                    erwarteteCsv,
+                    eigenerDriveApi.letzterAktualisierterInhalt,
+                )
+            }
+        }
 }
