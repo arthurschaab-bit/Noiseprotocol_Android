@@ -1,6 +1,5 @@
 package com.example.lrmprotokoll.diagnose.export
 
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -18,6 +17,7 @@ import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
+import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
@@ -51,6 +51,12 @@ data class BundleKontext(
     val ausloeser: String,
     val acraReportJson: String? = null,
     val threadDetails: String? = null,
+    /** Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: der Laufzeitzustand-Report
+     * von [com.example.lrmprotokoll.diagnose.acra.LaufzeitzustandCollector] - anders als
+     * [acraReportJson] nicht der volle ACRA-Report, sondern nur dessen
+     * `LAUFZEITZUSTAND`-Feld (siehe SupportOutboxReportSender). `null` fuer alle Bundle-Typen
+     * ausser einem Absturz-Bundle, bei dem der Collector gelaufen ist. */
+    val laufzeitzustandJson: String? = null,
     /** `null` liest Logcat live (fuer manuelle/periodische Bundles); bei einem Absturz-Bundle
      * uebergibt der ACRA-Sender den bereits von ACRA gesammelten Text (Schritt 5). */
     val logcatText: String? = null,
@@ -162,6 +168,15 @@ class SupportBundleExporter(
             }
             kontext.threadDetails?.let { inhalt ->
                 schreibeEintrag("crash/threads.txt") { it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8)) }
+            }
+            // Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: laeuft wie
+            // crash/acra_report.json durch den DiagnosticRedactor - derselbe Grund (Copilot-Fund
+            // PR #182): der Inhalt stammt aus demselben ACRA-Report und kann dieselben Muster
+            // enthalten (Geraetenamen, o.ae.).
+            kontext.laufzeitzustandJson?.let { inhalt ->
+                schreibeEintrag("crash/laufzeitzustand_beim_absturz.json") {
+                    it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8))
+                }
             }
             if (kontext.exitInfos.isNotEmpty()) {
                 schreibeEintrag("crash/exit_info.json") { it.write(buildExitInfoJson(kontext.exitInfos).toByteArray(StandardCharsets.UTF_8)) }
@@ -331,6 +346,14 @@ class SupportBundleExporter(
 
     private fun buildRuntimeJson(): String {
         val json = JSONObject()
+        // Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md: dieser Exporter-Lauf baut
+        // state/runtime.json NACH einem moeglichen Absturz (manuell, periodisch, oder - bei
+        // einem Absturz-Bundle - im ACRA-Sender-Prozess, siehe SupportOutboxReportSender-KDoc).
+        // Den Zustand IM Absturzmoment selbst liefert stattdessen
+        // crash/laufzeitzustand_beim_absturz.json, wenn vorhanden (LaufzeitzustandCollector,
+        // laeuft im abstuerzenden Prozess) - dieses Feld verhindert, dass die zwei Zeitpunkte
+        // verwechselt werden.
+        json.put("erfasst", "bei Bundle-Erstellung")
         // Geraete-/OS-Metadaten (aus main gemergt, vormals buildDeviceJson() im
         // Vor-Schritt-4-Exporter) - hier statt einer eigenen device.json, weil state/runtime.json
         // seit Schritt 4 ohnehin der Sammelort fuer Laufzeitkontext ist.
@@ -338,22 +361,11 @@ class SupportBundleExporter(
         json.put("osRelease", Build.VERSION.RELEASE)
         json.put("manufacturer", DiagnosticRedactor.redactString(Build.MANUFACTURER))
         json.put("model", DiagnosticRedactor.redactString(Build.MODEL))
-        val runtime = Runtime.getRuntime()
-        json.put("heapUsedBytes", runtime.totalMemory() - runtime.freeMemory())
-        json.put("heapFreeBytes", runtime.freeMemory())
-        json.put("heapMaxBytes", runtime.maxMemory())
 
-        runCatching {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            if (am != null) {
-                val memInfo = ActivityManager.MemoryInfo()
-                am.getMemoryInfo(memInfo)
-                json.put("systemAvailMemBytes", memInfo.availMem)
-                json.put("systemTotalMemBytes", memInfo.totalMem)
-                json.put("systemLowMemory", memInfo.lowMemory)
-                json.put("systemMemoryThresholdBytes", memInfo.threshold)
-            }
-        }
+        // Heap/ActivityManager.MemoryInfo/laufende Dienste: geteilt mit LaufzeitzustandCollector,
+        // der dieselben billigen Felder im abstuerzenden Prozess erfasst (Bugfix
+        // docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 1).
+        LaufzeitzustandJson.schreibeGemeinsameFelder(context, json)
 
         runCatching {
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -382,14 +394,6 @@ class SupportBundleExporter(
                 berechtigungen.put(name, gewaehrt)
             }
             json.put("berechtigungen", berechtigungen)
-        }
-
-        runCatching {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            val dienste = JSONArray()
-            @Suppress("DEPRECATION")
-            am?.getRunningServices(Integer.MAX_VALUE)?.forEach { dienste.put(it.service.className) }
-            json.put("laufendeDienste", dienste)
         }
 
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
