@@ -395,7 +395,7 @@ fun NoiseProtocolApp(
     // reiner Mikrofonlauf eine Session, die Aufforderung kommt also fuer beide Messarten.
     val offeneSession by container.database.sessionDao().offeneSessionFlow()
         .collectAsState(initial = null)
-    var fotoSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var fotoSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
     var zuletztGefragteSession by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv) {
         val id = offeneSession?.id
@@ -414,7 +414,7 @@ fun NoiseProtocolApp(
     // nicht mehr fest in den Einstellungen, sondern beim Messbeginn abfragen - dieselbe
     // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
-    var stammdatenSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var stammdatenSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
     var zuletztGefragteStammdatenSession by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
         val id = offeneSession?.id
