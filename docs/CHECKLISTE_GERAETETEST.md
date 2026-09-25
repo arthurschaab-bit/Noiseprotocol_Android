@@ -356,6 +356,23 @@ Wiederherstellungsweg die komplette Datenbank als `ByteArray` im Speicher hielt.
 | Diagnose-Screen/nächstes Support-Bundle nach einem Sync-Zyklus mit Datenbank-Sicherung prüfen | Keine neuen Einträge „Datenbank-Sicherung konnte nicht erstellt werden" und kein `OutOfMemoryError` zu den Sicherungszeitpunkten im Logcat-Ausschnitt | |
 | Sicherung einspielen (lokal über SAF oder „Von Drive wiederherstellen") auf einem Testgerät oder Emulator | Die App startet mit den zuvor gesicherten Daten neu, kein Absturz, keine Speicherwarnung während des Einspielens | |
 
+### F17 — High-End-Bericht: Fehlschläge sichtbar im Diagnoseprotokoll (Bugfix 24.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_BERICHT_HIGHEND.md`), aber **noch nicht auf echter Hardware
+gesehen**. Auslöser war ein gescheiterter High-End-Bericht auf dem Owner-Gerät (Huawei P30) am
+23.09.2026, der im direkt danach erstellten Support-Bundle **keine einzige Zeile** hinterließ
+(`docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 3) — die eigentliche Ursache dieses konkreten
+Fehlschlags ist weiterhin unbekannt.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Denselben High-End-Bericht wie am 23.09. (gleicher Zeitraum) auf dem P30 wiederholen, danach „Bundle jetzt erstellen und hochladen" | Im Bundle steht unter `log/events.jsonl` bzw. `log/breadcrumbs.jsonl` entweder „High-End-Bericht erzeugt: …" oder ein `REPORT_CREATE_FAILED` bzw. „nicht gestartet: …" mit erkennbarem Grund | |
+
+Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueError`, ist das ein
+eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
+zurückmelden statt selbst zu beheben.
+
 ---
 
 ## Was zurückgemeldet werden sollte
