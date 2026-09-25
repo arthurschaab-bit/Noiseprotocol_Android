@@ -33,6 +33,11 @@ class SettingsManager(
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
 
+    private companion object {
+        /** Eigene Konstante, weil [istBestandsinstallation] denselben Schluessel ausnehmen muss. */
+        const val SCHLUESSEL_ONBOARDING = "onboarding_completed"
+    }
+
     /**
      * Liest [schluessel] verschluesselt, mit einmaliger Migration aus dem Klartext-Feld in
      * [prefs]: bestehende Installationen sollen ihre ntfy-Konfiguration nicht verlieren, nur weil
@@ -602,9 +607,52 @@ class SettingsManager(
         set(value) = prefs.edit().putLong("support_bundle_gesundheit_letzte_db_groesse_bytes", value).apply()
 
     // ---------------------------------------------------------------- Onboarding & Erstkontakt (M9)
+
+    /**
+     * Ob die vierseitige Einfuehrung ([com.example.lrmprotokoll.ui.OnboardingScreen]) bereits
+     * gezeigt wurde.
+     *
+     * **Der Default haengt bewusst vom Zustand der Installation ab** (Owner-Entscheidung
+     * 25.09.2026, UX-Audit F-14): Vorher stand hier fest `true`, wodurch die Einfuehrung bei
+     * einer Neuinstallation nie von selbst erschien - sie war nur ueber
+     * Einstellungen -> "Einfuehrung erneut anzeigen" erreichbar. Ein fester Default `false` waere
+     * das andere Extrem: Dann bekaeme jede Bestandsinstallation die Einfuehrung beim naechsten
+     * Update einmalig nachgereicht, obwohl diese Nutzer die App laengst kennen.
+     *
+     * Deshalb entscheidet [istBestandsinstallation] - ohne neuen Speicherschluessel und ohne
+     * Migration.
+     */
     var onboardingCompleted: Boolean
-        get() = prefs.getBoolean("onboarding_completed", true)
-        set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+        get() = prefs.getBoolean(SCHLUESSEL_ONBOARDING, istBestandsinstallation())
+        set(value) = prefs.edit().putBoolean(SCHLUESSEL_ONBOARDING, value).apply()
+
+    /**
+     * Heuristik fuer "diese Installation gab es schon vor dem Onboarding-Fix": Steht in
+     * `noise_settings` irgendein anderer Schluessel als [SCHLUESSEL_ONBOARDING], hat die App
+     * hier bereits gelaufen.
+     *
+     * Warum das traegt: Auf einer frischen Installation ist die Datei leer, und bis zum ersten
+     * Lesen dieses Werts schreibt niemand hinein. Der Ablauf beim Start ist
+     * `LaermprotokollApp.onCreate` (baut nur den [com.example.lrmprotokoll.AppContainer] auf;
+     * `ProcessExitCollector.auswerten()` kehrt bei leerer Exit-Historie zurueck, *bevor* es
+     * `letzterVerarbeiteterProzessExitZeitstempel` schreibt) -> `MainActivity.onCreate` (liest
+     * `appLanguage`, schreibt nicht) -> `AppNavigation` liest diesen Wert. Umgekehrt schreibt
+     * jede Bestandsinstallation zwangslaeufig etwas: `monitoringWasActive` und
+     * `audioMonitoringWasActive` werden bei jedem Start bzw. Stopp der Ueberwachung gesetzt,
+     * jede geaenderte Einstellung ohnehin.
+     *
+     * Bewusst KEIN zusaetzlicher Schluessel ("installation_gesehen" o.ae.): Der muesste beim
+     * allerersten Start geschrieben werden und waere damit genau das Signal, das er messen soll -
+     * eine Henne-Ei-Konstruktion, die bei einem Absturz vor dem Schreiben kippt.
+     *
+     * Grenzfall, bewusst so: Wer die App installiert, nichts einstellt und keine Messung startet,
+     * gilt beim naechsten Start weiterhin als neu und sieht die Einfuehrung. Das ist richtig - er
+     * hat sie ja noch nicht gesehen.
+     */
+    private fun istBestandsinstallation(): Boolean {
+        val vorhandeneSchluessel = runCatching { prefs.all.keys }.getOrNull() ?: return true
+        return vorhandeneSchluessel.any { it != SCHLUESSEL_ONBOARDING }
+    }
 
     // ---------------------------------------------------------------- F2: Filter-Zustand Persistenz (M10)
     var filterDbMin: Float
