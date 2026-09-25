@@ -41,7 +41,32 @@ das, statt ihn als erledigt zu melden.
 
 ---
 
-## 1 · S-3 — Automatische Geräteverbindung, getrennt von der Aufzeichnung · **zuerst**
+## 0a · F-35 — technischer Blocker, **vor S-3 zu beheben**
+
+Am Emulator gemessen (PR #204, Lauf 36165915514): **Ohne `RECORD_AUDIO` und ohne gepinntes
+Messgerät kommt der Foreground-Service nicht in den Vordergrund** — er beendet sich selbst.
+
+`AndroidManifest.xml:102` deklariert `foregroundServiceType="microphone|connectedDevice"`.
+Liefert `berechneForegroundServiceType()` eine `0`, ruft `AudioRecordingService.kt:409` die
+Zweiargument-Variante `startForeground(id, notification)` auf — die erbt die Manifest-Typen,
+also auch `microphone`. Der catch-Block ruft **genau dieselbe Variante** noch einmal (`:423`)
+und beendet danach den Dienst (`:426`). Der „typlose Rückfall" ist nicht typlos.
+
+**Damit ist S-3 auf dem heutigen Pfad nicht umsetzbar.** „Nur verbinden" braucht einen
+Foreground-Service, der ohne Mikrofonberechtigung laufen darf.
+
+**Das ist eine Owner-Entscheidung, keine technische Wahl** (`AGENTS.md` §8a). Zur Auswahl:
+- `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` — verlangt gegenüber Google eine Begründung
+- `dataSync` — hat eigene Laufzeitgrenzen
+- gar kein Foreground-Service im „nur verbinden"-Pfad — ändert das Verhalten bei Bildschirmsperre
+
+**Frag den Owner, bevor du einen dieser Wege baust.** Der Test dafür liegt vor und ist an der
+richtigen Stelle mit dem Hinweis versehen, wo nach der Behebung `assertTrue(imVordergrund)`
+hingehört.
+
+---
+
+## 1 · S-3 — Automatische Geräteverbindung, getrennt von der Aufzeichnung
 
 Umfasst **F-02** und **F-03**. Das ist der Umbau mit dem größten unmittelbaren Effekt.
 
