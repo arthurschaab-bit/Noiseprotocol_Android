@@ -55,7 +55,14 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: aosp_atd
+          # Owner-Entscheidung 25.09.2026 (UX-Audit Kapitel 35.1, "System-Insets"):
+          # aosp_atd ist ein Automated Test Device und bringt bewusst keine SystemUI mit. Ohne
+          # SystemUI gibt es keine Statusleiste und damit keinen statusBars-Inset -
+          # SystemLeistenAbstandInstrumentedTest hat sich deshalb in drei Laeufen hintereinander
+          # ueber seine assumeTrue-Schranke weggeskippt und nichts geprueft. Ein Bild mit
+          # SystemUI ist die Voraussetzung dafuer, dass dieser Punkt ueberhaupt pruefbar wird.
+          # Kostet Bootzeit und Download je Lauf; das ist der bewusst in Kauf genommene Preis.
+          target: google_apis
           arch: x86_64
           force-avd-creation: false
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none

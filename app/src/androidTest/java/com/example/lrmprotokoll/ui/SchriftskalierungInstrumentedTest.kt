@@ -59,9 +59,9 @@ import org.junit.runner.RunWith
  * **Bewusst abgestufte Schaerfe.** Bei Standardschrift wird *kein Ueberlauf* verlangt: Das muss
  * heute gelten und ist damit eine echte Regressionsbremse. Bei 130 % und 200 % wird nur
  * verlangt, dass die Bedienelemente vorhanden, erreichbar und klickbar bleiben - also kein
- * Layout-Zusammenbruch. Ob dort zusaetzlich Text abgeschnitten wird, ist der noch offene Befund
- * F-21 des Audits. Das hier bereits als Erwartung festzuschreiben wuerde entweder den Fehler als
- * gewolltes Verhalten zementieren oder die CI rot faerben, bevor er behoben ist. **Sobald F-21
+ * Layout-Zusammenbruch. Ob dort zusaetzlich Text abgeschnitten wird, ist der Befund F-34 des Audits
+ * (Kopfzeile des Cockpits). Das hier bereits als Erwartung festzuschreiben wuerde entweder den Fehler als
+ * gewolltes Verhalten zementieren oder die CI rot faerben, bevor er behoben ist. **Sobald F-34
  * umgesetzt ist, gehoeren die Ueberlauf-Pruefungen auf alle drei Stufen ausgeweitet** - dafuer
  * steht [textLayout] bereits bereit.
  */
@@ -152,17 +152,17 @@ class SchriftskalierungInstrumentedTest {
         //                  ueberlaufHoehe=true maxBreite=0px maxHoehe=2147483647px
         //
         // maxBreite=0: Die Titelspalte bekommt ueberhaupt keine Breite zugeteilt - schon bei
-        // Schriftfaktor 1.0. Das ist derselbe Mechanismus wie bei Befund F-21
+        // Schriftfaktor 1.0. Das ist derselbe Mechanismus wie bei Befund F-34
         // (LiveCockpitCard.kt:223: Row mit SpaceBetween, Titelspalte `weight(1f, fill = false)`
         // und `maxLines = 1`, daneben die mitwachsenden Status-Badges): die Spalte bekommt nur,
         // was die Badges uebriglassen. Auf dem schmalen Geraetebild der CI - die
         // Startknopf-Messung weist nur 240 px Inhaltsbreite aus - bleibt davon nichts uebrig.
         //
-        // F-21 ist damit breiter als im Audit beschrieben: nicht nur ein Problem grosser
+        // F-34 ist damit breiter als zunaechst vermutet: nicht nur ein Problem grosser
         // Schrift, sondern generell eines knapper Breite. Solange der Befund offen ist, waere
         // jede Zusicherung auf dem Titel eine dauerhaft rote CI fuer einen bekannten,
         // unbehobenen Fehler. Geprueft wird deshalb nur, dass der Knoten ueberhaupt existiert.
-        // **Sobald F-21 umgesetzt ist, gehoert hier pruefeNichtAbgeschnitten("Cockpit-Titel", ...)
+        // **Sobald F-34 umgesetzt ist, gehoert hier pruefeNichtAbgeschnitten("Cockpit-Titel", ...)
         // hin** - die Messfunktion steht bereit.
         composeRule.onNodeWithText(titel).assertExists()
     }
@@ -190,18 +190,18 @@ class SchriftskalierungInstrumentedTest {
             .assertIsDisplayed()
             .assertHasClickAction()
 
-        // BEFUND F-21, am Emulator bestaetigt (Lauf 36161839317): Bei 130 % und 200 % ist der
+        // BEFUND F-34, am Emulator bestaetigt (Lauf 36161839317): Bei 130 % und 200 % ist der
         // Cockpit-Titel zwar noch im Semantikbaum, aber nicht mehr dargestellt
         // (assertIsDisplayed schlaegt fehl). Ursache ist die Kopfzeile in LiveCockpitCard.kt:223
         // - eine Row mit SpaceBetween, in der die Titelspalte `weight(1f, fill = false)` und
         // `maxLines = 1` hat, waehrend die Status-Badges daneben mitwachsen. Die Titelspalte wird
         // dabei auf praktisch null Breite zusammengedrueckt.
         //
-        // Das ist genau der noch offene Befund F-21 des Audits, jetzt nicht mehr nur vermutet
+        // Das ist genau der Befund F-34 des Audits, jetzt nicht mehr nur vermutet
         // sondern gemessen. Hier wird deshalb bewusst NUR die Existenz geprueft: eine harte
-        // Sichtbarkeitszusicherung wuerde die CI rot faerben, bevor F-21 behoben ist - und das
+        // Sichtbarkeitszusicherung wuerde die CI rot faerben, bevor F-34 behoben ist - und das
         // Klassen-KDoc verlangt auf diesen Stufen ohnehin nur die Bedienbarkeit der
-        // BEDIENELEMENTE; der Titel ist keines. **Sobald F-21 umgesetzt ist, gehoert hier
+        // BEDIENELEMENTE; der Titel ist keines. **Sobald F-34 umgesetzt ist, gehoert hier
         // assertIsDisplayed() hin.**
         composeRule
             .onNodeWithText(composeRule.activity.getString(R.string.cockpit_title))
@@ -246,7 +246,7 @@ class SchriftskalierungInstrumentedTest {
         // rief setContent zweimal auf; das quittiert die ComposeTestRule mit
         // "Cannot call setContent twice per test!" (Emulator-Lauf 25.09.2026). Geprueft wird am
         // Cockpit-Titeltext in derselben Typografie, nicht am Startknopf - der hat eine feste
-        // Hoehe von 56 dp und kann gar nicht mitwachsen (genau das ist Teil von Befund F-21).
+        // Hoehe von 56 dp und kann gar nicht mitwachsen (das gehoert zu Befund F-34).
         val titel = composeRule.activity.getString(R.string.cockpit_title)
 
         composeRule.setContent {
