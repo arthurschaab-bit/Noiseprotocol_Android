@@ -89,10 +89,11 @@ jobs:
         run: python .github/scripts/ci-timing.py run "Android Lint" -- ./gradlew lintDebug --stacktrace
 
       # Bekannte Stil-Verstoesse bleiben wie bisher sichtbar und nicht blockierend.
+      # --continue stellt sicher, dass alle drei SourceSets vollstaendig geprueft werden (PR #201).
       - name: Run ktlint
         if: ${{ !cancelled() && steps.gradle.outcome == 'success' }}
         continue-on-error: true
-        run: python .github/scripts/ci-timing.py run "ktlint (informativ)" -- ./gradlew ktlintCheck --stacktrace
+        run: python .github/scripts/ci-timing.py run "ktlint (informativ)" -- ./gradlew ktlintCheck --stacktrace --continue
 
       - name: Testbericht in die Zusammenfassung schreiben
         if: ${{ !cancelled() }}

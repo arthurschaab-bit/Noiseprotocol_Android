@@ -116,6 +116,22 @@ object DriveSyncPlanung {
 
     /**
      * Startet sofort einen einmaligen Synchronisationslauf (z.B. nach einer WAV-Aufnahme).
+     *
+     * `KEEP` statt `REPLACE` (OOM-Bugfix Schritt 2, PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1,
+     * Owner-Entscheidung 23.09.2026): `REPLACE` brach einen noch laufenden bzw. eingeplanten
+     * Sofortlauf ab, sobald waehrend seiner Laufzeit ein weiteres Laermereignis eintraf - genau
+     * das liess das 30-Tage-Nachholen (`DriveSyncCoordinator.holeVersaeumteTageNach`) nie fertig
+     * werden ("Job was cancelled" im Logcat, `drive_daily_files` blieb bei 9 Eintraegen haengen).
+     *
+     * Owner-Vorgabe: Trifft ein Ereignis ein, waehrend ein Sofortlauf bereits laeuft, bekommt es
+     * KEINEN eigenen Lauf mehr - es geht spaetestens mit dem naechsten periodischen Lauf (<= 30
+     * min, [plane]) nach Drive. Vier Aufrufer loesen `starteSofort()` aus ([AudioRecordingService]
+     * nach jeder WAV-Aufnahme, `FotoDokumentationSheet` und `ProtokollDetailScreen` fuer
+     * Beweismaterial, [com.example.lrmprotokoll.video.VideoMuxWorker] nach dem Muxen) - alle
+     * kommentieren ihren Aufruf mit "sofort hochladen, nicht auf den naechsten Zyklus warten".
+     * Keiner verlangt zwingend einen GARANTIERTEN sofortigen Upload (kein Rueckgabewert wird
+     * ausgewertet, keine UI wartet auf den Abschluss) - die 30-Minuten-Verzoegerung im
+     * Kollisionsfall ist ein bewusst in Kauf genommener Zielkonflikt, kein unbemerkter.
      */
     fun starteSofort(context: Context) {
         val app = context.applicationContext as? LaermprotokollApp
@@ -131,7 +147,7 @@ object DriveSyncPlanung {
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "${WORK_NAME}_immediate",
-                ExistingWorkPolicy.REPLACE,
+                ExistingWorkPolicy.KEEP,
                 anfrage,
             )
         } catch (e: Throwable) {

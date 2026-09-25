@@ -328,6 +328,8 @@ Absturz-Bundle, 2 MB je periodischem Bundle, Einzelobergrenzen siehe Konzept 4.5
 - Größenbudget eingehalten: 10 MB je Absturz-Bundle, 2 MB je periodischem Bundle, plus die
   Einzelobergrenzen aus Konzept 4.5. Reißt das ZIP die Grenze dennoch, wird in der dort
   festgelegten Reihenfolge gekürzt (`events.jsonl`, dann `logcat.txt`, zuletzt `crash/`).
+  *Nachträglich geändert (Owner-Entscheidung O-7, 23.09.2026, Konzept 4.5/8a): `crash/` wird nie
+  gekürzt, das Budget ist für Absturz-Bundles ein Richtwert.*
 - Bestehende `SupportBundleExporter`-Tests angepasst und grün.
 - `assembleDebug` und `test` grün, Ausgabe im PR.
 

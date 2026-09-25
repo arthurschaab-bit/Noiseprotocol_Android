@@ -14,18 +14,24 @@ import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
-import java.time.LocalDate
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Der UI-Pfad erreicht den Runner und zeigt dessen Dateifehler ohne Absturz. */
 @RunWith(RobolectricTestRunner::class)
@@ -34,6 +40,15 @@ import org.robolectric.annotation.GraphicsMode
 class BerichtErstellenSheetTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    @After
+    fun datenbankZuruecksetzen() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        runBlocking(Dispatchers.IO) {
+            app.container.database.clearAllTables()
+        }
+    }
 
     @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
@@ -72,12 +87,13 @@ class BerichtErstellenSheetTest {
             )
         }
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
-        val startButton = composeRule.onNodeWithTag("btn_bericht_erstellen_start")
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
-            runCatching { startButton.assertIsEnabled() }.isSuccess
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            runCatching {
+                composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
+            }.isSuccess
         }
-        startButton.performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
             composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -85,5 +101,48 @@ class BerichtErstellenSheetTest {
         assertTrue(runnerAufgerufen.get())
         composeRule.onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
+    }
+
+    /**
+     * Test 3 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3): muss ohne die Änderung rot sein. Eine
+     * abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein Breadcrumb, kein
+     * REPORT_CREATE_FAILED (das war bisher nirgends verwendet, siehe docs/BEFUNDE_P30_2026-09-23.md
+     * Abschnitt 3).
+     */
+    @Test fun abgelehnteVorpruefungHinterlaesstBreadcrumbOhneReportEvent() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val diagnosticsReporter = app.container.diagnosticsReporter
+
+        // Bewusst OHNE initialHighEndRange: erzeugen() lehnt bereits den fehlenden Datumsbereich ab,
+        // bevor HighEndReportExport.generate() je aufgerufen wird.
+        composeRule.setContent {
+            BerichtScreen(onBack = {}, onOpenSettings = {})
+        }
+        composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            runCatching {
+                composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
+            }.isSuccess
+        }
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule
+                .onAllNodesWithTag("bericht_erstellen_fehler")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        composeRule
+            .onNodeWithTag("bericht_erstellen_fehler")
+            .assertTextEquals("Bitte zuerst einen Datumsbereich wählen.")
+        val nichtGestartet =
+            diagnosticsReporter.recentBreadcrumbs().filter {
+                it.category == "Bericht" &&
+                    it.message == "High-End-Bericht nicht gestartet: Bitte zuerst einen Datumsbereich wählen."
+            }
+        assertEquals("Genau ein Breadcrumb für die abgelehnte Vorprüfung", 1, nichtGestartet.size)
+        assertEquals(DiagnosticSeverity.INFO, nichtGestartet.single().level)
+        val reportEvents = diagnosticsReporter.recentEvents().filter { it.code == DiagnosticCode.REPORT_CREATE_FAILED }
+        assertTrue("Eine abgelehnte Vorprüfung darf kein Report-Event erzeugen", reportEvents.isEmpty())
     }
 }

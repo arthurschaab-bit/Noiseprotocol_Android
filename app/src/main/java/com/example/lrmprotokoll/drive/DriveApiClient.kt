@@ -103,6 +103,27 @@ interface DriveApiClient {
         fortschritt: suspend (bestaetigt: Long, gesamt: Long) -> Unit = { _, _ -> },
     ): Result<String>
 
+    /**
+     * Aktualisiert den Inhalt einer BESTEHENDEN Datei per resumable Upload (Drive v3, `PATCH`,
+     * `uploadType=resumable`) - das Gegenstueck zu [dateiHochladenResumable] fuer eine bereits
+     * bekannte [fileId], mit denselben Speichereigenschaften: [datei] wird nie vollstaendig
+     * eingelesen (Bugfix 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md - fuer die
+     * ~500-MB-Datenbanksicherung, siehe [com.example.lrmprotokoll.drive.DriveDatenbankSicherung],
+     * waere [dateiAktualisieren] mit seinem `ByteArray`-Parameter derselbe OutOfMemoryError, den
+     * [dateiHochladenResumable] fuer den Video-Upload (M11 Etappe B) bereits vermeidet).
+     *
+     * Parameter und Rueckruf-Verhalten wie [dateiHochladenResumable] - siehe dort fuer die
+     * Begruendung von [fortsetzenAb]/[sessionGestartet]/[fortschritt].
+     */
+    suspend fun dateiAktualisierenResumable(
+        fileId: String,
+        datei: java.io.File,
+        mimeType: String,
+        fortsetzenAb: String? = null,
+        sessionGestartet: suspend (sessionUri: String) -> Unit = {},
+        fortschritt: suspend (bestaetigt: Long, gesamt: Long) -> Unit = { _, _ -> },
+    ): Result<Unit>
+
     /** Ersetzt den Inhalt einer bestehenden Datei - aktualisiert in place (Plan 8.4.4). */
     suspend fun dateiAktualisieren(
         fileId: String,
@@ -119,4 +140,15 @@ interface DriveApiClient {
      * Video-Upload gibt es hier keine 200-MB-Groessenordnung.
      */
     suspend fun dateiHerunterladen(fileId: String): Result<ByteArray>
+
+    /**
+     * Laedt den Inhalt einer Datei STREAMEND nach [ziel] herunter, statt ihn (wie
+     * [dateiHerunterladen]) als `ByteArray` zurueckzugeben - fuer die Datenbank-Wiederherstellung
+     * seit dem Streaming-Umbau (Bugfix 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md): eine
+     * ~500-MB-Sicherung komplett im Speicher zu halten waere derselbe Fehler wie beim Hochladen.
+     */
+    suspend fun dateiHerunterladenNach(
+        fileId: String,
+        ziel: java.io.File,
+    ): Result<Unit>
 }

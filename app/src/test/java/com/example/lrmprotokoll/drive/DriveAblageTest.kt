@@ -1,11 +1,11 @@
 package com.example.lrmprotokoll.drive
 
-import java.time.Instant
-import java.time.ZoneId
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
+import java.time.ZoneId
 
 private val BERLIN: ZoneId = ZoneId.of("Europe/Berlin")
 
@@ -15,7 +15,6 @@ private val BERLIN: ZoneId = ZoneId.of("Europe/Berlin")
  * niemand sucht.
  */
 class DriveAblageTest {
-
     @Test
     fun derTagesordnerHeisstNachDemDatumInDerZeitzoneDesNutzers() {
         // 23:30 Ortszeit ist 21:30 UTC - der Ordner muss trotzdem der des laufenden Tages sein.
@@ -55,128 +54,181 @@ class DriveAblageTest {
         var suchAufrufe = 0
         private var naechsteId = 1
 
-        override suspend fun ordnerAnlegen(name: String, elternId: String?): Result<String> {
+        override suspend fun ordnerAnlegen(
+            name: String,
+            elternId: String?,
+        ): Result<String> {
             angelegt += name to elternId
             val id = "ordner-${naechsteId++}"
             vorhandene["$elternId/$name"] = id
             return Result.success(id)
         }
 
-        override suspend fun ordnerSuchen(name: String, elternId: String?): Result<DriveDatei?> {
+        override suspend fun ordnerSuchen(
+            name: String,
+            elternId: String?,
+        ): Result<DriveDatei?> {
             suchAufrufe++
             val id = vorhandene["$elternId/$name"] ?: return Result.success(null)
             return Result.success(DriveDatei(id, name))
         }
 
         override suspend fun ordnerAuflisten() = Result.success(emptyList<DriveDatei>())
-        override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String) = Result.success(Unit)
-        override suspend fun dateiSuchen(name: String, ordnerId: String) = Result.success<DriveDatei?>(null)
-        override suspend fun dateienInOrdnerAuflisten(ordnerId: String) = Result.success(emptySet<String>())
-        override suspend fun dateiAnlegen(
-            name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
-        ) = Result.success("datei")
-        override suspend fun dateiAktualisieren(
-            fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
+
+        override suspend fun ordnerUmbenennen(
+            ordnerId: String,
+            neuerName: String,
         ) = Result.success(Unit)
-        override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> =
-            throw NotImplementedError("im Test nicht benoetigt")
+
+        override suspend fun dateiSuchen(
+            name: String,
+            ordnerId: String,
+        ) = Result.success<DriveDatei?>(null)
+
+        override suspend fun dateienInOrdnerAuflisten(ordnerId: String) = Result.success(emptySet<String>())
+
+        override suspend fun dateiAnlegen(
+            name: String,
+            ordnerId: String,
+            inhalt: ByteArray,
+            mimeType: String,
+            gzip: Boolean,
+        ) = Result.success("datei")
+
+        override suspend fun dateiAktualisieren(
+            fileId: String,
+            inhalt: ByteArray,
+            mimeType: String,
+            gzip: Boolean,
+        ) = Result.success(Unit)
+
+        override suspend fun dateiHerunterladen(fileId: String): Result<ByteArray> = throw NotImplementedError("im Test nicht benoetigt")
+
+        override suspend fun dateiHerunterladenNach(
+            fileId: String,
+            ziel: java.io.File,
+        ): Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun dateiHochladenResumable(
-            name: String, ordnerId: String, datei: java.io.File, mimeType: String,
-            fortsetzenAb: String?, sessionGestartet: suspend (String) -> Unit,
+            name: String,
+            ordnerId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
         ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
+
+        override suspend fun dateiAktualisierenResumable(
+            fileId: String,
+            datei: java.io.File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     @Test
-    fun fehlendeEbenenWerdenAngelegt() = runTest {
-        val api = FakeOrdnerApi()
-        val baum = DriveOrdnerbaum(api)
+    fun fehlendeEbenenWerdenAngelegt() =
+        runTest {
+            val api = FakeOrdnerApi()
+            val baum = DriveOrdnerbaum(api)
 
-        val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
+            val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
 
-        assertEquals(listOf("2026-09-04" to "wurzel", "Fotos" to "ordner-1"), api.angelegt)
-        assertEquals("ordner-2", id)
-    }
-
-    @Test
-    fun einVorhandenerOrdnerWirdWiederverwendetStattDupliziert() = runTest {
-        // Drive erlaubt gleichnamige Ordner nebeneinander - ohne die Suche haette der Nutzer
-        // nach fuenf Zyklen fuenf "Fotos"-Ordner.
-        val api = FakeOrdnerApi(mutableMapOf("wurzel/2026-09-04" to "tag-1", "tag-1/Fotos" to "fotos-1"))
-        val baum = DriveOrdnerbaum(api)
-
-        val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
-
-        assertEquals("fotos-1", id)
-        assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
-    }
+            assertEquals(listOf("2026-09-04" to "wurzel", "Fotos" to "ordner-1"), api.angelegt)
+            assertEquals("ordner-2", id)
+        }
 
     @Test
-    fun derZwischenspeicherSpartDieWiederholteSuche() = runTest {
-        // Sonst kostete jeder einzelne Upload zwei zusaetzliche API-Aufrufe und liefe bei
-        // Dutzenden Fotos in Drives Rate-Limit.
-        val api = FakeOrdnerApi()
-        val baum = DriveOrdnerbaum(api)
+    fun einVorhandenerOrdnerWirdWiederverwendetStattDupliziert() =
+        runTest {
+            // Drive erlaubt gleichnamige Ordner nebeneinander - ohne die Suche haette der Nutzer
+            // nach fuenf Zyklen fuenf "Fotos"-Ordner.
+            val api = FakeOrdnerApi(mutableMapOf("wurzel/2026-09-04" to "tag-1", "tag-1/Fotos" to "fotos-1"))
+            val baum = DriveOrdnerbaum(api)
 
-        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
-        val nachErstemLauf = api.suchAufrufe
-        repeat(5) { baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow() }
+            val id = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
 
-        assertEquals("Kein einziger weiterer Suchaufruf", nachErstemLauf, api.suchAufrufe)
-    }
+            assertEquals("fotos-1", id)
+            assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
+        }
 
     @Test
-    fun verschiedeneKategorienTeilenSichDenTagesordner() = runTest {
-        val api = FakeOrdnerApi()
-        val baum = DriveOrdnerbaum(api)
+    fun derZwischenspeicherSpartDieWiederholteSuche() =
+        runTest {
+            // Sonst kostete jeder einzelne Upload zwei zusaetzliche API-Aufrufe und liefe bei
+            // Dutzenden Fotos in Drives Rate-Limit.
+            val api = FakeOrdnerApi()
+            val baum = DriveOrdnerbaum(api)
 
-        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
-        baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS).getOrThrow()
+            baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
+            val nachErstemLauf = api.suchAufrufe
+            repeat(5) { baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow() }
 
-        assertEquals(
-            "Der Tagesordner darf nur einmal entstehen",
-            1,
-            api.angelegt.count { it.first == "2026-09-04" },
-        )
-    }
+            assertEquals("Kein einziger weiterer Suchaufruf", nachErstemLauf, api.suchAufrufe)
+        }
+
+    @Test
+    fun verschiedeneKategorienTeilenSichDenTagesordner() =
+        runTest {
+            val api = FakeOrdnerApi()
+            val baum = DriveOrdnerbaum(api)
+
+            baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.FOTOS).getOrThrow()
+            baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS).getOrThrow()
+
+            assertEquals(
+                "Der Tagesordner darf nur einmal entstehen",
+                1,
+                api.angelegt.count { it.first == "2026-09-04" },
+            )
+        }
 
     // ------------------------------------------------------------------ M12 Schritt 5: Support-Bundle-Ordner
 
     @Test
-    fun supportBundleOrdnerLiegtDirektUnterDerWurzelNichtUnterEinemTagesordner() = runTest {
-        val api = FakeOrdnerApi()
-        val baum = DriveOrdnerbaum(api)
+    fun supportBundleOrdnerLiegtDirektUnterDerWurzelNichtUnterEinemTagesordner() =
+        runTest {
+            val api = FakeOrdnerApi()
+            val baum = DriveOrdnerbaum(api)
 
-        baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
+            baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
 
-        assertEquals(
-            "Der Support-Ordner darf nicht unter einem Tagesordner liegen (Konzept 4.6)",
-            listOf("Support-Bundle" to "wurzel"),
-            api.angelegt,
-        )
-    }
-
-    @Test
-    fun supportBundleOrdnerWirdWiederverwendetStattDupliziert() = runTest {
-        val api = FakeOrdnerApi(mutableMapOf("wurzel/Support-Bundle" to "support-1"))
-        val baum = DriveOrdnerbaum(api)
-
-        val id = baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
-
-        assertEquals("support-1", id)
-        assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
-    }
-
-    @Test
-    fun einFehlerBeimAnlegenWirdDurchgereichtStattStillInDieWurzelAbzulegen() = runTest {
-        val api = object : DriveApiClient by FakeOrdnerApi() {
-            override suspend fun ordnerSuchen(name: String, elternId: String?) =
-                Result.failure<DriveDatei?>(DriveApiException("kein Zugriff", httpCode = 403))
+            assertEquals(
+                "Der Support-Ordner darf nicht unter einem Tagesordner liegen (Konzept 4.6)",
+                listOf("Support-Bundle" to "wurzel"),
+                api.angelegt,
+            )
         }
-        val baum = DriveOrdnerbaum(api)
 
-        val ergebnis = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS)
+    @Test
+    fun supportBundleOrdnerWirdWiederverwendetStattDupliziert() =
+        runTest {
+            val api = FakeOrdnerApi(mutableMapOf("wurzel/Support-Bundle" to "support-1"))
+            val baum = DriveOrdnerbaum(api)
 
-        assertTrue(ergebnis.isFailure)
-    }
+            val id = baum.ordnerFuerSupportBundles("wurzel").getOrThrow()
+
+            assertEquals("support-1", id)
+            assertTrue("Nichts anzulegen", api.angelegt.isEmpty())
+        }
+
+    @Test
+    fun einFehlerBeimAnlegenWirdDurchgereichtStattStillInDieWurzelAbzulegen() =
+        runTest {
+            val api =
+                object : DriveApiClient by FakeOrdnerApi() {
+                    override suspend fun ordnerSuchen(
+                        name: String,
+                        elternId: String?,
+                    ) = Result.failure<DriveDatei?>(DriveApiException("kein Zugriff", httpCode = 403))
+                }
+            val baum = DriveOrdnerbaum(api)
+
+            val ergebnis = baum.ordnerFuer("wurzel", "2026-09-04", DriveKategorie.VIDEOS)
+
+            assertTrue(ergebnis.isFailure)
+        }
 }

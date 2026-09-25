@@ -74,6 +74,26 @@ class DiagnosticRedactorTest {
         assertEquals("OK", nested["status"])
     }
 
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 1):
+     * "google_account_name" (Klarname aus Google-Sign-In, SettingsManager) fehlte in
+     * SENSITIVE_KEYS, waehrend die gepaarte "google_account_email" bereits ueber EMAIL_PATTERN
+     * geschwaerzt wurde. "drive_folder_name" ist bewusst als unverdaechtiger Schluessel dabei,
+     * um zu zeigen, dass der neue Eintrag ("account_name") gezielt trifft statt breit zu matchen.
+     */
+    @Test
+    fun redactsGoogleAccountDisplayNameButKeepsUnrelatedNameKey() {
+        val data = mapOf(
+            "google_account_name" to "Max Mustermann",
+            "drive_folder_name" to "Laermprotokolle 2026",
+        )
+
+        val redacted = DiagnosticRedactor.redactMap(data)
+
+        assertEquals("[REDACTED]", redacted["google_account_name"])
+        assertEquals("Laermprotokolle 2026", redacted["drive_folder_name"])
+    }
+
     @Test
     fun redactsDiagnosticEventAndBreadcrumb() {
         val event = DiagnosticEvent(

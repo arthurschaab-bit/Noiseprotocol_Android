@@ -47,7 +47,6 @@ class HomeNavigationComposeTest {
         // Layout-Umbau (Owner-Vorgabe 12.09.2026): Einstellungen haengt nicht mehr an einem
         // eigenen Bottom-Nav-Tab, sondern am Drei-Punkt-Menue des Start-Screens.
         composeRule.onNodeWithTag("btn_overflow_menu").performClick()
-        composeRule.waitForIdle()
         val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()
@@ -84,7 +83,6 @@ class HomeNavigationComposeTest {
         val reportLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_report)
 
         composeRule.onNodeWithTag("btn_overflow_menu").performClick()
-        composeRule.waitForIdle()
         val settingsLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)
         composeRule.onAllNodesWithText(settingsLabel).onFirst().performClick()
         composeRule.waitForIdle()

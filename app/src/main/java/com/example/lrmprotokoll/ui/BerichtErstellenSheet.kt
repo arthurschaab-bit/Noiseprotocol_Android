@@ -78,6 +78,7 @@ fun BerichtErstellenSheet(
 ) {
     val context = LocalContext.current
     val db = remember { (context.applicationContext as LaermprotokollApp).container.database }
+    val diagnosticsReporter = remember { (context.applicationContext as LaermprotokollApp).container.diagnosticsReporter }
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -118,13 +119,16 @@ fun BerichtErstellenSheet(
         }
         if (fehler != null) {
             meldung = fehler
+            // Eine abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein
+            // Breadcrumb, kein Report-Event (PROMPT_FIX_BERICHT_HIGHEND.md Schritt 1).
+            diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht nicht gestartet: $fehler")
             return
         }
         erzeugt = true
         meldung = null
         scope.launch {
             val ergebnis = try {
-                HighEndReportExport(context, db).generate(tage, aktuell!!, ausgewaehlteIds, runner)
+                HighEndReportExport(context, db, diagnosticsReporter).generate(tage, aktuell!!, ausgewaehlteIds, runner)
             } catch (e: Exception) {
                 ChaquopyReportRunner.Ergebnis.Fehler("Berichtserzeugung konnte nicht gestartet werden: ${e.message}", e)
             }

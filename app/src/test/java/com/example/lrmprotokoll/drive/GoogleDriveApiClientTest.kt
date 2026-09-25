@@ -1,6 +1,5 @@
 package com.example.lrmprotokoll.drive
 
-import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -12,10 +11,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.zip.GZIPInputStream
 
 /**
  * Prueft den Drive-REST-Client gegen einen echten HTTP-Server ([MockWebServer]), nicht gegen
@@ -28,12 +30,16 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class GoogleDriveApiClientTest {
+    @get:Rule
+    val ordner = TemporaryFolder()
 
     private lateinit var server: MockWebServer
     private lateinit var client: GoogleDriveApiClient
     private val token = FakeTokenProvider()
 
-    private class FakeTokenProvider(var token: Result<String> = Result.success("test-token")) : AccessTokenProvider {
+    private class FakeTokenProvider(
+        var token: Result<String> = Result.success("test-token"),
+    ) : AccessTokenProvider {
         override suspend fun holeToken(): Result<String> = token
     }
 
@@ -50,278 +56,352 @@ class GoogleDriveApiClientTest {
     }
 
     @Test
-    fun ordnerAnlegenSendetKorrektenPfadUndKoerper() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"ordner-123"}""").setResponseCode(200))
+    fun ordnerAnlegenSendetKorrektenPfadUndKoerper() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"ordner-123"}""").setResponseCode(200))
 
-        val ergebnis = client.ordnerAnlegen("Lärmprotokoll")
+            val ergebnis = client.ordnerAnlegen("Lärmprotokoll")
 
-        assertEquals("ordner-123", ergebnis.getOrThrow())
-        val anfrage = server.takeRequest()
-        assertEquals("POST", anfrage.method)
-        assertEquals("/drive/v3/files", anfrage.path)
-        val koerper = anfrage.body.readUtf8()
-        assertTrue(koerper.contains("\"mimeType\":\"application\\/vnd.google-apps.folder\""))
-        assertTrue(koerper.contains("Lärmprotokoll"))
-        assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
-    }
-
-    @Test
-    fun ordnerSuchenLiefertGefundenenOrdner() = runTest {
-        server.enqueue(
-            MockResponse().setBody("""{"files":[{"id":"ordner-found","name":"Lärmprotokoll"}]}""")
-        )
-
-        val ergebnis = client.ordnerSuchen("Lärmprotokoll")
-
-        val ordner = ergebnis.getOrThrow()
-        assertEquals("ordner-found", ordner?.id)
-        assertEquals("Lärmprotokoll", ordner?.name)
-        val anfrage = server.takeRequest()
-        assertEquals("GET", anfrage.method)
-        assertTrue(anfrage.path!!.contains("mimeType"))
-    }
+            assertEquals("ordner-123", ergebnis.getOrThrow())
+            val anfrage = server.takeRequest()
+            assertEquals("POST", anfrage.method)
+            assertEquals("/drive/v3/files", anfrage.path)
+            val koerper = anfrage.body.readUtf8()
+            assertTrue(koerper.contains("\"mimeType\":\"application\\/vnd.google-apps.folder\""))
+            assertTrue(koerper.contains("Lärmprotokoll"))
+            assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
+        }
 
     @Test
-    fun ordnerAuflistenLiefertAlleGefundenenOrdner() = runTest {
-        server.enqueue(
-            MockResponse().setBody("""{"files":[{"id":"ordner-1","name":"Ordner A"},{"id":"ordner-2","name":"Ordner B"}]}""")
-        )
+    fun ordnerSuchenLiefertGefundenenOrdner() =
+        runTest {
+            server.enqueue(
+                MockResponse().setBody("""{"files":[{"id":"ordner-found","name":"Lärmprotokoll"}]}"""),
+            )
 
-        val ergebnis = client.ordnerAuflisten()
+            val ergebnis = client.ordnerSuchen("Lärmprotokoll")
 
-        val liste = ergebnis.getOrThrow()
-        assertEquals(2, liste.size)
-        assertEquals("ordner-1", liste[0].id)
-        assertEquals("Ordner A", liste[0].name)
-        assertEquals("ordner-2", liste[1].id)
-        assertEquals("Ordner B", liste[1].name)
-    }
-
-    @Test
-    fun ordnerUmbenennenSendetPatchMitNeuemNamen() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"ordner-123","name":"Neuer Name"}""").setResponseCode(200))
-
-        val ergebnis = client.ordnerUmbenennen("ordner-123", "Neuer Name")
-
-        assertTrue(ergebnis.isSuccess)
-        val anfrage = server.takeRequest()
-        assertEquals("PATCH", anfrage.method)
-        assertEquals("/drive/v3/files/ordner-123", anfrage.path)
-        val koerper = anfrage.body.readUtf8()
-        assertTrue(koerper.contains("\"name\":\"Neuer Name\""))
-    }
+            val ordner = ergebnis.getOrThrow()
+            assertEquals("ordner-found", ordner?.id)
+            assertEquals("Lärmprotokoll", ordner?.name)
+            val anfrage = server.takeRequest()
+            assertEquals("GET", anfrage.method)
+            assertTrue(anfrage.path!!.contains("mimeType"))
+        }
 
     @Test
-    fun dateiSuchenLiefertGefundeneDatei() = runTest {
-        server.enqueue(
-            MockResponse().setBody("""{"files":[{"id":"datei-1","name":"laermprotokoll_2026-08-19.csv"}]}""")
-        )
+    fun ordnerAuflistenLiefertAlleGefundenenOrdner() =
+        runTest {
+            server.enqueue(
+                MockResponse().setBody("""{"files":[{"id":"ordner-1","name":"Ordner A"},{"id":"ordner-2","name":"Ordner B"}]}"""),
+            )
 
-        val ergebnis = client.dateiSuchen("laermprotokoll_2026-08-19.csv", "ordner-123")
+            val ergebnis = client.ordnerAuflisten()
 
-        val datei = ergebnis.getOrThrow()
-        assertEquals("datei-1", datei?.id)
-        val anfrage = server.takeRequest()
-        assertEquals("GET", anfrage.method)
-        assertTrue(anfrage.path!!.contains("q="))
-    }
-
-    @Test
-    fun dateiSuchenOhneTrefferLiefertNull() = runTest {
-        server.enqueue(MockResponse().setBody("""{"files":[]}"""))
-
-        val ergebnis = client.dateiSuchen("nichtvorhanden.csv", "ordner-123")
-
-        assertNull(ergebnis.getOrThrow())
-    }
+            val liste = ergebnis.getOrThrow()
+            assertEquals(2, liste.size)
+            assertEquals("ordner-1", liste[0].id)
+            assertEquals("Ordner A", liste[0].name)
+            assertEquals("ordner-2", liste[1].id)
+            assertEquals("Ordner B", liste[1].name)
+        }
 
     @Test
-    fun dateienInOrdnerAuflistenLiefertAlleNamenImOrdner() = runTest {
-        server.enqueue(
-            MockResponse().setBody("""{"files":[{"name":"datei1.wav"},{"name":"datei2.wav"}]}""")
-        )
+    fun ordnerUmbenennenSendetPatchMitNeuemNamen() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"ordner-123","name":"Neuer Name"}""").setResponseCode(200))
 
-        val ergebnis = client.dateienInOrdnerAuflisten("ordner-123")
+            val ergebnis = client.ordnerUmbenennen("ordner-123", "Neuer Name")
 
-        val namen = ergebnis.getOrThrow()
-        assertEquals(2, namen.size)
-        assertTrue(namen.contains("datei1.wav"))
-        assertTrue(namen.contains("datei2.wav"))
-        val anfrage = server.takeRequest()
-        assertEquals("GET", anfrage.method)
-        assertTrue(anfrage.path!!.contains("ordner-123"))
-    }
+            assertTrue(ergebnis.isSuccess)
+            val anfrage = server.takeRequest()
+            assertEquals("PATCH", anfrage.method)
+            assertEquals("/drive/v3/files/ordner-123", anfrage.path)
+            val koerper = anfrage.body.readUtf8()
+            assertTrue(koerper.contains("\"name\":\"Neuer Name\""))
+        }
 
     @Test
-    fun suchanfrageEscaptAnfuehrungszeichenImDateinamen() = runTest {
-        server.enqueue(MockResponse().setBody("""{"files":[]}"""))
+    fun dateiSuchenLiefertGefundeneDatei() =
+        runTest {
+            server.enqueue(
+                MockResponse().setBody("""{"files":[{"id":"datei-1","name":"laermprotokoll_2026-08-19.csv"}]}"""),
+            )
 
-        client.dateiSuchen("ein'name.csv", "ordner-123")
+            val ergebnis = client.dateiSuchen("laermprotokoll_2026-08-19.csv", "ordner-123")
 
-        val anfrage = server.takeRequest()
-        assertTrue(
-            "Ein ungeeschapptes Anfuehrungszeichen wuerde die Drive-Query-Syntax brechen",
-            anfrage.path!!.contains("ein%5C%27name.csv") || anfrage.requestUrl!!.queryParameter("q")!!.contains("ein\\'name.csv"),
-        )
-    }
-
-    @Test
-    fun dateiAnlegenSendetMultipartMitMetadatenUndInhalt() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
-
-        val ergebnis = client.dateiAnlegen(
-            name = "laermprotokoll_2026-08-19.csv", ordnerId = "ordner-123",
-            inhalt = "Zeit;LAeq_dB\n".toByteArray(), mimeType = "text/csv", gzip = false,
-        )
-
-        assertEquals("neue-datei", ergebnis.getOrThrow())
-        val anfrage = server.takeRequest()
-        assertEquals("/upload/drive/v3/files?uploadType=multipart", anfrage.path)
-        assertTrue(anfrage.getHeader("Content-Type")!!.startsWith("multipart/related"))
-        val koerper = anfrage.body.readUtf8()
-        assertTrue(koerper.contains("laermprotokoll_2026-08-19.csv"))
-        assertTrue(koerper.contains("Zeit;LAeq_dB"))
-    }
+            val datei = ergebnis.getOrThrow()
+            assertEquals("datei-1", datei?.id)
+            val anfrage = server.takeRequest()
+            assertEquals("GET", anfrage.method)
+            assertTrue(anfrage.path!!.contains("q="))
+        }
 
     @Test
-    fun dateiAnlegenMitGzipKomprimiertDenInhaltUndSetztDenHeader() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
-        val klartext = "Zeit;LAeq_dB\n2026-08-19T08:00:00+02:00;52,3\n".repeat(50)
+    fun dateiSuchenOhneTrefferLiefertNull() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
 
-        client.dateiAnlegen(
-            name = "x.csv", ordnerId = "ordner-123",
-            inhalt = klartext.toByteArray(), mimeType = "text/csv", gzip = true,
-        )
+            val ergebnis = client.dateiSuchen("nichtvorhanden.csv", "ordner-123")
 
-        val anfrage = server.takeRequest()
-        assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
-        val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
-        assertTrue(
-            "Der entpackte Rumpf muss wieder dem Klartext entsprechen",
-            entpackt.contains("2026-08-19T08:00:00+02:00;52,3"),
-        )
-    }
+            assertNull(ergebnis.getOrThrow())
+        }
 
     @Test
-    fun dateiAnlegenMitGzipBleibtNachDemEntpackenEinGueltigesMultipartPaket() = runTest {
-        // Regressionstest: Content-Encoding: gzip muss fuer den GESAMTEN Multipart-Rumpf gelten,
-        // nicht nur fuer den Dateianteil. Waere nur der Dateianteil komprimiert, stuenden nach
-        // dem Entpacken Multipart-Grenzen und JSON-Metadaten unveraendert MIT dem eigentlich
-        // schon entpackten Dateiinhalt vermischt - kein gueltiges Dokument mehr.
-        server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
+    fun dateienInOrdnerAuflistenLiefertAlleNamenImOrdner() =
+        runTest {
+            server.enqueue(
+                MockResponse().setBody("""{"files":[{"name":"datei1.wav"},{"name":"datei2.wav"}]}"""),
+            )
 
-        client.dateiAnlegen(
-            name = "laermprotokoll_2026-08-19.csv", ordnerId = "ordner-123",
-            inhalt = "Zeit;LAeq_dB\n2026-08-19T08:00:00+02:00;52,3\n".toByteArray(),
-            mimeType = "text/csv", gzip = true,
-        )
+            val ergebnis = client.dateienInOrdnerAuflisten("ordner-123")
 
-        val anfrage = server.takeRequest()
-        assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
-        val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
-        assertTrue("Multipart-Grenze muss nach dem Entpacken wieder lesbar sein", entpackt.contains("Content-Disposition") || entpackt.contains("laermprotokoll_2026-08-19.csv"))
-        assertTrue(entpackt.contains("2026-08-19T08:00:00+02:00;52,3"))
-    }
+            val namen = ergebnis.getOrThrow()
+            assertEquals(2, namen.size)
+            assertTrue(namen.contains("datei1.wav"))
+            assertTrue(namen.contains("datei2.wav"))
+            val anfrage = server.takeRequest()
+            assertEquals("GET", anfrage.method)
+            assertTrue(anfrage.path!!.contains("ordner-123"))
+        }
 
     @Test
-    fun dateiAktualisierenMitGzipKomprimiertDenRumpf() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"datei-1"}"""))
-        val klartext = "Zeit;LAeq_dB\n".repeat(50)
+    fun suchanfrageEscaptAnfuehrungszeichenImDateinamen() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
 
-        client.dateiAktualisieren("datei-1", klartext.toByteArray(), "text/csv", gzip = true)
+            client.dateiSuchen("ein'name.csv", "ordner-123")
 
-        val anfrage = server.takeRequest()
-        assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
-        val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
-        assertEquals(klartext, entpackt)
-    }
-
-    @Test
-    fun ohneGzipWirdKeinContentEncodingGesetztUndDerRumpfBleibtKlartext() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"x"}"""))
-
-        client.dateiAnlegen(
-            name = "x.csv", ordnerId = "ordner-123",
-            inhalt = "Klartext".toByteArray(), mimeType = "text/csv", gzip = false,
-        )
-
-        val anfrage = server.takeRequest()
-        assertNull(anfrage.getHeader("Content-Encoding"))
-    }
+            val anfrage = server.takeRequest()
+            assertTrue(
+                "Ein ungeeschapptes Anfuehrungszeichen wuerde die Drive-Query-Syntax brechen",
+                anfrage.path!!.contains("ein%5C%27name.csv") || anfrage.requestUrl!!.queryParameter("q")!!.contains("ein\\'name.csv"),
+            )
+        }
 
     @Test
-    fun dateiAktualisierenPatchtDenBestehendenInhalt() = runTest {
-        server.enqueue(MockResponse().setBody("""{"id":"datei-1"}"""))
+    fun dateiAnlegenSendetMultipartMitMetadatenUndInhalt() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
 
-        val ergebnis = client.dateiAktualisieren(
-            fileId = "datei-1", inhalt = "neuer Inhalt".toByteArray(), mimeType = "text/csv", gzip = false,
-        )
+            val ergebnis =
+                client.dateiAnlegen(
+                    name = "laermprotokoll_2026-08-19.csv",
+                    ordnerId = "ordner-123",
+                    inhalt = "Zeit;LAeq_dB\n".toByteArray(),
+                    mimeType = "text/csv",
+                    gzip = false,
+                )
 
-        assertTrue(ergebnis.isSuccess)
-        val anfrage = server.takeRequest()
-        assertEquals("PATCH", anfrage.method)
-        assertEquals("/upload/drive/v3/files/datei-1?uploadType=media", anfrage.path)
-        assertEquals("neuer Inhalt", anfrage.body.readUtf8())
-    }
-
-    @Test
-    fun dateiHerunterladenSendetAltMediaUndLiefertRoheBytes() = runTest {
-        // Absichtlich Bytes, die kein gueltiges UTF-8 sind (0xFF, 0x00) - waeren sie ueber
-        // ResponseBody.string() gelaufen, waere das Ergebnis lautlos verstuemmelt, nicht nur
-        // "anders". Genau das soll dateiHerunterladen (anders als fuehreAus) vermeiden.
-        val roheBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0xFF.toByte(), 0x00, 0x7A, 0x69, 0x70)
-        server.enqueue(MockResponse().setBody(okio.Buffer().write(roheBytes)))
-
-        val ergebnis = client.dateiHerunterladen("datei-1")
-
-        assertTrue(ergebnis.isSuccess)
-        assertArrayEquals(roheBytes, ergebnis.getOrThrow())
-        val anfrage = server.takeRequest()
-        assertEquals("GET", anfrage.method)
-        assertEquals("/drive/v3/files/datei-1?alt=media", anfrage.path)
-        assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
-    }
+            assertEquals("neue-datei", ergebnis.getOrThrow())
+            val anfrage = server.takeRequest()
+            assertEquals("/upload/drive/v3/files?uploadType=multipart", anfrage.path)
+            assertTrue(anfrage.getHeader("Content-Type")!!.startsWith("multipart/related"))
+            val koerper = anfrage.body.readUtf8()
+            assertTrue(koerper.contains("laermprotokoll_2026-08-19.csv"))
+            assertTrue(koerper.contains("Zeit;LAeq_dB"))
+        }
 
     @Test
-    fun dateiHerunterladenBeiHttpFehlerLiefertDriveApiException() = runTest {
-        server.enqueue(MockResponse().setResponseCode(404))
+    fun dateiAnlegenMitGzipKomprimiertDenInhaltUndSetztDenHeader() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
+            val klartext = "Zeit;LAeq_dB\n2026-08-19T08:00:00+02:00;52,3\n".repeat(50)
 
-        val ergebnis = client.dateiHerunterladen("weg")
+            client.dateiAnlegen(
+                name = "x.csv",
+                ordnerId = "ordner-123",
+                inhalt = klartext.toByteArray(),
+                mimeType = "text/csv",
+                gzip = true,
+            )
 
-        assertTrue(ergebnis.isFailure)
-        assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
-    }
-
-    @Test
-    fun httpFehlercodeWirdAlsDriveApiExceptionMitCodeDurchgereicht() = runTest {
-        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"code":404}}"""))
-
-        val ergebnis = client.dateiAktualisieren("weg", ByteArray(0), "text/csv")
-
-        assertTrue(ergebnis.isFailure)
-        val fehler = ergebnis.exceptionOrNull()
-        assertTrue(fehler is DriveApiException)
-        assertEquals(404, (fehler as DriveApiException).httpCode)
-    }
-
-    @Test
-    fun fehlgeschlagenesTokenFuehrtZuFehlschlagOhneHttpAufruf() = runTest {
-        token.token = Result.failure(IllegalStateException("nicht angemeldet"))
-
-        val ergebnis = client.ordnerAnlegen("Ordner")
-
-        assertTrue(ergebnis.isFailure)
-        assertEquals(0, server.requestCount)
-    }
+            val anfrage = server.takeRequest()
+            assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
+            val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
+            assertTrue(
+                "Der entpackte Rumpf muss wieder dem Klartext entsprechen",
+                entpackt.contains("2026-08-19T08:00:00+02:00;52,3"),
+            )
+        }
 
     @Test
-    fun unerreichbarerServerLiefertFehlerStattAusnahme() = runTest {
-        server.shutdown()
+    fun dateiAnlegenMitGzipBleibtNachDemEntpackenEinGueltigesMultipartPaket() =
+        runTest {
+            // Regressionstest: Content-Encoding: gzip muss fuer den GESAMTEN Multipart-Rumpf gelten,
+            // nicht nur fuer den Dateianteil. Waere nur der Dateianteil komprimiert, stuenden nach
+            // dem Entpacken Multipart-Grenzen und JSON-Metadaten unveraendert MIT dem eigentlich
+            // schon entpackten Dateiinhalt vermischt - kein gueltiges Dokument mehr.
+            server.enqueue(MockResponse().setBody("""{"id":"neue-datei"}"""))
 
-        val ergebnis = client.ordnerAnlegen("Ordner")
+            client.dateiAnlegen(
+                name = "laermprotokoll_2026-08-19.csv",
+                ordnerId = "ordner-123",
+                inhalt = "Zeit;LAeq_dB\n2026-08-19T08:00:00+02:00;52,3\n".toByteArray(),
+                mimeType = "text/csv",
+                gzip = true,
+            )
 
-        assertTrue(ergebnis.isFailure)
-    }
+            val anfrage = server.takeRequest()
+            assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
+            val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
+            assertTrue(
+                "Multipart-Grenze muss nach dem Entpacken wieder lesbar sein",
+                entpackt.contains("Content-Disposition") || entpackt.contains("laermprotokoll_2026-08-19.csv"),
+            )
+            assertTrue(entpackt.contains("2026-08-19T08:00:00+02:00;52,3"))
+        }
+
+    @Test
+    fun dateiAktualisierenMitGzipKomprimiertDenRumpf() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"datei-1"}"""))
+            val klartext = "Zeit;LAeq_dB\n".repeat(50)
+
+            client.dateiAktualisieren("datei-1", klartext.toByteArray(), "text/csv", gzip = true)
+
+            val anfrage = server.takeRequest()
+            assertEquals("gzip", anfrage.getHeader("Content-Encoding"))
+            val entpackt = GZIPInputStream(anfrage.body.inputStream()).readBytes().toString(Charsets.UTF_8)
+            assertEquals(klartext, entpackt)
+        }
+
+    @Test
+    fun ohneGzipWirdKeinContentEncodingGesetztUndDerRumpfBleibtKlartext() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"x"}"""))
+
+            client.dateiAnlegen(
+                name = "x.csv",
+                ordnerId = "ordner-123",
+                inhalt = "Klartext".toByteArray(),
+                mimeType = "text/csv",
+                gzip = false,
+            )
+
+            val anfrage = server.takeRequest()
+            assertNull(anfrage.getHeader("Content-Encoding"))
+        }
+
+    @Test
+    fun dateiAktualisierenPatchtDenBestehendenInhalt() =
+        runTest {
+            server.enqueue(MockResponse().setBody("""{"id":"datei-1"}"""))
+
+            val ergebnis =
+                client.dateiAktualisieren(
+                    fileId = "datei-1",
+                    inhalt = "neuer Inhalt".toByteArray(),
+                    mimeType = "text/csv",
+                    gzip = false,
+                )
+
+            assertTrue(ergebnis.isSuccess)
+            val anfrage = server.takeRequest()
+            assertEquals("PATCH", anfrage.method)
+            assertEquals("/upload/drive/v3/files/datei-1?uploadType=media", anfrage.path)
+            assertEquals("neuer Inhalt", anfrage.body.readUtf8())
+        }
+
+    @Test
+    fun dateiHerunterladenSendetAltMediaUndLiefertRoheBytes() =
+        runTest {
+            // Absichtlich Bytes, die kein gueltiges UTF-8 sind (0xFF, 0x00) - waeren sie ueber
+            // ResponseBody.string() gelaufen, waere das Ergebnis lautlos verstuemmelt, nicht nur
+            // "anders". Genau das soll dateiHerunterladen (anders als fuehreAus) vermeiden.
+            val roheBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0xFF.toByte(), 0x00, 0x7A, 0x69, 0x70)
+            server.enqueue(MockResponse().setBody(okio.Buffer().write(roheBytes)))
+
+            val ergebnis = client.dateiHerunterladen("datei-1")
+
+            assertTrue(ergebnis.isSuccess)
+            assertArrayEquals(roheBytes, ergebnis.getOrThrow())
+            val anfrage = server.takeRequest()
+            assertEquals("GET", anfrage.method)
+            assertEquals("/drive/v3/files/datei-1?alt=media", anfrage.path)
+            assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
+        }
+
+    @Test
+    fun dateiHerunterladenBeiHttpFehlerLiefertDriveApiException() =
+        runTest {
+            server.enqueue(MockResponse().setResponseCode(404))
+
+            val ergebnis = client.dateiHerunterladen("weg")
+
+            assertTrue(ergebnis.isFailure)
+            assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
+        }
+
+    /**
+     * PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 3: [GoogleDriveApiClient.dateiHerunterladenNach]
+     * schreibt STREAMEND in eine Datei - Gegenstueck zu [dateiHerunterladenSendetAltMediaUndLiefertRoheBytes],
+     * ebenfalls mit binaeren, nicht UTF-8-gueltigen Bytes, damit ein versteckter String-Umweg
+     * auffiele.
+     */
+    @Test
+    fun dateiHerunterladenNachSchreibtDenRohenInhaltStreamendInDieZieldatei() =
+        runTest {
+            val roheBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0xFF.toByte(), 0x00, 0x7A, 0x69, 0x70)
+            server.enqueue(MockResponse().setBody(okio.Buffer().write(roheBytes)))
+            val ziel = ordner.newFile("herunter.zip")
+
+            val ergebnis = client.dateiHerunterladenNach("datei-1", ziel)
+
+            assertTrue(ergebnis.isSuccess)
+            assertArrayEquals(roheBytes, ziel.readBytes())
+            val anfrage = server.takeRequest()
+            assertEquals("GET", anfrage.method)
+            assertEquals("/drive/v3/files/datei-1?alt=media", anfrage.path)
+            assertEquals("Bearer test-token", anfrage.getHeader("Authorization"))
+        }
+
+    @Test
+    fun dateiHerunterladenNachBeiHttpFehlerLiefertDriveApiExceptionUndLaesstDieZieldateiLeer() =
+        runTest {
+            server.enqueue(MockResponse().setResponseCode(404))
+            val ziel = ordner.newFile("herunter.zip")
+
+            val ergebnis = client.dateiHerunterladenNach("weg", ziel)
+
+            assertTrue(ergebnis.isFailure)
+            assertEquals(404, (ergebnis.exceptionOrNull() as? DriveApiException)?.httpCode)
+            assertEquals(0L, ziel.length())
+        }
+
+    @Test
+    fun httpFehlercodeWirdAlsDriveApiExceptionMitCodeDurchgereicht() =
+        runTest {
+            server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"code":404}}"""))
+
+            val ergebnis = client.dateiAktualisieren("weg", ByteArray(0), "text/csv")
+
+            assertTrue(ergebnis.isFailure)
+            val fehler = ergebnis.exceptionOrNull()
+            assertTrue(fehler is DriveApiException)
+            assertEquals(404, (fehler as DriveApiException).httpCode)
+        }
+
+    @Test
+    fun fehlgeschlagenesTokenFuehrtZuFehlschlagOhneHttpAufruf() =
+        runTest {
+            token.token = Result.failure(IllegalStateException("nicht angemeldet"))
+
+            val ergebnis = client.ordnerAnlegen("Ordner")
+
+            assertTrue(ergebnis.isFailure)
+            assertEquals(0, server.requestCount)
+        }
+
+    @Test
+    fun unerreichbarerServerLiefertFehlerStattAusnahme() =
+        runTest {
+            server.shutdown()
+
+            val ergebnis = client.ordnerAnlegen("Ordner")
+
+            assertTrue(ergebnis.isFailure)
+        }
 
     @Test
     fun escapeFuerDriveQueryEscaptAnfuehrungszeichenUndBackslashes() {

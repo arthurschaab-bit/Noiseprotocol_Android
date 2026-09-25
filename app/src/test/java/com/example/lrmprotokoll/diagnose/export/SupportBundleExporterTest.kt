@@ -10,6 +10,8 @@ import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
 import java.security.MessageDigest
@@ -17,6 +19,7 @@ import java.util.zip.ZipFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -63,6 +66,14 @@ class SupportBundleExporterTest {
             initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
         ),
         ringFile: BreadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+        traceVerzeichnis: File = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
+        // Default identisch zum Produktionsstandard in SupportBundleExporter selbst - bestehende
+        // Aufrufer dieser Hilfsfunktion bleiben dadurch unveraendert (echter, Robolectric-
+        // gestuetzter PackageManager-Weg); nur Tests, die den Parameter explizit setzen, weichen
+        // davon ab (PROMPT_FIX_BUNDLE_INHALT.md Teil 2).
+        berechtigungExistiertProvider: (String) -> Boolean = { name ->
+            runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
+        },
     ) = SupportBundleExporter(
         context = context,
         reporter = reporter,
@@ -70,7 +81,8 @@ class SupportBundleExporterTest {
         breadcrumbRingFile = ringFile,
         settingsManager = container.settingsManager,
         database = container.database,
-        traceVerzeichnis = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
+        traceVerzeichnis = traceVerzeichnis,
+        berechtigungExistiertProvider = berechtigungExistiertProvider,
     )
 
     private fun logEintrag(id: Long, nachricht: String) =
@@ -166,6 +178,176 @@ class SupportBundleExporterTest {
         }
     }
 
+    /**
+     * Test 3 aus docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Abschnitt 3: enthaelt der
+     * ACRA-Report (hier bereits als [BundleKontext.laufzeitzustandJson] durchgereicht, siehe
+     * [com.example.lrmprotokoll.diagnose.acra.SupportOutboxReportSender]) den Schluessel, landet
+     * er als eigene Datei im Bundle.
+     */
+    @Test
+    fun crashBundleEnthaeltLaufzeitzustandWennImKontextVorhanden() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext =
+                BundleKontext(
+                    typ = BundleTyp.ABSTURZ,
+                    ausloeser = "ACRA",
+                    laufzeitzustandJson = "{\"aufnahmeAktiv\":true,\"heapMaxBytes\":123456,\"bleVerbindungszustand\":\"STREAMING\"}",
+                )
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                assertNotNull(zip.getEntry("crash/laufzeitzustand_beim_absturz.json"))
+                val inhalt = zip.getInputStream(zip.getEntry("crash/laufzeitzustand_beim_absturz.json")).bufferedReader().readText()
+                assertTrue(inhalt.contains("aufnahmeAktiv"))
+                assertTrue(inhalt.contains("STREAMING"))
+            }
+        }
+
+    /** Gegenprobe zu Test 3: ohne den Schluessel entsteht die Datei nicht. */
+    @Test
+    fun crashBundleOhneLaufzeitzustandHatKeineDieserDatei() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext = BundleKontext(typ = BundleTyp.ABSTURZ, ausloeser = "ACRA")
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                assertTrue(zip.getEntry("crash/laufzeitzustand_beim_absturz.json") == null)
+            }
+        }
+
+    /**
+     * Schritt 2 des Auftrags: "Er laeuft durch den DiagnosticRedactor, wie crash/acra_report.json."
+     * Vorbild ist [crashBundleRedigiertPiiImAcraReportJson].
+     */
+    @Test
+    fun crashBundleRedigiertPiiImLaufzeitzustand() =
+        runTest {
+            val dao = FakeDiagnosticLogDao(emptyList())
+            val kontext =
+                BundleKontext(
+                    typ = BundleTyp.ABSTURZ,
+                    ausloeser = "ACRA",
+                    laufzeitzustandJson = "{\"hinweis\":\"Geraet AA:BB:CC:DD:EE:FF fuer user@example.com\"}",
+                )
+
+            val zipFile = exporter(dao).createBundle(kontext)
+
+            ZipFile(zipFile).use { zip ->
+                val inhalt = zip.getInputStream(zip.getEntry("crash/laufzeitzustand_beim_absturz.json")).bufferedReader().readText()
+                assertTrue(inhalt.contains("AA:BB:CC:XX:XX:XX"))
+                assertTrue(inhalt.contains("[REDACTED_EMAIL]"))
+                assertTrue(!inhalt.contains("user@example.com"))
+            }
+        }
+
+    /**
+     * Test 4 aus docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Abschnitt 3: state/runtime.json muss
+     * als "danach" gebaut erkennbar sein, damit niemand es mit dem Absturzmoment verwechselt
+     * (Befund C, docs/BEFUNDE_P30_2026-09-23.md Abschnitt 3a).
+     */
+    @Test
+    fun runtimeJsonMarkiertZeitpunktAlsBeiBundleErstellung() =
+        runTest {
+            val zipFile =
+                exporter(FakeDiagnosticLogDao(emptyList()))
+                    .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+            ZipFile(zipFile).use { zip ->
+                val runtimeJson = zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText()
+                assertTrue(runtimeJson.contains("\"erfasst\": \"bei Bundle-Erstellung\""))
+            }
+        }
+
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 2):
+     * Berechtigungen, die es auf dem Geraet gar nicht gibt (z. B. POST_NOTIFICATIONS auf API 29
+     * - erst API 33+), standen bislang als "false" ("verweigert") unter "berechtigungen" - beim
+     * Gerätetest auf dem Huawei P30 irrefuehrend. Fake-Pruefung statt echtem PackageManager
+     * (siehe [berechtigungExistiertProviderEchterWegUnterRobolectricKenntFrameworkBerechtigungenNicht]
+     * fuer den Grund).
+     */
+    @Test
+    fun runtimeJsonTrenntNichtVorhandeneBerechtigungenVonVerweigerten() = runTest {
+        val zipFile = exporter(
+            FakeDiagnosticLogDao(emptyList()),
+            // RECORD_AUDIO "existiert" (Fake), POST_NOTIFICATIONS nicht - unabhaengig davon, ob
+            // es tatsaechlich gewaehrt ist.
+            berechtigungExistiertProvider = { name -> name != "android.permission.POST_NOTIFICATIONS" },
+        ).createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val runtimeJson = org.json.JSONObject(zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText())
+            val berechtigungen = runtimeJson.getJSONObject("berechtigungen")
+            val nichtVorhanden = (0 until runtimeJson.getJSONArray("berechtigungenNichtVorhanden").length())
+                .map { runtimeJson.getJSONArray("berechtigungenNichtVorhanden").getString(it) }
+
+            assertTrue(
+                "Eine vorhandene Berechtigung muss weiterhin true/false unter berechtigungen stehen",
+                berechtigungen.has("android.permission.RECORD_AUDIO"),
+            )
+            assertTrue(
+                "Eine nicht vorhandene Berechtigung darf NICHT unter berechtigungen stehen (dort laese sie sich als 'verweigert')",
+                !berechtigungen.has("android.permission.POST_NOTIFICATIONS"),
+            )
+            assertTrue(
+                "Eine nicht vorhandene Berechtigung gehoert nach berechtigungenNichtVorhanden",
+                nichtVorhanden.contains("android.permission.POST_NOTIFICATIONS"),
+            )
+            assertTrue(
+                "Eine vorhandene Berechtigung darf nicht in berechtigungenNichtVorhanden auftauchen",
+                !nichtVorhanden.contains("android.permission.RECORD_AUDIO"),
+            )
+        }
+    }
+
+    /**
+     * Zweite Haelfte von Teil 2 ("wenn moeglich zusaetzlich @Config(sdk = [29]) gegen den echten
+     * Weg"): dieser Test laeuft gegen den echten `PackageManager`-Aufruf (kein Fake), aber er
+     * beweist NICHT, dass POST_NOTIFICATIONS auf einem echten API-29-Geraet fehlt und RECORD_AUDIO
+     * vorhanden ist - er haelt stattdessen fest, WARUM die Pruefung ueberhaupt hinter einer
+     * injizierbaren Funktion versteckt ist: Robolectrics PackageManager kennt unter
+     * `@Config(sdk = [29])` KEINE vom Android-Framework definierte Berechtigung, auch nicht
+     * RECORD_AUDIO/CAMERA, die auf einem echten Geraet seit jeher existieren
+     * (`context.packageManager.getPermissionInfo(name, 0)` wirft fuer jede hier getestete
+     * Framework-Berechtigung `NameNotFoundException`, empirisch geprueft: siehe PR-Beschreibung).
+     * Erkannt wird nur die eine App-eigene Berechtigung, die im gemergten Manifest selbst per
+     * `<permission>` DEFINIERT ist (`com.example.lrmprotokoll.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+     * von AGP eingefuegt) - deshalb hier keine pauschale "berechtigungen ist leer"-Behauptung,
+     * sondern gezielt gegen echte Framework-Berechtigungen geprueft. Ohne den Fake in
+     * [runtimeJsonTrenntNichtVorhandeneBerechtigungenVonVerweigerten] waere also jede echte
+     * Framework-Berechtigung faelschlich als "gibt es auf diesem Geraet nicht" markiert - genau
+     * der Fall, vor dem der Auftrag warnt ("Robolectric kennt Plattform-Berechtigungen womoeglich
+     * nicht"). Sollte ein spaeteres Robolectric-Update das aendern, faellt dieser Test auf und
+     * macht die veraltete Annahme sichtbar.
+     */
+    @Test
+    @Config(sdk = [29])
+    fun berechtigungExistiertProviderEchterWegUnterRobolectricKenntFrameworkBerechtigungenNicht() = runTest {
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val runtimeJson = org.json.JSONObject(zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText())
+            val berechtigungen = runtimeJson.getJSONObject("berechtigungen")
+            val nichtVorhanden = (0 until runtimeJson.getJSONArray("berechtigungenNichtVorhanden").length())
+                .map { runtimeJson.getJSONArray("berechtigungenNichtVorhanden").getString(it) }
+
+            // Keine vom Android-Framework definierte Berechtigung wird unter Robolectric/sdk=29
+            // erkannt - sie landen ausnahmslos in berechtigungenNichtVorhanden statt faelschlich
+            // unter berechtigungen mit "false".
+            assertTrue(nichtVorhanden.contains("android.permission.RECORD_AUDIO"))
+            assertTrue(nichtVorhanden.contains("android.permission.POST_NOTIFICATIONS"))
+            assertTrue(nichtVorhanden.contains("android.permission.CAMERA"))
+            assertTrue(!berechtigungen.has("android.permission.RECORD_AUDIO"))
+            assertTrue(!berechtigungen.has("android.permission.POST_NOTIFICATIONS"))
+            assertTrue(!berechtigungen.has("android.permission.CAMERA"))
+        }
+    }
+
     @Test
     fun createBundleSanitizesPiiInEventsAndBreadcrumbs() = runTest {
         val ringFile = BreadcrumbRingFile(File(context.cacheDir, "ring_pii_${System.nanoTime()}").apply { mkdirs() })
@@ -197,6 +379,34 @@ class SupportBundleExporterTest {
             assertTrue(breadcrumbs.contains("[REDACTED_EMAIL]"))
             assertTrue(!breadcrumbs.contains("user@example.com"))
             assertTrue(!breadcrumbs.contains("supersecret"))
+        }
+    }
+
+    /**
+     * Geraetefund (BEFUNDE_P30_2026-09-23.md Abschnitt 4, PROMPT_FIX_BUNDLE_INHALT.md Teil 1):
+     * "google_account_name" landete im Klartext in state/settings.json, obwohl die gepaarte
+     * "google_account_email" bereits geschwaerzt wurde. Prueft den vollen Weg
+     * SettingsManager -> unverschluesselteEinstellungenSnapshot() -> DiagnosticRedactor ->
+     * state/settings.json im fertigen Bundle - nicht nur den Redactor isoliert.
+     */
+    @Test
+    fun settingsJsonSchwaertGoogleKontoAnzeigenamenAberNichtUnverdaechtigeSchluessel() = runTest {
+        container.settingsManager.googleAccountName = "Max Mustermann"
+        container.settingsManager.googleAccountEmail = "max.mustermann@example.com"
+        container.settingsManager.driveFolderName = "Laermprotokolle 2026"
+
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()))
+            .createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val settingsJson = zip.getInputStream(zip.getEntry("state/settings.json")).bufferedReader().readText()
+            assertTrue(!settingsJson.contains("Max Mustermann"))
+            assertTrue(settingsJson.contains("\"google_account_name\": \"[REDACTED]\""))
+            assertTrue(!settingsJson.contains("max.mustermann@example.com"))
+            assertTrue(settingsJson.contains("\"google_account_email\": \"[REDACTED_EMAIL]\""))
+            // Unverdaechtiger Schluessel bleibt unveraendert - der neue SENSITIVE_KEYS-Eintrag
+            // ("account_name") darf nicht breiter matchen als noetig.
+            assertTrue(settingsJson.contains("\"drive_folder_name\": \"Laermprotokolle 2026\""))
         }
     }
 
@@ -293,5 +503,31 @@ class SupportBundleExporterTest {
                 manifest.contains("\"kuerzungsstufe\": 0") || manifest.contains("Budget ueberschritten"),
             )
         }
+    }
+
+    @Test
+    fun crashOrdnerWirdNieGekuerztAuchWennBudgetUeberschritten() = runTest {
+        // Owner-Entscheidung O-7 (Konzept 4.5): crash/ bleibt vollstaendig, das 10-MB-Budget ist
+        // fuer Absturz-Bundles ein Richtwert. Zufallsbytes komprimieren praktisch nicht -
+        // ANR-Trace und Tombstone an ihren Einzelobergrenzen (4 MB + 8 MB) reissen das Budget
+        // allein, auch nachdem events.jsonl und logcat.txt weggekuerzt sind.
+        val zufall = java.util.Random(42)
+        val anrTrace = ByteArray(4 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val tombstone = ByteArray(8 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val traces = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}").apply { mkdirs() }
+        File(traces, ANR_TRACE_DATEINAME).writeBytes(anrTrace)
+        File(traces, NATIVE_TOMBSTONE_DATEINAME).writeBytes(tombstone)
+
+        val zipFile = exporter(FakeDiagnosticLogDao(emptyList()), traceVerzeichnis = traces)
+            .createBundle(BundleKontext(typ = BundleTyp.ABSTURZ, ausloeser = "Test"))
+
+        assertTrue("Budget darf hier ueberschritten sein", zipFile.length() > 10L * 1024 * 1024)
+        ZipFile(zipFile).use { zip ->
+            assertArrayEquals(anrTrace, zip.getInputStream(zip.getEntry("crash/anr_trace.txt")).readBytes())
+            assertArrayEquals(tombstone, zip.getInputStream(zip.getEntry("crash/native_tombstone.pb")).readBytes())
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            assertTrue(manifest.contains("\"kuerzungsstufe\": 2"))
+        }
+        traces.deleteRecursively()
     }
 }

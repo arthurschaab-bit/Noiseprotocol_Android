@@ -316,17 +316,62 @@ Umsetzung weder ein Gerät noch ein Google-Konto in der Entwicklungsumgebung. Si
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Im Diagnose-Screen (Debug-Build) „RuntimeException auslösen" drücken | App stürzt ab; beim nächsten Start liegt in `support_outbox/` kurz ein `..._absturz.zip`, das automatisch nach Drive hochgeladen wird | |
-| „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | |
-| Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `state/runtime.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | |
-| Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | |
-| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog; nach dem nächsten App-Start liegt ein lesbarer Thread-Dump in den Diagnosedaten (aktuell **kein** automatischer Bundle-Upload dafür, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 8b) | |
-| 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | |
+| Im Diagnose-Screen (Debug-Build) „RuntimeException auslösen" drücken | App stürzt ab; beim nächsten Start liegt in `support_outbox/` kurz ein `..._absturz.zip`, das automatisch nach Drive hochgeladen wird | ◐ 23.09.2026, P30: Um 15:59:00 entstand laut Breadcrumb ein ACRA-Bundle; welcher Knopf, und ob es in Drive ankam, ist nicht belegt |
+| „OutOfMemoryError provozieren" drücken | Dasselbe wie oben — ACRA fängt auch das ab | ✅ 23.09.2026, P30: `2026-09-23_155924_absturz.zip` mit `OutOfMemoryError: Testabsturz (Debug)…` |
+| Absturz **während laufender Aufzeichnung** (nicht nur über den Debug-Knopf) | Bundle enthält unter `crash/laufzeitzustand_beim_absturz.json` den BLE-Verbindungszustand und `aufnahmeAktiv: true` zum Absturzzeitpunkt | |
+| Nach einem Absturz in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei mit Schema `JJJJ-MM-TT_HHMMSS_absturz.zip` ist angekommen | ✅ 23.09.2026, P30: `…_absturz.zip` vorhanden |
+| „Main-Thread blockieren (ANR)" drücken, 30 s warten | System zeigt ANR-Dialog. **ANR-Watchdog (O-8):** bei „Warten" entsteht nach den 30 s ein `..._anr.zip` in `support_outbox/` und wird hochgeladen (auch wenn „Automatischer Upload bei Absturz" aus ist); bei „App schließen" beim nächsten App-Start. Das Bundle enthält `crash/anr_watchdog.txt`, im Abschnitt `---- main ----` steht `Thread.sleep`. **Ab Android 11** zusätzlich, nur wenn das System die App beendet hat: `crash/anr_trace.txt` (System-Thread-Dump) - auf Android 10 (z. B. Huawei P30) fehlt dieser erwartungsgemäß | ◐ 23.09.2026, P30: Pfad „App schließen“ ✅ (erkannt nach 5002 ms, Bundle beim Neustart, `---- main ----` enthält `Thread.sleep`, kein `anr_trace.txt` wie erwartet). Pfad „Warten“ nicht belegt |
+| Nach dem ANR-Test in `<gewählter Ordner>/Support-Bundle` in Drive nachsehen | Datei `JJJJ-MM-TT_HHMMSS_anr.zip` ist angekommen | ✅ 23.09.2026, P30: `2026-09-23_160014_anr.zip` vorhanden |
+| 24 h laufen lassen (WLAN vorhanden) | Ein periodisches Gesundheits-Bundle erscheint einmal täglich in Drive — außer nichts hat sich geändert (kein Bundle ohne Not) | ◐ 23.09.2026: Erzeugung belegt (Breadcrumb „Erstelle Bundle (periodisch, periodisch)“), Upload nicht belegt |
 | Absturz auslösen, danach WLAN ausschalten, 6+ h warten, dann WLAN wieder anschalten | Der Upload wird nachgeholt (Fallback-Job ohne Netzbeschränkung nach 6 h) | |
-| Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | |
+| Diagnose-Screen → Abschnitt „Support-Bundles" öffnen | Zeigt Zeitpunkt/Ergebnis des letzten Uploads und Anzahl wartender Bundles; „Bundle jetzt erstellen und hochladen" legt sofort eines an | ✅ 23.09.2026, P30: Sofortupload „Erfolgreich: 2026-09-23_160035_manuell.zip“ |
 | Einstellungen → „Automatischer Upload bei Absturz" ausschalten, dann Absturz auslösen | Bundle entsteht weiterhin lokal, wird aber **nicht** automatisch hochgeladen | |
 | Einstellungen → „Tägliches Gesundheits-Bundle" ausschalten | Weder Erzeugung noch Upload finden mehr statt | |
-| DiagnoseScreen mit vielen (>200) Diagnose-Log-Einträgen öffnen, im Aufzeichnungsbetrieb | Bildschirm bleibt bedienbar (behebt den ursprünglich gemeldeten Absturz - **unbestätigter Verdacht, kein Befund**, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 2/Schritt 7) | |
+| DiagnoseScreen mit vielen (>200) Diagnose-Log-Einträgen öffnen, im Aufzeichnungsbetrieb | Bildschirm bleibt bedienbar (behebt den ursprünglich gemeldeten Absturz - **unbestätigter Verdacht, kein Befund**, siehe `DIAGNOSE_CRASH_KONZEPT.md` Abschnitt 2/Schritt 7) | ◐ 23.09.2026, P30: bedienbar mit 10.427 Einträgen, aber **ohne** laufende Aufzeichnung |
+
+**Gerätetest 23.09.2026 (Huawei P30, Build `1.0.0-pr188.ci602+119d2a4`):** Die Absturzdiagnose funktioniert. Sie hat dabei ein massives Speicherproblem im Normalbetrieb sichtbar gemacht (89 Abstürze in einer Woche, 88 davon Speichermangel). Siehe [`BEFUNDE_P30_2026-09-23.md`](BEFUNDE_P30_2026-09-23.md).
+
+### F15 — Drive-Sync: OOM-Bugfix (keine parallelen Zyklen, Nachholen wird fertig)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Debug-Build installieren, 24 h laufen lassen, danach ein Support-Bundle erstellen | Im Crash-Puffer (`log/logcat.txt`) keine neuen `OutOfMemoryError` | |
+| Dasselbe Bundle: `state/db_stats.json` prüfen | `drive_daily_files` wächst auf rund 30 Einträge | |
+| Dasselbe Bundle: Breadcrumbs durchsehen | „Drive-Sync wartet auf laufenden Zyklus" taucht auf, aber nie zwei Läufe, die sich überlappen | |
+
+Root Cause war Befund A1 (`BEFUNDE_P30_2026-09-23.md`): `DriveSyncCoordinator.holeVersaeumteTageNach()` lud für jeden der letzten 29 Tage die komplette Rohwerteliste (~290.000 Zeilen/Tag auf dem Owner-Gerät), bevor es prüfte, ob der Tag überhaupt fehlte, und `DriveSyncPlanung.starteSofort()` brach mit `ExistingWorkPolicy.REPLACE` einen noch laufenden Sofortlauf ab, sodass das Nachholen nie fertig wurde. Siehe [`PROMPT_FIX_OOM_DRIVE_SYNC.md`](PROMPT_FIX_OOM_DRIVE_SYNC.md).
+
+### F16 — Datenbank-Sicherung streamend statt im Speicher (Bugfix 23.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_DATENBANK_SICHERUNG.md`), aber **noch nicht auf echter Hardware
+gesehen** — auf dem Owner-Gerät (Huawei P30) gab es laut `BEFUNDE_P30_2026-09-23.md` Abschnitt
+2/A2 seit dem 16.09.2026 95 gescheiterte Sicherungsversuche mit `OutOfMemoryError`
+(Datenbankgröße ~492 MB, Heap-Grenze 402 MB), weil jeder Sicherungs- und
+Wiederherstellungsweg die komplette Datenbank als `ByteArray` im Speicher hielt.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach spätestens einem Sync-Zyklus (Drive-Sync aktiv, „Datenbank-Sicherung nach Drive“ an) in `<gewählter Ordner>/BACKUP/` nachsehen | `laermprotokoll_datenbank.zip` liegt dort, Änderungsdatum ist heute, Dateigröße ist plausibel (ungefähr die Größe der lokalen Datenbankdatei) | |
+| Diagnose-Screen/nächstes Support-Bundle nach einem Sync-Zyklus mit Datenbank-Sicherung prüfen | Keine neuen Einträge „Datenbank-Sicherung konnte nicht erstellt werden" und kein `OutOfMemoryError` zu den Sicherungszeitpunkten im Logcat-Ausschnitt | |
+| Sicherung einspielen (lokal über SAF oder „Von Drive wiederherstellen") auf einem Testgerät oder Emulator | Die App startet mit den zuvor gesicherten Daten neu, kein Absturz, keine Speicherwarnung während des Einspielens | |
+
+### F17 — High-End-Bericht: Fehlschläge sichtbar im Diagnoseprotokoll (Bugfix 24.09.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_BERICHT_HIGHEND.md`), aber **noch nicht auf echter Hardware
+gesehen**. Auslöser war ein gescheiterter High-End-Bericht auf dem Owner-Gerät (Huawei P30) am
+23.09.2026, der im direkt danach erstellten Support-Bundle **keine einzige Zeile** hinterließ
+(`docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 3) — die eigentliche Ursache dieses konkreten
+Fehlschlags ist weiterhin unbekannt.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Denselben High-End-Bericht wie am 23.09. (gleicher Zeitraum) auf dem P30 wiederholen, danach „Bundle jetzt erstellen und hochladen" | Im Bundle steht unter `log/events.jsonl` bzw. `log/breadcrumbs.jsonl` entweder „High-End-Bericht erzeugt: …" oder ein `REPORT_CREATE_FAILED` bzw. „nicht gestartet: …" mit erkennbarem Grund | |
+
+Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueError`, ist das ein
+eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
+zurückmelden statt selbst zu beheben.
 
 ---
 

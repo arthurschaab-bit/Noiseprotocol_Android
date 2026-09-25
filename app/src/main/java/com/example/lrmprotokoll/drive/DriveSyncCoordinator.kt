@@ -8,6 +8,7 @@ import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.meter.InstantSource
+import kotlinx.coroutines.sync.Mutex
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -48,13 +49,21 @@ class DriveSyncCoordinator(
     private val beweisVideoDao: com.example.lrmprotokoll.data.BeweisVideoDao? = null,
     private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
     /**
-     * Liefert die Datenbanksicherung als ZIP-Bytes (siehe [DriveDatenbankSicherung]). `null`
-     * heisst "keine automatische Datenbank-Sicherung" - wie [dokumentationsFotoDao]/
-     * [beweisVideoDao] optional, damit bestehende Test-Aufbauten nicht alle ein weiteres Fake
-     * mitschleppen muessen. Als Funktion statt eines direkten [android.content.Context]-Zugriffs,
-     * damit der Koordinator selbst ohne Android-Abhaengigkeit bleibt und testbar.
+     * Baut die Datenbanksicherung STREAMEND in eine selbstgewaehlte Datei und liefert diese
+     * zurueck (Bugfix 23.09.2026, docs/PROMPT_FIX_DATENBANK_SICHERUNG.md - siehe
+     * [DriveDatenbankSicherung]). `null` heisst "keine automatische Datenbank-Sicherung" - wie
+     * [dokumentationsFotoDao]/[beweisVideoDao] optional, damit bestehende Test-Aufbauten nicht
+     * alle ein weiteres Fake mitschleppen muessen. Als Funktion statt eines direkten
+     * [android.content.Context]-Zugriffs, damit der Koordinator selbst ohne Android-Abhaengigkeit
+     * bleibt und testbar - die Wahl DES Verzeichnisses (in der Praxis `cacheDir`, siehe
+     * `AppContainer.kt`) liegt deshalb bei der Quelle, nicht beim Koordinator. Vorher lieferte
+     * diese Funktion ein `ByteArray` - auf dem Owner-Geraet eine ~492-MB-Allokation bei einer
+     * Heap-Grenze von 402 MB, Ursache von 95 gescheiterten `OutOfMemoryError`-Versuchen zwischen
+     * dem 16. und 23.09.2026 (`docs/BEFUNDE_P30_2026-09-23.md`, Abschnitt 2/A2). Der Koordinator
+     * loescht die zurueckgelieferte Datei in JEDEM Fall (Erfolg wie Fehlschlag) im `finally` von
+     * [ladeDatenbankSicherungHoch] - sie gehoert nur diesem einen Versuch.
      */
-    private val datenbankSicherungQuelle: (suspend () -> ByteArray)? = null,
+    private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
 ) {
 
     /**
@@ -73,7 +82,34 @@ class DriveSyncCoordinator(
         data class Fehlgeschlagen(val grund: String, val httpCode: Int?) : SyncErgebnis
     }
 
+    /**
+     * Sorgt dafuer, dass niemals zwei Sync-Zyklen gleichzeitig laufen (OOM-Bugfix Schritt 1,
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Der periodische und der sofortige Worker
+     * (verschiedene WorkManager-Namen, siehe [DriveSyncPlanung]) sowie die manuellen "Jetzt
+     * synchronisieren"-Knoepfe (Diagnose-/Einstellungen-Screen) konnten bisher gleichzeitig
+     * laufen und dabei mehrfach riesige Rohwertlisten aus `level_samples` laden - auf dem
+     * Owner-Geraet bis zu vier Zyklen innerhalb einer Zehntelsekunde, kurz vor einem
+     * OutOfMemoryError. Der Coordinator ist ein Singleton im
+     * [com.example.lrmprotokoll.AppContainer] (`by lazy`), das Mutex-Feld gilt also fuer die
+     * gesamte App-Laufzeit.
+     */
+    private val zyklusMutex = Mutex()
+
     suspend fun syncEinenZyklus(): SyncErgebnis {
+        if (!zyklusMutex.tryLock()) {
+            // Nur EIN Breadcrumb pro wartendem Lauf, VOR dem eigentlichen (potenziell langen)
+            // Warten - tryLock() liefert das direkt, ohne selbst zu blockieren.
+            diagnosticsReporter?.breadcrumb("DriveSync", "Drive-Sync wartet auf laufenden Zyklus")
+            zyklusMutex.lock()
+        }
+        try {
+            return fuehreSyncZyklusAus()
+        } finally {
+            zyklusMutex.unlock()
+        }
+    }
+
+    private suspend fun fuehreSyncZyklusAus(): SyncErgebnis {
         if (!settings.driveSyncEnabled) {
             settings.driveSyncLastMessage = "Synchronisation pausiert"
             return SyncErgebnis.SyncAusgeschaltet
@@ -114,7 +150,6 @@ class DriveSyncCoordinator(
         runCatching { levelSampleDao.loescheVor(jetzt.minus(Duration.ofDays(30)).toEpochMilli()) }
             .onFailure { Log.w(TAG, "Puffer-Bereinigung (loescheVor) fehlgeschlagen: ${it.message}") }
 
-        val samples = levelSampleDao.zwischen(von.toEpochMilli(), jetzt.toEpochMilli())
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
             .map {
                 ProtokollEreignis(
@@ -127,7 +162,9 @@ class DriveSyncCoordinator(
             }
 
         val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
-        val zeilen = PegelAggregator.aggregiere(samples, ereignisse, von, jetzt, fensterDauer)
+        // OOM-Bugfix Schritt 4 (PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Rohwerte stueckweise
+        // statt als eine bis zu ~290.000 Zeilen grosse Tagesliste laden.
+        val zeilen = aggregiereInAbschnitten(von, jetzt, ereignisse, fensterDauer).zeilen
 
         var zipPackagesUploadedCount = 0
         var totalWavCountInZips = 0
@@ -338,8 +375,22 @@ class DriveSyncCoordinator(
             val tagesSchluessel = DriveAblage.tagesordner(tagVon, zone)
 
             runCatching {
-                val samples = levelSampleDao.zwischen(tagVon.toEpochMilli(), tagBis.toEpochMilli())
-                if (samples.isEmpty()) return@runCatching
+                // OOM-Bugfix Schritt 3 (PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1): Registry ZUERST
+                // pruefen, VOR jeglichem Rohwerte-Laden. Ein Tag, der NACH seinem eigenen
+                // Tagesende erfolgreich synchronisiert wurde, ist endgueltig fertig - Rohwerte
+                // eines vergangenen Tages kommen nicht nachtraeglich hinzu, die Messung laeuft
+                // live. lastSyncedAt ist bei BEIDEN Schreibstellen (hier unten und in
+                // [syncEinenZyklus]) der Zeitpunkt des SYNCS, nicht des Tages - "lastSyncedAt >=
+                // tagBis" heisst also praezise "nach Tagesende erfolgreich synchronisiert".
+                // Ohne diese Pruefung lud jeder Zyklus erneut die volle Tagesliste (bei ~290.000
+                // Zeilen/Tag auf dem Owner-Geraet), nur um dasselbe wie beim letzten Mal
+                // festzustellen.
+                val registry = dailyFileDao.byDate(tagesSchluessel)
+                if (registry != null && registry.state == DriveSyncState.SYNCED &&
+                    registry.lastSyncedAt >= tagBis.toEpochMilli()
+                ) {
+                    return@runCatching // nach Tagesende synchronisiert -> endgueltig, nichts zu tun
+                }
 
                 val ereignisse = noiseDao.zwischenZeitpunkt(tagVon.toEpochMilli(), tagBis.toEpochMilli())
                     .map {
@@ -352,12 +403,15 @@ class DriveSyncCoordinator(
                         )
                     }
                 val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
-                val zeilen = PegelAggregator.aggregiere(samples, ereignisse, tagVon, tagBis, fensterDauer)
+                // OOM-Bugfix Schritt 4: stueckweise statt als eine ~290.000-Zeilen-Liste laden.
+                val abschnitte = aggregiereInAbschnitten(tagVon, tagBis, ereignisse, fensterDauer)
+                if (!abschnitte.hatteRohwerte) return@runCatching // wie zuvor: keine Rohwerte -> nichts zu tun
+
+                val zeilen = abschnitte.zeilen
                 if (zeilen.isEmpty()) return@runCatching
 
-                val registry = dailyFileDao.byDate(tagesSchluessel)
                 if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
-                    return@runCatching // dieser Tag ist bereits vollstaendig synchronisiert
+                    return@runCatching // Zeilenzahl unveraendert seit dem letzten (nicht-endgueltigen) Sync
                 }
 
                 val dateiName = "laermprotokoll_$tagesSchluessel.csv"
@@ -381,6 +435,137 @@ class DriveSyncCoordinator(
                 Log.w(TAG, "Nachholen von $tagesSchluessel fehlgeschlagen: ${fehler.message}")
             }
         }
+    }
+
+    /** Ergebnis von [aggregiereInAbschnitten]: die verdichteten Zeilen plus ob ueberhaupt
+     * Rohwerte gefunden wurden (siehe dortiges KDoc, Absatz zu `hatteRohwerte`). */
+    private data class AbschnittsAggregation(val zeilen: List<AggregatZeile>, val hatteRohwerte: Boolean)
+
+    /**
+     * Aggregiert `[von, bis)` stueckweise in Abschnitten von rund einer Stunde, statt die
+     * kompletten Rohwerte des Zeitraums als eine Liste zu laden (OOM-Bugfix Schritt 4,
+     * PROMPT_FIX_OOM_DRIVE_SYNC.md / Befund A1 - `level_samples` hat auf dem Owner-Geraet rund
+     * 290.000 Zeilen/Tag). Die Abschnittslaenge ist ein ganzzahliges Vielfaches von
+     * [fensterDauer], ab [von] gerechnet, damit keine Fenstergrenze mitten in einen Abschnitt
+     * faellt.
+     *
+     * **Warum nicht einfach [PegelAggregator.aggregiere] separat je Abschnitt aufrufen und die
+     * Ergebnislisten aneinanderhaengen?** Dessen eigentliche Fensterberechnung (`bildeZeile`) ist
+     * rein lokal - das Ergebnis EINES Fensters haengt nur von den Samples/Ereignissen in genau
+     * diesem Fenster ab, keine gleitenden Mittel, kein Uebertrag zwischen Fenstern IM WERT. Aber
+     * `aggregiere()` trimmt Fuehrungs- und Schlusszeilen OHNE jegliche Daten auf den EIGENEN
+     * Datenumfang des jeweiligen Aufrufs (Test `leereZeitenVorUndNachMessungWerdenNichtAls
+     * LeereZeilenErzeugt`: eine Messung nur von Minute 10-12 erzeugt bei `bis=3600s` KEINE 60
+     * Zeilen, nur die eine mit echten Daten). Luecken DAZWISCHEN, innerhalb des Datenumfangs,
+     * werden dagegen als KEINE_VERBINDUNG-Zeilen gefuellt (Test
+     * `fensterOhneSampleWirdAlsLueckeAusgegebenNichtAusgelassen`). Ruft man das isoliert pro
+     * Abschnitt auf, gilt "eigener Datenumfang" ploetzlich pro ABSCHNITT statt pro ganzem Tag -
+     * eine Bluetooth-Aussetzer-Luecke, die eine Abschnittsgrenze beruehrt oder einen ganzen
+     * Abschnitt fuellt, wuerde dabei faelschlich verschluckt statt als KEINE_VERBINDUNG zu
+     * erscheinen. Deshalb ueberbrueckt diese Funktion fehlende Fenster ZWISCHEN zwei Abschnitten
+     * mit echten Zeilen explizit selbst, mit demselben "keine Daten"-Wert, den [AggregatZeile]s
+     * eigene Default-Parameter ohnehin fuer ein leeres Fenster liefern wuerden (siehe dessen
+     * Feld-Dokumentation) - keine Neuimplementierung der (privaten) `bildeZeile()`-Logik, nur
+     * deren dokumentiertes Leerfenster-Ergebnis als Literal.
+     *
+     * **Zweite Abhaengigkeit von Werten ausserhalb des Fensters - urspruenglich hier nur
+     * umgangen, seit der Nachbesserung vom 24.09.2026 an der Wurzel behoben:**
+     * [PegelAggregator.aggregiere] wies bis dahin einen echten Bug auf, keinen bloss kosmetischen
+     * Unterschied: Es waehlte die AUSGEGEBENEN `fensterStart`-Zeitstempel auf dem absoluten
+     * Millisekunden-Raster (`floor(minTs/fensterMillis)*fensterMillis`, unabhaengig vom
+     * `von`-Parameter), gruppierte Rohwerte in Buckets aber RELATIV zum eigenen `von`-Parameter
+     * des jeweiligen Aufrufs. War `von` nicht exakt auf das Fensterdauer-Raster ausgerichtet,
+     * fielen beide Bezugssysteme auseinander - je nach Datenlage landeten Rohwerte dadurch unter
+     * einem FALSCHEN `fensterStart` oder verschwanden ganz aus der Ausgabe. Das betraf entgegen
+     * der urspruenglichen Annahme NICHT nur mehrere Aufrufe mit unterschiedlichem `von` (wie beim
+     * Aufteilen in Abschnitte), sondern bereits einen einzigen Aufruf ueber den ganzen Tag - "bei
+     * genau einem Aufruf ist die Verschiebung konstant, also wohldefiniert" beschrieb nur, DASS
+     * das Ergebnis deterministisch war, nicht dass es korrekt war (siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Test
+     * `nichtRasterausgerichtetesVonBeiDatengetriebenemFensterbeginnGruppiertKorrekt`, fuer ein
+     * durchgerechnetes Gegenbeispiel).
+     *
+     * [PegelAggregator.aggregiere] berechnet seine Fenstergrenzen (`effektiverStartMillis`/
+     * `effektivesEndeMillis`) seitdem VON-RELATIV statt auf dem absoluten Epoch-Raster (siehe
+     * dessen KDoc) - das ist der entscheidende Punkt fuer DIESE Funktion hier: Jeder
+     * `abschnittVon` ist per Konstruktion ein ganzzahliges Vielfaches von [fensterDauer] vom
+     * GEMEINSAMEN, urspruenglichen `von` dieses Gesamtaufrufs entfernt (`abschnittDauer` oben ist
+     * selbst ein Vielfaches von [fensterDauer]) - von-relative Fenstergrenzen liegen deshalb fuer
+     * JEDEN Abschnitt auf demselben Raster wie fuer jeden anderen, unabhaengig davon, ob die
+     * eigenen Rohwerte dieses Abschnitts dicht direkt ab `abschnittVon` beginnen oder erst
+     * spaeter. Zwei Zwischenfassungen dieser Nachbesserung reparierten stattdessen NUR die
+     * Gruppierung der Rohwerte (zuerst auf dem absoluten Epoch-Raster, dann relativ zum
+     * jeweiligen `effektiverStartMillis`) und behoben damit zwar das obige Gegenbeispiel je
+     * EINZELNEM Aufruf - aber nicht das Zusammenspiel MEHRERER Aufrufe hier unten:
+     * `effektiverStartMillis` wechselte je nach Datenlage weiterhin zwischen "absolut
+     * rasteraligniert" und "auf `von` aligniert", wodurch verschiedene Abschnitte auf
+     * UNTERSCHIEDLICHEN Rastern landen konnten. Aufgefallen erst durch
+     * `DriveSyncCoordinatorTest.stueckweiseAggregationLiefertDasselbeErgebnisWieEinAufrufUeberDenGanzenTag`
+     * mit 20.000 dichten Zufallswerten bei Fensterdauer 7s (laengeres CSV als der
+     * Vergleichs-Gesamtaufruf) - siehe
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest], Test
+     * `nichtRasterausgerichtetesVonAlsBindenderFensterbeginnGruppiertKorrekt`, fuer ein
+     * durchgerechnetes Gegenbeispiel im Kleinen.
+     *
+     * Der vormals hier dokumentierte Fallback auf einen Gesamtaufruf bei nicht rasteraligniertem
+     * `von` ist damit ueberfluessig und entfernt: diese Funktion aggregiert jetzt fuer JEDE
+     * Fensterdauer stueckweise, auch fuer eine, die 3600 nicht glatt teilt (z. B. 7s) oder in
+     * einer Zeitzone mit Nicht-Stunden-Versatz (z. B. UTC+5:30) auf Mitternacht trifft - der volle
+     * Speichervorteil aus Schritt 4 gilt seitdem ausnahmslos.
+     *
+     * `hatteRohwerte` bildet nach, was der bisherige Code implizit tat: War samples.isEmpty()
+     * (VOR jeder Ereignis-Betrachtung), wurde der Tag in [holeVersaeumteTageNach] uebersprungen -
+     * ein Tag ganz ohne Rohwerte, aber mit Ereignissen, wurde nie hochgeladen. Dieses bestehende
+     * Verhalten wird hier bewusst 1:1 fortgefuehrt, nicht nebenbei mitkorrigiert.
+     */
+    private suspend fun aggregiereInAbschnitten(
+        von: Instant,
+        bis: Instant,
+        ereignisse: List<ProtokollEreignis>,
+        fensterDauer: Duration,
+    ): AbschnittsAggregation {
+        if (!bis.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
+
+        val fensterSekunden = fensterDauer.seconds.coerceAtLeast(1)
+        val vielfaches = Math.round(3600.0 / fensterSekunden).coerceAtLeast(1)
+        val abschnittDauer = fensterDauer.multipliedBy(vielfaches)
+
+        val zeilen = mutableListOf<AggregatZeile>()
+        var hatteRohwerte = false
+        var letztesFensterEnde: Instant? = null
+        var abschnittVon = von
+
+        while (abschnittVon.isBefore(bis)) {
+            val abschnittBis = minOf(abschnittVon.plus(abschnittDauer), bis)
+            val abschnittSamples = levelSampleDao.zwischen(abschnittVon.toEpochMilli(), abschnittBis.toEpochMilli())
+            if (abschnittSamples.isNotEmpty()) hatteRohwerte = true
+            val abschnittEreignisse = ereignisse.filter {
+                !it.at.isBefore(abschnittVon) && it.at.isBefore(abschnittBis)
+            }
+
+            if (abschnittSamples.isNotEmpty() || abschnittEreignisse.isNotEmpty()) {
+                val abschnittZeilen = PegelAggregator.aggregiere(
+                    abschnittSamples, abschnittEreignisse, abschnittVon, abschnittBis, fensterDauer,
+                )
+                if (abschnittZeilen.isNotEmpty()) {
+                    val ersteZeile = abschnittZeilen.first()
+                    letztesFensterEnde?.let { ende ->
+                        // Luecke zwischen dem letzten Abschnitt mit Daten und diesem hier -
+                        // beide liegen innerhalb des Gesamt-Datenumfangs, muss also wie bei
+                        // einem einzigen aggregiere()-Aufruf als KEINE_VERBINDUNG erscheinen.
+                        var lueckenFenster = ende
+                        while (lueckenFenster.isBefore(ersteZeile.fensterStart)) {
+                            zeilen += AggregatZeile(fensterStart = lueckenFenster)
+                            lueckenFenster = lueckenFenster.plus(fensterDauer)
+                        }
+                    }
+                    zeilen += abschnittZeilen
+                    letztesFensterEnde = abschnittZeilen.last().fensterStart.plus(fensterDauer)
+                }
+            }
+            abschnittVon = abschnittBis
+        }
+        return AbschnittsAggregation(zeilen, hatteRohwerte)
     }
 
     /**
@@ -519,10 +704,16 @@ class DriveSyncCoordinator(
      * Owner-Meldung 16.09.2026, "Upload schmiert nach 1-2h ab" - siehe
      * [SettingsManager.datenbankSicherungLastAttemptAt]-KDoc fuer die volle Herleitung): ohne
      * das baute [datenbankSicherungQuelle] die komplette Datenbank bei jedem einzelnen, per
-     * [DriveSyncWorker.starteSofort] durch ein Laermereignis ausgeloesten Zyklus neu als ZIP im
-     * Speicher auf - bei haeufigen Ereignissen genug wiederholte, mehrere zehn MB grosse
-     * Allokationen, um den Heap eines kleinen Geraets binnen unter einer Stunde zu OOM zu
-     * treiben. Die Pruefung steht VOR dem teuren [quelle]-Aufruf, nicht erst vor dem Upload.
+     * [DriveSyncWorker.starteSofort] durch ein Laermereignis ausgeloesten Zyklus neu auf und lud
+     * sie hoch - bei haeufigen Ereignissen unnoetig wiederholter Festplatten-I/O und
+     * Upload-Traffic fuer eine mehrere hundert MB grosse Datei. Die Pruefung steht VOR dem teuren
+     * [quelle]-Aufruf, nicht erst vor dem Upload.
+     *
+     * Fehlschlaege (Bauen wie Hochladen) werden seit dem Streaming-Umbau (Bugfix 23.09.2026,
+     * docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 4) als
+     * [com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED] gemeldet, nicht
+     * mehr nur als INFO-Breadcrumb - genau dieser stille Breadcrumb-Pfad war der Grund, warum die
+     * 95 gescheiterten Sicherungsversuche vom 16.-23.09.2026 niemandem aufgefallen sind.
      */
     private suspend fun ladeDatenbankSicherungHoch(ordnerId: String) {
         if (!settings.datenbankSicherungDriveUpload) return
@@ -534,18 +725,36 @@ class DriveSyncCoordinator(
         }
         settings.datenbankSicherungLastAttemptAt = now.now().toEpochMilli()
 
-        val bytes = runCatching { quelle() }.getOrElse { fehler ->
-            diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung konnte nicht erstellt werden: ${fehler.message}")
+        val tempDatei = runCatching { quelle() }.getOrElse { fehler ->
+            diagnosticsReporter?.report(
+                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                component = "DriveSyncCoordinator",
+                operation = "ladeDatenbankSicherungHoch.bauen",
+                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                cause = fehler,
+                message = fehler.message,
+            )
             return
         }
-        DriveDatenbankSicherung.hochladen(driveApi, ordnerId, bytes)
-            .onSuccess {
-                settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
-                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${bytes.size} Bytes)")
-            }
-            .onFailure { fehler ->
-                diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung-Upload fehlgeschlagen: ${fehler.message}")
-            }
+        try {
+            DriveDatenbankSicherung.hochladen(driveApi, ordnerId, tempDatei)
+                .onSuccess {
+                    settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
+                    diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${tempDatei.length()} Bytes)")
+                }
+                .onFailure { fehler ->
+                    diagnosticsReporter?.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                        component = "DriveSyncCoordinator",
+                        operation = "ladeDatenbankSicherungHoch.hochladen",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        cause = fehler,
+                        message = fehler.message,
+                    )
+                }
+        } finally {
+            tempDatei.delete()
+        }
     }
 
     private suspend fun schreibeDatei(

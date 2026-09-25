@@ -1,6 +1,5 @@
 package com.example.lrmprotokoll.diagnose.export
 
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,9 +13,11 @@ import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
+import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
@@ -50,6 +51,12 @@ data class BundleKontext(
     val ausloeser: String,
     val acraReportJson: String? = null,
     val threadDetails: String? = null,
+    /** Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: der Laufzeitzustand-Report
+     * von [com.example.lrmprotokoll.diagnose.acra.LaufzeitzustandCollector] - anders als
+     * [acraReportJson] nicht der volle ACRA-Report, sondern nur dessen
+     * `LAUFZEITZUSTAND`-Feld (siehe SupportOutboxReportSender). `null` fuer alle Bundle-Typen
+     * ausser einem Absturz-Bundle, bei dem der Collector gelaufen ist. */
+    val laufzeitzustandJson: String? = null,
     /** `null` liest Logcat live (fuer manuelle/periodische Bundles); bei einem Absturz-Bundle
      * uebergibt der ACRA-Sender den bereits von ACRA gesammelten Text (Schritt 5). */
     val logcatText: String? = null,
@@ -97,6 +104,17 @@ class SupportBundleExporter(
     private val traceVerzeichnis: File,
     private val bleVerbindungszustandProvider: () -> String = { "UNBEKANNT" },
     private val aufnahmeAktivProvider: () -> Boolean = { false },
+    /** Bugfix (Geraetetest P30 23.09.2026, PROMPT_FIX_BUNDLE_INHALT.md Teil 2): ob die
+     * Plattform eine angeforderte Berechtigung ueberhaupt kennt (z. B. POST_NOTIFICATIONS ist
+     * erst API 33+ - auf einem API-29-Geraet lieferte [PackageManager.getPermissionInfo] dafuer
+     * bislang stets `false` = "verweigert", was bei der Fehlersuche in die Irre fuehrt statt
+     * "gibt es auf diesem Geraet nicht" zu zeigen). Als injizierbare Funktion statt direktem
+     * [PackageManager]-Aufruf in [buildRuntimeJson], weil Robolectrics PackageManager echte
+     * Plattform-Berechtigungen mitunter nicht kennt (siehe SupportBundleExporterTest).
+     */
+    private val berechtigungExistiertProvider: (String) -> Boolean = { name ->
+        runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
+    },
 ) {
 
     suspend fun createBundle(kontext: BundleKontext): File {
@@ -123,7 +141,8 @@ class SupportBundleExporter(
         val istPeriodisch = kontext.typ == BundleTyp.PERIODISCH
         val zipBudget = if (istPeriodisch) ZIP_BUDGET_PERIODISCH else ZIP_BUDGET_ABSTURZ
         // Kuerzungsreihenfolge (Konzept 4.5): zuerst events.jsonl, dann zusaetzlich logcat.txt,
-        // crash/ wird nie gekuerzt - dafuer existiert das Bundle.
+        // crash/ wird nie gekuerzt - dafuer existiert das Bundle (Owner-Entscheidung O-7: das
+        // Budget ist fuer Absturz-Bundles damit ein Richtwert, keine harte Grenze).
         val eventsMax = if (kuerzungsstufe >= 1) 0L else if (istPeriodisch) EVENTS_MAX_PERIODISCH else EVENTS_MAX_ABSTURZ
         val logcatMax = if (kuerzungsstufe >= 2) 0L else if (istPeriodisch) LOGCAT_MAX_PERIODISCH else LOGCAT_MAX_ABSTURZ
 
@@ -161,11 +180,24 @@ class SupportBundleExporter(
             kontext.threadDetails?.let { inhalt ->
                 schreibeEintrag("crash/threads.txt") { it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8)) }
             }
+            // Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 2: laeuft wie
+            // crash/acra_report.json durch den DiagnosticRedactor - derselbe Grund (Copilot-Fund
+            // PR #182): der Inhalt stammt aus demselben ACRA-Report und kann dieselben Muster
+            // enthalten (Geraetenamen, o.ae.).
+            kontext.laufzeitzustandJson?.let { inhalt ->
+                schreibeEintrag("crash/laufzeitzustand_beim_absturz.json") {
+                    it.write(DiagnosticRedactor.redactString(inhalt).orEmpty().toByteArray(StandardCharsets.UTF_8))
+                }
+            }
             if (kontext.exitInfos.isNotEmpty()) {
                 schreibeEintrag("crash/exit_info.json") { it.write(buildExitInfoJson(kontext.exitInfos).toByteArray(StandardCharsets.UTF_8)) }
             }
             File(traceVerzeichnis, ANR_TRACE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/anr_trace.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
+            }
+            // O-8: Mitschnitt des ANR-Watchdogs - der einzige ANR-Beleg auf Android 10.
+            File(traceVerzeichnis, ANR_WATCHDOG_DATEINAME).takeIf { it.exists() }?.let { quelle ->
+                schreibeEintrag("crash/anr_watchdog.txt") { out -> quelle.inputStream().use { it.copyTo(out) } }
             }
             File(traceVerzeichnis, NATIVE_TOMBSTONE_DATEINAME).takeIf { it.exists() }?.let { quelle ->
                 schreibeEintrag("crash/native_tombstone.pb") { out -> quelle.inputStream().use { it.copyTo(out) } }
@@ -325,6 +357,14 @@ class SupportBundleExporter(
 
     private fun buildRuntimeJson(): String {
         val json = JSONObject()
+        // Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md: dieser Exporter-Lauf baut
+        // state/runtime.json NACH einem moeglichen Absturz (manuell, periodisch, oder - bei
+        // einem Absturz-Bundle - im ACRA-Sender-Prozess, siehe SupportOutboxReportSender-KDoc).
+        // Den Zustand IM Absturzmoment selbst liefert stattdessen
+        // crash/laufzeitzustand_beim_absturz.json, wenn vorhanden (LaufzeitzustandCollector,
+        // laeuft im abstuerzenden Prozess) - dieses Feld verhindert, dass die zwei Zeitpunkte
+        // verwechselt werden.
+        json.put("erfasst", "bei Bundle-Erstellung")
         // Geraete-/OS-Metadaten (aus main gemergt, vormals buildDeviceJson() im
         // Vor-Schritt-4-Exporter) - hier statt einer eigenen device.json, weil state/runtime.json
         // seit Schritt 4 ohnehin der Sammelort fuer Laufzeitkontext ist.
@@ -332,22 +372,11 @@ class SupportBundleExporter(
         json.put("osRelease", Build.VERSION.RELEASE)
         json.put("manufacturer", DiagnosticRedactor.redactString(Build.MANUFACTURER))
         json.put("model", DiagnosticRedactor.redactString(Build.MODEL))
-        val runtime = Runtime.getRuntime()
-        json.put("heapUsedBytes", runtime.totalMemory() - runtime.freeMemory())
-        json.put("heapFreeBytes", runtime.freeMemory())
-        json.put("heapMaxBytes", runtime.maxMemory())
 
-        runCatching {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            if (am != null) {
-                val memInfo = ActivityManager.MemoryInfo()
-                am.getMemoryInfo(memInfo)
-                json.put("systemAvailMemBytes", memInfo.availMem)
-                json.put("systemTotalMemBytes", memInfo.totalMem)
-                json.put("systemLowMemory", memInfo.lowMemory)
-                json.put("systemMemoryThresholdBytes", memInfo.threshold)
-            }
-        }
+        // Heap/ActivityManager.MemoryInfo/laufende Dienste: geteilt mit LaufzeitzustandCollector,
+        // der dieselben billigen Felder im abstuerzenden Prozess erfasst (Bugfix
+        // docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md Schritt 1).
+        LaufzeitzustandJson.schreibeGemeinsameFelder(context, json)
 
         runCatching {
             val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -368,22 +397,25 @@ class SupportBundleExporter(
 
         runCatching {
             val berechtigungen = JSONObject()
+            // Bugfix (Geraetetest P30 23.09.2026, PROMPT_FIX_BUNDLE_INHALT.md Teil 2): Geraete-
+            // und API-Level-abhaengige Berechtigungen (z. B. POST_NOTIFICATIONS, BLUETOOTH_SCAN/
+            // -CONNECT, SCHEDULE_EXACT_ALARM), die die Plattform auf diesem Geraet gar nicht
+            // kennt, stehen separat statt unter "berechtigungen" mit dem irrefuehrenden Wert
+            // `false` ("verweigert").
+            val nichtVorhanden = JSONArray()
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
             val namen = packageInfo.requestedPermissions
             val flags = packageInfo.requestedPermissionsFlags
             namen?.forEachIndexed { i, name ->
-                val gewaehrt = ((flags?.getOrNull(i) ?: 0) and android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED) != 0
-                berechtigungen.put(name, gewaehrt)
+                if (berechtigungExistiertProvider(name)) {
+                    val gewaehrt = ((flags?.getOrNull(i) ?: 0) and android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED) != 0
+                    berechtigungen.put(name, gewaehrt)
+                } else {
+                    nichtVorhanden.put(name)
+                }
             }
             json.put("berechtigungen", berechtigungen)
-        }
-
-        runCatching {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            val dienste = JSONArray()
-            @Suppress("DEPRECATION")
-            am?.getRunningServices(Integer.MAX_VALUE)?.forEach { dienste.put(it.service.className) }
-            json.put("laufendeDienste", dienste)
+            json.put("berechtigungenNichtVorhanden", nichtVorhanden)
         }
 
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))

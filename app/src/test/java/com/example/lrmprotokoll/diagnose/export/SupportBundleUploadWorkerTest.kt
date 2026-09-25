@@ -10,7 +10,6 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.DriveApiClient
 import com.example.lrmprotokoll.drive.DriveDatei
-import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -21,6 +20,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 /**
  * M12 Schritt 5: [SupportBundleUploadWorker] gegen einen handgeschriebenen Fake-[DriveApiClient]
@@ -30,7 +30,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SupportBundleUploadWorkerTest {
-
     private class FakeDriveApiClient(
         private val vorhandeneDateien: MutableSet<String> = mutableSetOf(),
     ) : DriveApiClient {
@@ -38,27 +37,63 @@ class SupportBundleUploadWorkerTest {
         var hochladenSchlaegtFehl = false
         var suchAufrufe = 0
 
-        override suspend fun ordnerAnlegen(name: String, elternId: String?) = kotlin.Result.success("support-ordner-id")
-        override suspend fun ordnerSuchen(name: String, elternId: String?): kotlin.Result<DriveDatei?> =
-            kotlin.Result.success(DriveDatei("support-ordner-id", name))
+        override suspend fun ordnerAnlegen(
+            name: String,
+            elternId: String?,
+        ) = kotlin.Result.success("support-ordner-id")
+
+        override suspend fun ordnerSuchen(
+            name: String,
+            elternId: String?,
+        ): kotlin.Result<DriveDatei?> = kotlin.Result.success(DriveDatei("support-ordner-id", name))
+
         override suspend fun ordnerAuflisten() = kotlin.Result.success(emptyList<DriveDatei>())
-        override suspend fun ordnerUmbenennen(ordnerId: String, neuerName: String) = kotlin.Result.success(Unit)
-        override suspend fun dateiSuchen(name: String, ordnerId: String): kotlin.Result<DriveDatei?> {
+
+        override suspend fun ordnerUmbenennen(
+            ordnerId: String,
+            neuerName: String,
+        ) = kotlin.Result.success(Unit)
+
+        override suspend fun dateiSuchen(
+            name: String,
+            ordnerId: String,
+        ): kotlin.Result<DriveDatei?> {
             suchAufrufe++
             return kotlin.Result.success(if (name in vorhandeneDateien) DriveDatei("bereits-da", name) else null)
         }
+
         override suspend fun dateienInOrdnerAuflisten(ordnerId: String) = kotlin.Result.success(emptySet<String>())
+
         override suspend fun dateiAnlegen(
-            name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
+            name: String,
+            ordnerId: String,
+            inhalt: ByteArray,
+            mimeType: String,
+            gzip: Boolean,
         ) = kotlin.Result.success("datei-id")
+
         override suspend fun dateiAktualisieren(
-            fileId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean,
+            fileId: String,
+            inhalt: ByteArray,
+            mimeType: String,
+            gzip: Boolean,
         ) = kotlin.Result.success(Unit)
+
         override suspend fun dateiHerunterladen(fileId: String): kotlin.Result<ByteArray> =
             throw NotImplementedError("im Test nicht benoetigt")
+
+        override suspend fun dateiHerunterladenNach(
+            fileId: String,
+            ziel: File,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun dateiHochladenResumable(
-            name: String, ordnerId: String, datei: File, mimeType: String,
-            fortsetzenAb: String?, sessionGestartet: suspend (String) -> Unit,
+            name: String,
+            ordnerId: String,
+            datei: File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
         ): kotlin.Result<String> {
             if (hochladenSchlaegtFehl) return kotlin.Result.failure(RuntimeException("Simulierter Netzfehler"))
@@ -66,6 +101,15 @@ class SupportBundleUploadWorkerTest {
             vorhandeneDateien += name
             return kotlin.Result.success("hochgeladen-id")
         }
+
+        override suspend fun dateiAktualisierenResumable(
+            fileId: String,
+            datei: File,
+            mimeType: String,
+            fortsetzenAb: String?,
+            sessionGestartet: suspend (String) -> Unit,
+            fortschritt: suspend (Long, Long) -> Unit,
+        ): kotlin.Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
     }
 
     private lateinit var context: Context
@@ -74,14 +118,20 @@ class SupportBundleUploadWorkerTest {
 
     private fun bauWorker(driveApi: DriveApiClient) =
         TestListenableWorkerBuilder<SupportBundleUploadWorker>(context)
-            .setWorkerFactory(object : WorkerFactory() {
-                override fun createWorker(
-                    appContext: Context, workerClassName: String, workerParameters: WorkerParameters,
-                ) = SupportBundleUploadWorker(appContext, workerParameters, driveApi)
-            })
-            .build()
+            .setWorkerFactory(
+                object : WorkerFactory() {
+                    override fun createWorker(
+                        appContext: Context,
+                        workerClassName: String,
+                        workerParameters: WorkerParameters,
+                    ) = SupportBundleUploadWorker(appContext, workerParameters, driveApi)
+                },
+            ).build()
 
-    private fun bundleDatei(name: String, inhalt: String = "fake-zip-inhalt"): File {
+    private fun bundleDatei(
+        name: String,
+        inhalt: String = "fake-zip-inhalt",
+    ): File {
         val datei = File(outboxDir, name)
         datei.writeText(inhalt)
         return datei
@@ -96,7 +146,9 @@ class SupportBundleUploadWorkerTest {
         outboxDir.deleteRecursively()
         outboxDir.mkdirs()
         // Isoliert diesen Test von anderen, die dieselbe geteilte Robolectric-Applikation nutzen.
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.settingsManager.driveFolderId = "wurzel-id"
+        ApplicationProvider
+            .getApplicationContext<LaermprotokollApp>()
+            .container.settingsManager.driveFolderId = "wurzel-id"
     }
 
     @After
@@ -105,68 +157,77 @@ class SupportBundleUploadWorkerTest {
     }
 
     @Test
-    fun erfolgreicherUploadLoeschtDieDateiUndVermerktErfolg() = runTest {
-        val datei = bundleDatei("2026-09-17_230000_absturz.zip")
-        val driveApi = FakeDriveApiClient()
+    fun erfolgreicherUploadLoeschtDieDateiUndVermerktErfolg() =
+        runTest {
+            val datei = bundleDatei("2026-09-17_230000_absturz.zip")
+            val driveApi = FakeDriveApiClient()
 
-        val ergebnis = bauWorker(driveApi).doWork()
+            val ergebnis = bauWorker(driveApi).doWork()
 
-        assertTrue(ergebnis is Result.Success)
-        assertFalse("Datei muss nach erfolgreichem Upload geloescht sein", datei.exists())
-        assertEquals(listOf("2026-09-17_230000_absturz.zip"), driveApi.hochgeladeneDateien)
-        assertTrue(
-            ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.settingsManager.supportBundleLastUploadAt > 0,
-        )
-    }
-
-    @Test
-    fun fehlgeschlagenerUploadLiefertRetryUndBehaeltDieDatei() = runTest {
-        val datei = bundleDatei("2026-09-17_230000_absturz.zip")
-        val driveApi = FakeDriveApiClient().apply { hochladenSchlaegtFehl = true }
-
-        val ergebnis = bauWorker(driveApi).doWork()
-
-        assertTrue(ergebnis is Result.Retry)
-        assertTrue("Bei einem Fehlschlag darf die Datei nicht verloren gehen", datei.exists())
-    }
+            assertTrue(ergebnis is Result.Success)
+            assertFalse("Datei muss nach erfolgreichem Upload geloescht sein", datei.exists())
+            assertEquals(listOf("2026-09-17_230000_absturz.zip"), driveApi.hochgeladeneDateien)
+            assertTrue(
+                ApplicationProvider
+                    .getApplicationContext<LaermprotokollApp>()
+                    .container.settingsManager.supportBundleLastUploadAt > 0,
+            )
+        }
 
     @Test
-    fun bereitsHochgeladeneDateiWirdNurGeloeschtNichtErneutHochgeladen() = runTest {
-        val datei = bundleDatei("2026-09-17_230000_absturz.zip")
-        val driveApi = FakeDriveApiClient(vorhandeneDateien = mutableSetOf("2026-09-17_230000_absturz.zip"))
+    fun fehlgeschlagenerUploadLiefertRetryUndBehaeltDieDatei() =
+        runTest {
+            val datei = bundleDatei("2026-09-17_230000_absturz.zip")
+            val driveApi = FakeDriveApiClient().apply { hochladenSchlaegtFehl = true }
 
-        val ergebnis = bauWorker(driveApi).doWork()
+            val ergebnis = bauWorker(driveApi).doWork()
 
-        assertTrue(ergebnis is Result.Success)
-        assertFalse(datei.exists())
-        assertTrue(
-            "Eine bereits auf Drive vorhandene Datei darf nicht noch einmal hochgeladen werden",
-            driveApi.hochgeladeneDateien.isEmpty(),
-        )
-    }
+            assertTrue(ergebnis is Result.Retry)
+            assertTrue("Bei einem Fehlschlag darf die Datei nicht verloren gehen", datei.exists())
+        }
 
     @Test
-    fun keinDriveOrdnerEingerichtetLaesstDieOutboxUnangetastet() = runTest {
-        ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.settingsManager.driveFolderId = null
-        val datei = bundleDatei("2026-09-17_230000_manuell.zip")
-        val driveApi = FakeDriveApiClient()
+    fun bereitsHochgeladeneDateiWirdNurGeloeschtNichtErneutHochgeladen() =
+        runTest {
+            val datei = bundleDatei("2026-09-17_230000_absturz.zip")
+            val driveApi = FakeDriveApiClient(vorhandeneDateien = mutableSetOf("2026-09-17_230000_absturz.zip"))
 
-        val ergebnis = bauWorker(driveApi).doWork()
+            val ergebnis = bauWorker(driveApi).doWork()
 
-        assertTrue(ergebnis is Result.Success)
-        assertTrue("Ohne eingerichteten Ordner darf nichts geloescht werden", datei.exists())
-        assertTrue(driveApi.hochgeladeneDateien.isEmpty())
-    }
+            assertTrue(ergebnis is Result.Success)
+            assertFalse(datei.exists())
+            assertTrue(
+                "Eine bereits auf Drive vorhandene Datei darf nicht noch einmal hochgeladen werden",
+                driveApi.hochgeladeneDateien.isEmpty(),
+            )
+        }
 
     @Test
-    fun mehrereDateienWerdenAlleHochgeladen() = runTest {
-        bundleDatei("2026-09-17_230000_absturz.zip")
-        bundleDatei("2026-09-17_231000_periodisch.zip")
-        val driveApi = FakeDriveApiClient()
+    fun keinDriveOrdnerEingerichtetLaesstDieOutboxUnangetastet() =
+        runTest {
+            ApplicationProvider
+                .getApplicationContext<LaermprotokollApp>()
+                .container.settingsManager.driveFolderId = null
+            val datei = bundleDatei("2026-09-17_230000_manuell.zip")
+            val driveApi = FakeDriveApiClient()
 
-        val ergebnis = bauWorker(driveApi).doWork()
+            val ergebnis = bauWorker(driveApi).doWork()
 
-        assertTrue(ergebnis is Result.Success)
-        assertEquals(2, driveApi.hochgeladeneDateien.size)
-    }
+            assertTrue(ergebnis is Result.Success)
+            assertTrue("Ohne eingerichteten Ordner darf nichts geloescht werden", datei.exists())
+            assertTrue(driveApi.hochgeladeneDateien.isEmpty())
+        }
+
+    @Test
+    fun mehrereDateienWerdenAlleHochgeladen() =
+        runTest {
+            bundleDatei("2026-09-17_230000_absturz.zip")
+            bundleDatei("2026-09-17_231000_periodisch.zip")
+            val driveApi = FakeDriveApiClient()
+
+            val ergebnis = bauWorker(driveApi).doWork()
+
+            assertTrue(ergebnis is Result.Success)
+            assertEquals(2, driveApi.hochgeladeneDateien.size)
+        }
 }
