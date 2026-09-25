@@ -6,6 +6,13 @@ Dieses Dokument ist das einzige Ergebnis des Auftrags. Es ist so geschrieben, da
 Coding-Agent ein einzelnes Finding umsetzen kann, ohne die UX-Konzeption neu zu machen: Jedes
 Finding nennt Datei, Symbol, aktuelles Verhalten, Zielverhalten und Testauswirkung.
 
+> **Nachtrag 25.09.2026:** Sechs der sieben offenen Owner-Fragen sind beantwortet und in die
+> betroffenen Findings eingearbeitet – siehe
+> [Kapitel 35.2](#352-owner-entscheidungen-vom-25092026). Offen bleibt einzig der Default von
+> `onboardingCompleted` ([F-14](#f-14)). Dadurch geändert: [F-16](#f-16) wird über **Weg B**
+> gelöst (Room-Migration 25 → 26), [F-30](#f-30) steigt von P3 auf P2, [F-02](#f-02) und
+> [F-19](#f-19) sind freigegeben.
+
 ---
 
 ## 1. Executive Summary
@@ -1614,7 +1621,8 @@ ab.
    auf `sessionDao.offeneSessionFlow()` umstellen).
 3. Auto-Connect beim App-Start: in `MainActivity.onCreate` bzw. in `AppNavigation` ein
    `LaunchedEffect`, das bei `meterDeviceAddress != null`, vorhandener `BLUETOOTH_CONNECT`-
-   Berechtigung und neuem Schalter `autoConnectMeter` (Default an) die neue Aktion sendet.
+   Berechtigung und neuem Schalter `autoConnectMeter` die neue Aktion sendet.
+   **Owner-Entscheidung 25.09.2026: Schalter einführen, Default an.**
 4. Der Bluetooth-Badge löst bei gepinntem Gerät diese Aktion aus statt des Scan-Dialogs; der
    Scan bleibt über „Anderes Gerät koppeln" im Messgerät-Screen erreichbar.
 
@@ -1626,7 +1634,7 @@ messungLaeuft: Boolean  = offeneSession != null
 wavLaeuft    : Boolean  = AudioRecordingService.audioAufnahmeAktiv   (vorhanden)
 ```
 
-*Persistenzänderung:* ein neuer Boolean `autoConnectMeter` in `SettingsManager`.
+*Persistenzänderung:* ein neuer Boolean `autoConnectMeter` in `SettingsManager`, Default `true` (Owner-Entscheidung 25.09.2026).
 
 *Navigation Impact:* keiner (wird in [F-29](#f-29) separat behandelt).
 
@@ -2345,6 +2353,11 @@ wichtigsten.
 > benachbarten Defaults in `SettingsManager` tragen eine KDoc-Begründung, dieser nicht; die
 > Git-Historie hilft nicht, weil der Wert im Initialimport (`d84c837`) entstanden ist. Deshalb
 > als **Owner-Frage** markiert, nicht als eindeutiger Bug – AGENTS.md §8a.
+>
+> **Stand 25.09.2026: weiterhin offen.** Auf die Frage kam eine Rückfrage, keine Entscheidung.
+> Zu klären ist nur noch, ob bestehende Installationen die Einführung einmalig nachgeholt
+> bekommen sollen; die Erklärung dazu steht in
+> [Kapitel 35.2](#352-owner-entscheidungen-vom-25092026).
 
 **B – Technische Perspektive**
 
@@ -2390,8 +2403,10 @@ in die nächste Messung übernommen, was fachlich falsch sein kann (siehe
 
 *Betroffener Use Case:* Standard-Workflow, Use-Case A. *Häufigkeit:* **hoch**.
 
-*Zielverhalten:* Unveränderte Angaben erzeugen keine neue Zeile. Zeitgebundene Felder werden
-nicht stillschweigend übernommen, sondern sichtbar als „zuletzt: …" angeboten.
+*Zielverhalten:* Unveränderte Angaben erzeugen keine neue Zeile. Wurden die Angaben an einem Tag
+einmal bestätigt, wird an diesem Tag nicht erneut aufgefordert; korrigierbar bleiben sie
+jederzeit (**Owner-Entscheidung 25.09.2026**). Zeitgebundene Felder werden mit dem Zeitstempel
+ihrer letzten Bestätigung angezeigt, statt stillschweigend als aktuell zu gelten.
 
 | Kennzahl | Heute | Danach |
 |---|---|---|
@@ -2473,7 +2488,11 @@ Sessions umfassen (Mikrofon → Messgerät). Das ist fachlich korrekt so modelli
 Messquellen = zwei Messreihen, ausführlich im `SessionEntity`-KDoc begründet) – nur als
 UI-Anker ist es falsch.
 
-*Vorgeschlagene Änderung – zwei Wege, beide ohne Schemabruch*
+> **Owner-Entscheidung 25.09.2026: Weg B.** Weg A bleibt unten als Beschreibung stehen, weil er
+> die fachliche Regel definiert, die auch Weg B umsetzt – umgesetzt wird aber die strukturelle
+> Variante mit `messvorgangId`.
+
+*Zwei Wege, beide ohne Schemabruch*
 
 **Weg A (minimal, empfohlen als Sofortmaßnahme):** Die Abfrage vom Session- auf den Tagesbezug
 umstellen.
@@ -2504,10 +2523,15 @@ dürfen sich nicht versehentlich ändern).
 | **Neu (instrumentiert)** | „Quellenwechsel Mikrofon → Messgerät löst die Sheets nicht erneut aus" |
 | Weg B zusätzlich | neuer `AppDatabaseV26MigrationTest` analog den 21 vorhandenen |
 
-> **Widerspruchshinweis (AGENTS.md §2):** Weg A ändert, *wie oft* gefragt wird, nicht *wann*.
-> Die Owner-Festlegung „erst messen, dann fotografieren" (`FotoDokumentationSheet.kt:47-53`)
-> bleibt unberührt. Die Tagesregel für das **Kalibrierfoto** ist dagegen eine fachliche
-> Festlegung, die der Owner treffen muss – siehe [Kapitel 13.3](#133-fachliche-prüfung-des-gewünschten-ux-prinzips).
+> **Widerspruchshinweis (AGENTS.md §2):** Die Änderung betrifft, *wie oft* gefragt wird, nicht
+> *wann*. Die Owner-Festlegung „erst messen, dann fotografieren"
+> (`FotoDokumentationSheet.kt:47-53`) bleibt unberührt.
+>
+> **Owner-Entscheidung 25.09.2026 zum Kalibrierfoto:** nicht erzwingen, aber mehrfach
+> ermöglichen. Konkret: Die Abfrage erscheint einmal je Kalendertag; zusätzlich gibt es eine
+> jederzeit erreichbare Aktion „Neues Kalibrierfoto", die nicht an die Tagesregel gebunden ist.
+> Die Obergrenze `fotoDokuMaxProKategorie` (Default 3) bleibt davon unberührt und ist der
+> Ort, an dem „öfter" konfigurierbar ist.
 
 ---
 
@@ -2565,8 +2589,10 @@ Hauptanwendungsfall. Häufigkeit: hoch, Schweregrad optisch.
 **Technik:** siehe [Kapitel 28.3](#283-hartkodierte-farben-dark-mode-risiko). Die Zielstruktur
 existiert bereits: `AppStatusColors` / `MaterialTheme.colorScheme.statusColors`
 (`ui/theme/Tokens.kt:12-45`). **Änderung:** Literale durch Token ersetzen.
-**Wichtig:** Das ist laut README eine **offene Owner-Entscheidung**, weil jede Nuance heute
-leicht anders ist – dieses Audit bestätigt den Befund, entscheidet ihn nicht.
+**Owner-Entscheidung 25.09.2026: freigegeben** („ja gerne"). Der README-Vorbehalt („bewusst als
+Owner-Entscheidung offengelassen") ist damit erledigt. Da jede Nuance heute leicht anders ist,
+sollte die Umsetzung je Bedeutung **einen** Token festlegen (verbunden / verbindet / instabil /
+fehlgeschlagen / inaktiv) und alle Literale darauf abbilden – nicht Literal für Literal ersetzen.
 **Tests:** `test/.../ui/BluetoothStatusBadgeTest.kt`, `MicrophoneStatusBadgeTest.kt`,
 `components/NoiseComponentsTest.kt` prüfen Texte, nicht Farben → voraussichtlich unverändert.
 
@@ -2722,7 +2748,7 @@ Häufigkeit: mittel.
 Drei-Tab-Struktur. **Tests:** `androidTest/.../AppNavigationBarInstrumentedTest.kt` nur bei (b).
 
 <a id="f-30"></a>
-#### F-30 · Cockpit widerspricht der eigenen Designleitlinie „Verlauf vor Einzelwert" · **P3**
+#### F-30 · Cockpit widerspricht der eigenen Designleitlinie „Verlauf vor Einzelwert" · **P2**
 
 **UX:** `docs/UX_DESIGN_PLAN.md` Leitlinie 3 sagt: „Der aktuelle dB-Wert ist nicht
 überdimensional groß, sondern die zeitliche Kurve und Tendenz stehen im visuellen Fokus." Im
@@ -2730,9 +2756,16 @@ Cockpit wird der Momentanwert mit `typography.displayLarge` gesetzt, der Chart s
 einer Karte. Häufigkeit: dauerhaft sichtbar.
 
 **Technik:** `LiveCockpitCard.kt:357-365` (`displayLarge` `:361`), Chart `:529-539`.
-**Einordnung:** Das ist ein Widerspruch zu einem dokumentierten Gestaltungsprinzip, keine
-technische Fehlfunktion. Ob das Prinzip weiter gilt, entscheidet der Owner – deshalb P3 und
-ausdrücklich **ohne** Umsetzungsempfehlung.
+**Owner-Entscheidung 25.09.2026: Die Leitlinie gilt weiter** („ja verlauf"). Damit ist das kein
+Vorbehalt mehr, sondern eine bestätigte Anforderung – Priorität von P3 auf **P2** angehoben.
+
+**Vorgeschlagene Änderung:** Den Momentanwert von `displayLarge` auf `headlineMedium` oder
+`headlineSmall` zurücknehmen und den Chart nach oben ziehen, sodass er das erste große Element
+unter der Kopfzeile ist. Der Wert bleibt vollständig lesbar, verliert aber die visuelle
+Dominanz. Die Kennwerte (LAeq/LAmax) bleiben, wo sie sind – sie gehören zum Verlauf, nicht zum
+Momentanwert. Reine Layoutänderung, keine neue Logik.
+**Tests:** `test/.../ui/LiveCockpitCardTest.kt` prüft Texte, nicht Typografie → voraussichtlich
+unverändert.
 
 <a id="f-31"></a>
 #### F-31 · Sechs Screens haben keinen Snackbar-Kanal · **P3**
@@ -2933,7 +2966,8 @@ Stammdaten, Messintegrität und der Bericht hängen daran statt an der Session.
 `MainActivity` (Sheet-Auslöser), `ProtokollScreen`. **Bündelt:** [F-01](#f-01) (Rückkehr des
 Sheets), [F-12](#f-12), [F-16](#f-16). **Risiko:** hoch (Schemaänderung, 21 vorhandene
 Migrationstests als Vorbild; `fallbackToDestructiveMigration` ist verboten). **Alternative mit
-kleinerem Risiko:** die Tagesregel aus [F-16 Weg A](#f-16), ohne Schemaänderung.
+kleinerem Risiko** wäre die reine Tagesregel aus [F-16 Weg A](#f-16) gewesen – der Owner hat sich
+am 25.09.2026 bewusst für Weg B entschieden.
 
 ### S-3 · Automatische Geräteverbindung, getrennt von der Aufzeichnung
 
@@ -2990,7 +3024,7 @@ Owner-Entscheidung zum Kalibrierfoto.
 | ID | Kurzbeschreibung | Prio | Aufwand | Risiko | Kategorie |
 |---|---|---|---|---|---|
 | [F-01](#f-01) | Sheet-Eingaben gehen bei Drehung verloren, Sheet kehrt nicht zurück | **P0** | S (Teil 1) / M (Teil 3) | niedrig | Datenverlust |
-| [F-02](#f-02) | Kein Auto-Connect; „Verbinden" == „Messung starten" | P1 | L | hoch | Workflow |
+| [F-02](#f-02) | Kein Auto-Connect; „Verbinden" == „Messung starten" – **freigegeben, Default an** | P1 | L | hoch | Workflow |
 | [F-03](#f-03) | `FAILED` ist eine Sackgasse | P1 | S | mittel | Zuverlässigkeit |
 | [F-04](#f-04) | Selbstprüfung mit hartkodierten Parametern | P1 | S | niedrig | Transparenz |
 | [F-05](#f-05) | `HealthActionType` wird ignoriert | P1 | S | niedrig | Bedienbarkeit |
@@ -3004,10 +3038,10 @@ Owner-Entscheidung zum Kalibrierfoto.
 | [F-13](#f-13) | Drive-Status nicht im Hauptfluss, kein Retry | P1 | M | niedrig | Transparenz |
 | [F-14](#f-14) | Onboarding erscheint nie | P1 | S | niedrig | First-Time-Use |
 | [F-15](#f-15) | Stammdaten: Duplikate, alle Felder gleich behandelt | P2 | M | niedrig | Interaktionskosten |
-| [F-16](#f-16) | Beide Sheets erscheinen zweimal je Messvorgang | **P1** | M (Weg A) / L (Weg B) | mittel | Interaktionskosten |
+| [F-16](#f-16) | Beide Sheets erscheinen zweimal je Messvorgang | **P1** | **L** (Weg B entschieden) | **hoch** (Room-Migration) | Interaktionskosten |
 | [F-17](#f-17) | Klassifizierungsstatus nicht darstellbar | P2 | M | niedrig | Transparenz |
 | [F-18](#f-18) | Zwei Filtersysteme | P2 | M | mittel | Konsistenz |
-| [F-19](#f-19) | Hartkodierte Farben (Dark Mode) | P2 | M | niedrig | Darstellung |
+| [F-19](#f-19) | Hartkodierte Farben (Dark Mode) – **freigegeben** | P2 | M | niedrig | Darstellung |
 | [F-20](#f-20) | 156 nicht lokalisierte UI-Literale | P2 | L | mittel | i18n |
 | [F-21](#f-21) | Touch-Targets unter 48 dp | P2 | S | niedrig | Accessibility |
 | [F-22](#f-22) | Trigger-Quelle-Chip: Affordanz und Größe | P2 | S | niedrig | Accessibility |
@@ -3018,7 +3052,7 @@ Owner-Entscheidung zum Kalibrierfoto.
 | [F-27](#f-27) | Drei Exportwege ohne Fehlerbehandlung | P2 | S | niedrig | Fehlerbehandlung |
 | [F-28](#f-28) | Berichtszeitraum nicht vorbelegt | P2 | S | niedrig | Interaktionskosten |
 | [F-29](#f-29) | Messgerät-Screen vier Ebenen tief | P3 | S | niedrig | Navigation |
-| [F-30](#f-30) | Widerspruch zur Leitlinie „Verlauf vor Einzelwert" | P3 | – | – | Owner-Entscheidung |
+| [F-30](#f-30) | Widerspruch zur Leitlinie „Verlauf vor Einzelwert" | **P2** | S | niedrig | Darstellung |
 | [F-31](#f-31) | Sechs Screens ohne Snackbar-Kanal | P3 | S | niedrig | Konsistenz |
 | [F-32](#f-32) | Zwei Filter-Buttons im Protokoll | P3 | S | niedrig | Konsistenz |
 | [F-33](#f-33) | Snackbar und Toast gemischt | P3 | S | niedrig | Material |
@@ -3050,8 +3084,7 @@ bewusst nicht dupliziert.
 | F-13 | `DriveUploadScreenInstrumentedTest` | niedrig | Compose-Test der neuen Sync-Zeile |
 | F-14 | `MainActivityLaunchTest`, `AppStartupSmokeInstrumentedTest` (starten heute direkt ins Cockpit) | **mittel** | „frische Installation zeigt Onboarding, danach nicht" |
 | F-15 | `GesamtberichtStammdatenSheetInstrumentedTest` erweitern | niedrig | JVM: `entsprichtEintrag` |
-| F-16 (Weg A) | `FotoDokumentationTest`, `FotodokumentationSettingsInstrumentedTest` | mittel | DAO „Fotos je Kalendertag"; Instrumented: Quellenwechsel löst nichts aus |
-| F-16 (Weg B) | zusätzlich alle Session-bezogenen Tests | **hoch** | `AppDatabaseV26MigrationTest` |
+| F-16 (Weg B, entschieden) | `FotoDokumentationTest`, `FotodokumentationSettingsInstrumentedTest` + alle session-bezogenen Tests | **hoch** | `AppDatabaseV26MigrationTest`; DAO „je Messvorgang"; Instrumented: Quellenwechsel löst nichts aus |
 | F-17 | Compose-Tests der Aufnahmeliste | niedrig | `NoiseRecordGroupingTest` erweitern |
 | F-18 | `ProtokollScreenInstrumentedTest` (klickt gezielt den alten Button) | mittel | Persistenz des Session-Filters |
 | F-19 | voraussichtlich keine (Tests prüfen Texte, nicht Farben) | niedrig | – |
@@ -3136,11 +3169,11 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-16](#f-16) (**Weg A**, ohne Schemaänderung), [F-01](#f-01) Teil 3, [F-13](#f-13), [F-26](#f-26) |
-| **Komponenten** | `DokumentationsFotoDao`, `StammdatenVerlaufDao`, `MainActivity` (Sheet-Auslöser), `DriveUploadScreen`, Batch-Klassifizierung |
+| **Findings** | [F-16](#f-16) (**Weg B**, mit `messvorgangId` und Room-Migration 25 → 26 – Owner-Entscheidung 25.09.2026), [F-01](#f-01) Teil 3, [F-13](#f-13), [F-26](#f-26) |
+| **Komponenten** | `SessionEntity`, `AppDatabase` (Migration + exportiertes Schema), `MeasurementRecorder`, `DokumentationsFotoDao`, `StammdatenVerlaufDao`, `MainActivity` (Sheet-Auslöser), `DriveUploadScreen`, Batch-Klassifizierung |
 | **Erwarteter UX-Effekt** | Sheets erscheinen einmal je Messvorgang statt zweimal; Sync-Fehler sind vor Ort behebbar |
-| **Risiko** | mittel – **hier ist vorher die Owner-Entscheidung zum Kalibrierfoto nötig** ([Kapitel 13.3](#133-fachliche-prüfung-des-gewünschten-ux-prinzips)) |
-| **Testauswirkungen** | neue DAO-Tests; `FotoDokumentationTest` erweitern; neuer Instrumented-Test für den Quellenwechsel |
+| **Risiko** | **hoch** – Schemaänderung. Die fachlichen Regeln sind entschieden ([Kapitel 35.2](#352-owner-entscheidungen-vom-25092026)), das Risiko liegt jetzt allein in der Migration: `identityHash`, Tabellen- und Spaltennamen für alles Bestehende unverändert, `fallbackToDestructiveMigration` bleibt verboten (AGENTS.md §5) |
+| **Testauswirkungen** | **neuer `AppDatabaseV26MigrationTest`** (Pflicht, analog den 21 vorhandenen); neue DAO-Tests; `FotoDokumentationTest` erweitern; neuer Instrumented-Test für den Quellenwechsel; alle session-bezogenen Tests prüfen |
 
 ### Phase 5 – Fehlerprävention und Accessibility
 
@@ -3169,15 +3202,18 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 | **Findings** | [F-25](#f-25), [F-24](#f-24), [F-29](#f-29), [F-17](#f-17), [F-19](#f-19), [F-20](#f-20) |
 | **Risiko** | [F-19](#f-19) und [F-20](#f-20) brauchen eine Owner-Freigabe (beide sind im README als offene Entscheidung bzw. bewusster Restbestand geführt); [F-20](#f-20) bricht viele Compose-Tests, die auf deutschen Text matchen |
 
-### Was **nicht** ohne Owner-Entscheidung angefasst werden sollte
+### Stand der Owner-Vorbehalte (25.09.2026)
 
-| Punkt | Warum |
+| Punkt | Stand |
 |---|---|
-| Reihenfolge „erst messen, dann fotografieren" | ausdrücklich als „nicht verhandelbar" dokumentiert (`FotoDokumentationSheet.kt:47-53`) |
-| Tagesregel für das **Kalibrierfoto** | fachliche Festlegung zur Beweiskraft, nicht technisch ableitbar |
-| Vereinheitlichung der Statusfarben ([F-19](#f-19)) | im README ausdrücklich als offene Owner-Entscheidung geführt |
-| Default von `onboardingCompleted` ([F-14](#f-14)) | Intention aus dem Code nicht belegbar |
-| Leitlinie „Verlauf vor Einzelwert" ([F-30](#f-30)) | Designprinzip, keine Fehlfunktion |
+| Reihenfolge „erst messen, dann fotografieren" | **gilt unverändert** – ausdrücklich als „nicht verhandelbar" dokumentiert (`FotoDokumentationSheet.kt:47-53`); keines der Findings rührt daran |
+| Tagesregel für das **Kalibrierfoto** | **entschieden**: nicht erzwingen, aber mehrfach ermöglichen ([F-16](#f-16)) |
+| Tagesregel für die **Berichtsangaben** | **entschieden**: einmal je Tag bestätigen, jederzeit korrigierbar ([F-15](#f-15)) |
+| Vereinheitlichung der Statusfarben ([F-19](#f-19)) | **freigegeben** |
+| Leitlinie „Verlauf vor Einzelwert" ([F-30](#f-30)) | **bestätigt** – jetzt Anforderung statt Vorbehalt |
+| Schalter „Automatisch verbinden" ([F-02](#f-02)) | **freigegeben**, Default an |
+| Weg A/B für [F-16](#f-16) | **Weg B** – `messvorgangId` mit Room-Migration 25 → 26 |
+| Default von `onboardingCompleted` ([F-14](#f-14)) | **weiterhin offen** – einzige verbleibende Owner-Frage |
 
 ---
 
@@ -3234,17 +3270,36 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 | **Verhalten bei vollem Speicher** | Ableitung aus dem Code; der automatische Neustart nach Schreibfehler ist laut README selbst nur rekonstruiert | Gerätetest mit künstlich gefülltem Speicher |
 | **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet | Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
 
-### 35.2 Fragen an den Owner (AGENTS.md §8a)
+### 35.2 Owner-Entscheidungen vom 25.09.2026
 
-| # | Frage | Warum sie nicht selbst entschieden wurde |
-|---|---|---|
-| 1 | Soll das **Kalibrierfoto** wirklich nur einmal je Kalendertag verlangt werden? | Das ist eine Aussage über die Beweiskraft, keine technische Ableitung. Die App legt an anderer Stelle Wert auf den zeitlichen Bezug („vor Messung protokolliert", `GesamtberichtStammdatenSheet.kt:293`) |
-| 2 | Ist `onboardingCompleted = true` als Default Absicht? | Aus Code und Historie nicht belegbar; alle Nachbardefaults sind begründet, dieser nicht ([F-14](#f-14)) |
-| 3 | Sollen die **zeitgebundenen** Stammdatenfelder (Kalibrierung, Wetter, Datenqualitätshinweis) weiterhin automatisch vorbefüllt werden? | Automatische Übernahme kann eine falsche Tatsachenbehauptung im Bericht erzeugen ([Kap. 14.1](#141-stammdaten-je-messung-stammdaten_verlauf)) |
-| 4 | Gilt die Designleitlinie „Verlauf vor Einzelwert" (UX_DESIGN_PLAN §1.2) weiter? | Das Cockpit widerspricht ihr heute ([F-30](#f-30)) |
-| 5 | Sollen die 28 Farbliterale vereinheitlicht werden? | Im README ausdrücklich als offene Owner-Entscheidung geführt – dieses Audit bestätigt nur den Befund |
-| 6 | Soll ein Schalter „Automatisch mit dem Messgerät verbinden" eingeführt werden, und mit welchem Default? | Ändert das Akku- und Verbindungsverhalten ([F-02](#f-02)) |
-| 7 | Weg A oder Weg B für [F-16](#f-16)? | Weg B braucht eine Room-Migration 25 → 26 und löst zugleich [F-12](#f-12) sauberer |
+Die sieben offenen Fragen sind beantwortet. Die Antworten sind hier wörtlich sinngemäß
+festgehalten und in die betroffenen Findings eingearbeitet.
+
+| # | Frage | **Entscheidung** | Wirkung auf das Audit |
+|---|---|---|---|
+| 1 | Kalibrierfoto nur einmal je Kalendertag? | **Nicht erzwingen, aber mehrfach ermöglichen.** Es soll möglich sein, öfter als einmal pro Tag ein Kalibrierfoto zu machen; verlangt wird es nicht wiederholt. | Bestätigt die Regel aus [Kap. 13.3](#133-fachliche-prüfung-des-gewünschten-ux-prinzips): Abfrage einmal je Kalendertag, dazu eine jederzeit sichtbare Aktion „Neues Foto". → [F-16](#f-16) |
+| 2 | Ist `onboardingCompleted = true` als Default Absicht? | **Offen – Rückfrage gestellt.** Der Owner kennt den Schalter nicht; die Entscheidung steht noch aus. | [F-14](#f-14) bleibt offen. Erklärung in Alltagssprache siehe unten. |
+| 3 | Zeitgebundene Stammdatenfelder weiterhin vorbefüllen? | **Tagesregel, mit Korrekturmöglichkeit.** Wurden die Parameter an einem Tag einmal bestätigt, wird an diesem Tag nicht erneut aufgefordert. Der Nutzer muss sie jederzeit korrigieren können. | Löst den Kern von [F-15](#f-15) und [F-16](#f-16). Residualrisiko siehe Hinweis unter der Tabelle. |
+| 4 | Gilt „Verlauf vor Einzelwert" weiter? | **Ja, Verlauf.** | [F-30](#f-30) ist damit kein Owner-Vorbehalt mehr, sondern eine bestätigte Anforderung – Priorität von P3 auf **P2** angehoben. |
+| 5 | 28 Farbliterale vereinheitlichen? | **Ja.** | [F-19](#f-19) ist freigegeben; der README-Vorbehalt entfällt. |
+| 6 | Schalter „Automatisch verbinden" einführen? | **Ja, Default an.** | [F-02](#f-02) ist freigegeben, inklusive Default-Wert. |
+| 7 | Weg A oder Weg B für [F-16](#f-16)? | **Weg B** – `messvorgangId` mit Room-Migration 25 → 26. | [F-16](#f-16) wird strukturell gelöst; [F-12](#f-12) und [F-01](#f-01) profitieren mit. Aufwand steigt von M auf L, Risiko auf hoch. |
+
+**Residualrisiko zu Entscheidung 3, ausdrücklich benannt:** Die Tagesregel beseitigt die
+Wiederholung, nicht die Aktualität. Das Feld `wetter` kann damit bis zu 24 h alt im Bericht
+stehen (morgens bestätigt, abends gemessen). Empfehlung, ohne Rückfrage umsetzbar: den
+Zeitstempel der letzten Bestätigung in der Inline-Zeile mitführen
+(„Berichtsangaben bestätigt 08:14 · ändern"), damit eine veraltete Angabe sichtbar bleibt,
+statt sie zu erzwingen oder zu verschweigen.
+
+**Zu Entscheidung 2, in Alltagssprache:** `onboardingCompleted` ist ein gespeicherter Merker mit
+genau einer Bedeutung: „Hat dieser Nutzer die vierseitige Einführung schon gesehen?" Die App
+fragt beim Start danach und zeigt die Einführung nur, wenn der Merker `false` ist. Weil der
+Standardwert auf `true` steht (`SettingsManager.kt:606`), gilt bei einer frischen Installation
+sofort „schon gesehen" – die Einführung erscheint also nie von selbst, sondern nur über
+Einstellungen → „Einführung erneut anzeigen". Ein Einzeiler (`true` → `false`) behebt das;
+zu klären bleibt nur, ob **bestehende** Installationen die Einführung dann einmalig sehen
+sollen oder nicht.
 
 ### 35.3 Beobachtungen, die nicht ins Audit-Raster passen
 
@@ -3268,6 +3323,6 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 
 ---
 
-*Ende des Audits. Nächster Schritt laut [Kapitel 33](#33-proposed-implementation-roadmap):
-Phase 1 – und vorher die sieben Fragen aus [Kapitel 35.2](#352-fragen-an-den-owner-agentsmd-8a)
-klären.*
+*Ende des Audits. Die Owner-Fragen sind seit dem 25.09.2026 bis auf eine beantwortet
+([Kapitel 35.2](#352-owner-entscheidungen-vom-25092026)); nächster Schritt ist damit Phase 1 der
+[Roadmap](#33-proposed-implementation-roadmap), die von keiner offenen Frage abhängt.*
