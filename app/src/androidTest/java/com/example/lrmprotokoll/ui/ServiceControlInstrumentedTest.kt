@@ -108,14 +108,16 @@ class ServiceControlInstrumentedTest {
                 onNavigateToVideo = {},
             )
         }
-        composeRule.onNodeWithText("Start measurement").assertExists()
+        val startMeasurementText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_start_measurement)
+        val measuringRunningText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_measuring_running)
+        composeRule.onNodeWithText(startMeasurementText).assertExists()
 
         AudioRecordingService.testSetzeLaeuft(true)
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
-                composeRule.onAllNodesWithText("MEASUREMENT RUNNING").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText(measuringRunningText).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("MEASUREMENT RUNNING").assertIsDisplayed()
+            composeRule.onNodeWithText(measuringRunningText).assertIsDisplayed()
         } finally {
             AudioRecordingService.testSetzeLaeuft(false)
         }
