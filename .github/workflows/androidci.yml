@@ -91,11 +91,13 @@ jobs:
       # aktuell mehrere tausend Verstoesse (nie zuvor gegen ktlint gelaufen) - ein Vollformat-Pass
       # ist eine eigene, bewusst zu treffende Entscheidung, keine Nebenwirkung dieses Auftrags.
       # continue-on-error haelt den Schritt deshalb sichtbar (roter Status auf der Actions-Seite,
-      # Report als Artefakt), blockiert aber den Job nicht.
+      # Report als Artefakt), blockiert aber den Job nicht. --continue stellt sicher, dass alle drei
+      # SourceSets (main, test, androidTest) vollstaendig geprueft werden und kein Task durch den
+      # fruehzeitigen Abbruch eines parallelen Worker-Threads abgeschnitten wird (Befund A).
       - name: Run ktlint
         id: ktlint
         continue-on-error: true
-        run: ./gradlew ktlintCheck --no-daemon --stacktrace
+        run: ./gradlew ktlintCheck --no-daemon --stacktrace --continue
 
       # testDebugUnitTest bleibt explizit sichtbar, weil der instrumentierte Testplan dieses Gate
       # fordert. `test` laeuft zusaetzlich und behaelt damit auch Release-Unit-Tests als Pflichtgate.

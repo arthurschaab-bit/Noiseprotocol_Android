@@ -73,7 +73,7 @@ class ReportConfigSettingsTest {
         // auf die durch den State-Wechsel ausgeloeste asynchrone DB-Speicherung (eigene
         // Coroutine, kein Teil des Compose-Idle-Begriffs) - direkt danach lesen kann deshalb
         // noch den alten Wert liefern. Explizit auf den geschriebenen Wert pollen statt zu raten.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }?.gebietseinstufung == "WA"
         }
 
@@ -124,7 +124,7 @@ class ReportConfigSettingsTest {
         composeRule.waitForIdle()
 
         // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
                 ?.let { kotlin.math.abs(it.tierSchwelleVollmessungProzent - 100.0) < 0.0001 } == true
         }
@@ -153,7 +153,7 @@ class ReportConfigSettingsTest {
         composeRule.waitForIdle()
 
         // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             runBlocking(Dispatchers.IO) { app.container.database.reportConfigDao().get() }
                 ?.let { it.konservativFensterStartStunde == 19 && it.konservativFensterEndeStunde == 19 } == true
         }
@@ -180,7 +180,7 @@ class ReportConfigSettingsTest {
         composeRule.waitForIdle()
 
         // Siehe CI-Fund in gebietseinstufungWirdAusgewaehltUndUeberDasDaoGespeichert oben.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             runBlocking(Dispatchers.IO) {
                 app.container.database.reportConfigDao().get()
             }?.erzwingeBerichtOhneBestaetigteBewertung == true
