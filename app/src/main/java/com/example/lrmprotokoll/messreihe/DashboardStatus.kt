@@ -19,6 +19,7 @@ data class DashboardAnzeige(
     val betriebsartText: String,
     val laufzeitText: String?,
     val pegelText: String?,
+    val dauerText: String? = null,
 )
 
 fun leiteDashboardAnzeigeAb(
@@ -30,7 +31,13 @@ fun leiteDashboardAnzeigeAb(
     letzterPegel: Double?,
 ): DashboardAnzeige {
     if (!dienstAktiv) {
-        return DashboardAnzeige(dienstAktiv = false, betriebsartText = "Inaktiv", laufzeitText = null, pegelText = null)
+        return DashboardAnzeige(
+            dienstAktiv = false,
+            betriebsartText = "Inaktiv",
+            laufzeitText = null,
+            pegelText = null,
+            dauerText = null,
+        )
     }
 
     val betriebsartText = if (geraetGepinnt) {
@@ -41,7 +48,8 @@ fun leiteDashboardAnzeigeAb(
 
     // Nur eine laufende Session hat eine Laufzeit - sessionStartedAtMillis ist null, solange
     // kein Messgeraet gepinnt ist oder dessen Session noch nicht eroeffnet wurde.
-    val laufzeitText = sessionStartedAtMillis?.let { "Läuft seit ${formatiereDauer(jetztMillis - it)}" }
+    val dauerText = sessionStartedAtMillis?.let { formatiereDauer(jetztMillis - it) }
+    val laufzeitText = dauerText?.let { "Läuft seit $it" }
 
     // Ein Pegel ohne STREAMING waere ein veralteter Restwert aus einer frueheren Verbindung -
     // dasselbe Prinzip wie in MeterScreen (frame != null && connectionState == STREAMING).
@@ -49,7 +57,13 @@ fun leiteDashboardAnzeigeAb(
         ?.takeIf { verbindungszustand == ConnectionState.STREAMING }
         ?.let { String.format(Locale.GERMANY, "%.1f dB", it) }
 
-    return DashboardAnzeige(dienstAktiv = true, betriebsartText = betriebsartText, laufzeitText = laufzeitText, pegelText = pegelText)
+    return DashboardAnzeige(
+        dienstAktiv = true,
+        betriebsartText = betriebsartText,
+        laufzeitText = laufzeitText,
+        pegelText = pegelText,
+        dauerText = dauerText,
+    )
 }
 
 /** "M:SS" unter einer Stunde, "H:MM:SS" ab einer Stunde - negative/kaputte Eingaben (Uhr-

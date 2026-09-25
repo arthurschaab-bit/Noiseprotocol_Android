@@ -113,6 +113,7 @@ fun LiveCockpitCard(
 
     val db = container.database
     val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+    val offeneSession by db.sessionDao().offeneSessionFlow().collectAsState(initial = null)
     var messwerte by remember { mutableStateOf<List<MeasurementEntity>>(emptyList()) }
     var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
@@ -185,14 +186,14 @@ fun LiveCockpitCard(
         }
     }
 
-    LaunchedEffect(dienstAktiv, letzteSession?.endedAt) {
-        while (dienstAktiv || (letzteSession != null && letzteSession?.endedAt == null)) {
+    LaunchedEffect(dienstAktiv, offeneSession?.startedAt) {
+        while (dienstAktiv || offeneSession != null) {
             jetzt = System.currentTimeMillis()
             delay(1000)
         }
     }
 
-    val istMikrofonMessung = letzteSession?.deviceAddress?.isBlank() == true
+    val istMikrofonMessung = (offeneSession ?: letzteSession)?.deviceAddress?.isBlank() == true
     val isCalibrated = dienstAktiv && verbindungszustand == ConnectionState.STREAMING && letzterFrame != null
     // Bugfix (Owner-Feedback 12.09.2026): der Mikrofon-Fallback waehrend eines PCE-323-
     // Verbindungsausfalls bleibt erlaubt ("kann passieren", der Trigger/die Aufnahme laufen
@@ -208,9 +209,14 @@ fun LiveCockpitCard(
         else -> "dB"
     }
 
-    val sessionStartTime = letzteSession?.startedAt
-    val elapsedSeconds = if (dienstAktiv && sessionStartTime != null) ((jetzt - sessionStartTime) / 1000).coerceAtLeast(0) else 0L
-    val timerString = String.format(Locale.US, "%02d:%02d:%02d", elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60)
+    val dashboardAnzeige = leiteDashboardAnzeigeAb(
+        dienstAktiv = dienstAktiv,
+        geraetGepinnt = settings.meterDeviceAddress != null,
+        verbindungszustand = verbindungszustand,
+        sessionStartedAtMillis = offeneSession?.startedAt,
+        jetztMillis = jetzt,
+        letzterPegel = if (isCalibrated) liveLevel else null,
+    )
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -425,12 +431,15 @@ fun LiveCockpitCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Text(
-                        text = timerString,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    dashboardAnzeige.dauerText?.let { dauer ->
+                        Text(
+                            text = dauer,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag("cockpit_timer_text"),
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
