@@ -16,7 +16,7 @@ Audit, mit Datei, Zeile, Zielverhalten und Testauswirkung.
 | [Phase 3](PROMPT_UX_PHASE3.md) | Berichtsflow entschärfen | F-07, F-08, F-28, F-15 | niedrig | Antigravity |
 | [Phase 4](PROMPT_UX_PHASE4.md) | Messvorgang als Klammer, **Room 25 → 26** | F-16 (Weg B), F-01 T3, F-13, F-26 | **hoch** | **eher Codex** – Datenmodell, nicht Layout |
 | [Phase 5](PROMPT_UX_PHASE5.md) | Fehlerprävention und Accessibility | F-10, F-21, F-22, F-23, F-31, F-33, **F-34** | niedrig | **Antigravity** – braucht Emulator |
-| [Phase 6](PROMPT_UX_PHASE6.md) | Strukturelle Umbauten, einzeln | S-3 (F-02, F-03), S-1, S-4, S-5 (F-18, F-32) | **hoch** | Antigravity, **mit Gerätetest** |
+| [Phase 6](PROMPT_UX_PHASE6.md) | Strukturelle Umbauten, einzeln | **F-35**, S-3 (F-02, F-03), S-1, S-4, S-5 (F-18, F-32) | **hoch** | Antigravity, **mit Gerätetest** |
 | [Phase 7](PROMPT_UX_PHASE7.md) | Aufräumen | F-25, F-24, F-29, F-17, F-19, F-20 | niedrig | Antigravity |
 
 ## Abhängigkeiten

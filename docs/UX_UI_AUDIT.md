@@ -2851,6 +2851,59 @@ Die Messfunktion dafür ist bereits vorhanden.
 betreffen zwar teilweise dieselbe Kopfzeile, sind aber verschiedene Fehler mit verschiedenen
 Lösungen.
 
+<a id="f-35"></a>
+#### F-35 · Der „typlose" `startForeground()`-Rückfall ist nicht typlos und greift nicht · **P1**
+
+*Nachgetragen am 25.09.2026 aus dem Emulator-Lauf
+[36165915514](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/36165915514)
+(PR #204). Im ursprünglichen Audit stand der Punkt als ungeprüft in
+[Kapitel 35.1](#351-nicht-geprüft-weil-kein-gerätemulator-verfügbar-war): „der typlose Fallback
+existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet". Er ist jetzt
+beobachtet worden.*
+
+**UX:** Ohne Mikrofonberechtigung und ohne gepinntes Messgerät **kommt der Dienst nicht in den
+Vordergrund** — er beendet sich selbst. Für den Nutzer heißt das: Ein reines „Verbinden" ohne
+Aufzeichnung ist auf dem heutigen Codepfad nicht möglich.
+
+**Tragweite:** [F-02](#f-02) („Verbinden" von „Messung starten" trennen) setzt genau diesen Pfad
+voraus. F-35 ist damit ein **technischer Blocker für F-02** und gehört vor ihm behoben.
+
+**Technik — was gemessen wurde:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest`
+läuft als isolierter Berechtigungsfall nach `pm revoke android.permission.RECORD_AUDIO` vor dem
+Prozessstart. Der Entzug griff nachweislich (`dumpsys`: `granted=false`), die vier bestehenden
+Berechtigungsfälle sind grün. Der Dienst erreichte den Vordergrund innerhalb von 15 s nicht.
+
+**Technik — warum, aus dem Code ablesbar:**
+
+| Stelle | Inhalt |
+|---|---|
+| `AndroidManifest.xml:102` | `android:foregroundServiceType="microphone\|connectedDevice"` |
+| `AudioRecordingService.kt:409` | `startForeground(NOTIFICATION_ID, buildNotification(…))` — try-Zweig bei `serviceType == 0` |
+| `AudioRecordingService.kt:423` | `startForeground(NOTIFICATION_ID, buildNotification(…))` — **derselbe Aufruf** im catch |
+| `AudioRecordingService.kt:426` | `stopSelf()` |
+
+Liefert `berechneForegroundServiceType()` eine `0`, ruft der try-Zweig die
+**Zweiargument-Variante** auf. Die ist nicht typlos: Sie erbt die im Manifest deklarierten Typen,
+also auch `microphone` — für das die Berechtigung gerade fehlt. Der catch-Block ruft daraufhin
+**genau dieselbe Variante** noch einmal auf und beendet den Dienst.
+
+*Nicht bewiesen:* der genaue Ausnahmetyp. Der stünde im Logcat, das als Artefakt
+`emulator-diagnostics-api-34` abgelegt wird und nicht im Job-Log steht. Dass der catch-Block
+denselben Aufruf wiederholt, ist dagegen unmittelbar aus dem Code ablesbar.
+
+**Änderung:** Der Rückfall muss einen Typ verwenden, den die App auch ohne `RECORD_AUDIO`
+führen darf — in Frage kommen `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` oder `dataSync`, jeweils mit
+passendem Manifest-Eintrag und Begründung. Alternativ startet der „nur verbinden"-Pfad gar keinen
+Foreground-Service. **Welcher Weg richtig ist, ist eine Owner-Entscheidung** (`AGENTS.md` §8a):
+`SPECIAL_USE` verlangt gegenüber Google eine Begründung, `dataSync` hat eigene Laufzeitgrenzen,
+und „kein Foreground-Service" ändert das Verhalten bei Bildschirmsperre.
+
+**Tests:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest` liegt vor und misst genau
+das. Er sichert die Vordergrund-Erwartung derzeit **nicht** zu, sondern protokolliert sie — eine
+harte Zusicherung wäre eine dauerhaft rote CI für einen bekannten, unbehobenen Befund. Im Test
+steht, dass dort `assertTrue(imVordergrund)` hingehört, sobald F-35 behoben ist. Hart zugesichert
+bleibt die Sicherheitsaussage, dass ohne Berechtigung keine Audioaufzeichnung läuft.
+
 ---
 
 ## 30. Quick Wins
@@ -3235,7 +3288,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [S-3](#s-3--automatische-geräteverbindung-getrennt-von-der-aufzeichnung) ([F-02](#f-02), [F-03](#f-03)), danach [S-1](#s-1--messbereitschaft-als-eigenes-konzept), [S-4](#s-4--bericht-tab-als-arbeitsplatz-statt-zwischenseite), [S-5](#s-5--ein-filtermodell-für-aufnahmen-und-sessions) ([F-18](#f-18), [F-32](#f-32)) |
+| **Findings** | **[F-35](#f-35) zuerst** (technischer Blocker), dann [S-3](#s-3--automatische-geräteverbindung-getrennt-von-der-aufzeichnung) ([F-02](#f-02), [F-03](#f-03)), danach [S-1](#s-1--messbereitschaft-als-eigenes-konzept), [S-4](#s-4--bericht-tab-als-arbeitsplatz-statt-zwischenseite), [S-5](#s-5--ein-filtermodell-für-aufnahmen-und-sessions) ([F-18](#f-18), [F-32](#f-32)) |
 | **Komponenten** | `AudioRecordingService`, `ConnectionSupervisor`, `AppContainer`, `LiveCockpitCard`, `BerichtScreen`, beide Filtermodelle |
 | **Erwarteter UX-Effekt** | Der Standard-Workflow fällt von 19 auf ~7 Taps ([Kapitel 10.4](#104-kennzahlenvergleich-standard-workflow-returning-user)) |
 | **Risiko** | **hoch** – Foreground-Service-Lebenszyklus, laut README bereits mehrfach Gegenstand von Gerätetest-Befunden |
@@ -3314,7 +3367,7 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 | **Dark-Mode-Wirkung der 28 Farbliterale** | der Codebefund ist eindeutig, die optische Wirkung nicht gemessen | Screenshot-Vergleich hell/dunkel |
 | **Tatsächliche Dauer des Chaquopy-Berichtslaufs** | keine Messung möglich | Gerätetest mit 30 Messtagen |
 | **Verhalten bei vollem Speicher** | Ableitung aus dem Code; der automatische Neustart nach Schreibfehler ist laut README selbst nur rekonstruiert | Gerätetest mit künstlich gefülltem Speicher |
-| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet. ⚠️ *Test liegt vor (`ForegroundServiceOhneMikrofonPermissionInstrumentedTest`, PR #204), ist aber in keinem Lauf ausgeführt worden: Er startet als isolierter Berechtigungsfall erst nach dem Hauptlauf, und der war bisher rot.* | Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
+| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet. ✅ **Geprüft — und die Antwort ist negativ:** Der Dienst kommt nicht in den Vordergrund, der „typlose" Rückfall ist nicht typlos. Als [F-35](#f-35) nachgetragen; technischer Blocker für [F-02](#f-02) | erledigt — Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
 
 ### 35.2 Owner-Entscheidungen vom 25.09.2026
 
