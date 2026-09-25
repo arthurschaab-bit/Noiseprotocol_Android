@@ -1,8 +1,16 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertHasClickAction
@@ -10,6 +18,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -26,8 +35,7 @@ import org.junit.runner.RunWith
 
 /**
  * Verhalten des Cockpits bei vergroesserter System-Schriftgroesse (UX-Audit Kapitel 35.1,
- * "Dynamische Schriftgroessen" - bis hierher nur als *Needs verification* vermerkt, weil in der
- * Entwicklungsumgebung kein Geraet lief).
+ * "Dynamische Schriftgroessen").
  *
  * **Warum ueberhaupt ein Test:** Das Cockpit setzt an mehreren Stellen `maxLines = 1` und feste
  * Hoehen (der Startknopf z.B. `height(56.dp)`). Bei 130 % oder 200 % Schriftgroesse - unter
@@ -38,15 +46,23 @@ import org.junit.runner.RunWith
  * **Wie skaliert wird:** ueber [LocalDensity] mit unveraendertem `density` und erhoehtem
  * `fontScale` - genau die Groesse, die Android beim Schieberegler "Schriftgroesse" veraendert.
  *
+ * **Warum ein Scrollbehaelter (Korrektur nach dem ersten Emulator-Lauf, 25.09.2026):** Die erste
+ * Fassung rief `setContent { LiveCockpitCard() }` ohne Scrollmoeglichkeit auf. Bei 130 % und
+ * 200 % rutschte der Startknopf damit aus dem Sichtbereich und `assertIsDisplayed()` schlug fehl
+ * - ein Fehler der Testanordnung, nicht der App: im echten Startbildschirm liegt das Cockpit in
+ * einer `LazyColumn` (`MainActivity.kt:730`) und ist scrollbar. Der Behaelter hier bildet das
+ * nach; vor jeder Sichtbarkeitspruefung wird gescrollt. Damit prueft der Test weiterhin das
+ * Richtige - ob das Bedienelement erreichbar und bedienbar bleibt -, nur nicht mehr unter einer
+ * Bedingung, die es in der App gar nicht gibt.
+ *
  * **Bewusst abgestufte Schaerfe.** Bei Standardschrift wird *kein Ueberlauf* verlangt: Das muss
  * heute gelten und ist damit eine echte Regressionsbremse. Bei 130 % und 200 % wird nur
- * verlangt, dass die Bedienelemente vorhanden, sichtbar und klickbar bleiben - also kein
+ * verlangt, dass die Bedienelemente vorhanden, erreichbar und klickbar bleiben - also kein
  * Layout-Zusammenbruch. Ob dort zusaetzlich Text abgeschnitten wird, ist der noch offene Befund
- * F-21 des Audits (feste Hoehen, `widthIn(max = 84.dp)` an den Status-Badges). Das hier bereits
- * als Erwartung festzuschreiben wuerde entweder den Fehler als gewolltes Verhalten zementieren
- * oder die CI rot faerben, bevor er behoben ist. **Sobald F-21 umgesetzt ist, gehoeren die
- * Ueberlauf-Pruefungen auf alle drei Stufen ausgeweitet** - dafuer steht [laeuftTextUeber]
- * bereits bereit.
+ * F-21 des Audits. Das hier bereits als Erwartung festzuschreiben wuerde entweder den Fehler als
+ * gewolltes Verhalten zementieren oder die CI rot faerben, bevor er behoben ist. **Sobald F-21
+ * umgesetzt ist, gehoeren die Ueberlauf-Pruefungen auf alle drei Stufen ausgeweitet** - dafuer
+ * steht [textLayout] bereits bereit.
  */
 @RunWith(AndroidJUnit4::class)
 class SchriftskalierungInstrumentedTest {
@@ -59,33 +75,59 @@ class SchriftskalierungInstrumentedTest {
         ApplicationProvider.getApplicationContext<LaermprotokollApp>()
     }
 
-    /** Rendert das Cockpit mit dem angegebenen Schriftfaktor bei unveraenderter Pixeldichte. */
+    /**
+     * Rendert das Cockpit mit dem angegebenen Schriftfaktor bei unveraenderter Pixeldichte, in
+     * einem scrollbaren Behaelter wie im echten Startbildschirm.
+     */
     private fun zeigeCockpitMitSchriftfaktor(faktor: Float) {
         composeRule.setContent {
             val basis = LocalDensity.current
             CompositionLocalProvider(
                 LocalDensity provides Density(density = basis.density, fontScale = faktor),
             ) {
-                LiveCockpitCard()
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                ) {
+                    LiveCockpitCard()
+                }
             }
         }
         composeRule.waitForIdle()
     }
 
     /**
-     * `hasVisualOverflow` ist die einzige belastbare Auskunft darueber, ob Compose einen Text
-     * tatsaechlich abgeschnitten hat - der Semantik-Baum enthaelt weiterhin den vollstaendigen
-     * String, `onNodeWithText` faende ihn also auch dann noch.
+     * Das [TextLayoutResult] eines Textknotens. `hasVisualOverflow` daraus ist die einzige
+     * belastbare Auskunft darueber, ob Compose einen Text tatsaechlich abgeschnitten hat - der
+     * Semantik-Baum enthaelt weiterhin den vollstaendigen String, `onNodeWithText` faende ihn
+     * also auch dann noch.
      */
-    private fun laeuftTextUeber(knoten: SemanticsNodeInteraction): Boolean {
+    private fun textLayout(knoten: SemanticsNodeInteraction): TextLayoutResult {
         val ergebnisse = mutableListOf<TextLayoutResult>()
         knoten.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(ergebnisse) }
         assertTrue(
             "Kein TextLayoutResult erhalten - der Knoten ist offenbar kein Text",
             ergebnisse.isNotEmpty(),
         )
-        return ergebnisse.first().hasVisualOverflow
+        return ergebnisse.first()
     }
+
+    /**
+     * Beschreibt eine Textmessung so, dass ein Fehlschlag in der CI aus sich heraus verstaendlich
+     * ist. Ohne Emulator in der Entwicklungsumgebung ist die Meldung die einzige Diagnose, die
+     * ankommt - eine blosse Zusicherung "darf nicht ueberlaufen" waere nicht nachvollziehbar.
+     */
+    private fun messwerte(
+        bezeichnung: String,
+        layout: TextLayoutResult,
+    ): String =
+        "$bezeichnung: breite=${layout.size.width}px hoehe=${layout.size.height}px " +
+            "zeilen=${layout.lineCount} ueberlaufBreite=${layout.didOverflowWidth} " +
+            "ueberlaufHoehe=${layout.didOverflowHeight} " +
+            "maxBreite=${layout.layoutInput.constraints.maxWidth}px " +
+            "maxHoehe=${layout.layoutInput.constraints.maxHeight}px"
 
     @Test
     fun beiStandardschriftIstNichtsAbgeschnitten() {
@@ -94,13 +136,18 @@ class SchriftskalierungInstrumentedTest {
         val startBeschriftung = composeRule.activity.getString(R.string.cockpit_start_measurement)
         val titel = composeRule.activity.getString(R.string.cockpit_title)
 
+        val startLayout = textLayout(composeRule.onNodeWithText(startBeschriftung).performScrollTo())
         assertFalse(
-            "Die Beschriftung des Startknopfes darf bei Standardschrift nicht abgeschnitten sein",
-            laeuftTextUeber(composeRule.onNodeWithText(startBeschriftung)),
+            "Die Beschriftung des Startknopfes darf bei Standardschrift nicht abgeschnitten " +
+                "sein - ${messwerte("Startknopf", startLayout)}",
+            startLayout.hasVisualOverflow,
         )
+
+        val titelLayout = textLayout(composeRule.onNodeWithText(titel).performScrollTo())
         assertFalse(
-            "Der Cockpit-Titel darf bei Standardschrift nicht abgeschnitten sein",
-            laeuftTextUeber(composeRule.onNodeWithText(titel)),
+            "Der Cockpit-Titel darf bei Standardschrift nicht abgeschnitten sein - " +
+                messwerte("Titel", titelLayout),
+            titelLayout.hasVisualOverflow,
         )
     }
 
@@ -108,14 +155,7 @@ class SchriftskalierungInstrumentedTest {
     fun beiEinhundertdreissigProzentBleibtDerStartknopfBedienbar() {
         // 130 %: die haeufigste Abweichung vom Standard, unter Android mit zwei Tipps erreichbar.
         zeigeCockpitMitSchriftfaktor(1.3f)
-
-        composeRule
-            .onNodeWithTag(START_MEASUREMENT_BUTTON_TAG)
-            .assertIsDisplayed()
-            .assertHasClickAction()
-        composeRule
-            .onNodeWithText(composeRule.activity.getString(R.string.cockpit_title))
-            .assertIsDisplayed()
+        pruefeBedienbarkeit()
     }
 
     @Test
@@ -124,13 +164,18 @@ class SchriftskalierungInstrumentedTest {
         // um den Layout-Zusammenbruch (Knopf aus dem Bildschirm gedrueckt, Hoehe 0, Absturz beim
         // Messen) - nicht um Ellipsen, siehe Klassen-KDoc.
         zeigeCockpitMitSchriftfaktor(2.0f)
+        pruefeBedienbarkeit()
+    }
 
+    private fun pruefeBedienbarkeit() {
         composeRule
             .onNodeWithTag(START_MEASUREMENT_BUTTON_TAG)
+            .performScrollTo()
             .assertIsDisplayed()
             .assertHasClickAction()
         composeRule
             .onNodeWithText(composeRule.activity.getString(R.string.cockpit_title))
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
@@ -138,28 +183,55 @@ class SchriftskalierungInstrumentedTest {
     fun derSchriftfaktorKommtInDerKompositionUeberhauptAn() {
         // Absicherung gegen einen stillen Fehlschlag der Testanordnung selbst: Kaeme der
         // Schriftfaktor gar nicht an, blieben die Tests oben gruen und waeren wertlos.
-        // Geprueft wird am Cockpit-TITEL, nicht am Startknopf - der hat eine feste Hoehe von
-        // 56 dp und kann gar nicht mitwachsen (genau das ist Teil von Befund F-21).
+        //
+        // Beide Stufen werden in EINER Komposition nebeneinander gerendert. Die erste Fassung
+        // rief setContent zweimal auf; das quittiert die ComposeTestRule mit
+        // "Cannot call setContent twice per test!" (Emulator-Lauf 25.09.2026). Geprueft wird am
+        // Cockpit-Titeltext in derselben Typografie, nicht am Startknopf - der hat eine feste
+        // Hoehe von 56 dp und kann gar nicht mitwachsen (genau das ist Teil von Befund F-21).
         val titel = composeRule.activity.getString(R.string.cockpit_title)
 
-        zeigeCockpitMitSchriftfaktor(1.0f)
+        composeRule.setContent {
+            val basis = LocalDensity.current
+            Column {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density = basis.density, fontScale = 1.0f),
+                ) {
+                    Text(
+                        text = titel,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.testTag("probe_schrift_normal"),
+                    )
+                }
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density = basis.density, fontScale = 2.0f),
+                ) {
+                    Text(
+                        text = titel,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.testTag("probe_schrift_gross"),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
         val hoeheNormal =
             composeRule
-                .onNodeWithText(titel)
+                .onNodeWithTag("probe_schrift_normal")
                 .fetchSemanticsNode()
                 .size.height
-
-        zeigeCockpitMitSchriftfaktor(2.0f)
         val hoeheGross =
             composeRule
-                .onNodeWithText(titel)
+                .onNodeWithTag("probe_schrift_gross")
                 .fetchSemanticsNode()
                 .size.height
 
         assertTrue(
-            "Bei doppelter Schriftgroesse muss der Cockpit-Titel hoeher sein als bei einfacher " +
+            "Bei doppelter Schriftgroesse muss derselbe Text hoeher sein als bei einfacher " +
                 "(normal=$hoeheNormal, gross=$hoeheGross) - sonst kommt der Schriftfaktor in " +
-                "dieser Testanordnung gar nicht an und alle uebrigen Tests dieser Klasse waeren wertlos",
+                "dieser Testanordnung gar nicht an und alle uebrigen Tests dieser Klasse waeren " +
+                "wertlos",
             hoeheGross > hoeheNormal,
         )
     }

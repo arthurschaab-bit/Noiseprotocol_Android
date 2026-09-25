@@ -53,15 +53,28 @@ class SystemLeistenAbstandInstrumentedTest {
 
         val rohInsets = composeRule.activity.window.decorView.rootWindowInsets
         assumeTrue("Ohne rootWindowInsets laesst sich nichts messen", rohInsets != null)
-        val statusleisteOben =
-            WindowInsetsCompat
-                .toWindowInsetsCompat(rohInsets!!)
-                .getInsets(WindowInsetsCompat.Type.statusBars())
-                .top
+        val insets = WindowInsetsCompat.toWindowInsetsCompat(rohInsets!!)
+        val statusleisteOben = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+        val systemleistenOben = insets.getInsets(WindowInsetsCompat.Type.systemBars()).top
 
         // Auf einem Geraetebild ohne Statusleiste gibt es nichts zu ueberlappen - dann ist der
         // Test gegenstandslos statt gruen-durch-Zufall.
-        assumeTrue("Dieses Geraetebild hat keine Statusleiste", statusleisteOben > 0)
+        //
+        // WICHTIG (Emulator-Lauf 25.09.2026): Genau hier hat sich der Test weggeskippt und damit
+        // NICHTS geprueft. Wahrscheinlichste Ursache ist das Geraetebild der CI:
+        // emulator-tests.yml verwendet `target: aosp_atd`. Ein Automated Test Device ist bewusst
+        // abgespeckt und bringt keine SystemUI mit - ohne SystemUI gibt es keine Statusleiste und
+        // folglich keinen Inset. Trifft das zu, laesst sich dieser Punkt aus Audit-Kapitel 35.1
+        // auf diesem Geraetebild grundsaetzlich nicht pruefen; er braeuchte ein Bild mit SystemUI
+        // (z. B. `google_apis`). Das ist eine CI-Entscheidung des Owners (AGENTS.md §8a), nicht
+        // eine, die dieser Test eigenmaechtig treffen darf - deshalb ueberspringt er sich
+        // weiterhin, sagt jetzt aber im Bericht, was er gemessen hat.
+        assumeTrue(
+            "Dieses Geraetebild hat keine Statusleiste (statusBars.top=$statusleisteOben, " +
+                "systemBars.top=$systemleistenOben) - vermutlich ein aosp_atd-Bild ohne " +
+                "SystemUI. Der Punkt aus Audit-Kapitel 35.1 bleibt damit ungeprueft.",
+            statusleisteOben > 0,
+        )
 
         val titelOben =
             composeRule

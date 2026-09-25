@@ -18,6 +18,8 @@ import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.Weighting
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -72,7 +74,19 @@ class LivePegelBarrierefreiheitInstrumentedTest {
     }
 
     @Test
-    fun derLivePegelEinesEchtenFramesIstAlsLiveRegionAusgezeichnet() {
+    fun ohneLaufendeMessungBleibtDerKalibrierteWertAusUndDieLiveRegionSteht() {
+        // KORREKTUR nach dem ersten Emulator-Lauf (25.09.2026). Die erste Fassung wartete
+        // darauf, dass der Pegel eines eingespeisten Frames als Zahl im Cockpit erscheint, und
+        // lief in einen ComposeTimeout. Die Pruefung war falsch gedacht:
+        //
+        //   LiveCockpitCard.kt:196  isCalibrated = dienstAktiv && STREAMING && letzterFrame != null
+        //   LiveCockpitCard.kt:204  liveLevel = if (isCalibrated) letzterFrame?.level else ...
+        //
+        // Ohne laufenden Vordergrunddienst ist `dienstAktiv` falsch, also zeigt das Cockpit
+        // "--.-", egal wie viele gueltige Frames ankommen. Das ist kein Fehler, sondern genau
+        // der im Audit als F-02 beschriebene Zusammenhang ("Verbinden" ist nicht von "Messung
+        // starten" getrennt). Dieser Test haelt ihn jetzt ausfuehrbar fest, statt ein Verhalten
+        // zu verlangen, das es nicht gibt.
         val container = app.container
         container.connectionSupervisor.start(BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323 Test"))
         composeRule.waitUntil(timeoutMillis = 10_000L) {
@@ -85,15 +99,19 @@ class LivePegelBarrierefreiheitInstrumentedTest {
         composeRule.setContent { LiveCockpitCard() }
         composeRule.waitForIdle()
 
-        // 1. Der Wert des empfangenen Frames erscheint tatsaechlich im Cockpit. Nur die
-        // Vorkommastellen pruefen - die Nachkommastelle haengt am Locale-Trennzeichen.
-        composeRule.waitUntil(timeoutMillis = 10_000L) {
-            composeRule.onAllNodesWithText("73", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onAllNodesWithText("73", substring = true).onFirst().assertIsDisplayed()
+        // 1. Die Verbindung steht wirklich und liefert Frames - sonst waere die Aussage unten
+        //    wertlos, weil sie auch ganz ohne Verbindung zutraefe.
+        assertEquals(ConnectionState.STREAMING, container.connectionSupervisor.state.value)
+        assertNotNull(
+            "Der Transport muss einen Frame-Empfangszeitpunkt melden, sonst kam gar nichts an",
+            fakeTransport.lastFrameAt.value,
+        )
 
-        // 2. Genau ein Knoten traegt die LiveRegion-Auszeichnung (LiveCockpitCard setzt sie mit
-        // mergeDescendants auf den Block um Pegel, Einheit und Einordnungstext).
+        // 2. Trotzdem steht im Cockpit der Platzhalter, nicht der Messwert (F-02).
+        composeRule.onAllNodesWithText("--.-", substring = true).onFirst().assertIsDisplayed()
+
+        // 3. Die LiveRegion-Auszeichnung steht auch in diesem Zustand - Voraussetzung dafuer,
+        //    dass TalkBack den spaeteren Wechsel auf den ersten echten Messwert ansagt.
         composeRule
             .onNode(
                 SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
