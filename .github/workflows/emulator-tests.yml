@@ -64,6 +64,14 @@ jobs:
           # Kostet Bootzeit und Download je Lauf; das ist der bewusst in Kauf genommene Preis.
           target: google_apis
           arch: x86_64
+          # Ohne `profile` erzeugt avdmanager ein Geraet mit 320x640 - eine Bildschirmgroesse,
+          # die es bei heutigen Telefonen nicht gibt (das schmalste liegt bei rund 360 dp). Mit
+          # aosp_atd fiel das nie auf, weil dieses Bild keine SystemUI und damit keine Status-
+          # und Navigationsleiste mitbringt. Mit google_apis kosten die Leisten auf 640 px Hoehe
+          # ueber 10 Prozent des Platzes: 14 bestehende Tests fielen aus, neun davon mit
+          # "performScrollTo() failed" (Lauf 36169220008). Ein festes, realistisches Profil macht
+          # die Geometrie unabhaengig vom Systemabbild und reproduzierbar.
+          profile: pixel_5
           force-avd-creation: false
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
