@@ -1438,7 +1438,7 @@ Nur tatsächliche Befunde aus diesem Code, keine allgemeine Checkliste.
 | **Nur über Farbe vermittelt** | Keine der Statusanzeigen verlässt sich allein auf Farbe: `ConnectionState.label()` liefert immer Text, `StatusPill` und die Badges tragen Text, die Selbstprüfung hat Icon + Text. Ausdrücklich so kommentiert in `ConnectionState.kt:22-25` | ✅ **vorbildlich** |
 | **Live-Regionen** | Live-Pegel im Cockpit und im Messgerät-Screen sind als `LiveRegionMode.Polite` ausgezeichnet | `LiveCockpitCard.kt:346`, `MeterScreen.kt:319` – laut README am Gerät noch nicht verifiziert |
 | **Chart** | `PegelverlaufChart` hat eine generierte `contentDescription` und ist laut README voll getestet | `PegelverlaufChart.kt:118` |
-| **Dynamische Schriftgrößen** | Risiko an drei Stellen: Badges mit `widthIn(max = 84.dp)` + `maxLines = 1` + `TextOverflow.Ellipsis` (`MainActivity.kt:580`, `:587`), Cockpit-Kopf mit `maxLines = 1` (`LiveCockpitCard.kt:234`, `:240`), `AssistChip`s mit fester `height(28.dp)` (`MainActivity.kt:1444`, `:1451`) | **Needs verification** – aus dem Code ist das Abschneiden wahrscheinlich, aber nicht bewiesen |
+| **Dynamische Schriftgrößen** | Risiko an drei Stellen: Badges mit `widthIn(max = 84.dp)` + `maxLines = 1` + `TextOverflow.Ellipsis` (`MainActivity.kt:580`, `:587`), Cockpit-Kopf mit `maxLines = 1` (`LiveCockpitCard.kt:234`, `:240`), `AssistChip`s mit fester `height(28.dp)` (`MainActivity.kt:1444`, `:1451`) | **Bestätigt am Emulator (25.09.2026)** – und schlimmer als vermutet: der Cockpit-Titel wird nicht gekürzt, sondern bekommt `maxBreite=0px` und verschwindet, schon bei Schriftfaktor 1,0 auf schmalem Gerät. Siehe [F-34](#f-34) |
 | **Fokusreihenfolge** | Keine `focusRequester`/`focusProperties` im Code; die Reihenfolge ergibt sich aus der Komposition. Im Stammdaten-Sheet folgt sie der fachlichen Reihenfolge – plausibel | **Needs verification** |
 | **Fehlermeldungen** | Inline-Fehlertexte stehen als eigene `Text`-Composables neben dem Feld/Button und werden von TalkBack gelesen. `OutlinedTextField` nutzt aber nirgends `isError`/`supportingText` | `BerichtErstellenSheet.kt:228` |
 | **Disabled Controls** | siehe [Kapitel 25](#25-disabled-controls) – deaktivierte Knöpfe bekommen keine Erklärung in den Semantics |
@@ -2805,6 +2805,52 @@ Häufigkeit: mittel.
 wurde. **Änderung:** Kanal überall übergeben ([F-31](#f-31)), die drei unbedingten Toasts auf
 Snackbar umstellen.
 
+<a id="f-34"></a>
+#### F-34 · Cockpit-Titel verschwindet, sobald die Status-Badges die Breite füllen · **P1**
+
+*Nachgetragen am 25.09.2026. Dieses Finding entstand nicht beim Lesen des Codes, sondern aus den
+Messungen der Emulator-Tests aus PR #204. Im ursprünglichen Audit stand der Sachverhalt nur als
+Risiko in [Kapitel 28](#28-android-material-best-practices-und-accessibility) („Dynamische
+Schriftgrößen", **Needs verification**) und in [Kapitel 35.1](#351-nicht-geprüft-weil-kein-gerätemulator-verfügbar-war).*
+
+**UX:** Die Überschrift des Cockpits („Überwachung") wird nicht etwa abgeschnitten oder mit
+Ellipse gekürzt – sie wird **gar nicht dargestellt**. Betroffen ist jeder Nutzer mit vergrößerter
+Schrift und zusätzlich jeder mit schmalem Gerät bei Standardschrift. Häufigkeit: hoch, der
+Cockpit-Kopf ist auf dem Startbildschirm immer sichtbar.
+
+**Technik:** `LiveCockpitCard.kt:223` ist eine `Row` mit `Arrangement.SpaceBetween`. Die
+Titelspalte darin hat `Modifier.weight(1f, fill = false)`, die beiden Texte `maxLines = 1`
+(`:234`, `:240`). Rechts daneben stehen die Status-Badges, die mit der Schriftgröße mitwachsen.
+`weight(1f, fill = false)` teilt der Spalte nur zu, was die Badges übriglassen – das kann null
+sein, und dann ist es null.
+
+**Gemessen** (Emulator API 34, `SchriftskalierungInstrumentedTest`):
+
+| Lauf | Schriftfaktor | Ergebnis |
+|---|---|---|
+| [36161839317](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/36161839317) | 1,3 und 2,0 | `assertIsDisplayed()` auf dem Titel schlägt fehl; der Startknopf bleibt sichtbar und klickbar |
+| [36164004983](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/36164004983) | **1,0** | `Cockpit-Titel: breite=0px hoehe=28px zeilen=1 ueberlaufBreite=false ueberlaufHoehe=true maxBreite=0px` |
+
+Die zweite Zeile ist der eigentliche Befund: **`maxBreite=0px` bei Schriftfaktor 1,0.** Es ist
+also kein reines Schriftgrößenproblem, sondern ein Breitenproblem – auf einem schmalen Gerät
+trifft es den Nutzer ohne jede Sondereinstellung.
+
+**Änderung:** Die Titelspalte darf nicht auf null schrumpfen können. Entweder eine Mindestbreite
+(`Modifier.widthIn(min = …)`) in Verbindung mit `weight(1f)` ohne `fill = false`, oder – der
+robustere Weg – die Kopfzeile bei knapper Breite umbrechen lassen (`FlowRow`) statt Titel und
+Badges in einer Zeile zu erzwingen. In beiden Fällen gehören die Badges auf eine Obergrenze
+begrenzt, die dem Titel Platz lässt.
+
+**Tests:** `SchriftskalierungInstrumentedTest` liegt vor und misst genau das. Er sichert den Titel
+derzeit bewusst **nicht** zu, sondern prüft nur dessen Existenz, weil eine harte Zusicherung die
+CI rot färben würde, solange dieses Finding offen ist. Im Test steht an drei Stellen im Klartext,
+dass dort nach der Umsetzung `pruefeNichtAbgeschnitten(…)` bzw. `assertIsDisplayed()` hingehört.
+Die Messfunktion dafür ist bereits vorhanden.
+
+**Abgrenzung:** Nicht zu verwechseln mit [F-21](#f-21) (Touch-Targets unter 48 dp). Die beiden
+betreffen zwar teilweise dieselbe Kopfzeile, sind aber verschiedene Fehler mit verschiedenen
+Lösungen.
+
 ---
 
 ## 30. Quick Wins
@@ -3149,7 +3195,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-04](#f-04), [F-05](#f-05), [F-09](#f-09), [F-11](#f-11), [F-12](#f-12), [F-14](#f-14) |
+| **Findings** | [F-04](#f-04), [F-05](#f-05), [F-09](#f-09), [F-11](#f-11), [F-12](#f-12), ~~[F-14](#f-14)~~ (**erledigt**, PR #203) |
 | **Komponenten** | `SystemHealthChecker` (Aufrufstellen), `AppContainer` (Observer öffentlich), `DiagnoseScreen`, `AudioRecordingService` (neuer `StateFlow`), `LiveCockpitCard` (Banner), `ProtokollScreen`/`ProtokollDetailScreen` (Integritätsstatus), `SettingsManager` (Onboarding-Default) |
 | **Erwarteter UX-Effekt** | Die sieben internen Zustände aus [Kapitel 19](#19-visibility-of-system-status-was-intern-existiert-und-nicht-ankommt) erreichen den Nutzer; Erstnutzer bekommen eine Einführung |
 | **Risiko** | niedrig bis mittel – `F-14` kann Startup-Tests brechen |
@@ -3179,7 +3225,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-10](#f-10), [F-21](#f-21), [F-22](#f-22), [F-23](#f-23), [F-31](#f-31), [F-33](#f-33) |
+| **Findings** | [F-10](#f-10), [F-21](#f-21), [F-22](#f-22), [F-23](#f-23), [F-31](#f-31), [F-33](#f-33), **[F-34](#f-34)** (nachgetragen 25.09.2026) |
 | **Komponenten** | neue Speicher-Prüffunktion, `LiveCockpitCard`, Badges, `MainActivity` (Snackbar-Kanäle) |
 | **Erwarteter UX-Effekt** | Messungen scheitern nicht mehr still an Speicher; zentrale Bedienelemente sind bedienbar und für TalkBack korrekt |
 | **Risiko** | niedrig |
@@ -3213,7 +3259,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 | Leitlinie „Verlauf vor Einzelwert" ([F-30](#f-30)) | **bestätigt** – jetzt Anforderung statt Vorbehalt |
 | Schalter „Automatisch verbinden" ([F-02](#f-02)) | **freigegeben**, Default an |
 | Weg A/B für [F-16](#f-16) | **Weg B** – `messvorgangId` mit Room-Migration 25 → 26 |
-| Default von `onboardingCompleted` ([F-14](#f-14)) | **weiterhin offen** – einzige verbleibende Owner-Frage |
+| Default von `onboardingCompleted` ([F-14](#f-14)) | **entschieden und umgesetzt** (PR #203): Einführung nur bei Neuinstallation, erkannt am Zustand der Einstellungsdatei |
 
 ---
 
@@ -3259,16 +3305,16 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 
 | Punkt | Warum offen | Wie zu prüfen |
 |---|---|---|
-| **System-Insets** | `enableEdgeToEdge()` + `contentWindowInsets = WindowInsets(0,0,0,0)` im äußeren `Scaffold`; der `NavHost` bekommt nur `bottom`-Padding (`MainActivity.kt:196`, `:209-214`). Ob Inhalte unter der Statusleiste landen, hängt davon ab, wie die inneren `Scaffold`s/`TopAppBar`s ihre Insets anwenden – das ist aus dem Code nicht zuverlässig ableitbar | Emulator, Gestennavigation + 3-Button-Navigation, hoher und niedriger Statusleistenbereich |
+| **System-Insets** | ⚠️ *Test liegt vor (`SystemLeistenAbstandInstrumentedTest`, PR #204), hat aber in drei Läufen nichts geprüft: `aosp_atd` bringt keine SystemUI und damit keine Statusleiste mit. Die CI wurde daraufhin auf `target: google_apis` umgestellt (Owner-Entscheidung 25.09.2026); Ergebnis steht aus.* — `enableEdgeToEdge()` + `contentWindowInsets = WindowInsets(0,0,0,0)` im äußeren `Scaffold`; der `NavHost` bekommt nur `bottom`-Padding (`MainActivity.kt:196`, `:209-214`). Ob Inhalte unter der Statusleiste landen, hängt davon ab, wie die inneren `Scaffold`s/`TopAppBar`s ihre Insets anwenden – das ist aus dem Code nicht zuverlässig ableitbar | Emulator, Gestennavigation + 3-Button-Navigation, hoher und niedriger Statusleistenbereich |
 | **Tastatur/IME** | kein `imePadding()` in der gesamten UI; das Stammdaten-Sheet hat 13 Felder in einem scrollenden `ModalBottomSheet` | Emulator: unterstes Feld antippen, prüfen ob es über der Tastatur bleibt |
-| **Dynamische Schriftgrößen** | Badges mit `widthIn(max = 84.dp)` + `maxLines = 1`, Cockpit-Kopf mit `maxLines = 1`, `AssistChip`s mit `height(28.dp)` | Gerät mit Schriftgröße 130 % / 200 % |
+| **Dynamische Schriftgrößen** | ✅ **Geprüft und bestätigt** (PR #204, Emulator API 34). Ergebnis schlimmer als vermutet: der Cockpit-Titel wird nicht gekürzt, sondern verschwindet – `maxBreite=0px` bereits bei Schriftfaktor 1,0 auf schmalem Gerät. Als [F-34](#f-34) nachgetragen | erledigt |
 | **Kontrastwerte** | Die Farbpalette ist konsistent definiert, aber es liegen keine gemessenen Kontrastverhältnisse vor | Accessibility Scanner auf Start, Daten, Detail, Einstellungen |
 | **TalkBack-Fokusreihenfolge** | keine `focusRequester`/`focusProperties` im Code; die Reihenfolge ergibt sich aus der Komposition | TalkBack-Durchlauf je Screen |
-| **Live-Region-Ansage des Pegels** | als `LiveRegionMode.Polite` ausgezeichnet, laut README noch nie am Gerät verifiziert | TalkBack bei laufender Messung |
+| **Live-Region-Ansage des Pegels** | ⚠️ **Teilweise geprüft** (PR #204): Die Auszeichnung als `LiveRegionMode.Polite` ist am Emulator belegt, ebenso dass ohne laufenden Vordergrunddienst kein kalibrierter Wert erscheint (siehe [F-02](#f-02)). **Offen bleibt**, ob TalkBack tatsächlich spricht – das kann kein Test zeigen | TalkBack bei laufender Messung, am Gerät |
 | **Dark-Mode-Wirkung der 28 Farbliterale** | der Codebefund ist eindeutig, die optische Wirkung nicht gemessen | Screenshot-Vergleich hell/dunkel |
 | **Tatsächliche Dauer des Chaquopy-Berichtslaufs** | keine Messung möglich | Gerätetest mit 30 Messtagen |
 | **Verhalten bei vollem Speicher** | Ableitung aus dem Code; der automatische Neustart nach Schreibfehler ist laut README selbst nur rekonstruiert | Gerätetest mit künstlich gefülltem Speicher |
-| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet | Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
+| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet. ⚠️ *Test liegt vor (`ForegroundServiceOhneMikrofonPermissionInstrumentedTest`, PR #204), ist aber in keinem Lauf ausgeführt worden: Er startet als isolierter Berechtigungsfall erst nach dem Hauptlauf, und der war bisher rot.* | Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
 
 ### 35.2 Owner-Entscheidungen vom 25.09.2026
 
@@ -3278,7 +3324,7 @@ festgehalten und in die betroffenen Findings eingearbeitet.
 | # | Frage | **Entscheidung** | Wirkung auf das Audit |
 |---|---|---|---|
 | 1 | Kalibrierfoto nur einmal je Kalendertag? | **Nicht erzwingen, aber mehrfach ermöglichen.** Es soll möglich sein, öfter als einmal pro Tag ein Kalibrierfoto zu machen; verlangt wird es nicht wiederholt. | Bestätigt die Regel aus [Kap. 13.3](#133-fachliche-prüfung-des-gewünschten-ux-prinzips): Abfrage einmal je Kalendertag, dazu eine jederzeit sichtbare Aktion „Neues Foto". → [F-16](#f-16) |
-| 2 | Ist `onboardingCompleted = true` als Default Absicht? | **Offen – Rückfrage gestellt.** Der Owner kennt den Schalter nicht; die Entscheidung steht noch aus. | [F-14](#f-14) bleibt offen. Erklärung in Alltagssprache siehe unten. |
+| 2 | Ist `onboardingCompleted = true` als Default Absicht? | **Nein – Einführung nur für Neuinstallationen.** Owner-Antwort: „Ja, nur für neue Installationen." Die zusätzlich erwogene Erkennung über Google Cloud wurde geprüft und verworfen: sie setzt Anmeldung und Netz beim allerersten Start voraus, und die Drive-Synchronisierung ist per Default aus. | [F-14](#f-14) **umgesetzt und gemergt** (PR #203): Der Default hängt jetzt vom Zustand der Einstellungsdatei ab – ohne neuen Schlüssel und ohne Migration. Erklärung in Alltagssprache siehe unten. |
 | 3 | Zeitgebundene Stammdatenfelder weiterhin vorbefüllen? | **Tagesregel, mit Korrekturmöglichkeit.** Wurden die Parameter an einem Tag einmal bestätigt, wird an diesem Tag nicht erneut aufgefordert. Der Nutzer muss sie jederzeit korrigieren können. | Löst den Kern von [F-15](#f-15) und [F-16](#f-16). Residualrisiko siehe Hinweis unter der Tabelle. |
 | 4 | Gilt „Verlauf vor Einzelwert" weiter? | **Ja, Verlauf.** | [F-30](#f-30) ist damit kein Owner-Vorbehalt mehr, sondern eine bestätigte Anforderung – Priorität von P3 auf **P2** angehoben. |
 | 5 | 28 Farbliterale vereinheitlichen? | **Ja.** | [F-19](#f-19) ist freigegeben; der README-Vorbehalt entfällt. |
