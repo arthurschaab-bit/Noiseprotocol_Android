@@ -362,6 +362,75 @@ diesen Mechanismus zeigt.
 
 ---
 
+### 4.6 `ForegroundServiceAndroidTest` (Emulator API 34) — Absturz auf dem falschen Thread
+
+**Nachtrag 26.09.2026.** Aufgetreten in Lauf 36234744754 (PR #210), Job
+`emulator / instrumented-tests (34)`, ein Fehlschlag von 229:
+
+```
+ForegroundServiceAndroidTest > foregroundServiceStartetUndStopptUeberUiUndVerwaltetOngoingNotification
+android.view.ViewRootImpl$CalledFromWrongThreadException:
+Only the original thread that created a view hierarchy can touch its views.
+Expected: main  Calling: DefaultDispatcher-worker-1
+```
+
+**Die vollständige Kette, von unten gelesen:**
+
+```
+AudioRecordingService.kt:692        _currentMicDb.value = currentDb
+  StateFlowImpl.setValue -> updateState -> StateFlowSlot.makePending
+  CancellableContinuationImpl.resumeWith -> dispatchResume
+  DispatchedTaskKt.dispatch -> DispatchedTaskKt.resume          <- INLINE, ohne Dispatch
+  androidx.compose.ui.test.FrameDeferringContinuationInterceptor$FrameDeferredContinuation
+  androidx.compose.ui.test.ApplyingContinuationInterceptor$SendApplyContinuation
+  Snapshot.Companion.sendApplyNotifications
+  SnapshotKt.advanceGlobalSnapshot
+  Recomposer$recompositionRunner$2$unregisterApplyObserver$1
+  Recomposer$runRecomposeAndApplyChanges -> CompositionImpl.applyChanges
+  AndroidComposeView.onRequestMeasure -> View.requestLayout
+  ViewRootImpl.checkThread                                       <- Absturz
+```
+
+**Das ist KEIN Fehler im Produktivcode.** Die beiden entscheidenden Glieder sind
+`androidx.compose.ui.test.FrameDeferringContinuationInterceptor` und
+`androidx.compose.ui.test.ApplyingContinuationInterceptor` — reine Compose-**Test**-Infrastruktur,
+die `createAndroidComposeRule` installiert. Der `ApplyingContinuationInterceptor` ruft bei jeder
+Fortsetzung synchron `Snapshot.sendApplyNotifications()` auf.
+
+Im Betrieb sammelt `collectAsState()` unter dem `AndroidUiDispatcher` der Activity. Der schiebt die
+Fortsetzung auf den Main-Thread, und die beiden Interceptors existieren dort überhaupt nicht. Der
+Pfad kann im Betrieb so nicht auftreten.
+
+**Warum es trotzdem auftritt:** `ForegroundServiceAndroidTest` spannt mit
+`createAndroidComposeRule<ComponentActivity>()` eine eigene Komposition auf und lässt dabei den
+echten `AudioRecordingService` laufen. Dessen Überwachungsschleife schreibt `_currentMicDb` im Takt
+der Audioblöcke aus einer Coroutine auf `Dispatchers.Default`. Trifft eine solche Schreibung einen
+Moment, in dem ein Verbraucher der Testkomposition an diesem `StateFlow` hängt, wird dessen
+Fortsetzung inline auf dem schreibenden Thread wiederaufgenommen — und der Test-Interceptor löst
+dort die Snapshot-Anwendung samt Neumessung aus.
+
+Daraus erklärt sich auch die Sporadik: Es muss ein Verbraucher aktiv sein UND die Schreibung muss in
+das richtige Zeitfenster fallen. Auf `main` (`fecd048`) war derselbe Test in zwei Läufen grün
+(36231020409, 36231729466).
+
+**Nicht behoben.** Mögliche Wege, keiner davon ohne Abwägung, deshalb dem Owner vorgelegt
+(AGENTS.md §8a):
+
+1. Den echten Dienst im Test nicht mitlaufen lassen, sondern seinen Pegelstrom durch eine Attrappe
+   ersetzen. Sauberste Trennung, aber der Test prüft gerade das Zusammenspiel mit dem echten Dienst.
+2. Die Komposition des Tests erst aufspannen, nachdem der Dienst gestoppt ist, beziehungsweise sie
+   vor dem Start wieder abbauen. Ändert den Ablauf des Tests.
+3. `_currentMicDb` im Dienst gedrosselt und auf einem festen Dispatcher veröffentlichen. Greift in
+   Produktivcode ein, um ein Testproblem zu lösen — dafür spricht allenfalls, dass ein Pegelwert im
+   Audioblocktakt als Compose-Zustand ohnehin viel Rekomposition erzeugt.
+
+**Fehlzuordnung, die hier festgehalten gehört:** Der Befund wurde zunächst als
+Nebenläufigkeitsfehler im Produktivcode gemeldet, der „auch im Betrieb" auftreten könne. Das war
+falsch und beruhte darauf, dass nur der App-Rahmen im Stack gelesen wurde und nicht die Rahmen
+darüber. Die Korrektur steht im PR-Verlauf von #210.
+
+---
+
 ## 5 · Prüfpunkte & Empfehlungen nach AGENTS.md §8a
 
 Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidung von Flakes:
