@@ -472,6 +472,7 @@
     <string name="report_precondition_master_data">Stammdaten je Tag eindeutig</string>
     <string name="report_precondition_area">Gebietseinstufung gesetzt</string>
     <string name="report_precondition_blocked">Bericht gesperrt: %1$s</string>
+    <string name="report_preset_recent_measurement">Letzte Messung</string>
     <string name="bericht_intro_desc">Zeitraumbericht oder vollständiger Gesamtbericht mit Stammdaten, Kennwerten und Fotos – als PDF.</string>
     <string name="period_report_action">Zeitraumbericht erstellen</string>
     <string name="period_report_dialog_title">Zeitraumbericht</string>

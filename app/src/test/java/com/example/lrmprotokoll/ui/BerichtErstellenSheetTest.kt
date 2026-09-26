@@ -53,6 +53,11 @@ class BerichtErstellenSheetTest {
         runBlocking(Dispatchers.IO) {
             app.container.database.clearAllTables()
         }
+        app.getSharedPreferences("noise_settings", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .remove("high_end_bericht_erster_tag")
+            .remove("high_end_bericht_letzter_tag")
+            .commit()
     }
 
     /**
@@ -215,6 +220,21 @@ class BerichtErstellenSheetTest {
                 app.container.database.reportConfigDao().get()?.gebietseinstufung
             },
         )
+    }
+
+    @Test fun siebenTagePresetWirdFuerDenNaechstenBerichtGemerkt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        composeRule.setContent {
+            BerichtScreen(onBack = {}, onOpenSettings = {})
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("btn_high_end_preset_7d")
+            .performScrollTo()
+            .performClick()
+
+        val gespeichert = app.container.settingsManager.letzterHighEndBerichtszeitraum()
+        assertEquals(6L, gespeichert!!.second - gespeichert.first)
+        assertEquals(LocalDate.now().toEpochDay(), gespeichert.second)
     }
 
     /**

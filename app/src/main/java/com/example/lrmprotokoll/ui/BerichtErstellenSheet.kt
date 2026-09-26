@@ -56,6 +56,7 @@ import com.example.lrmprotokoll.report.HighEndReportExport
 import com.example.lrmprotokoll.report.BerichtDatei
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -75,11 +76,13 @@ fun BerichtErstellenSheet(
     onFertig: () -> Unit,
     runner: suspend (String) -> ChaquopyReportRunner.Ergebnis,
     initialRange: BerichtZeitraum? = null,
+    recentRange: BerichtZeitraum? = null,
 ) {
     val context = LocalContext.current
     val areaSaveError = stringResource(R.string.report_area_save_error)
     val db = remember { (context.applicationContext as LaermprotokollApp).container.database }
     val diagnosticsReporter = remember { (context.applicationContext as LaermprotokollApp).container.diagnosticsReporter }
+    val settingsManager = remember { (context.applicationContext as LaermprotokollApp).container.settingsManager }
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -108,6 +111,13 @@ fun BerichtErstellenSheet(
             tage.any { it.datum == datum && it.stammdatenKandidaten.any { kandidat -> kandidat.id == id } }
         }
         laedt = false
+    }
+
+    fun waehleZeitraum(auswahl: BerichtZeitraum) {
+        zeitraum = auswahl
+        ausgewaehlteIds = emptyMap()
+        pdfPfad = null
+        settingsManager.speichereHighEndBerichtszeitraum(auswahl.ersterTag.toEpochDay(), auswahl.letzterTag.toEpochDay())
     }
 
     fun erzeugen() {
@@ -156,6 +166,28 @@ fun BerichtErstellenSheet(
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = { datumDialogOffen = true }, modifier = Modifier.testTag("btn_bericht_datumsbereich")) {
                 Text("Datumsbereich wählen")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = { waehleZeitraum(BerichtZeitraum(LocalDate.now().minusDays(6), LocalDate.now())) },
+                    modifier = Modifier.testTag("btn_high_end_preset_7d"),
+                ) { Text(stringResource(R.string.period_report_preset_7_days)) }
+                TextButton(
+                    onClick = { waehleZeitraum(BerichtZeitraum(LocalDate.now().minusDays(29), LocalDate.now())) },
+                    modifier = Modifier.testTag("btn_high_end_preset_30d"),
+                ) { Text(stringResource(R.string.period_report_preset_30_days)) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = { waehleZeitraum(BerichtZeitraum(LocalDate.now().withDayOfMonth(1), LocalDate.now())) },
+                    modifier = Modifier.testTag("btn_high_end_preset_month"),
+                ) { Text(stringResource(R.string.period_report_preset_this_month)) }
+                recentRange?.let { letzterZeitraum ->
+                    TextButton(
+                        onClick = { waehleZeitraum(letzterZeitraum) },
+                        modifier = Modifier.testTag("btn_high_end_preset_recent"),
+                    ) { Text(stringResource(R.string.report_preset_recent_measurement)) }
+                }
             }
             zeitraum?.let {
                 Text("${it.ersterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN))} – " +
@@ -301,7 +333,10 @@ fun BerichtErstellenSheet(
     }
 
     if (datumDialogOffen) {
-        val picker = rememberDateRangePickerState()
+        val picker = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = zeitraum?.ersterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+            initialSelectedEndDateMillis = zeitraum?.letzterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+        )
         // Review-Befund (Owner-Meldung 15.09.2026, echtes Geraet): DateRangePicker in einem
         // DatePickerDialog ist ohne Hoehenbegrenzung hoeher als der Bildschirm - Uebernehmen/
         // Abbrechen landeten ausserhalb des Sichtbereichs. Material3 empfiehlt fuer
@@ -327,9 +362,7 @@ fun BerichtErstellenSheet(
                                 val start = picker.selectedStartDateMillis
                                 val ende = picker.selectedEndDateMillis
                                 if (start != null && ende != null) {
-                                    zeitraum = BerichtZeitraum.ausPicker(start, ende)
-                                    ausgewaehlteIds = emptyMap()
-                                    pdfPfad = null
+                                    waehleZeitraum(BerichtZeitraum.ausPicker(start, ende))
                                     datumDialogOffen = false
                                 } else meldung = "Bitte Start- und Enddatum wählen."
                             },
