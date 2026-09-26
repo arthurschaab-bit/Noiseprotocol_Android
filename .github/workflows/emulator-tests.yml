@@ -81,8 +81,38 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
+          # Historie dieser Zeile, damit sie niemand versehentlich zurueckdreht:
+          #
+          # Bis 25.09.2026 stand hier aosp_atd. Ein Automated Test Device bringt bewusst keine
+          # SystemUI mit - ohne SystemUI keine Statusleiste, kein statusBars-Inset, und
+          # SystemLeistenAbstandInstrumentedTest hat sich in drei Laeufen ueber seine
+          # assumeTrue-Schranke weggeskippt, ohne etwas zu pruefen.
+          #
+          # Auf Owner-Entscheidung wurde deshalb auf google_apis umgestellt. Das hat seinen
+          # Zweck erfuellt: Im Lauf 36169220008 ist der Test erstmals wirklich gelaufen und war
+          # GRUEN - der Titel des Startbildschirms beginnt unterhalb der Statusleiste. Der Punkt
+          # "System-Insets" aus Audit-Kapitel 35.1 ist damit beantwortet.
+          #
+          # google_apis bringt aber nicht nur SystemUI mit, sondern auch die Google-Dienste. Die
+          # blenden Systemdialoge ueber die App und nehmen ihr den Fensterfokus: Im Lauf
+          # 36181486631 fielen 13 bestehende Tests aus, neun davon mit
+          # RootViewWithoutFocusException ("Waited for the root of the view hierarchy to have
+          # window focus"). Da die Frage beantwortet ist, kostet das Bild ab jetzt 13 kaputte
+          # Tests ohne zusaetzlichen Erkenntnisgewinn - deshalb zurueck auf aosp_atd.
+          #
+          # Wer den Insets-Test dauerhaft scharf haben will, nimmt `default` statt google_apis:
+          # AOSP MIT SystemUI, aber ohne Google-Dienste. Das ist ungetestet und waere ein
+          # eigener Versuch wert.
           target: aosp_atd
           arch: x86_64
+          # Ohne `profile` erzeugt avdmanager ein Geraet mit 320x640 - eine Bildschirmgroesse,
+          # die es bei heutigen Telefonen nicht gibt (das schmalste liegt bei rund 360 dp). Mit
+          # aosp_atd fiel das nie auf, weil dieses Bild keine SystemUI und damit keine Status-
+          # und Navigationsleiste mitbringt. Mit google_apis kosten die Leisten auf 640 px Hoehe
+          # ueber 10 Prozent des Platzes: 14 bestehende Tests fielen aus, neun davon mit
+          # "performScrollTo() failed" (Lauf 36169220008). Ein festes, realistisches Profil macht
+          # die Geometrie unabhaengig vom Systemabbild und reproduzierbar.
+          profile: pixel_5
           force-avd-creation: false
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
