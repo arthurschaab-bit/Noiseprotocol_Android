@@ -27,7 +27,11 @@ Die App verwendet zwei sich ergänzende Testebenen:
    - prüfen reale Compose-Semantics und Touch-Koordinaten, Foreground-Service-Lebenszyklus, `NotificationManager`, `MediaPlayer`, Scoped Storage, `PdfDocument`, Room/SQLite, Android-System-Intents, Espresso-`Intents` für SAF-Dateiauswahl und (seit Phase 9b) eine echte YAMNet/TFLite-Modellinferenz,
    - decken die Stellen ab, an denen Robolectric entweder nur Shadows bietet oder reale Android-Lifecycle-/Systemintegration wichtig ist.
 
-Beide Ebenen laufen in GitHub Actions bei jedem Pull Request und Push auf `main`. Ein grüner
+Beide Ebenen laufen parallel im gemeinsamen GitHub-Actions-Lauf **Android CI** bei jedem
+relevanten Pull Request und Push auf `main`. Nur ausschließlich Markdown im Wurzelverzeichnis
+oder unter `docs/` überspringt die Android-Jobs; ein leichtes, stabiles Gesamtgate bleibt sichtbar.
+Unbekannte Pfade, gemischte Änderungen und unvollständige Git-Diffs führen zum vollständigen Lauf.
+Ein manueller Lauf führt immer beide Ebenen aus. Ein grüner
 Emulatorlauf ersetzt **keinen** Hardwaretest mit einem realen PCE-323, Mikrofon, Lautsprecher,
 Kamera oder einem echten Google-/ntfy-Backend — siehe Abschnitt 7.
 
@@ -39,34 +43,47 @@ Kamera oder einem echten Google-/ntfy-Backend — siehe Abschnitt 7.
 
 | Schritt | Kommando | Blockierend? |
 |---|---|---|
-| Build | `assembleDebug assembleDebugAndroidTest compileDebugAndroidTestKotlin` | Ja |
+| Python | `pytest app/src/test/python/` und CI-Skriptregressionen | Ja |
+| Compile | Bestandteil von `test` und `lintDebug`; APKs im parallelen Heavy Gate | Ja |
 | Android Lint | `lintDebug` | Ja |
 | ktlint | `ktlintCheck` | **Nein** (`continue-on-error: true` — Report wird trotzdem als Artefakt hochgeladen) |
-| JVM/Robolectric | `testDebugUnitTest test` (inkl. `checkUnusedDaoMethods`, siehe unten) | Ja |
+| JVM/Robolectric | `test` (inkl. `testDebugUnitTest` und `checkUnusedDaoMethods`, siehe unten) | Ja |
 | Coverage | `koverXmlReportDebug koverHtmlReportDebug` | Nein (nur Reporting) |
 
 `checkUnusedDaoMethods` (eigene Gradle-Task in `app/build.gradle.kts`) hängt sich automatisch an
 `test`: eine neu deklarierte, aber nirgends aufgerufene DAO-Methode macht CI genauso rot wie ein
 fehlgeschlagener Test, ohne eine separate Zeile im Workflow zu brauchen.
 
-### 2.2 Android Emulator Tests — `instrumented-tests` (`.github/workflows/emulator-tests.yml`)
+### 2.2 Heavy Gate — `emulator / instrumented-tests` (`.github/workflows/emulator-tests.yml`)
+
+Wiederverwendbarer Workflow, ausschließlich vom Parent `androidci.yml` aufgerufen.
+APK-Erstellung und AndroidTest-Kompilierung erfolgen nur hier. Die Debug-APK ist unmittelbar
+nach dem Build als `app-debug-apk-<Laufnummer>` im gemeinsamen Lauf verfügbar, auch wenn
+später Tests fehlschlagen. Versionskennung und Debug-Keystore gelten für alle Gradle-Aufrufe
+dieses Jobs. Der Keystore wird erst nach den Installations-/Testschritten gelöscht.
 
 Android 14 / **API 34** AOSP ATD, `x86_64`, KVM-Beschleunigung, 2 Kerne, 2048 MB RAM, Animationen
 deaktiviert, `-noaudio -camera-back none`. Ablauf:
 
 ```text
-./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+./gradlew assembleDebug assembleDebugAndroidTest
 bash .github/scripts/run-instrumented-tests.sh 34   # siehe unten
 ```
 
 `run-instrumented-tests.sh` führt zuerst `connectedDebugAndroidTest` mit allen Tests **außer**
-den vier `*PermissionInstrumentedTest`-Klassen aus, die eine Laufzeitberechtigung entziehen
+den vier ausdrücklich benannten `ohneBerechtigung...`-Methoden aus, die eine Laufzeitberechtigung entziehen
 (ein Entzug mitten im laufenden Testprozess würde diesen Prozess töten und den ganzen restlichen
 Lauf mitreißen). Diese vier Fälle laufen danach einzeln über `adb shell am instrument`, jeweils
 nach einem gezielten `pm revoke` **vor** dem jeweiligen Prozessstart.
 
-Bei Fehlern werden zusätzlich ADB-/Logcat- und `dumpsys activity`-Diagnosen als Artefakte
-gespeichert.
+Bei Fehlern sichert ein EXIT-Trap ADB-/Logcat-, `dumpsys`-, Geräteinformationen und Screenshots
+**vor dem Emulator-Teardown**. Diagnosefehler überschreiben den ursprünglichen Teststatus nicht.
+Die vier isolierten Methoden liefern zusätzlich eigene JUnit-XML- und Textberichte. Ein nicht
+bestätigtes Permission-Revoke ist ein Fehler statt einer möglicherweise falsch grünen Prüfung.
+
+Beide Jobs schreiben Phasenzeiten und ihre Dauer ab Checkout in `GITHUB_STEP_SUMMARY`.
+Details zur Messmethode, Baseline und Architekturentscheidung: [CI-Audit](CI_AUDIT_2026-09.md).
+Gradle-Daemons werden innerhalb eines Jobs wiederverwendet; Configuration Cache bleibt aus.
 
 ---
 
@@ -147,8 +164,10 @@ Fünf unabhängige PRs haben das geschlossen:
 ## 6. JVM- und Robolectric-Abdeckung
 
 Die JVM-Ebene ist deutlich breiter als die Instrumentationstests. Sie liegt unter
-`app/src/test/java/com/example/lrmprotokoll/` und wird im CI-Gate mit `testDebugUnitTest` und
-`test` ausgeführt. Repräsentative Bereiche:
+`app/src/test/java/com/example/lrmprotokoll/` und wird im CI-Gate mit `test` ausgeführt.
+Der gemessene Task-Graph enthält `testDebugUnitTest` und den DAO-Check. Die bisherige doppelte
+Anforderung führte dieselbe Suite nur einmal aus. Eine Release-Unit-Test-Task ist mit der
+aktuellen AGP-Konfiguration nicht Teil dieses Graphen; das ist keine Änderung der CI-Abdeckung. Repräsentative Bereiche:
 
 | Bereich | Repräsentative Tests |
 |---|---|
@@ -215,7 +234,7 @@ echte YAMNet-Inferenz gegen eine echte Audiodatei läuft erfolgreich durch.
 
 ```bash
 # JVM / Robolectric (inkl. checkUnusedDaoMethods)
-./gradlew testDebugUnitTest test --no-daemon --stacktrace --continue
+./gradlew test --stacktrace --continue
 
 # Android Lint
 ./gradlew lintDebug --no-daemon --stacktrace
@@ -224,7 +243,7 @@ echte YAMNet-Inferenz gegen eine echte Audiodatei läuft erfolgreich durch.
 ./gradlew ktlintCheck --no-daemon --stacktrace
 
 # Instrumentierung auf verbundenem Gerät/Emulator (API 34 fuer CI-Naehe)
-./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+./gradlew assembleDebug assembleDebugAndroidTest
 ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
 
 # Coverage
