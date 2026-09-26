@@ -6,11 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -91,7 +91,7 @@ class ForegroundServiceAndroidTest {
     @Test
     fun foregroundServiceStartetUndStopptUeberUiUndVerwaltetOngoingNotification() {
         composeRule.setContent {
-            LiveCockpitCard()
+            LiveCockpitCard(modifier = Modifier.verticalScroll(rememberScrollState()))
         }
         composeRule.waitForIdle()
 
@@ -113,7 +113,16 @@ class ForegroundServiceAndroidTest {
 
         // 3. Stoppen über UI (Beenden-Button) inkl. Sicherheitsabfrage
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(END_MEASUREMENT_BUTTON_TAG).assertIsDisplayed().performClick()
+        composeRule.waitUntil(timeoutMillis = 7_000L) {
+            composeRule.onAllNodesWithTag(END_MEASUREMENT_BUTTON_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(END_MEASUREMENT_BUTTON_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            composeRule.onAllNodesWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
         composeRule.onNodeWithText("Messung beenden").performClick()
 
