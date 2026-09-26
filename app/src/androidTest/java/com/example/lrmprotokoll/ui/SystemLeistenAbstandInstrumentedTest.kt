@@ -60,15 +60,23 @@ class SystemLeistenAbstandInstrumentedTest {
         // Auf einem Geraetebild ohne Statusleiste gibt es nichts zu ueberlappen - dann ist der
         // Test gegenstandslos statt gruen-durch-Zufall.
         //
-        // WICHTIG (Emulator-Lauf 25.09.2026): Genau hier hat sich der Test weggeskippt und damit
-        // NICHTS geprueft. Wahrscheinlichste Ursache ist das Geraetebild der CI:
-        // emulator-tests.yml verwendet `target: aosp_atd`. Ein Automated Test Device ist bewusst
-        // abgespeckt und bringt keine SystemUI mit - ohne SystemUI gibt es keine Statusleiste und
-        // folglich keinen Inset. Trifft das zu, laesst sich dieser Punkt aus Audit-Kapitel 35.1
-        // auf diesem Geraetebild grundsaetzlich nicht pruefen; er braeuchte ein Bild mit SystemUI
-        // (z. B. `google_apis`). Das ist eine CI-Entscheidung des Owners (AGENTS.md §8a), nicht
-        // eine, die dieser Test eigenmaechtig treffen darf - deshalb ueberspringt er sich
-        // weiterhin, sagt jetzt aber im Bericht, was er gemessen hat.
+        // STAND 25.09.2026 - die Frage, die dieser Test stellt, IST BEANTWORTET:
+        //
+        // Auf `target: aosp_atd` (dem Standardbild der CI) skippt er sich hier weg, weil ein
+        // Automated Test Device bewusst keine SystemUI mitbringt - ohne SystemUI keine
+        // Statusleiste, kein Inset, nichts zu ueberlappen.
+        //
+        // Im Lauf 36169220008 lief die CI einmalig auf `google_apis`, also MIT SystemUI. Dort
+        // ist dieser Test wirklich durchgelaufen und war GRUEN: Der Titel des Startbildschirms
+        // beginnt unterhalb der Statusleiste. Damit ist der Punkt "System-Insets" aus
+        // Audit-Kapitel 35.1 geklaert - kein Befund.
+        //
+        // Die CI steht seither wieder auf aosp_atd, weil google_apis ausser SystemUI auch die
+        // Google-Dienste mitbringt und die 13 bestehenden Tests den Fensterfokus stehlen
+        // (RootViewWithoutFocusException, Lauf 36181486631). Der Test bleibt deshalb erhalten
+        // und skippt sich - als Regressionsbremse fuer den Tag, an dem jemand die CI auf ein
+        // Bild mit SystemUI umstellt. Die Skip-Meldung nennt die gemessenen Insets, damit man
+        // im Bericht sieht, ob er etwas geprueft hat oder nicht.
         assumeTrue(
             "Dieses Geraetebild hat keine Statusleiste (statusBars.top=$statusleisteOben, " +
                 "systemBars.top=$systemleistenOben) - vermutlich ein aosp_atd-Bild ohne " +

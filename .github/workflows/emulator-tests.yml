@@ -55,14 +55,29 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          # Owner-Entscheidung 25.09.2026 (UX-Audit Kapitel 35.1, "System-Insets"):
-          # aosp_atd ist ein Automated Test Device und bringt bewusst keine SystemUI mit. Ohne
-          # SystemUI gibt es keine Statusleiste und damit keinen statusBars-Inset -
-          # SystemLeistenAbstandInstrumentedTest hat sich deshalb in drei Laeufen hintereinander
-          # ueber seine assumeTrue-Schranke weggeskippt und nichts geprueft. Ein Bild mit
-          # SystemUI ist die Voraussetzung dafuer, dass dieser Punkt ueberhaupt pruefbar wird.
-          # Kostet Bootzeit und Download je Lauf; das ist der bewusst in Kauf genommene Preis.
-          target: google_apis
+          # Historie dieser Zeile, damit sie niemand versehentlich zurueckdreht:
+          #
+          # Bis 25.09.2026 stand hier aosp_atd. Ein Automated Test Device bringt bewusst keine
+          # SystemUI mit - ohne SystemUI keine Statusleiste, kein statusBars-Inset, und
+          # SystemLeistenAbstandInstrumentedTest hat sich in drei Laeufen ueber seine
+          # assumeTrue-Schranke weggeskippt, ohne etwas zu pruefen.
+          #
+          # Auf Owner-Entscheidung wurde deshalb auf google_apis umgestellt. Das hat seinen
+          # Zweck erfuellt: Im Lauf 36169220008 ist der Test erstmals wirklich gelaufen und war
+          # GRUEN - der Titel des Startbildschirms beginnt unterhalb der Statusleiste. Der Punkt
+          # "System-Insets" aus Audit-Kapitel 35.1 ist damit beantwortet.
+          #
+          # google_apis bringt aber nicht nur SystemUI mit, sondern auch die Google-Dienste. Die
+          # blenden Systemdialoge ueber die App und nehmen ihr den Fensterfokus: Im Lauf
+          # 36181486631 fielen 13 bestehende Tests aus, neun davon mit
+          # RootViewWithoutFocusException ("Waited for the root of the view hierarchy to have
+          # window focus"). Da die Frage beantwortet ist, kostet das Bild ab jetzt 13 kaputte
+          # Tests ohne zusaetzlichen Erkenntnisgewinn - deshalb zurueck auf aosp_atd.
+          #
+          # Wer den Insets-Test dauerhaft scharf haben will, nimmt `default` statt google_apis:
+          # AOSP MIT SystemUI, aber ohne Google-Dienste. Das ist ungetestet und waere ein
+          # eigener Versuch wert.
+          target: aosp_atd
           arch: x86_64
           # Ohne `profile` erzeugt avdmanager ein Geraet mit 320x640 - eine Bildschirmgroesse,
           # die es bei heutigen Telefonen nicht gibt (das schmalste liegt bei rund 360 dp). Mit
