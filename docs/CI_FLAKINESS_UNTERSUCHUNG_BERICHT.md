@@ -295,8 +295,6 @@ das ist der aussichtsreichste Weg, den Flake ursächlich loszuwerden.
     (`Modifier.graphicsLayer { alpha = pulseAlpha.value }`) verlagert und für den statischen Zustand
     vollständig deaktiviert wurde. Seither laufen beide Klassen stabil.
 
----
-
 ### 4.6 `ForegroundServiceAndroidTest` (Emulator API 34) — Absturz auf dem falschen Thread
 
 **Nachtrag 26.09.2026.** Aufgetreten in Lauf 36234744754 (PR #210), Job
@@ -363,6 +361,73 @@ das richtige Zeitfenster fallen. Auf `main` (`fecd048`) war derselbe Test in zwe
 Nebenläufigkeitsfehler im Produktivcode gemeldet, der „auch im Betrieb" auftreten könne. Das war
 falsch und beruhte darauf, dass nur der App-Rahmen im Stack gelesen wurde und nicht die Rahmen
 darüber. Die Korrektur steht im PR-Verlauf von #210.
+
+---
+
+### 4.7 `MainActivityNavigationAndroidTest` — die Dauermessungs-Karte bleibt aus
+
+**Nachtrag 26.09.2026.** Aufgetreten im Wiederholungslauf von 36234744754 (PR #210):
+
+```
+MainActivityNavigationAndroidTest > dauermessungsCardWirdBeiVorhandenerSessionAngezeigtUndNavigiert
+androidx.compose.ui.test.ComposeTimeoutException
+  java.lang.AssertionError: warteUndScrolleZu-Timeout nach 10047ms
+```
+
+Der Test legt vor dem Aufbau der Oberfläche eine offene `SessionEntity` an und erwartet die
+Dauermessungs-Karte. Sie erscheint nicht.
+
+**Die Diagnose in `AsyncListTestHelper` hat den Fall entschieden.** Sie führt beim Timeout zwei
+Eingriffe aus, die „Emission kommt nicht an" von „Änderung wird nicht neu gezeichnet" trennen:
+
+```
+Nach Snapshot.sendApplyNotifications():  Ziel erreichbar=false, Textknoten=18
+Nach zusaetzlichem Insert:               Ziel erreichbar=true,  Textknoten=23
+```
+
+Ein erzwungenes Neuzeichnen ändert nichts. Ein zusätzlicher, völlig unbeteiligter Insert macht die
+Karte sofort sichtbar. Room ist dabei unauffällig: `isOpen=true`, Beobachterzähler stabil
+(`sessions=4`), `needsSync=false`, `pendingRefresh=false`, Abfragen in 4 ms.
+
+**Ursache.** Es ist derselbe Fehler, den PR #182 aufgeklärt hat — nur für einen anderen Flow.
+`MainActivity.kt` las den Zustand so:
+
+```kotlin
+val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+```
+
+Durch das `by`-Delegat findet die eigentliche Lesung erst an der Verwendungsstelle statt, und die
+einzige liegt im `LazyColumn`-Builder (`if (letzteSession != null)`, Dauermessungs-Karte). Damit
+beobachtet allein der abgeleitete Zustand der LazyColumn aus der ersten Messphase diesen Flow.
+Trifft die erste Room-Emission kurz nach jener Auswertung ein, wird sie nie neu ausgewertet — die
+Karte bleibt aus, bis irgendeine andere Änderung ein Neuzeichnen erzwingt. Genau das zeigt der
+Insert-Eingriff der Diagnose.
+
+Für `records` und `references` wurde das in #182 behoben, indem `.value` im Kompositions-Scope
+gelesen wird (`MainActivity.kt:391-392`, samt erklärendem Kommentar). **`letzteSession` hat diese
+Korrektur nicht bekommen.**
+
+**Behebung.** Dieselbe Form wie bei `records`/`references`:
+
+```kotlin
+val letzteSessionZustand = db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+val letzteSession = letzteSessionZustand.value
+```
+
+Auf zwei Zeilen, weil `…collectAsState(…).value` in einem Zug vier Kettenglieder ergibt und ktlint
+die Kette dann mehrzeilig verlangt — die mehrzeilige Form wiederum verstößt gegen „a multiline
+expression should start on a new line". Die Zwischenvariable ist der Weg, der ohne neue
+ktlint-Befunde auskommt und der Form von `records`/`references` am nächsten kommt.
+
+**Das betrifft nicht nur den Test.** Beim App-Start wird `letzteSessionFlow()` genauso erstmalig
+emittiert. Trifft die Emission dasselbe Zeitfenster, fehlt die Dauermessungs-Karte auch auf dem
+Gerät, bis eine andere Änderung neu zeichnen lässt. Im Betrieb passiert das häufig genug, dass es
+kaum auffällt — der Defekt ist derselbe.
+
+**NICHT verifiziert:** dass der Fix den Testfehlschlag beseitigt. Dafür braucht es einen
+Emulator-Lauf; in der Entwicklungsumgebung dieser Sitzung läuft keiner. Belegt ist bisher nur, dass
+die Änderung die im Repo bereits etablierte Form aus #182 herstellt und die Diagnose genau auf
+diesen Mechanismus zeigt.
 
 ---
 

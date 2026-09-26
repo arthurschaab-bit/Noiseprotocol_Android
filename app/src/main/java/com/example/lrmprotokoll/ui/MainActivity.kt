@@ -444,7 +444,13 @@ fun NoiseProtocolApp(
     var referenceToDelete by remember { mutableStateOf<ReferenceSound?>(null) }
     var showReferenceDialog by remember { mutableStateOf<NoiseRecord?>(null) }
     var showPairingDialog by remember { mutableStateOf(false) }
-    val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+    // Bewusst `.value` hier statt `by` - aus demselben Grund wie bei records/references oben.
+    // Die einzige Lesestelle ist die Dauermessungs-Karte im LazyColumn-Builder; ueber ein Delegat
+    // wuerde der Zustand allein im abgeleiteten Scope der LazyColumn beobachtet. Der Fix aus
+    // PR #182 hat diesen Flow nicht erfasst. Belegt in
+    // docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md Abschnitt 4.7.
+    val letzteSessionZustand = db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
+    val letzteSession = letzteSessionZustand.value
     val latestFrame by container.meterTransport.frames.collectAsState(initial = null)
     var refName by remember { mutableStateOf("") }
     var showOverflowMenu by remember { mutableStateOf(false) }
