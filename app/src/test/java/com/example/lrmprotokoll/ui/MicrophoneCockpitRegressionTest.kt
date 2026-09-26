@@ -123,4 +123,28 @@ class MicrophoneCockpitRegressionTest {
         composeRule.onNodeWithText(fallbackUnit, substring = true).assertExists()
         composeRule.onNodeWithTag("cockpit_meter_fallback_hint", useUnmergedTree = true).assertExists()
     }
+
+    @Test fun beendeteSessionZeigtKeineLaufendeDauerImCockpit() {
+        serviceFlow<Boolean>("_laeuft").value = false
+        runBlocking {
+            app.container.database.sessionDao().insert(
+                SessionEntity(
+                    startedAt = 9_000_000_000_000L,
+                    endedAt = 9_000_000_060_000L,
+                    deviceAddress = "AA:BB:CC:DD:EE:FF",
+                    deviceName = "PCE-323",
+                    weighting = null,
+                    timeWeighting = null,
+                )
+            )
+        }
+        showCockpit()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("cockpit_timer_text").assertDoesNotExist()
+        val runningStatus = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_measuring_running)
+        composeRule.onNodeWithText(runningStatus).assertDoesNotExist()
+        val readyStatus = composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_ready_to_measure)
+        composeRule.onNodeWithText(readyStatus).assertExists()
+    }
 }

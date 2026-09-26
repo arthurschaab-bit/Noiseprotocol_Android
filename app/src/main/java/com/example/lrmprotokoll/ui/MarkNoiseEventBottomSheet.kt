@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,8 +63,8 @@ fun MarkNoiseEventBottomSheet(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var selectedCategoryId by remember { mutableStateOf("hammering") }
-    var noteText by remember { mutableStateOf("") }
+    var selectedCategoryId by rememberSaveable { mutableStateOf("hammering") }
+    var noteText by rememberSaveable { mutableStateOf("") }
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val currentTimeStr = remember { timeFormat.format(Date()) }
     val dbText = remember(currentDb) {

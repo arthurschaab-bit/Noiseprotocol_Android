@@ -5,7 +5,6 @@ import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.report.pdf.TagesberichtPdf
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
 import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -19,11 +18,12 @@ import java.util.zip.ZipOutputStream
  * MeasurementRecorder.onFrame). Als eigenstaendige Funktion pruefbar ohne den Context, den
  * ReportManager selbst braucht.
  */
-internal fun pegelEinheit(meterWeighting: String?): String = when (meterWeighting) {
-    "A" -> "dBA"
-    "C" -> "dBC"
-    else -> "dB"
-}
+internal fun pegelEinheit(meterWeighting: String?): String =
+    when (meterWeighting) {
+        "A" -> "dBA"
+        "C" -> "dBC"
+        else -> "dB"
+    }
 
 /**
  * Bezeichnung fuer den energetischen Pegelmittelwert (Prüfprotokoll-Befund 01 / Korrekturliste
@@ -67,8 +67,9 @@ internal fun unbestaetigteBewertungHinweis(records: List<NoiseRecord>): String? 
         "vorzutäuschen, die nicht belegt war.\n\n"
 }
 
-class ReportManager(private val context: Context) {
-
+open class ReportManager(
+    private val context: Context,
+) {
     /**
      * Tagesbericht als PDF. Frueher eine `.txt`-Datei - umgestellt im Zuge der
      * Berichts-Konsolidierung, damit alle Berichte dasselbe Format haben und der Tagesbericht
@@ -77,15 +78,21 @@ class ReportManager(private val context: Context) {
      * Der Inhalt entsteht in [ermittleTagesbericht] (rein, getestet), die Ausgabe in
      * [TagesberichtPdf]. Diese Methode verklammert nur beides und bestimmt den Dateinamen.
      */
-    fun generateDailyReport(records: List<NoiseRecord>, deviceName: String? = null): File {
+    open fun generateDailyReport(
+        records: List<NoiseRecord>,
+        deviceName: String? = null,
+    ): File {
         val daten = ermittleTagesbericht(records, deviceName)
         val datei = File(BerichtDatei.ordner(context), "Tagesbericht_${daten.datum}.pdf")
         return TagesberichtPdf.schreibe(daten, datei)
     }
 
-    fun shareFile(file: File) = BerichtDatei.teile(context, file)
+    open fun shareFile(file: File) = BerichtDatei.teile(context, file)
 
-    fun createZipAndShare(records: List<NoiseRecord>, reportFile: File?) {
+    open fun createZipAndShare(
+        records: List<NoiseRecord>,
+        reportFile: File?,
+    ) {
         val dateStr = ermittleTagesbericht(records).datum
         val zipFile = File(BerichtDatei.ordner(context), "Laermprotokoll_$dateStr.zip")
 

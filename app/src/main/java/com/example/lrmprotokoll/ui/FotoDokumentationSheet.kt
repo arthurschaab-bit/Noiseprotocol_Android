@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -80,7 +81,7 @@ fun FotoDokumentationSheet(
     var offeneKategorie by remember { mutableStateOf<FotoKategorie?>(null) }
     var rohdatei by remember { mutableStateOf<File?>(null) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
-    var notiz by remember { mutableStateOf("") }
+    var notiz by rememberSaveable { mutableStateOf("") }
     val gezaehlt = remember { mutableStateOf(mapOf<FotoKategorie, Int>()) }
     var zeigeBestaetigung by remember { mutableStateOf(false) }
 
@@ -156,7 +157,7 @@ fun FotoDokumentationSheet(
                 label = { Text("Notiz zum nächsten Foto (optional)") },
                 placeholder = { Text("z. B. Messgerät 1,5 m über Boden") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("input_foto_notiz"),
             )
             Spacer(Modifier.height(12.dp))
 

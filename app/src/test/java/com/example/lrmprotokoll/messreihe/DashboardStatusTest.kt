@@ -87,4 +87,49 @@ class DashboardStatusTest {
     fun formatiereDauerKapptNegativeEingabenAufNull() {
         assertEquals("0:00", formatiereDauer(-5_000))
     }
+
+    @Test
+    fun inaktiverDienstZeigtKeineDauerSelbstMitSessionStart() {
+        val anzeige = leiteDashboardAnzeigeAb(
+            dienstAktiv = false,
+            geraetGepinnt = true,
+            verbindungszustand = ConnectionState.STREAMING,
+            sessionStartedAtMillis = 1_000L,
+            jetztMillis = 65_000L,
+            letzterPegel = 55.0,
+        )
+
+        assertNull(anzeige.dauerText)
+        assertNull(anzeige.laufzeitText)
+    }
+
+    @Test
+    fun aktiverDienstOhneSessionStartZeigtKeineDauer() {
+        val anzeige = leiteDashboardAnzeigeAb(
+            dienstAktiv = true,
+            geraetGepinnt = false,
+            verbindungszustand = ConnectionState.IDLE,
+            sessionStartedAtMillis = null,
+            jetztMillis = 65_000L,
+            letzterPegel = null,
+        )
+
+        assertNull(anzeige.dauerText)
+        assertNull(anzeige.laufzeitText)
+    }
+
+    @Test
+    fun aktiverDienstMitOffenerSessionLiefertDauerText() {
+        val anzeige = leiteDashboardAnzeigeAb(
+            dienstAktiv = true,
+            geraetGepinnt = true,
+            verbindungszustand = ConnectionState.STREAMING,
+            sessionStartedAtMillis = 10_000L,
+            jetztMillis = 75_000L,
+            letzterPegel = 60.0,
+        )
+
+        assertEquals("1:05", anzeige.dauerText)
+        assertEquals("Läuft seit 1:05", anzeige.laufzeitText)
+    }
 }

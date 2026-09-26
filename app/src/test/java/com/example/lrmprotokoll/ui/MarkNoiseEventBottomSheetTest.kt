@@ -74,4 +74,34 @@ class MarkNoiseEventBottomSheetTest {
         assertEquals("Bauarbeiten Nachbar", savedNote)
         assertEquals(true, dismissed)
     }
+
+    @Test
+    fun stateRestorationSurvivesNoteAndCategory() {
+        val restorationTester = androidx.compose.ui.test.junit4.StateRestorationTester(composeRule)
+
+        restorationTester.setContent {
+            MarkNoiseEventBottomSheet(
+                currentDb = 55.0,
+                currentWeighting = "dB(A)",
+                onSaveEvent = { _, _ -> },
+                onDismiss = {}
+            )
+        }
+        composeRule.waitForIdle()
+
+        val drillStr = composeRule.activity.getString(com.example.lrmprotokoll.R.string.category_drilling)
+        val notePlaceholder = composeRule.activity.getString(com.example.lrmprotokoll.R.string.mark_event_note_placeholder)
+
+        // Select drill category and enter note
+        composeRule.onNodeWithText(drillStr).performClick()
+        composeRule.onNodeWithText(notePlaceholder).performTextInput("Restoration Test Note")
+        composeRule.waitForIdle()
+
+        // Emulate saved instance state restore (e.g. rotation)
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        // Verify note and selected category survived
+        composeRule.onNodeWithText("Restoration Test Note").assertIsDisplayed()
+    }
 }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -16,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -33,6 +31,8 @@ import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
@@ -65,12 +65,13 @@ import java.util.Locale
 fun ProtokollDetailScreen(
     sessionId: Long,
     onBack: () -> Unit,
-    onShowSnackbar: ((String) -> Unit)? = null
+    onShowSnackbar: ((String) -> Unit)? = null,
+    messreiheExport: MessreiheExport? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
-    val export = remember { MessreiheExport(context) }
+    val export = remember(messreiheExport) { messreiheExport ?: MessreiheExport(context) }
     // Lazy statt sofort per remember: NoiseClassifier laedt im init-Block synchron das ~4 MB
     // YAMNet-Modell (MediaPipe AudioClassifier.createFromOptions) und wuerde damit bei JEDER
     // Komposition dieses Screens den Main-Thread blockieren, obwohl Klassifizierung nur bei
@@ -179,14 +180,15 @@ fun ProtokollDetailScreen(
     // Fotopicker (kein READ_MEDIA_IMAGES noetig) liefert erst die Uris, danach fragt der Dialog
     // unten die Kategorie fuer den ganzen Auswahl-Vorgang ab.
     var ausgewaehlteGalerieUris by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
-    val galeriePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            ausgewaehlteGalerieUris = uris
-            zeigeGalerieKategorieDialog = true
+    val galeriePicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.PickMultipleVisualMedia(),
+        ) { uris ->
+            if (uris.isNotEmpty()) {
+                ausgewaehlteGalerieUris = uris
+                zeigeGalerieKategorieDialog = true
+            }
         }
-    }
 
     fun importiereGalerieFotos(kategorie: FotoKategorie) {
         val uris = ausgewaehlteGalerieUris
@@ -200,7 +202,8 @@ fun ProtokollDetailScreen(
             }
             // Beweismaterial soll wie ein Kamerafoto sofort synchronisiert werden, nicht erst im
             // naechsten Zyklus (siehe FotoDokumentationSheet).
-            com.example.lrmprotokoll.drive.DriveSyncPlanung.starteSofort(context)
+            com.example.lrmprotokoll.drive.DriveSyncPlanung
+                .starteSofort(context)
         }
     }
 
@@ -210,7 +213,7 @@ fun ProtokollDetailScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.protocol_tab_sessions),
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 },
                 navigationIcon = {
@@ -222,18 +225,19 @@ fun ProtokollDetailScreen(
                     BluetoothStatusBadge(
                         state = connectionState,
                         deviceName = session?.deviceName,
-                        modifier = Modifier.padding(end = 12.dp)
+                        modifier = Modifier.padding(end = 12.dp),
                     )
-                }
+                },
             )
-        }
+        },
     ) { padding ->
         if (!geladen) {
             Box(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .padding(padding)
+                        .fillMaxSize(),
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
             }
@@ -251,71 +255,77 @@ fun ProtokollDetailScreen(
         val isLive = s.endedAt == null
         val sessionEndeFuerChart = s.endedAt ?: jetzt
 
-        val chartSpalten = remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
-            if (messwerte.isNotEmpty()) {
-                downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
-            } else {
-                downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+        val chartSpalten =
+            remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
+                if (messwerte.isNotEmpty()) {
+                    downsampleMesswerteFuerChart(messwerte, s.startedAt, sessionEndeFuerChart)
+                } else {
+                    downsampleAggregateFuerChart(aggregate, s.startedAt, sessionEndeFuerChart)
+                }
             }
-        }
 
-        val dauerText = if (s.endedAt != null) {
-            formatiereDauer(Duration.ofMillis(s.endedAt - s.startedAt))
-        } else {
-            formatiereDauer(Duration.ofMillis((jetzt - s.startedAt).coerceAtLeast(0)))
-        }
+        val dauerText =
+            if (s.endedAt != null) {
+                formatiereDauer(Duration.ofMillis(s.endedAt - s.startedAt))
+            } else {
+                formatiereDauer(Duration.ofMillis((jetzt - s.startedAt).coerceAtLeast(0)))
+            }
 
         val threshold = container.settingsManager.dbThreshold.toDouble()
         val protokollListState = rememberLazyListState()
         // LazyColumn besitzt neben den Ereignissen einige feste/bedingte Kopf- und Auditzeilen.
         // Die exakte Zahl sorgt dafuer, dass der Fast-Scroller bis zum wirklichen Listenende
         // abbildet, ohne dafuer 20.000+ Eintraege zu materialisieren.
-        val fastScrollItemCount = 5 +
-            (if (sessionRecords.isNotEmpty()) 1 + sessionRecords.size else 0) +
-            (if (beweisvideos.isNotEmpty()) 1 else 0) +
-            (if (ausfallbaender.isNotEmpty()) 1 + ausfallbaender.size else 0)
+        val fastScrollItemCount =
+            5 +
+                (if (sessionRecords.isNotEmpty()) 1 + sessionRecords.size else 0) +
+                (if (beweisvideos.isNotEmpty()) 1 else 0) +
+                (if (ausfallbaender.isNotEmpty()) 1 + ausfallbaender.size else 0)
 
         LazyColumn(
             state = protokollListState,
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .fastScrollBar(protokollListState, fastScrollItemCount),
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .fastScrollBar(protokollListState, fastScrollItemCount),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // 1. KOMPAKTE 1-SEKUNDEN ZUSAMMENFASSUNG (Dauer, Leq, Max, Events)
             item {
                 NoiseHeaderCard(
                     title = stringResource(R.string.protocol_detail_metrics),
-                    subtitle = "Start: ${formatierer.format(Date(s.startedAt))} · ${s.deviceName ?: stringResource(R.string.protocol_not_specified)}",
+                    subtitle = "Start: ${formatierer.format(
+                        Date(s.startedAt),
+                    )} · ${s.deviceName ?: stringResource(R.string.protocol_not_specified)}",
                     statusBadge = {
                         if (isLive) {
                             StatusPill(text = stringResource(R.string.protocol_live_active), type = StatusPillType.CONNECTED)
                         } else {
                             StatusPill(text = stringResource(R.string.protocol_completed), type = StatusPillType.NEUTRAL)
                         }
-                    }
+                    },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         SummaryMetricItem(stringResource(R.string.stat_duration), dauerText, modifier = Modifier.weight(1f))
                         SummaryMetricItem(
                             "📈 ${leqBezeichnung(session?.deviceAddress?.isBlank() == true)}",
                             kennwerte?.leqDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         SummaryMetricItem(
                             "⚡ ${lmaxBezeichnung(session?.deviceAddress?.isBlank() == true)}",
                             kennwerte?.maxDb?.let { "%.1f dB".format(Locale.US, it) } ?: "-- dB",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         SummaryMetricItem(
                             stringResource(R.string.stat_incidents),
                             "${sessionRecords.size}",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
@@ -328,7 +338,7 @@ fun ProtokollDetailScreen(
                     subtitle = stringResource(R.string.protocol_detail_zoom_hint),
                     statusBadge = {
                         if (isLive) StatusPill(text = stringResource(R.string.protocol_live_curve), type = StatusPillType.CONNECTED)
-                    }
+                    },
                 ) {
                     PegelverlaufChart(
                         spalten = chartSpalten,
@@ -339,7 +349,7 @@ fun ProtokollDetailScreen(
                         thresholdDb = threshold,
                         laeqDb = kennwerte?.leqDb,
                         isLive = isLive,
-                        height = 180.dp
+                        height = 180.dp,
                     )
                 }
             }
@@ -348,18 +358,32 @@ fun ProtokollDetailScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Button(
                         onClick = {
                             val k = kennwerte ?: return@Button
                             scope.launch {
-                                val fotos = withContext(Dispatchers.IO) { container.fotoDokumentation.fuerSession(s.id) }
-                                val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender, fotos) }
-                                export.teilen(datei)
+                                val result =
+                                    runCatching {
+                                        val fotos = withContext(Dispatchers.IO) { container.fotoDokumentation.fuerSession(s.id) }
+                                        val datei = withContext(Dispatchers.IO) { export.exportierePdf(s, k, ausfallbaender, fotos) }
+                                        export.teilen(datei)
+                                    }
+                                result.onFailure { fehler ->
+                                    container.diagnosticsReporter.report(
+                                        code = DiagnosticCode.EXPORT_FAILED,
+                                        component = "ProtokollDetailScreen",
+                                        operation = "exportPdf",
+                                        severity = DiagnosticSeverity.WARN,
+                                        cause = fehler,
+                                        message = fehler.message ?: "PDF-Export fehlgeschlagen",
+                                    )
+                                    onShowSnackbar?.invoke(context.getString(R.string.export_failed_message))
+                                }
                             }
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).testTag("btn_export_pdf"),
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -369,11 +393,25 @@ fun ProtokollDetailScreen(
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                val datei = withContext(Dispatchers.IO) { export.exportiereCsv(s, messwerte, aggregate) }
-                                export.teilen(datei)
+                                val result =
+                                    runCatching {
+                                        val datei = withContext(Dispatchers.IO) { export.exportiereCsv(s, messwerte, aggregate) }
+                                        export.teilen(datei)
+                                    }
+                                result.onFailure { fehler ->
+                                    container.diagnosticsReporter.report(
+                                        code = DiagnosticCode.EXPORT_FAILED,
+                                        component = "ProtokollDetailScreen",
+                                        operation = "exportCsv",
+                                        severity = DiagnosticSeverity.WARN,
+                                        cause = fehler,
+                                        message = fehler.message ?: "CSV-Export fehlgeschlagen",
+                                    )
+                                    onShowSnackbar?.invoke(context.getString(R.string.export_failed_message))
+                                }
                             }
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).testTag("btn_export_csv"),
                     ) {
                         Icon(AppIcons.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -388,7 +426,7 @@ fun ProtokollDetailScreen(
                     Text(
                         text = stringResource(R.string.protocol_documented_events, sessionRecords.size),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
 
@@ -397,32 +435,32 @@ fun ProtokollDetailScreen(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = record.label ?: record.detectedLabel ?: "Lärmereignis",
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     StatusPill(
                                         text = "%.1f dB".format(Locale.US, record.calibratedDbA ?: record.dbValue),
-                                        type = StatusPillType.WARNING
+                                        type = StatusPillType.WARNING,
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp)),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (!record.notes.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = stringResource(R.string.protocol_notes_label, record.notes),
-                                        style = MaterialTheme.typography.bodySmall
+                                        style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
                             }
@@ -435,11 +473,12 @@ fun ProtokollDetailScreen(
                                             klassifizierendeIds.add(record.id)
                                             try {
                                                 val file = File(record.filePath)
-                                                val detected = if (file.exists() && file.isFile) {
-                                                    withContext(Dispatchers.IO) { classifier.value.classify(file) }
-                                                } else {
-                                                    null
-                                                }
+                                                val detected =
+                                                    if (file.exists() && file.isFile) {
+                                                        withContext(Dispatchers.IO) { classifier.value.classify(file) }
+                                                    } else {
+                                                        null
+                                                    }
                                                 if (detected != null) {
                                                     container.database.noiseDao().update(record.copy(detectedLabel = detected))
                                                 }
@@ -449,7 +488,7 @@ fun ProtokollDetailScreen(
                                         }
                                     },
                                     enabled = !wirdKlassifiziert,
-                                    modifier = Modifier.size(40.dp)
+                                    modifier = Modifier.size(40.dp),
                                 ) {
                                     if (wirdKlassifiziert) {
                                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -480,22 +519,25 @@ fun ProtokollDetailScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             beweisvideos.forEach { video ->
                                 val datei = java.io.File(video.dateiPfad)
-                                val zustand = when {
-                                    video.muxFehlgeschlagen -> "ohne Ton (Zusammenführen fehlgeschlagen)"
-                                    !video.tonGemuxt -> "Ton wird hinzugefügt …"
-                                    video.hatTonspur -> "mit Ton"
-                                    else -> "ohne Ton (Mikrofon lief nicht)"
-                                }
+                                val zustand =
+                                    when {
+                                        video.muxFehlgeschlagen -> "ohne Ton (Zusammenführen fehlgeschlagen)"
+                                        !video.tonGemuxt -> "Ton wird hinzugefügt …"
+                                        video.hatTonspur -> "mit Ton"
+                                        else -> "ohne Ton (Mikrofon lief nicht)"
+                                    }
                                 val abspielbar = (video.tonGemuxt || video.muxFehlgeschlagen) && datei.exists()
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(enabled = abspielbar) {
-                                            if (!com.example.lrmprotokoll.report.BerichtDatei.oeffne(context, datei)) {
-                                                onShowSnackbar?.invoke("Video nicht verfügbar oder keine App zum Abspielen gefunden")
-                                            }
-                                        }
-                                        .padding(vertical = 6.dp),
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = abspielbar) {
+                                                if (!com.example.lrmprotokoll.report.BerichtDatei
+                                                        .oeffne(context, datei)
+                                                ) {
+                                                    onShowSnackbar?.invoke("Video nicht verfügbar oder keine App zum Abspielen gefunden")
+                                                }
+                                            }.padding(vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
@@ -505,8 +547,9 @@ fun ProtokollDetailScreen(
                                             fontWeight = FontWeight.SemiBold,
                                         )
                                         Text(
-                                            text = "${com.example.lrmprotokoll.video.Videospeicher.formatiereDauer(video.dauerMs / 1000)} · " +
-                                                "${video.groesseBytes / (1024 * 1024)} MB · $zustand",
+                                            text =
+                                                "${com.example.lrmprotokoll.video.Videospeicher.formatiereDauer(video.dauerMs / 1000)} · " +
+                                                    "${video.groesseBytes / (1024 * 1024)} MB · $zustand",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -539,7 +582,7 @@ fun ProtokollDetailScreen(
                                     galeriePicker.launch(
                                         androidx.activity.result.PickVisualMediaRequest(
                                             mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly,
-                                        )
+                                        ),
                                     )
                                 },
                                 modifier = Modifier.testTag("btn_foto_galerie_hinzufuegen"),
@@ -576,8 +619,9 @@ fun ProtokollDetailScreen(
                                             }
                                         }
                                         Text(
-                                            text = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
-                                                .format(Date(foto.aufgenommenAm)),
+                                            text =
+                                                SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
+                                                    .format(Date(foto.aufgenommenAm)),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -598,32 +642,33 @@ fun ProtokollDetailScreen(
             // 5. REVISIONSSICHERE AUDIT-DETAILS (Aufklappbar für Techniker/Behörden)
             item {
                 NoiseCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showAuditDetails = !showAuditDetails }
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { showAuditDetails = !showAuditDetails },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = stringResource(R.string.protocol_audit_header),
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
                             )
                         }
                         Icon(
                             imageVector = if (showAuditDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     }
 
@@ -670,33 +715,44 @@ fun ProtokollDetailScreen(
                     Text(
                         text = stringResource(R.string.protocol_outages_header, ausfallbaender.size),
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
                 items(ausfallbaender) { band ->
                     val ongoingText = stringResource(R.string.protocol_outage_ongoing)
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column {
                                 Text(
-                                    text = "${formatierer.format(band.von)} – ${if (band.bis != null) formatierer.format(band.bis) else ongoingText}",
+                                    text = "${formatierer.format(
+                                        band.von,
+                                    )} – ${if (band.bis != null) formatierer.format(band.bis) else ongoingText}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
                                 )
                                 if (band.bis != null) {
                                     Text(
-                                        text = stringResource(R.string.protocol_outage_duration, formatiereDauer(Duration.ofMillis(band.bis - band.von))),
+                                        text =
+                                            stringResource(
+                                                R.string.protocol_outage_duration,
+                                                formatiereDauer(
+                                                    Duration.ofMillis(
+                                                        band.bis - band.von,
+                                                    ),
+                                                ),
+                                            ),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
                                     )
                                 }
                             }
@@ -724,11 +780,12 @@ fun ProtokollDetailScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     FotoKategorie.entries.forEach { kategorie ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { importiereGalerieFotos(kategorie) }
-                                .padding(vertical = 10.dp)
-                                .testTag("galerie_kategorie_${kategorie.name}"),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { importiereGalerieFotos(kategorie) }
+                                    .padding(vertical = 10.dp)
+                                    .testTag("galerie_kategorie_${kategorie.name}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(kategorie.anzeigename, style = MaterialTheme.typography.bodyLarge)
@@ -750,30 +807,38 @@ fun ProtokollDetailScreen(
 }
 
 @Composable
-private fun SummaryMetricItem(title: String, value: String, modifier: Modifier = Modifier) {
+private fun SummaryMetricItem(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
 @Composable
-private fun AuditDetailRow(label: String, value: String) {
+private fun AuditDetailRow(
+    label: String,
+    value: String,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)

@@ -35,9 +35,13 @@ import kotlin.math.floor
  * geprueft; das Zeichnen selbst bleibt unter Robolectric ungetestet (PdfDocument braucht einen
  * echten Renderer, siehe PROMPT_M10_FUNKTIONEN.md F12) und ist nur am Geraet pruefbar.
  */
-class PeriodenBerichtExport(private val context: Context) {
-
-    fun exportierePdf(bericht: PeriodenBericht, titel: String): File {
+open class PeriodenBerichtExport(
+    private val context: Context,
+) {
+    open fun exportierePdf(
+        bericht: PeriodenBericht,
+        titel: String,
+    ): File {
         val formatierer = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         val kennwerte = bericht.kennwerte
 
@@ -48,7 +52,11 @@ class PeriodenBerichtExport(private val context: Context) {
             val kopfPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 13f, fett = true)
             val textPaint = BerichtLayout.paint(textSize = 11f)
 
-            fun zeile(inhalt: String, paint: Paint = textPaint, hoehe: Float = 16f) {
+            fun zeile(
+                inhalt: String,
+                paint: Paint = textPaint,
+                hoehe: Float = 16f,
+            ) {
                 val y = lauf.platziere(hoehe)
                 canvasGeber()?.drawText(inhalt, x, y + hoehe - 4f, paint)
             }
@@ -127,7 +135,7 @@ class PeriodenBerichtExport(private val context: Context) {
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
 
-    fun teilen(file: File) = BerichtDatei.teile(context, file)
+    open fun teilen(file: File) = BerichtDatei.teile(context, file)
 }
 
 /**
@@ -157,7 +165,12 @@ internal fun zeichnePegelverlaufChart(
     right: Float,
     bottom: Float,
 ) {
-    val textPaint = Paint().apply { textSize = 9f; color = Color.DKGRAY; isAntiAlias = true }
+    val textPaint =
+        Paint().apply {
+            textSize = 9f
+            color = Color.DKGRAY
+            isAntiAlias = true
+        }
     if (spalten.isEmpty()) {
         canvas.drawText("Keine Messwerte für den Pegelverlauf.", left, (top + bottom) / 2f, textPaint)
         return
@@ -180,25 +193,59 @@ internal fun zeichnePegelverlaufChart(
     val gesamtSekunden = ((bis - von) / 1000).coerceAtLeast(1)
 
     fun x(sekunden: Long): Float = plotLeft + (sekunden.toFloat() / gesamtSekunden) * plotWidth
+
     fun y(db: Double): Float {
         val ratio = ((db - minScaleDb) / dbSpanne).coerceIn(0.0, 1.0)
         return (plotBottom - ratio * plotHeight).toFloat()
     }
 
-    val gridPaint = Paint().apply { color = Color.LTGRAY; strokeWidth = 0.75f }
-    val rahmenPaint = Paint().apply { color = Color.GRAY; style = Paint.Style.STROKE; strokeWidth = 1f }
-    val curveLinePaint = Paint().apply {
-        color = Color.rgb(21, 101, 192); strokeWidth = 1.6f; style = Paint.Style.STROKE; isAntiAlias = true
-    }
-    val curveDotPaint = Paint().apply { color = Color.rgb(21, 101, 192); style = Paint.Style.FILL; isAntiAlias = true }
-    val areaPaint = Paint().apply { color = Color.argb(46, 21, 101, 192); style = Paint.Style.FILL }
+    val gridPaint =
+        Paint().apply {
+            color = Color.LTGRAY
+            strokeWidth = 0.75f
+        }
+    val rahmenPaint =
+        Paint().apply {
+            color = Color.GRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+    val curveLinePaint =
+        Paint().apply {
+            color = Color.rgb(21, 101, 192)
+            strokeWidth = 1.6f
+            style = Paint.Style.STROKE
+            isAntiAlias = true
+        }
+    val curveDotPaint =
+        Paint().apply {
+            color = Color.rgb(21, 101, 192)
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+    val areaPaint =
+        Paint().apply {
+            color = Color.argb(46, 21, 101, 192)
+            style = Paint.Style.FILL
+        }
     val outagePaint = Paint().apply { color = Color.argb(60, 211, 47, 47) }
-    val leqPaint = Paint().apply {
-        color = Color.rgb(46, 125, 50); strokeWidth = 1.3f; style = Paint.Style.STROKE
-        pathEffect = DashPathEffect(floatArrayOf(6f, 6f), 0f)
-    }
-    val pinAussenPaint = Paint().apply { color = Color.rgb(255, 160, 0); isAntiAlias = true }
-    val pinInnenPaint = Paint().apply { color = Color.rgb(255, 213, 79); isAntiAlias = true }
+    val leqPaint =
+        Paint().apply {
+            color = Color.rgb(46, 125, 50)
+            strokeWidth = 1.3f
+            style = Paint.Style.STROKE
+            pathEffect = DashPathEffect(floatArrayOf(6f, 6f), 0f)
+        }
+    val pinAussenPaint =
+        Paint().apply {
+            color = Color.rgb(255, 160, 0)
+            isAntiAlias = true
+        }
+    val pinInnenPaint =
+        Paint().apply {
+            color = Color.rgb(255, 213, 79)
+            isAntiAlias = true
+        }
 
     // 1. Y-Achsen-Gitterlinien und -Beschriftung
     val ySteps = if (dbSpanne >= 30) 4 else 3
@@ -226,11 +273,12 @@ internal fun zeichnePegelverlaufChart(
     }
 
     // 4. Pegeldaten in Segmente aufteilen (Datenlücken wie im Original erkannt) & zeichnen
-    val spaltenAbstandSek = if (spalten.size > 1) {
-        (spalten.last().zeitOffsetSekunden - spalten.first().zeitOffsetSekunden) / (spalten.size - 1)
-    } else {
-        60L
-    }
+    val spaltenAbstandSek =
+        if (spalten.size > 1) {
+            (spalten.last().zeitOffsetSekunden - spalten.first().zeitOffsetSekunden) / (spalten.size - 1)
+        } else {
+            60L
+        }
     val maxLueckeSekunden = maxOf(180L, (spaltenAbstandSek * 2.5).toLong())
 
     val segmente = mutableListOf<MutableList<ChartSpalte>>()

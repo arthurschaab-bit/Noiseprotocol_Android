@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,7 +22,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
@@ -54,10 +52,14 @@ fun ProtokollScreen(
     onOpenSession: (Long) -> Unit,
     onStartNewMeasurement: (() -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
-    val sessions by container.database.sessionDao().alle().collectAsState(initial = emptyList())
+    val sessions by container.database
+        .sessionDao()
+        .alle()
+        .collectAsState(initial = emptyList())
     val db = container.database
 
     // Bugfix (Owner-Feedback 12.09.2026): "+ Neue Messung" macht keinen Sinn, solange schon eine
@@ -80,33 +82,36 @@ fun ProtokollScreen(
     // Ereignisse je Session laden - dieselbe Abfrage, die auch ModernSessionCard fuer die
     // Ereigniszahl je Karte nutzt, hier einmal fuer Filter/Gruppierung vorab.
     LaunchedEffect(sessions) {
-        sessionEvents = if (sessions.isEmpty()) {
-            emptyMap()
-        } else {
-            withContext(Dispatchers.IO) {
-                sessions.associate { s ->
-                    s.id to db.noiseDao().zwischenZeitpunkt(s.startedAt, s.endedAt ?: System.currentTimeMillis())
+        sessionEvents =
+            if (sessions.isEmpty()) {
+                emptyMap()
+            } else {
+                withContext(Dispatchers.IO) {
+                    sessions.associate { s ->
+                        s.id to db.noiseDao().zwischenZeitpunkt(s.startedAt, s.endedAt ?: System.currentTimeMillis())
+                    }
                 }
             }
-        }
     }
 
-    val filteredSessions = remember(sessions, searchQuery, filterOnlyWithEvents, sessionFilter, sessionEvents) {
-        sessions.filter { s ->
-            val matchQuery = searchQuery.isBlank() ||
-                    s.deviceName.contains(searchQuery, ignoreCase = true) ||
-                    SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(s.startedAt).contains(searchQuery, ignoreCase = true)
-            if (!matchQuery) return@filter false
+    val filteredSessions =
+        remember(sessions, searchQuery, filterOnlyWithEvents, sessionFilter, sessionEvents) {
+            sessions.filter { s ->
+                val matchQuery =
+                    searchQuery.isBlank() ||
+                        s.deviceName.contains(searchQuery, ignoreCase = true) ||
+                        SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(s.startedAt).contains(searchQuery, ignoreCase = true)
+                if (!matchQuery) return@filter false
 
-            val ereignisse = sessionEvents[s.id] ?: emptyList()
-            // Bugfix nebenbei entdeckt: filterOnlyWithEvents stand schon im remember()-Schluessel,
-            // wurde im Filter selbst aber nie ausgewertet - der Button im TopAppBar tat bislang
-            // nichts.
-            if (filterOnlyWithEvents && ereignisse.isEmpty()) return@filter false
+                val ereignisse = sessionEvents[s.id] ?: emptyList()
+                // Bugfix nebenbei entdeckt: filterOnlyWithEvents stand schon im remember()-Schluessel,
+                // wurde im Filter selbst aber nie ausgewertet - der Button im TopAppBar tat bislang
+                // nichts.
+                if (filterOnlyWithEvents && ereignisse.isEmpty()) return@filter false
 
-            sessionPasstFilter(s, ereignisse, sessionFilter)
+                sessionPasstFilter(s, ereignisse, sessionFilter)
+            }
         }
-    }
     val gruppierteSessions = remember(filteredSessions) { gruppiereSessionsNachTag(filteredSessions) }
 
     Scaffold(
@@ -116,7 +121,7 @@ fun ProtokollScreen(
                     Text(
                         text = stringResource(R.string.nav_data),
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 },
                 navigationIcon = {
@@ -125,11 +130,14 @@ fun ProtokollScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { filterOnlyWithEvents = !filterOnlyWithEvents }, modifier = Modifier.testTag("btn_filter_events")) {
+                    IconButton(
+                        onClick = { filterOnlyWithEvents = !filterOnlyWithEvents },
+                        modifier = Modifier.testTag("btn_filter_events"),
+                    ) {
                         Icon(
                             imageVector = AppIcons.FilterList,
                             contentDescription = "Filter",
-                            tint = if (filterOnlyWithEvents) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (filterOnlyWithEvents) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     // Owner-Feature-Auftrag 12.09.2026: erweiterter Filter (dB-Bereich, Favoriten,
@@ -165,7 +173,7 @@ fun ProtokollScreen(
                             }
                         }
                     }
-                }
+                },
             )
         },
         floatingActionButton = {
@@ -177,16 +185,17 @@ fun ProtokollScreen(
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.protocol_new_measurement), fontWeight = FontWeight.Bold) },
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.padding(bottom = 8.dp).testTag("fab_new_measurement")
+                    modifier = Modifier.padding(bottom = 8.dp).testTag("fab_new_measurement"),
                 )
             }
-        }
+        },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
         ) {
             // Search Bar
             OutlinedTextField(
@@ -203,9 +212,10 @@ fun ProtokollScreen(
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(PROTOKOLL_SEARCH_BAR_TAG)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag(PROTOKOLL_SEARCH_BAR_TAG),
             )
 
             AnimatedVisibility(visible = showSessionFilterPanel) {
@@ -282,40 +292,49 @@ fun ProtokollScreen(
                 text = stringResource(R.string.protocol_recent_measurements),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
             if (filteredSessions.isEmpty()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            tint = MaterialTheme.colorScheme.outline,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (searchQuery.isNotBlank()) stringResource(R.string.protocol_search_no_results) else stringResource(R.string.empty_protocol_desc),
+                            text =
+                                if (searchQuery.isNotBlank()) {
+                                    stringResource(
+                                        R.string.protocol_search_no_results,
+                                    )
+                                } else {
+                                    stringResource(R.string.empty_protocol_desc)
+                                },
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = 80.dp),
                 ) {
                     // Owner-Feature-Auftrag 12.09.2026: Sessions nach Kalendertag gruppiert,
                     // dieselbe Optik (einklappbare Kopfzeile mit Anzahl) wie die Tagesgruppen auf
@@ -327,9 +346,10 @@ fun ProtokollScreen(
                                 onClick = {
                                     if (eingeklappt) eingeklappteTage.remove(tag) else eingeklappteTage.add(tag)
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("protokoll_tagesheader_$tag"),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .testTag("protokoll_tagesheader_$tag"),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                                 shape = MaterialTheme.shapes.small,
                             ) {
@@ -361,7 +381,7 @@ fun ProtokollScreen(
                                 ModernSessionCard(
                                     session = session,
                                     db = db,
-                                    onClick = { onOpenSession(session.id) }
+                                    onClick = { onOpenSession(session.id) },
                                 )
                             }
                         }
@@ -369,22 +389,23 @@ fun ProtokollScreen(
 
                     item {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Icon(
                                 imageVector = AppIcons.Restore,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = stringResource(R.string.protocol_end_of_history),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -392,14 +413,13 @@ fun ProtokollScreen(
             }
         }
     }
-
 }
 
 @Composable
 private fun ModernSessionCard(
     session: SessionEntity,
     db: com.example.lrmprotokoll.data.AppDatabase,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     val isLive = session.endedAt == null
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
@@ -407,11 +427,12 @@ private fun ModernSessionCard(
 
     val dateStr = remember(session.startedAt) { dateFormat.format(session.startedAt) }
     val nowText = stringResource(R.string.protocol_time_now)
-    val timeRangeStr = remember(session.startedAt, session.endedAt, nowText) {
-        val startStr = timeFormat.format(session.startedAt)
-        val endStr = if (session.endedAt != null) timeFormat.format(session.endedAt) else nowText
-        "$startStr – $endStr"
-    }
+    val timeRangeStr =
+        remember(session.startedAt, session.endedAt, nowText) {
+            val startStr = timeFormat.format(session.startedAt)
+            val endStr = if (session.endedAt != null) timeFormat.format(session.endedAt) else nowText
+            "$startStr – $endStr"
+        }
 
     var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
@@ -432,13 +453,14 @@ private fun ModernSessionCard(
         eventCount = records.size
     }
 
-    val durationStr = remember(session.startedAt, session.endedAt) {
-        val end = session.endedAt ?: System.currentTimeMillis()
-        val d = Duration.ofMillis((end - session.startedAt).coerceAtLeast(0))
-        val h = d.toHours()
-        val m = (d.toMinutes() % 60).toInt()
-        if (h > 0) "${h}h ${m}m" else "${m} min"
-    }
+    val durationStr =
+        remember(session.startedAt, session.endedAt) {
+            val end = session.endedAt ?: System.currentTimeMillis()
+            val d = Duration.ofMillis((end - session.startedAt).coerceAtLeast(0))
+            val h = d.toHours()
+            val m = (d.toMinutes() % 60).toInt()
+            if (h > 0) "${h}h ${m}m" else "$m min"
+        }
 
     val laeqStr = kennwerte?.leqDb?.let { String.format(Locale.getDefault(), "%.1f dB", it) } ?: "--.-"
     val lmaxStr = kennwerte?.maxDb?.let { String.format(Locale.getDefault(), "%.1f dB", it) } ?: "--.-"
@@ -446,49 +468,58 @@ private fun ModernSessionCard(
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
-            .testTag("card_session_${session.id}")
-            .clickable { onClick() }
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+                .testTag("card_session_${session.id}")
+                .clickable { onClick() },
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Top Row: Date, Time Range, Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
                     Text(
                         text = dateStr,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = timeRangeStr,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
                 // Status Badge
-                val badgeText = if (isLive) stringResource(R.string.protocol_badge_active) else stringResource(R.string.protocol_badge_complete)
+                val badgeText =
+                    if (isLive) {
+                        stringResource(
+                            R.string.protocol_badge_active,
+                        )
+                    } else {
+                        stringResource(R.string.protocol_badge_complete)
+                    }
                 val badgeBg = if (isLive) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
                 val badgeTextColor = if (isLive) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
 
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(badgeBg)
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(badgeBg)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = badgeText,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = badgeTextColor
+                        color = badgeTextColor,
                     )
                 }
             }
@@ -498,7 +529,7 @@ private fun ModernSessionCard(
             // 4 Stats Columns Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 MetricColumn(label = stringResource(R.string.protocol_metric_duration), value = durationStr)
                 // Ein reiner Mikrofonlauf hat kein LAeq - dieselbe Rechnung, aber ohne
@@ -517,40 +548,40 @@ private fun ModernSessionCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = AppIcons.Sensors,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = session.deviceName,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { onClick() }
+                    modifier = Modifier.clickable { onClick() },
                 ) {
                     Text(
                         text = stringResource(R.string.protocol_details_button),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.width(2.dp))
                     Icon(
                         imageVector = AppIcons.ChevronRight,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -561,20 +592,20 @@ private fun ModernSessionCard(
 @Composable
 private fun MetricColumn(
     label: String,
-    value: String
+    value: String,
 ) {
     Column {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
@@ -583,5 +614,5 @@ private fun MetricColumn(
 internal fun formatiereDauer(dauer: Duration): String {
     val stunden = dauer.toHours()
     val minuten = (dauer.toMinutes() % 60).toInt()
-    return if (stunden > 0) "${stunden} h ${minuten} min" else "${minuten} min"
+    return if (stunden > 0) "$stunden h $minuten min" else "$minuten min"
 }

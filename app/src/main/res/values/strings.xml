@@ -32,6 +32,7 @@
     <string name="action_export">Exportieren</string>
     <string name="action_export_csv">CSV exportieren</string>
     <string name="action_export_pdf">PDF exportieren</string>
+    <string name="export_failed_message">Export fehlgeschlagen</string>
     <string name="action_back">Zurück</string>
     <string name="action_menu">Menü</string>
     <string name="action_options">Weitere Optionen</string>

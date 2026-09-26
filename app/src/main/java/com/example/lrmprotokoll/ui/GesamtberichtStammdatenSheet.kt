@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -85,19 +86,21 @@ fun GesamtberichtStammdatenSheet(
     var verlauf by remember { mutableStateOf<List<StammdatenVerlaufEntity>>(emptyList()) }
     var auswahlOffen by remember { mutableStateOf(false) }
 
-    var geraetHersteller by remember { mutableStateOf("") }
-    var geraetTyp by remember { mutableStateOf("") }
-    var geraetGenauigkeitsklasse by remember { mutableStateOf("") }
-    var geraetSeriennummer by remember { mutableStateOf("") }
-    var geraetKalibrierung by remember { mutableStateOf("") }
-    var messort by remember { mutableStateOf("") }
-    var mikrofonposition by remember { mutableStateOf("") }
-    var mikrofonhoehe by remember { mutableStateOf("") }
-    var entfernungZurQuelle by remember { mutableStateOf("") }
-    var innenAussen by remember { mutableStateOf("") }
-    var fensterzustand by remember { mutableStateOf("") }
-    var wetter by remember { mutableStateOf("") }
-    var datenqualitaetHinweis by remember { mutableStateOf("") }
+    var bereitsInitialisiert by rememberSaveable(sessionId) { mutableStateOf(false) }
+
+    var geraetHersteller by rememberSaveable { mutableStateOf("") }
+    var geraetTyp by rememberSaveable { mutableStateOf("") }
+    var geraetGenauigkeitsklasse by rememberSaveable { mutableStateOf("") }
+    var geraetSeriennummer by rememberSaveable { mutableStateOf("") }
+    var geraetKalibrierung by rememberSaveable { mutableStateOf("") }
+    var messort by rememberSaveable { mutableStateOf("") }
+    var mikrofonposition by rememberSaveable { mutableStateOf("") }
+    var mikrofonhoehe by rememberSaveable { mutableStateOf("") }
+    var entfernungZurQuelle by rememberSaveable { mutableStateOf("") }
+    var innenAussen by rememberSaveable { mutableStateOf("") }
+    var fensterzustand by rememberSaveable { mutableStateOf("") }
+    var wetter by rememberSaveable { mutableStateOf("") }
+    var datenqualitaetHinweis by rememberSaveable { mutableStateOf("") }
 
     var standortLaedt by remember { mutableStateOf(false) }
     var wetterLaedt by remember { mutableStateOf(false) }
@@ -123,7 +126,10 @@ fun GesamtberichtStammdatenSheet(
     LaunchedEffect(sessionId) {
         val letzte = withContext(Dispatchers.IO) { container.database.stammdatenVerlaufDao().letzte(10) }
         verlauf = letzte
-        letzte.firstOrNull()?.let { uebernehmen(it) }
+        if (!bereitsInitialisiert) {
+            letzte.firstOrNull()?.let { uebernehmen(it) }
+            bereitsInitialisiert = true
+        }
     }
 
     val standortBerechtigungsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { erlaubt ->
