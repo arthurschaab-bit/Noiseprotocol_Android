@@ -53,7 +53,11 @@ class SheetDrehungInstrumentedTest {
             app.container.database.sessionDao().insert(
                 SessionEntity(
                     startedAt = System.currentTimeMillis(),
-                    operatingMode = "METER_PCE",
+                    endedAt = null,
+                    deviceAddress = "00:11:22:33:44:55",
+                    deviceName = "PCE-323",
+                    weighting = "A",
+                    timeWeighting = "FAST",
                 ),
             )
         }
@@ -91,7 +95,11 @@ class SheetDrehungInstrumentedTest {
             app.container.database.sessionDao().insert(
                 SessionEntity(
                     startedAt = System.currentTimeMillis(),
-                    operatingMode = "METER_PCE",
+                    endedAt = null,
+                    deviceAddress = "00:11:22:33:44:55",
+                    deviceName = "PCE-323",
+                    weighting = "A",
+                    timeWeighting = "FAST",
                 ),
             )
         }
