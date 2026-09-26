@@ -278,6 +278,63 @@ entschärfen hat die Rate nicht zuverlässig gesenkt.
    sie ist ein Fehlschlag, der nur in rund einem Drittel der Läufe auftritt, in der CI nicht
    untersuchbar.
 
+### Messreihe 26.09.2026 — drei Hypothesen widerlegt, die Ursache eingegrenzt
+
+Owner-Auftrag: Messreihe fahren und die Werte in eine Datei schreiben. Die Diagnose aus #210
+landete bis dahin nur in der Fehlermeldung und verfiel mit dem Testbericht — über mehrere
+Vorkommen ließ sich nichts vergleichen.
+
+**Neu: `protokolliereMesswert()`** hängt jede Messung an `app/build/flake_a_messwerte.tsv`, und
+zwar für **beide** Ausgänge. Ohne die Verteilung der grünen Läufe sagt ein einzelner roter nichts
+darüber, ob sich etwas geändert hat. Das erste Ergebnis daraus ist schon ein Befund:
+
+| Ausgang | verstricheneMs | Prüfungen |
+|---|---|---|
+| grün | 52, 56, 619 | **1** |
+| rot | 15292, 15311, 15340, 15387, 15430 | 1282–1294 |
+
+**Streng zweigipflig.** Entweder ist der Knopf bei der *ersten* Prüfung frei, oder er wird es nie.
+Kein Mittelfeld — „zu langsam" scheidet damit als Erklärung aus.
+
+**Was geprüft und widerlegt wurde:**
+
+| # | Hypothese | Vorgehen | Ergebnis |
+|---|---|---|---|
+| 1 | `advanceTimeBy` holt die auf den Main-Looper gepostete Fortsetzung nicht ab | `shadowOf(Looper.getMainLooper()).idle()` je Prüfschritt | **widerlegt** — schon der erste Lauf rot (15387 ms) |
+| 2 | Der Main-Dispatcher läuft unter `autoAdvance = false` nicht, oder der Rückweg vom IO-Sprung kommt nicht an | Zwei Sonden: Coroutine auf `Dispatchers.Main`, und eine mit `withContext(Dispatchers.IO)` und zurück | **widerlegt** — `sondeMain=true sondeNachIo=true` in *jedem* roten Lauf |
+| 3 | Die Zustandsänderung erreicht die Komposition nicht, weil keine Snapshot-Benachrichtigung zugestellt wird | `Snapshot.sendApplyNotifications()` je Prüfschritt, 16 Läufe | **widerlegt** — 5/16 rot gegen 10/28 der Basis, kein Effekt |
+
+**Ein eigener Fehler, der hier festgehalten gehört:** Die Diagnose aus #210 misst mit
+`runBlocking(Dispatchers.IO)`. Das umgeht den Main-Dispatcher vollständig und belegt nur den
+*Hinweg* zur Datenbank, nie den Rückweg. Auf diese Messung war die Aussage „die Room-Abfrage ist
+schnell, also nicht die Ursache" gestützt — sie trug weniger, als ihr zugeschrieben wurde. Zudem
+prüfte sie nur `reportConfigDao().get()`, also die **erste** der beiden IO-Abfragen des Effekts;
+`ladeBerichtstage()` war nie gemessen. Eine dritte Sonde holt das nach: sie kehrt in 521 ms zurück,
+**während** das Sheet hängt.
+
+**Was die Ursache eingrenzt.** Zähler im `LaunchedEffect` (temporär, nicht eingecheckt) liefern im
+roten Lauf:
+
+```
+effektStart=1 nachConfig=1 nachTage=1 effektEnde=1 abbruch=null
+```
+
+Der Effekt lief **einmal vollständig durch**. `laedt = false` wurde ausgeführt, kein Abbruch, keine
+Ausnahme. Der Knopf hängt an `enabled = !erzeugt && !laedt`, und `erzeugt` ist zu diesem Zeitpunkt
+noch `false`. Er müsste frei sein — der Test sieht ihn 1287 Prüfungen lang als gesperrt.
+
+**Damit steht fest:**
+
+- Der **Produktivzustand ist korrekt**. Das ist *kein* Fehler, der Nutzer treffen kann — die
+  gegenteilige Vermutung (ein dauerhaft gesperrter Knopf mit Endlosspinner) ist ausgeräumt.
+- Der Fehlschlag liegt darin, dass die **Komposition des Tests** den fertigen Zustand nicht
+  übernimmt. Weder Dispatcher noch Looper noch Datenbank noch Snapshot-Benachrichtigungen erklären
+  das.
+- Der Verdacht richtet sich damit auf `autoAdvance = false` selbst — den Behelf aus #209 gegen die
+  endlose `CircularProgressIndicator`-Animation. **Warum** die Rekomposition in diesem Modus
+  ausbleibt, ist weiterhin offen; das ließ sich ohne tiefen Einstieg in Compose-Interna nicht
+  klären.
+
 **Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
 `enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
 Roadmap-Phase 3 (`docs/PROMPT_UX_PHASE3.md`), deren Definition of Done ausdrücklich verlangt,
