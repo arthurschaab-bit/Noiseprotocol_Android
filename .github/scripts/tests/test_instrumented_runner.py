@@ -43,7 +43,7 @@ case "$*" in
   'shell dumpsys package '*)
     case "$SCENARIO" in
       revoke_failure)
-        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT; do
+        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT RECORD_AUDIO; do
           printf 'android.permission.%s: granted=true\n' "$permission"
         done
         ;;
@@ -52,9 +52,10 @@ case "$*" in
         printf 'android.permission.ACCESS_COARSE_LOCATION: granted=false\n'
         printf 'android.permission.BLUETOOTH_SCAN: granted=false\n'
         printf 'android.permission.BLUETOOTH_CONNECT: granted=false\n'
+        printf 'android.permission.RECORD_AUDIO: granted=false\n'
         ;;
       *)
-        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT; do
+        for permission in CAMERA ACCESS_COARSE_LOCATION BLUETOOTH_SCAN BLUETOOTH_CONNECT RECORD_AUDIO; do
           printf 'android.permission.%s: granted=false\n  flags=[]\n' "$permission"
         done
         ;;
@@ -178,24 +179,29 @@ exec bash .github/scripts/run-instrumented-tests.sh "$API_LEVEL"
         return [ET.parse(path).getroot() for path in sorted(
             (self.workspace / "app/build/outputs/androidTest-results/permission").glob("TEST-*.xml"))]
 
-    def test_success_runs_utp_and_all_four_isolated_methods(self):
+    # PR #204 ergaenzt einen fuenften Berechtigungsfall (RECORD_AUDIO, ohne API-Grenze):
+    # ForegroundServiceOhneMikrofonPermissionInstrumentedTest. Die Zahlen hier wachsen
+    # deshalb von vier auf fuenf.
+    def test_success_runs_utp_and_all_five_isolated_methods(self):
         self.assertEqual(self.run_scenario(), 0, self.output)
         commands = [line for line in self.calls if line.startswith("adb shell am instrument ")]
-        self.assertEqual(len(commands), 4)
+        self.assertEqual(len(commands), 5)
         gradle = [line for line in self.calls if line.startswith("gradlew ")]
         self.assertEqual(len(gradle), 2)
         excluded = gradle[0].split(".notClass=", 1)[1].split(",")
         selected = [line.split("-e class ", 1)[1].split(" ", 1)[0] for line in commands]
         self.assertEqual(selected, excluded)
         self.assertNotIn("--no-daemon", "\n".join(gradle))
-        self.assertEqual(len(self.reports()), 4)
+        self.assertEqual(len(self.reports()), 5)
         self.assertTrue(all(report.get("failures") == "0" for report in self.reports()))
-        self.assertEqual(len(list((self.workspace / "logs/permission-tests").glob("*.txt"))), 4)
+        self.assertEqual(len(list((self.workspace / "logs/permission-tests").glob("*.txt"))), 5)
         self.assertNotIn("adb logcat -b all -d", self.calls)
 
     def test_api_30_keeps_existing_bluetooth_permission_exception(self):
         self.assertEqual(self.run_scenario(api_level=30), 0, self.output)
-        self.assertEqual(len(self.reports()), 3)
+        # Vier statt drei: Der RECORD_AUDIO-Fall aus PR #204 hat keine API-Grenze, nur der
+        # BLUETOOTH-Fall entfaellt unterhalb von API 31.
+        self.assertEqual(len(self.reports()), 4)
         self.assertFalse(any("am instrument" in line and "MeterScreen" in line for line in self.calls))
 
     def test_main_test_failure_preserves_gradle_status_and_live_logs(self):
@@ -220,7 +226,7 @@ exec bash .github/scripts/run-instrumented-tests.sh "$API_LEVEL"
     def test_permission_junit_failure_fails_even_when_adb_returns_zero(self):
         self.assertEqual(self.run_scenario("permission_failure"), 1, self.output)
         self.assert_live_diagnostics(1)
-        self.assertEqual(len(self.reports()), 4)
+        self.assertEqual(len(self.reports()), 5)
         failed = [report for report in self.reports() if report.get("failures") == "1"]
         self.assertEqual(len(failed), 1)
         self.assertIn("Expected <camera> & dialog", failed[0].find("testcase/failure").text)
@@ -228,7 +234,7 @@ exec bash .github/scripts/run-instrumented-tests.sh "$API_LEVEL"
     def test_nonzero_adb_status_cannot_be_hidden_by_success_text(self):
         self.assertEqual(self.run_scenario("permission_exit_failure"), 23, self.output)
         self.assert_live_diagnostics(23)
-        self.assertEqual(len(self.reports()), 4)
+        self.assertEqual(len(self.reports()), 5)
 
     def test_permission_failure_remains_primary_when_cleanup_also_fails(self):
         self.assertEqual(self.run_scenario("permission_and_grant_failure"), 23, self.output)
