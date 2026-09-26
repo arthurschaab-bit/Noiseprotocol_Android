@@ -90,13 +90,15 @@ class BreadcrumbRingFileTest {
     @Test
     fun ueberschreibtDieAeltesteDateiBeimZweitenWechsel() {
         val ring = BreadcrumbRingFile(verzeichnis)
-        // Genug Eintraege fuer zwei volle Rotationen (A -> B -> A erneut, dabei A geleert).
-        repeat(15000) { i -> ring.anhaengen(breadcrumb("Fuelltext Nummer $i mit etwas mehr Laenge drin")) }
+        // Groessere Zeilen erzwingen mehrere Rotationen mit weniger asynchronen Schreibvorgaengen.
+        // 800 * mehr als 1 KiB ueberschreitet das Budget beider Ringdateien deutlich.
+        val fuelltext = "x".repeat(1024)
+        repeat(800) { i -> ring.anhaengen(breadcrumb("Fuelltext Nummer $i $fuelltext")) }
         ring.wartenBisFertig(timeoutSekunden = 15)
 
         val gelesen = ring.lesen()
         assertTrue("Die aeltesten Eintraege (Index 0) duerfen nach zwei Rotationen nicht mehr vorhanden sein", gelesen.none { it.message.contains("Nummer 0 ") })
-        assertTrue("Die juengsten Eintraege muessen noch vorhanden sein", gelesen.any { it.message.contains("Nummer 14999 ") })
+        assertTrue("Die juengsten Eintraege muessen noch vorhanden sein", gelesen.any { it.message.contains("Nummer 799 ") })
     }
 
     @Test
