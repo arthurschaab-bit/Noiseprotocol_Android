@@ -352,16 +352,18 @@ fun LiveCockpitCard(
         ) {
             aufzeichnungsHinweis?.let { hinweis ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("cockpit_aufzeichnungshinweis_banner"),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("cockpit_aufzeichnungshinweis_banner"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Row(
@@ -408,9 +410,10 @@ fun LiveCockpitCard(
                             TextButton(
                                 onClick = {
                                     if (hasAudioPermission) {
-                                        val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                            putExtra(EXTRA_START_AUDIO_MONITORING, true)
-                                        }
+                                        val intent =
+                                            Intent(context, AudioRecordingService::class.java).apply {
+                                                putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                                            }
                                         context.startForegroundService(intent)
                                     } else {
                                         permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
@@ -431,18 +434,19 @@ fun LiveCockpitCard(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = stringResource(if (dienstAktiv) R.string.cockpit_measuring_running else R.string.cockpit_ready_to_measure),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(2.dp))
 

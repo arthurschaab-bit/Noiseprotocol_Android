@@ -23,7 +23,6 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LiveCockpitCardTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -48,7 +47,7 @@ class LiveCockpitCardTest {
             LaermprotokollTheme(darkTheme = true) {
                 QuickEventTagContent(
                     currentDb = 65.4,
-                    onSave = { _, _ -> }
+                    onSave = { _, _ -> },
                 )
             }
         }
@@ -72,7 +71,10 @@ class LiveCockpitCardTest {
             LaermprotokollTheme(darkTheme = true) {
                 QuickEventTagContent(
                     currentDb = 65.4,
-                    onSave = { kategorie, notiz -> gespeicherteKategorie = kategorie; gespeicherteNotiz = notiz }
+                    onSave = { kategorie, notiz ->
+                        gespeicherteKategorie = kategorie
+                        gespeicherteNotiz = notiz
+                    },
                 )
             }
         }
@@ -137,7 +139,7 @@ class LiveCockpitCardTest {
         composeRule.setContent {
             LaermprotokollTheme(darkTheme = true) {
                 LiveCockpitCard(
-                    onNavigateToDiagnose = { diagnoseAufgerufen = true }
+                    onNavigateToDiagnose = { diagnoseAufgerufen = true },
                 )
             }
         }

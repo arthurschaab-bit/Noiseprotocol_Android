@@ -37,7 +37,6 @@ import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
-import com.example.lrmprotokoll.messreihe.Integritaetsbefund
 import com.example.lrmprotokoll.messreihe.Messintegritaet
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
@@ -384,11 +383,12 @@ fun ProtokollDetailScreen(
                             }
                         val lueckenStr =
                             if (befund.gapAnzahl > 0) {
-                                " · " + if (befund.gapAnzahl == 1) {
-                                    stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
-                                } else {
-                                    stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
-                                }
+                                " · " +
+                                    if (befund.gapAnzahl == 1) {
+                                        stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
+                                    } else {
+                                        stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
+                                    }
                             } else {
                                 ""
                             }
@@ -414,7 +414,9 @@ fun ProtokollDetailScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "${stringResource(R.string.protocol_data_availability)}: ${String.format(Locale.GERMAN, "%.1f %%", befund.verfuegbarkeitProzent)} · $ausfaelleStr$lueckenStr",
+                                text = "${stringResource(
+                                    R.string.protocol_data_availability,
+                                )}: ${String.format(Locale.GERMAN, "%.1f %%", befund.verfuegbarkeitProzent)} · $ausfaelleStr$lueckenStr",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -22,20 +22,26 @@ import kotlinx.coroutines.flow.asStateFlow
  * bleibt). Der BroadcastReceiver wird fuer die Lebensdauer der App registriert und nie
  * explizit abgemeldet - [AppContainer] haelt genau eine Instanz fuer den ganzen Prozess.
  */
-class BluetoothAdapterStateObserver(context: Context) {
+class BluetoothAdapterStateObserver(
+    context: Context,
+) {
     private val appContext = context.applicationContext
 
     private val _enabled = MutableStateFlow(currentlyEnabled())
     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
 
-    private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
-                BluetoothAdapter.STATE_ON -> _enabled.value = true
-                BluetoothAdapter.STATE_OFF -> _enabled.value = false
+    private val receiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                    BluetoothAdapter.STATE_ON -> _enabled.value = true
+                    BluetoothAdapter.STATE_OFF -> _enabled.value = false
+                }
             }
         }
-    }
 
     init {
         ContextCompat.registerReceiver(
@@ -62,4 +68,3 @@ class BluetoothAdapterStateObserver(context: Context) {
         _enabled.value = wert
     }
 }
-

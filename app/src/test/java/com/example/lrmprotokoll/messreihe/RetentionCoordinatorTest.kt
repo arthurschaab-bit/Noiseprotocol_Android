@@ -35,14 +35,18 @@ class RetentionCoordinatorTest {
                 (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
                 (it.weighting == null || it.timeWeighting == null)
         }
-        override suspend fun anzahlGaps(sessionId: Long) = zeilen.count {
-            it.sessionId == sessionId && (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) != 0
-        }
-        override suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long) = zeilen.count {
-            it.sessionId == sessionId &&
-                (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
-                (it.weighting == null || it.timeWeighting == null)
-        }
+
+        override suspend fun anzahlGaps(sessionId: Long) =
+            zeilen.count {
+                it.sessionId == sessionId && (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) != 0
+            }
+
+        override suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long) =
+            zeilen.count {
+                it.sessionId == sessionId &&
+                    (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
+                    (it.weighting == null || it.timeWeighting == null)
+            }
         override suspend fun aelterAls(grenze: Long) = zeilen.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = zeilen.size

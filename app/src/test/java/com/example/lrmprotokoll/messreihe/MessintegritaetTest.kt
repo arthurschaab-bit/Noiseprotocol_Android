@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MessintegritaetTest {
-
     @Test
     fun vollstaendigWennVerfuegbarkeitUeberSchwelleUndKeineGapsUndNichtVerdichtet() {
         val von = 1_000_000L
