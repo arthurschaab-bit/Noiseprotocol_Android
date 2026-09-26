@@ -337,7 +337,11 @@ fun ProtokollScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .weight(1f)
+                            // Damit Tests gezielt zu einem Eintrag scrollen koennen, statt sich
+                            // darauf zu verlassen, dass er zufaellig in den Sichtbereich passt.
+                            // Analog zu "home_lazy_column" auf dem Startbildschirm.
+                            .testTag("protokoll_liste"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp),
                 ) {

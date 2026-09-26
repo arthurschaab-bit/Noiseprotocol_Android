@@ -188,6 +188,43 @@ fun DiagnoseScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    fun appDetailsIntent(): Intent =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+
+    /**
+     * Oeffnet den ersten Systemdialog, den das Geraet beantwortet.
+     *
+     * Nicht jedes Geraet kennt jeden Settings-Intent, deshalb die Kandidatenliste. Scheitert
+     * JEDER Weg, darf das nicht still passieren: Sonst tippt der Nutzer auf "Beheben" und es
+     * geschieht sichtbar nichts. Genau diese Fehlerklasse hat Phase 1 mit F-27 fuer die
+     * Exportwege beseitigt; sie gehoert hier nicht wieder eingefuehrt.
+     */
+    fun oeffneErsteErreichbare(
+        beschreibung: String,
+        vararg kandidaten: Intent,
+    ) {
+        for (intent in kandidaten) {
+            try {
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {
+                // Naechsten Kandidaten versuchen.
+            }
+        }
+        container.diagnosticsReporter.breadcrumb(
+            "Diagnose",
+            "Kein Systemdialog erreichbar fuer: $beschreibung",
+        )
+        val meldung = "Die Einstellungen für „$beschreibung\" lassen sich auf diesem Gerät nicht öffnen."
+        if (onShowSnackbar != null) {
+            onShowSnackbar(meldung)
+        } else {
+            Toast.makeText(context, meldung, Toast.LENGTH_LONG).show()
+        }
+    }
+
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
     val isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
@@ -313,66 +350,37 @@ fun DiagnoseScreen(
                                                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                                                         notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                                     } else {
-                                                        try {
-                                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                                data = Uri.fromParts("package", context.packageName, null)
-                                                            }
-                                                            context.startActivity(intent)
-                                                        } catch (_: Exception) {}
+                                                        oeffneErsteErreichbare("Benachrichtigungen", appDetailsIntent())
                                                     }
                                                 }
                                                 HealthActionType.BATTERY_OPTIMIZATION -> {
-                                                    try {
-                                                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                    oeffneErsteErreichbare(
+                                                        "Akku-Optimierung",
+                                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                                                             data = Uri.parse("package:${context.packageName}")
-                                                        }
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {
-                                                        try {
-                                                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                                        } catch (_: Exception) {
-                                                            try {
-                                                                val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                                    data = Uri.fromParts("package", context.packageName, null)
-                                                                }
-                                                                context.startActivity(appDetails)
-                                                            } catch (_: Exception) {}
-                                                        }
-                                                    }
+                                                        },
+                                                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                                        appDetailsIntent(),
+                                                    )
                                                 }
                                                 HealthActionType.EXACT_ALARM_PERMISSION -> {
                                                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                                        try {
-                                                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                                        oeffneErsteErreichbare(
+                                                            "Exakte Alarme",
+                                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                                                                 data = Uri.parse("package:${context.packageName}")
-                                                            }
-                                                            context.startActivity(intent)
-                                                        } catch (_: Exception) {
-                                                            try {
-                                                                val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                                    data = Uri.fromParts("package", context.packageName, null)
-                                                                }
-                                                                context.startActivity(appDetails)
-                                                            } catch (_: Exception) {}
-                                                        }
+                                                            },
+                                                            appDetailsIntent(),
+                                                        )
                                                     }
                                                 }
                                                 HealthActionType.ENABLE_BLUETOOTH -> {
-                                                    try {
-                                                        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                                                    } catch (_: Exception) {
-                                                        try {
-                                                            @Suppress("DEPRECATION")
-                                                            context.startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                                                        } catch (_: Exception) {
-                                                            try {
-                                                                val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                                    data = Uri.fromParts("package", context.packageName, null)
-                                                                }
-                                                                context.startActivity(appDetails)
-                                                            } catch (_: Exception) {}
-                                                        }
-                                                    }
+                                                    oeffneErsteErreichbare(
+                                                        "Bluetooth",
+                                                        Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
+                                                        Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE),
+                                                        appDetailsIntent(),
+                                                    )
                                                 }
                                                 HealthActionType.CONNECT_METER -> {
                                                     onNavigateToMeter?.invoke()
@@ -387,16 +395,11 @@ fun DiagnoseScreen(
                                                     onNavigateToSettings?.invoke(null)
                                                 }
                                                 null -> {
-                                                    try {
-                                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                            data = Uri.fromParts("package", context.packageName, null)
-                                                        }
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {}
+                                                    oeffneErsteErreichbare("App-Einstellungen", appDetailsIntent())
                                                 }
                                             }
                                         },
-                                        modifier = Modifier.testTag("health_action_${checkItem.id}")
+                                        modifier = Modifier.testTag("health_action_${checkItem.id}"),
                                     ) {
                                         Text(label)
                                     }
