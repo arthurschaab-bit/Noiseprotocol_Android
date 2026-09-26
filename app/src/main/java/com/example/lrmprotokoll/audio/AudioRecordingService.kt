@@ -12,7 +12,10 @@ import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -44,6 +47,14 @@ import java.nio.ByteOrder
 
 private const val NOTIFICATION_ID = 1
 private const val NOTIFICATION_CHANNEL_ID = "noise_monitoring_channel"
+
+/**
+ * Mindestabstand zwischen zwei Veroeffentlichungen des Mikrofonpegels als Compose-Zustand.
+ * Die Leseschleife liefert je nach Puffergroesse alle 20-50 ms einen Block; jede Schreibung in
+ * [AudioRecordingService.currentMicDb] zieht eine Rekomposition des Cockpits nach sich. 100 ms
+ * sind fuer eine Pegelanzeige mehr als genug und vierteln die Zahl der Rekompositionen.
+ */
+private const val MIKROFON_PEGEL_INTERVALL_MS = 100L
 
 /**
  * Steuert, ob dieser Start auch die Mikrofon-Ueberwachung anstossen soll. Fehlt das Extra,
@@ -83,11 +94,46 @@ class AudioRecordingService : LifecycleService() {
         private val _aufzeichnungsHinweis = MutableStateFlow<String?>(null)
         val aufzeichnungsHinweis: StateFlow<String?> = _aufzeichnungsHinweis.asStateFlow()
 
-        internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
-        internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) { _audioAufnahmeAktiv.value = wert }
-        internal fun testSetzeCurrentMicDb(wert: Double?) { _currentMicDb.value = wert }
-        internal fun testSetzeLaufendesFormat(wert: Aufnahmeformat?) { _laufendesFormat.value = wert }
-        internal fun testSetzeAufzeichnungsHinweis(wert: String?) { _aufzeichnungsHinweis.value = wert }
+        internal fun testSetzeLaeuft(wert: Boolean) {
+            _laeuft.value = wert
+        }
+
+        internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) {
+            _audioAufnahmeAktiv.value = wert
+        }
+
+        internal fun testSetzeCurrentMicDb(wert: Double?) {
+            _currentMicDb.value = wert
+        }
+
+        internal fun testSetzeLaufendesFormat(wert: Aufnahmeformat?) {
+            _laufendesFormat.value = wert
+        }
+
+        internal fun testSetzeAufzeichnungsHinweis(wert: String?) {
+            _aufzeichnungsHinweis.value = wert
+        }
+
+        private val hauptThreadHandler by lazy { Handler(Looper.getMainLooper()) }
+
+        /**
+         * Veroeffentlicht den Mikrofonpegel immer auf dem Main-Thread.
+         *
+         * Die Leseschleife laeuft auf [Dispatchers.IO]. Schrieb sie direkt in den StateFlow, wurde
+         * die Fortsetzung eines Compose-Verbrauchers inline auf dem schreibenden Thread
+         * wiederaufgenommen. Im Betrieb schiebt der AndroidUiDispatcher der Activity sie von dort
+         * auf den Main-Thread; unter `createAndroidComposeRule` tut das niemand, dort endete der
+         * Pfad in `ViewRootImpl.checkThread` (siehe docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md,
+         * Abschnitt 4.6). Der Handler ist absichtlich `lazy`: reine JVM-Tests, die diese Klasse
+         * nur laden, sollen keinen Main-Looper brauchen.
+         */
+        private fun veroeffentlicheMikrofonPegel(wert: Double?) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                _currentMicDb.value = wert
+            } else {
+                hauptThreadHandler.post { _currentMicDb.value = wert }
+            }
+        }
     }
 
     data class Aufnahmeformat(val abtastrate: Int, val kanaele: Int)
@@ -413,7 +459,11 @@ class AudioRecordingService : LifecycleService() {
 
         val serviceType = berechneForegroundServiceType()
         if (serviceType == 0) {
-            Log.w("AudioRecordingService", "Foreground-Service nicht gestartet: weder Mikrofonberechtigung noch gekoppeltes Messgerät vorhanden (F-35)")
+            Log.w(
+                "AudioRecordingService",
+                "Foreground-Service nicht gestartet: weder Mikrofonberechtigung noch " +
+                    "gekoppeltes Messgerät vorhanden (F-35)",
+            )
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "Foreground-Service bewusst nicht gestartet: serviceType=0 (weder RECORD_AUDIO noch Messgeraet)",
@@ -452,7 +502,7 @@ class AudioRecordingService : LifecycleService() {
                 component = "AudioRecordingService",
                 operation = "startForegroundService",
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
-                cause = e
+                cause = e,
             )
             // F-35: Wiederholung desselben fehlgeschlagenen Aufrufs unterbinden
             stillerAusfallHinweis = "Vordergrunddienst konnte nicht gestartet werden."
@@ -670,6 +720,7 @@ class AudioRecordingService : LifecycleService() {
             val tempByteBuffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
             var unerwarteterReadFehler: Int? = null
             var unerwarteterSchreibFehler: Throwable? = null
+            var letzteMikrofonPegelVeroeffentlichungMs = 0L
 
             while (isRunning) {
                 val readSize = audioRecord.read(buffer, 0, buffer.size)
@@ -726,7 +777,11 @@ class AudioRecordingService : LifecycleService() {
 
                     val currentDb = fastPegelSchaetzer.naechsterBlock(buffer, readSize, audioRecord.sampleRate)
                     letzterMikrofonDb = currentDb
-                    _currentMicDb.value = currentDb
+                    val jetztMs = SystemClock.elapsedRealtime()
+                    if (jetztMs - letzteMikrofonPegelVeroeffentlichungMs >= MIKROFON_PEGEL_INTERVALL_MS) {
+                        letzteMikrofonPegelVeroeffentlichungMs = jetztMs
+                        veroeffentlicheMikrofonPegel(currentDb)
+                    }
                     if (settingsManager.driveSyncEnabled) {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
@@ -755,7 +810,7 @@ class AudioRecordingService : LifecycleService() {
             }
 
             _audioAufnahmeAktiv.value = false
-            _currentMicDb.value = null
+            veroeffentlicheMikrofonPegel(null)
             _laufendesFormat.value = null
             diagnosticsReporter.breadcrumb(
                 "AudioService",
@@ -1096,6 +1151,7 @@ class AudioRecordingService : LifecycleService() {
     /** Schuetzt writeChunk() (Read-Loop) gegen das Nullsetzen+Schliessen in starteWavAufnahme(). */
     private val activeWavRecorderLock = Any()
     private val triggerWachhund = TriggerWachhund()
+
     @Volatile private var wavOhneMikrofonGemeldet = false
     private var stillerAusfallHinweis: String?
         get() = _aufzeichnungsHinweis.value
