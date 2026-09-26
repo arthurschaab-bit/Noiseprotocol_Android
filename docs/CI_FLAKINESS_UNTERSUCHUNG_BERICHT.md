@@ -30,7 +30,8 @@ deren Ursachen und setzt gezielte Korrekturen um:
    - `HomeNavigationComposeTest`: Überflüssiges `waitForIdle()` direkt nach Klick auf das Popup-Menü
      entfernt.
    - `BerichtErstellenSheetTest`: Fehlender Datenbank-Reset führte zu State-Leaks zwischen Tests;
-     Knotensuche und Timeouts stabilisiert.
+     Knotensuche und Timeouts stabilisiert. **Unvollständig — siehe Nachtrag 26.09.2026 in
+     Abschnitt 4.4:** die eigentliche Ursache war eine endlose Animation, der Flake bestand fort.
    - `MeterScreenComposeTest` / `MeterScreenPermissionAndScanTest`: Wurden durch die Recompositions-Schleife
      in `BluetoothStatusBadge.kt` verursacht, die bereits in PR #189 erfolgreich behoben wurde.
 
@@ -189,6 +190,59 @@ Die in PR #194–#199 aufgetretenen Flakes in sechs Testklassen wurden einzeln i
   - Frische Knotensuche mit `assertIsEnabled()` innerhalb von `waitUntil` und Erhöhung des Timeouts
     auf 15.000 ms für ausgelastete Runner.
 
+#### Nachtrag 26.09.2026 — die Ursache war eine andere, der Flake bestand fort
+
+Die oben genannte Gegenmaßnahme hat den Fehlschlag **nicht** beseitigt. Auf PR #204 trat er erneut
+auf (Lauf 36226286168, Versuch 1: `abgelehnteVorpruefungHinterlaesstBreadcrumbOhneReportEvent`,
+`ComposeTimeoutException` in `BerichtErstellenSheetTest.kt:122`). Der Neustart desselben Commits,
+ohne jede Änderung, war grün — beides zusammen belegt die Nicht-Determiniertheit in der CI.
+
+**Gemessen statt vermutet.** Der Test wurde lokal so instrumentiert, dass er bei Zeitüberschreitung
+Knotenzahl und Freigabezustand des Startknopfs festhält. Im Fehlerfall:
+
+```
+anzahlStartKnoten=1
+deaktiviert=true
+```
+
+Der Knopf **existiert** also, das Sheet ist offen — er bleibt nach 15 Sekunden *echter* Zeit
+gesperrt. Damit scheidet Ursache 3 („`startButton` wurde vor dem Öffnen der BottomSheet
+initialisiert") als Erklärung aus, und Ursache 2 ist nur die halbe Wahrheit: nicht die Ladezeit
+selbst blockiert, sondern das, was *während* der Ladezeit gerendert wird.
+
+**Tatsächliche Ursache.** Solange `laedt == true` ist, rendert `BerichtErstellenSheet.kt:163` einen
+`CircularProgressIndicator` — einen *unbestimmten* Fortschrittsindikator, also eine endlose
+Animation. Mit `autoAdvance = true` fordert sie fortlaufend neue Frames an; die Leerlauferkennung
+wird nie fertig, und `waitUntil` läuft in die Zeitüberschreitung, obwohl die Room-Abfrage längst
+zurück ist. Das ist exakt dieselbe Fehlerklasse wie in Abschnitt 4.5 (`BluetoothStatusBadge`,
+`rememberInfiniteTransition`) und beim `ExposedDropdownMenu` in Abschnitt 4.2.
+
+Daraus folgt auch, warum die damalige Erhöhung des Timeouts auf 15.000 ms nicht helfen konnte:
+**gegen eine endlose Animation ist kein Timeout groß genug.** Sie hat den Fehlschlag nur nach hinten
+verschoben, nicht beseitigt — und den Abschnitt fälschlich als erledigt erscheinen lassen.
+
+Die beobachteten rund 50 % sind ein Rennen: Kommt die Room-Abfrage zurück, bevor der Indikator in
+die Komposition gelangt, verschwindet er folgenlos; verliert sie das Rennen, blockiert er. Deshalb
+traf es mal die eine, mal die andere Testmethode der Klasse — beide warten auf dieselbe Bedingung.
+
+**Gemessene Rate vorher** (`BerichtErstellenSheetTest`, unveränderter Stand, je eigener Gradle-Lauf
+mit `--rerun-tasks`): **3 rot / 3 grün** bei sechs Läufen.
+
+**Behebung.** Beide Testmethoden öffnen das Sheet jetzt über die gemeinsame Hilfsmethode
+`oeffneSheetUndWarteAufStartknopf()`. Sie hält die Testuhr an (`mainClock.autoAdvance = false`) und
+stellt sie pro Prüfschritt gezielt weiter; das leert den Main-Looper, ohne die Animation mitlaufen
+zu lassen. `autoAdvance` wird im `finally` wieder eingeschaltet, damit nachfolgende Schritte
+unverändert arbeiten. Das ist dasselbe Muster, mit dem `c7c16f2` das `ExposedDropdownMenu` in
+`ReportConfigSettingsTest` gelöst hat.
+
+**Gemessene Rate nachher:** **3 grün / 0 rot** bei den ersten drei Läufen derselben Messreihe.
+Die Serie wird auf zwölf Läufe fortgesetzt; das Ergebnis wird hier nachgetragen.
+
+**Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
+`enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
+Roadmap-Phase 3 (`docs/PROMPT_UX_PHASE3.md`), deren Definition of Done ausdrücklich verlangt,
+`BerichtErstellenSheetTest` dabei anzupassen statt zu umgehen.
+
 ### 4.5 `MeterScreenComposeTest` & `MeterScreenPermissionAndScanTest` (Robolectric)
 - **Analyse PR #179 vs. PR #189:**
   - In PR #179 wurde `FakeMeterTransport` eingeführt, um den echten BLE-Supervisor zu isolieren.
@@ -208,8 +262,14 @@ Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidu
    `DropdownMenu`) kein pauschales `waitForIdle()` verwenden, da Popups unter `GraphicsMode.NATIVE`
    kontinuierlich Frames anfordern können. Assertions direkt an Knoten binden oder `mainClock.autoAdvance = false`
    nutzen.
-2. **Datenbank-Isolation:** Jede Testklasse, die Komponenten mit DAO-Zugriffen testet, muss `@Before`/`@After`
+2. **Unbestimmte Fortschrittsanzeigen:** `CircularProgressIndicator()` und `LinearProgressIndicator()`
+   ohne Fortschrittswert sind endlose Animationen. Steht eine davon während eines `waitUntil` oder
+   `waitForIdle()` in der Komposition, wird die Leerlauferkennung nie fertig — unabhängig von der
+   Höhe des Timeouts. Entweder die Uhr für diesen Abschnitt anhalten (`mainClock.autoAdvance = false`,
+   Frames gezielt setzen, im `finally` zurücksetzen) oder auf einen Zustand warten, der den Indikator
+   nicht einschließt. Siehe Nachtrag in Abschnitt 4.4.
+3. **Datenbank-Isolation:** Jede Testklasse, die Komponenten mit DAO-Zugriffen testet, muss `@Before`/`@After`
    `db.clearAllTables()` auf `Dispatchers.IO` ausführen, da Room-Instanzen in Gradle-Test-Forks als
    Singleton fortbestehen.
-3. **Locale-Unabhängigkeit:** UI-Tests dürfen keine hartcodierten Lokalisierungs-Strings abfragen,
+4. **Locale-Unabhängigkeit:** UI-Tests dürfen keine hartcodierten Lokalisierungs-Strings abfragen,
    sondern müssen stets `context.getString(R.string...)` verwenden.

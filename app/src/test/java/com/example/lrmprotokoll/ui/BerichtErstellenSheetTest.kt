@@ -50,6 +50,36 @@ class BerichtErstellenSheetTest {
         }
     }
 
+    /**
+     * Öffnet das Sheet über "Neuer Bericht" und wartet, bis der Startknopf freigegeben ist.
+     *
+     * Solange `laedt == true` ist, zeigt `BerichtErstellenSheet` einen `CircularProgressIndicator`
+     * - eine unbestimmte, also endlose Animation. Mit `autoAdvance = true` fordert sie fortlaufend
+     * neue Frames an, die Leerlauferkennung wird nie fertig und `waitUntil` läuft in die
+     * `ComposeTimeoutException`, obwohl der Ladevorgang längst abgeschlossen wäre.
+     *
+     * Deshalb wird die Testuhr angehalten und pro Prüfschritt gezielt weitergestellt; das leert den
+     * Main-Looper, ohne die Animation mitlaufen zu lassen. `autoAdvance` wird im `finally` wieder
+     * eingeschaltet, damit nachfolgende Schritte unverändert arbeiten. Dasselbe Muster löst in
+     * `ReportConfigSettingsTest` das `ExposedDropdownMenu` (c7c16f2); die Klasse von Fehlern ist in
+     * docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md Abschnitt 4.5 beschrieben.
+     */
+    private fun oeffneSheetUndWarteAufStartknopf() {
+        try {
+            composeRule.mainClock.autoAdvance = false
+            composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
+            composeRule.mainClock.advanceTimeBy(500)
+            composeRule.waitUntil(timeoutMillis = 15_000L) {
+                composeRule.mainClock.advanceTimeBy(50)
+                runCatching {
+                    composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
+                }.isSuccess
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+
     @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val jetzt = System.currentTimeMillis()
@@ -86,12 +116,7 @@ class BerichtErstellenSheetTest {
                 },
             )
         }
-        composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
-        composeRule.waitUntil(timeoutMillis = 15_000L) {
-            runCatching {
-                composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
-            }.isSuccess
-        }
+        oeffneSheetUndWarteAufStartknopf()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
@@ -118,12 +143,7 @@ class BerichtErstellenSheetTest {
         composeRule.setContent {
             BerichtScreen(onBack = {}, onOpenSettings = {})
         }
-        composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
-        composeRule.waitUntil(timeoutMillis = 15_000L) {
-            runCatching {
-                composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
-            }.isSuccess
-        }
+        oeffneSheetUndWarteAufStartknopf()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             composeRule
