@@ -59,7 +59,6 @@ class RetentionCoordinatorTest {
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = geschrieben.filter { it.minuteStart in von until bis }
         override suspend fun anzahlZwischen(von: Long, bis: Long) = geschrieben.count { it.minuteStart in von until bis }
-        override suspend fun anzahlFuerSession(sessionId: Long) = geschrieben.count { it.sessionId == sessionId }
     }
 
     private val measurementDao = FakeMeasurementDao()

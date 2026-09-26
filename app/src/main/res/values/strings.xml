@@ -490,4 +490,9 @@
     <string name="protocol_gap_singular">%1$d Lücke</string>
     <string name="protocol_gap_plural">%1$d Lücken</string>
     <string name="protocol_raw_data_compressed_hint">Für einen High-End-Bericht nicht geeignet: Rohdaten sind bereits verdichtet.</string>
+
+    <!-- Aufzeichnungshinweis (F-09, F-11, F-35) -->
+    <string name="cockpit_aufzeichnungshinweis_title">Aufzeichnungshinweis</string>
+    <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
+    <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
 </resources>

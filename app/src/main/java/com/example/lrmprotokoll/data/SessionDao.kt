@@ -173,8 +173,4 @@ interface MinuteAggregateDao {
      * andere Rohwerte desselben Tages noch vorhanden sind (Owner-Entscheidung 13.09.2026). */
     @Query("SELECT COUNT(*) FROM minute_aggregates WHERE minuteStart >= :von AND minuteStart < :bis")
     suspend fun anzahlZwischen(von: Long, bis: Long): Int
-
-    /** Anzahl verdichteter Minuten je Session (F-12). */
-    @Query("SELECT COUNT(*) FROM minute_aggregates WHERE sessionId = :sessionId")
-    suspend fun anzahlFuerSession(sessionId: Long): Int
 }

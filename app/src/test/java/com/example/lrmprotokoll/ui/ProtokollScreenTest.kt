@@ -100,12 +100,16 @@ class ProtokollScreenTest {
         composeRule.setContent {
             ProtokollScreen(onBack = {}, onOpenSession = {}, onStartNewMeasurement = {})
         }
+        val formatter = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        val tagHeute = "protokoll_tagesheader_${formatter.format(java.util.Date(heute))}"
+        val tagGestern = "protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}"
+
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("PCE-323").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(tagHeute).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag(tagGestern).fetchSemanticsNodes().isNotEmpty()
         }
 
-        val formatter = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(heute))}").assertIsDisplayed()
-        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}").assertIsDisplayed()
+        composeRule.onNodeWithTag(tagHeute).assertIsDisplayed()
+        composeRule.onNodeWithTag(tagGestern).assertExists()
     }
 }

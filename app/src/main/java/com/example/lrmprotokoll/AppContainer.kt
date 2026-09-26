@@ -37,6 +37,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import com.example.lrmprotokoll.audio.AudioRecordingService
 
 /**
  * Schlanker manueller Ersatz fuer ein DI-Framework (Plan Abschnitt 4.2): haelt die
@@ -59,6 +61,9 @@ class AppContainer(
     val bluetoothAdapterStateObserver by lazy {
         BluetoothAdapterStateObserver(context.applicationContext)
     }
+
+    val aufzeichnungsHinweis: StateFlow<String?>
+        get() = AudioRecordingService.aufzeichnungsHinweis
 
     // App-weiter Scope statt Activity-/Service-gebunden: der Verbindungsaufbau muss eine
     // geschlossene UI und Konfigurationswechsel ueberleben (PROMPT_M3 Aufgabe 3). Gestartet/

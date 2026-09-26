@@ -110,6 +110,7 @@ fun LiveCockpitCard(
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
     val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
     val micDb by AudioRecordingService.currentMicDb.collectAsState()
+    val aufzeichnungsHinweis by AudioRecordingService.aufzeichnungsHinweis.collectAsState()
 
     val db = container.database
     val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
@@ -342,6 +343,90 @@ fun LiveCockpitCard(
                     modifier = Modifier.clickable { onNavigateToSettings?.invoke() },
                     maxLines = 1
                 )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = aufzeichnungsHinweis != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            aufzeichnungsHinweis?.let { hinweis ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("cockpit_aufzeichnungshinweis_banner"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.cockpit_aufzeichnungshinweis_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                Text(
+                                    text = hinweis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.testTag("cockpit_aufzeichnungshinweis_text"),
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            onNavigateToDiagnose?.let { navDiagnose ->
+                                TextButton(
+                                    onClick = navDiagnose,
+                                    modifier = Modifier.testTag("cockpit_aufzeichnungshinweis_btn_diagnose"),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.cockpit_aufzeichnungshinweis_action_diagnose),
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = {
+                                    if (hasAudioPermission) {
+                                        val intent = Intent(context, AudioRecordingService::class.java).apply {
+                                            putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                                        }
+                                        context.startForegroundService(intent)
+                                    } else {
+                                        permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+                                    }
+                                },
+                                modifier = Modifier.testTag("cockpit_aufzeichnungshinweis_btn_restart"),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.cockpit_aufzeichnungshinweis_action_restart),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 

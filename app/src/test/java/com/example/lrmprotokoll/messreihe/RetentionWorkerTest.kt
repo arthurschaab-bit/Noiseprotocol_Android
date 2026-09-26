@@ -63,7 +63,6 @@ class RetentionWorkerTest {
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun zwischen(von: Long, bis: Long) = emptyList<MinuteAggregateEntity>()
         override suspend fun anzahlZwischen(von: Long, bis: Long) = 0
-        override suspend fun anzahlFuerSession(sessionId: Long): Int = 0
     }
 
     private lateinit var context: Context

@@ -62,4 +62,31 @@ class AudioRecordingServiceStartupTest {
 
         serviceController.destroy()
     }
+
+    @Test
+    fun serviceStartOhneMessgeraetUndOhneMikrofonberechtigungSetztAufzeichnungshinweisUndStoppt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.settingsManager.meterDeviceAddress = null
+        val shadowApp = org.robolectric.Shadows.shadowOf(app)
+        shadowApp.denyPermissions(android.Manifest.permission.RECORD_AUDIO)
+
+        AudioRecordingService.testSetzeAufzeichnungsHinweis(null)
+        AudioRecordingService.testSetzeLaeuft(false)
+
+        val intent = Intent(app, AudioRecordingService::class.java)
+        val serviceController = Robolectric.buildService(AudioRecordingService::class.java, intent)
+        serviceController.create()
+        serviceController.startCommand(0, 1)
+
+        org.junit.Assert.assertFalse(AudioRecordingService.laeuft.value)
+        org.junit.Assert.assertNotNull(AudioRecordingService.aufzeichnungsHinweis.value)
+        org.junit.Assert.assertEquals(
+            "Kein Messgerät gekoppelt und Mikrofonberechtigung fehlt.",
+            AudioRecordingService.aufzeichnungsHinweis.value,
+        )
+
+        // Nach dem Test bereinigen
+        AudioRecordingService.testSetzeAufzeichnungsHinweis(null)
+        serviceController.destroy()
+    }
 }
