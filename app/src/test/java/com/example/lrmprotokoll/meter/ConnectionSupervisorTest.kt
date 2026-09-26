@@ -88,6 +88,7 @@ class ConnectionSupervisorTest {
         expectedFramePeriod: Duration? = null,
         cadenceTolerance: Double = 0.2,
         diagnosticLogger: DiagnosticLogger? = null,
+        failedRetryInterval: Duration = Duration.ofMinutes(15),
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -100,6 +101,7 @@ class ConnectionSupervisorTest {
             errorRateWindow = errorRateWindow,
             maxAttempts = maxAttempts,
             minStableSession = minStableSession,
+            failedRetryInterval = failedRetryInterval,
             expectedFramePeriod = expectedFramePeriod,
             cadenceTolerance = cadenceTolerance,
             diagnosticLogger = diagnosticLogger,
@@ -231,6 +233,101 @@ class ConnectionSupervisorTest {
 
         assertEquals(ConnectionState.FAILED, supervisor.state.value)
         assertEquals(3, transport.connectTimestampsMillis.size)
+    }
+
+    /**
+     * F-03: Bis zum 26.09.2026 endete die Ueberwachungsschleife bei FAILED endgueltig
+     * (`return@coroutineScope`) - eine einmal fehlgeschlagene Verbindung blieb tot, bis der
+     * Nutzer selbst eingriff. Jetzt nimmt sie nach [failedRetryInterval] einen neuen Anlauf.
+     */
+    @Test
+    fun nachFailedFuehrtDieWartezeitZuEinemNeuenAnlauf() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 3,
+                failedRetryInterval = Duration.ofMinutes(1),
+            )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        val nachErstemAnlauf = transport.connectTimestampsMillis.size
+        assertEquals(3, nachErstemAnlauf)
+
+        advanceTimeBy(61_000) // Wartezeit abgelaufen
+        runCurrent()
+
+        assertTrue(
+            "Nach der Wartezeit muss ein neuer Verbindungsversuch laufen, nicht bloss FAILED stehen bleiben",
+            transport.connectTimestampsMillis.size > nachErstemAnlauf,
+        )
+    }
+
+    /** F-03: Der Anstoss aus der UI (jedes ON_RESUME) holt den Anlauf sofort. */
+    @Test
+    fun erneutVersuchenHoltDenAnlaufVorDieWartezeit() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 3,
+                failedRetryInterval = Duration.ofHours(1),
+            )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        val nachErstemAnlauf = transport.connectTimestampsMillis.size
+
+        supervisor.erneutVersuchen()
+        runCurrent()
+
+        assertTrue(
+            "erneutVersuchen() muss den naechsten Anlauf sofort ausloesen, ohne die Stunde abzuwarten",
+            transport.connectTimestampsMillis.size > nachErstemAnlauf,
+        )
+    }
+
+    /**
+     * Ohne diese Sperre bliebe ein Anstoss im Puffer liegen und wuerde beim naechsten Erreichen
+     * von FAILED die Wartezeit ueberspringen - ein Anstoss von vorhin soll aber keinen Anlauf
+     * von spaeter vorziehen.
+     */
+    @Test
+    fun erneutVersuchenAusserhalbVonFailedBleibtFolgenlos() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 3,
+                failedRetryInterval = Duration.ofHours(1),
+            )
+
+        supervisor.start(device)
+        runCurrent()
+        supervisor.erneutVersuchen() // noch nicht FAILED - darf nicht gepuffert werden
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        val nachErstemAnlauf = transport.connectTimestampsMillis.size
+        advanceTimeBy(60_000) // weit unter failedRetryInterval
+        runCurrent()
+
+        assertEquals(
+            "Der fruehere Anstoss darf die Wartezeit nicht ueberspringen",
+            nachErstemAnlauf,
+            transport.connectTimestampsMillis.size,
+        )
     }
 
     @Test
@@ -566,7 +663,7 @@ class ConnectionSupervisorTest {
     }
 
     @Test
-    fun endgueltigerFehlschlagWirdProtokolliert() = runTest {
+    fun fehlschlagNachErschoepftenVersuchenWirdProtokolliert() = runTest {
         val transport = NeverStreamingTransport(testScheduler)
         val dao = FakeDiagnosticLogDao()
         val logger = DiagnosticLogger(dao, InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }, aktiv = { true })
@@ -581,9 +678,13 @@ class ConnectionSupervisorTest {
         runCurrent()
 
         assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        // Wortlaut bewusst geaendert: bis F-03 stand hier "endgueltig fehlgeschlagen", weil die
+        // Ueberwachung an dieser Stelle aufgab. Sie gibt nicht mehr auf, also waere "endgueltig"
+        // im Diagnoseprotokoll schlicht falsch. Zugesichert bleibt, dass der erschoepfte Anlauf
+        // mit seiner Versuchszahl protokolliert wird.
         assertTrue(
-            "Erwartete einen Log-Eintrag zum endgueltigen Fehlschlag, war ${dao.zeilen.map { it.message }}",
-            dao.zeilen.any { it.message.contains("endgueltig fehlgeschlagen nach 3 Versuchen") },
+            "Erwartete einen Log-Eintrag zum erschoepften Anlauf, war ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("fehlgeschlagen nach 3 Versuchen") },
         )
     }
 
