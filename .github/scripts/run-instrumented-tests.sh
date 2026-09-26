@@ -99,7 +99,7 @@ adb logcat -c
 # waehrend dieses Laufs wuerde den instrumentierten Prozess toeten und den gesamten restlichen
 # Testlauf mitreissen. Sie laufen stattdessen weiter unten einzeln per `adb shell am instrument`,
 # jeweils nach einem `pm revoke` VOR dem Prozessstart.
-notclass="com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrumentedTest#ohneBerechtigungFragtDerAufnahmeButtonErstNachUndStartetDannDenKameraIntent,com.example.lrmprotokoll.ui.VideoAufnahmeScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScreenBeimBetretenNachUndSchaltetNachErlaubnisWeiter,com.example.lrmprotokoll.ui.GesamtberichtStammdatenSheetPermissionInstrumentedTest#ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand,com.example.lrmprotokoll.ui.MeterScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScanButtonErstNachUndBesitztDanachDieBerechtigung"
+notclass="com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrumentedTest#ohneBerechtigungFragtDerAufnahmeButtonErstNachUndStartetDannDenKameraIntent,com.example.lrmprotokoll.ui.VideoAufnahmeScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScreenBeimBetretenNachUndSchaltetNachErlaubnisWeiter,com.example.lrmprotokoll.ui.GesamtberichtStammdatenSheetPermissionInstrumentedTest#ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand,com.example.lrmprotokoll.service.ForegroundServiceOhneMikrofonPermissionInstrumentedTest#ohneMikrofonBerechtigungKommtDerDienstTrotzdemInDenVordergrund,com.example.lrmprotokoll.ui.MeterScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScanButtonErstNachUndBesitztDanachDieBerechtigung"
 
 python3 .github/scripts/ci-timing.py run "UTP / instrumentierte Tests" -- \
   ./gradlew connectedDebugAndroidTest --stacktrace -Pandroid.testInstrumentationRunnerArguments.notClass="$notclass"
@@ -131,6 +131,11 @@ faelle=(
   "com.example.lrmprotokoll.ui.FotoDokumentationSheetPermissionInstrumentedTest#ohneBerechtigungFragtDerAufnahmeButtonErstNachUndStartetDannDenKameraIntent|android.permission.CAMERA"
   "com.example.lrmprotokoll.ui.VideoAufnahmeScreenPermissionInstrumentedTest#ohneBerechtigungFragtDerScreenBeimBetretenNachUndSchaltetNachErlaubnisWeiter|android.permission.CAMERA"
   "com.example.lrmprotokoll.ui.GesamtberichtStammdatenSheetPermissionInstrumentedTest#ohneBerechtigungFragtStandortErmittelnErstNachUndHaengtNichtEndlosImLadezustand|android.permission.ACCESS_COARSE_LOCATION"
+  # UX-Audit Kapitel 35.1 (letzter offener Punkt): Kommt der Foreground Service auch dann in den
+  # Vordergrund, wenn berechneForegroundServiceType() mangels RECORD_AUDIO und ohne gepinntes
+  # Messgeraet 0 liefert und nur der typlose startForeground()-Rueckfall bleibt? Voraussetzung
+  # fuer Befund F-02 ("nur verbinden, ohne aufzuzeichnen").
+  "com.example.lrmprotokoll.service.ForegroundServiceOhneMikrofonPermissionInstrumentedTest#ohneMikrofonBerechtigungKommtDerDienstTrotzdemInDenVordergrund|android.permission.RECORD_AUDIO"
 )
 # BLUETOOTH_SCAN/BLUETOOTH_CONNECT gibt es erst ab API 31 (Legacy-Pfad davor laeuft ueber
 # ACCESS_FINE_LOCATION) - der Test selbst ueberspringt sich unterhalb von API 31 per
