@@ -31,6 +31,7 @@ class MainActivityNavigationAndroidTest {
 
     private lateinit var app: LaermprotokollApp
     private lateinit var fakeTransport: FakeMeterTransport
+    private var previousStammdatenAbfrageAktiv = true
 
     @Before
     fun setUp() {
@@ -39,12 +40,17 @@ class MainActivityNavigationAndroidTest {
         app.setCustomContainer(AppContainer(app, fakeTransport))
         app.container.settingsManager.onboardingCompleted = true
         app.container.settingsManager.fotoDokuAktiv = false
+        // Die Navigationsfaelle legen offene Sessions an. Die standardmaessig aktive
+        // Stammdaten-Abfrage darf dabei keinen Dialog ueber die Startliste legen.
+        previousStammdatenAbfrageAktiv = app.container.settingsManager.stammdatenAbfrageAktiv
+        app.container.settingsManager.stammdatenAbfrageAktiv = false
         app.container.database.clearAllTables()
     }
 
     @After
     fun tearDown() {
         app.container.settingsManager.fotoDokuAktiv = false
+        app.container.settingsManager.stammdatenAbfrageAktiv = previousStammdatenAbfrageAktiv
         app.container.database.clearAllTables()
         app.resetContainer()
     }
@@ -211,9 +217,11 @@ class MainActivityNavigationAndroidTest {
             )
         }
         setNavigationContent()
-        composeRule.onNodeWithTag("home_lazy_column").performTouchInput { swipeUp() }
+        // Room emittiert asynchron; ein pauschaler Wisch wartet weder auf die Session
+        // noch garantiert er bei unterschiedlichen Bildschirmhoehen eine sichtbare Karte.
+        composeRule.warteUndScrolleZu(hasTestTag("btn_session_view_protocol"))
         composeRule.onNodeWithTag("card_continuous_session").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_session_view_protocol").performClick()
+        composeRule.onNodeWithTag("btn_session_view_protocol").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("nav_item_protokoll").assertIsSelected()
     }
 }

@@ -13,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +37,17 @@ class HomeNavigationComposeTest {
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun setUp() {
+        // UX-Audit F-14: Der Default von onboardingCompleted haengt jetzt davon ab, ob in der
+        // Einstellungsdatei schon etwas steht. Unter Robolectric ist sie leer, also gilt der
+        // Testlauf als Neuinstallation und [AppNavigation] rendert die Einfuehrung statt der
+        // Navigationsleiste. Dieselbe Vorbereitung nutzen die instrumentierten Tests
+        // (AppStartupSmokeInstrumentedTest, MainActivityNavigationAndroidTest).
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.settingsManager.onboardingCompleted = true
+    }
 
     @Test
     fun diagnoseIstUeberEinstellungenErreichbar() {
