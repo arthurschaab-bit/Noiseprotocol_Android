@@ -32,31 +32,36 @@ import java.util.Locale
  * minimalen Abhaengigkeits-Stil des Projekts (siehe ZIP-Export in [ReportManager], der ebenfalls
  * nur `java.util.zip` statt einer Bibliothek nutzt).
  */
-class MessreiheExport(private val context: Context) {
-
-    private fun dateiname(session: SessionEntity, endung: String): String {
+open class MessreiheExport(
+    private val context: Context,
+) {
+    private fun dateiname(
+        session: SessionEntity,
+        endung: String,
+    ): String {
         val datum = SimpleDateFormat("dd.MM.yyyy_HHmm", Locale.getDefault()).format(Date(session.startedAt))
         return "Session_$datum.$endung"
     }
 
     /** [messwerte] wird bevorzugt (volle Genauigkeit), [aggregate] nur als Rueckfall fuer
      * Sessions, deren Rohwerte der Retention-Job (Plan 13.2) bereits verdichtet hat. */
-    fun exportiereCsv(
+    open fun exportiereCsv(
         session: SessionEntity,
         messwerte: List<MeasurementEntity>,
         aggregate: List<MinuteAggregateEntity>,
     ): File {
-        val inhalt = if (messwerte.isNotEmpty()) {
-            MessreiheCsv.ausMesswerten(messwerte)
-        } else {
-            MessreiheCsv.ausAggregaten(aggregate)
-        }
+        val inhalt =
+            if (messwerte.isNotEmpty()) {
+                MessreiheCsv.ausMesswerten(messwerte)
+            } else {
+                MessreiheCsv.ausAggregaten(aggregate)
+            }
         val file = File(BerichtDatei.ordner(context), dateiname(session, "csv"))
         file.writeText(inhalt, Charsets.UTF_8)
         return file
     }
 
-    fun exportierePdf(
+    open fun exportierePdf(
         session: SessionEntity,
         kennwerte: AkustischeKennwerte.Kennwerte,
         ausfallbaender: List<Ausfallband>,
@@ -88,19 +93,20 @@ class MessreiheExport(private val context: Context) {
             // Ein reiner Mikrofonlauf (leere deviceAddress, siehe SessionEntity-KDoc) bekommt
             // "Mittelwert" statt "LAeq" - Befund 01 / Korrekturliste C-2.
             val nurMikrofon = session.deviceAddress.isBlank()
-            val kennwertZeilen = listOfNotNull(
-                kennwerte.leqDb?.let { "${leqBezeichnung(nurMikrofon)}: ${formatiereDb(it)} dB" },
-                kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
-                kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
-                kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
-                kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
-                kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
-            ).ifEmpty {
-                // Nach der Umstellung auf E1 kann eine Session auch ein reiner Mikrofonlauf ohne
-                // Messwerte sein. Dann ist "keine Kennwerte" die Aussage - nicht eine Liste
-                // von Strichen, die wie ein Messergebnis aussieht.
-                listOf("Für diese Session liegen keine Messwerte vor.")
-            }
+            val kennwertZeilen =
+                listOfNotNull(
+                    kennwerte.leqDb?.let { "${leqBezeichnung(nurMikrofon)}: ${formatiereDb(it)} dB" },
+                    kennwerte.maxDb?.let { "Max: ${formatiereDb(it)} dB" },
+                    kennwerte.minDb?.let { "Min: ${formatiereDb(it)} dB" },
+                    kennwerte.l10Db?.let { "L10: ${formatiereDb(it)} dB" },
+                    kennwerte.l50Db?.let { "L50: ${formatiereDb(it)} dB" },
+                    kennwerte.l90Db?.let { "L90: ${formatiereDb(it)} dB" },
+                ).ifEmpty {
+                    // Nach der Umstellung auf E1 kann eine Session auch ein reiner Mikrofonlauf ohne
+                    // Messwerte sein. Dann ist "keine Kennwerte" die Aussage - nicht eine Liste
+                    // von Strichen, die wie ein Messergebnis aussieht.
+                    listOf("Für diese Session liegen keine Messwerte vor.")
+                }
             kennwertZeilen.forEach { zeile ->
                 val zy = lauf.platziere(18f)
                 canvasGeber()?.drawText(zeile, x, zy + 12f, textPaint)
@@ -163,11 +169,12 @@ class MessreiheExport(private val context: Context) {
             val zeitpunkt = formatierer.format(Date(foto.aufgenommenAm))
             val datei = File(foto.dateiPfad)
 
-            val bild = if (datei.exists()) {
-                runCatching { BitmapFactory.decodeFile(foto.dateiPfad) }.getOrNull()
-            } else {
-                null
-            }
+            val bild =
+                if (datei.exists()) {
+                    runCatching { BitmapFactory.decodeFile(foto.dateiPfad) }.getOrNull()
+                } else {
+                    null
+                }
 
             if (bild == null) {
                 val zy = lauf.platziere(18f)
@@ -185,11 +192,12 @@ class MessreiheExport(private val context: Context) {
                 // Owner-Feature-Auftrag 12.09.2026: ein aus der Galerie nachtraeglich
                 // hinzugefuegtes Foto muss im Bericht als solches erkennbar bleiben - anders als
                 // ein Kamerafoto belegt es nicht, dass es zum Messzeitpunkt selbst entstand.
-                val beschriftung = if (foto.nachtraeglichHinzugefuegt) {
-                    "$kategorie · $zeitpunkt · nachträglich hinzugefügt"
-                } else {
-                    "$kategorie · $zeitpunkt"
-                }
+                val beschriftung =
+                    if (foto.nachtraeglichHinzugefuegt) {
+                        "$kategorie · $zeitpunkt · nachträglich hinzugefügt"
+                    } else {
+                        "$kategorie · $zeitpunkt"
+                    }
                 c.drawText(beschriftung, x, by + hoehe + 12f, kleinPaint)
                 foto.notiz?.let { notiz -> c.drawText(notiz, x, by + hoehe + 24f, kleinPaint) }
             }
@@ -199,5 +207,5 @@ class MessreiheExport(private val context: Context) {
 
     private fun formatiereDb(wert: Double) = String.format(Locale.getDefault(), "%.1f", wert)
 
-    fun teilen(file: File) = BerichtDatei.teile(context, file)
+    open fun teilen(file: File) = BerichtDatei.teile(context, file)
 }

@@ -15,10 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
-import com.example.lrmprotokoll.report.GesamtberichtExport
-import com.example.lrmprotokoll.report.GesamtberichtStammdaten
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
+import com.example.lrmprotokoll.report.GesamtberichtExport
+import com.example.lrmprotokoll.report.GesamtberichtStammdaten
 import com.example.lrmprotokoll.report.PeriodenBerichtExport
 import com.example.lrmprotokoll.report.ermittleGesamtbericht
 import com.example.lrmprotokoll.report.ermittlePeriodenBericht
@@ -43,13 +45,16 @@ fun BerichtScreen(
     /** Testbarer Aufrufpfad; ohne Injection wird Chaquopy erst beim Erzeugen gestartet. */
     highEndRunner: (suspend (String) -> ChaquopyReportRunner.Ergebnis)? = null,
     initialHighEndRange: BerichtZeitraum? = null,
+    onShowSnackbar: ((String) -> Unit)? = null,
+    periodenBerichtExport: PeriodenBerichtExport? = null,
+    gesamtberichtExportInstance: GesamtberichtExport? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val db = container.database
     val scope = rememberCoroutineScope()
-    val periodenExport = remember { PeriodenBerichtExport(context) }
-    val gesamtberichtExport = remember { GesamtberichtExport(context) }
+    val periodenExport = remember(periodenBerichtExport) { periodenBerichtExport ?: PeriodenBerichtExport(context) }
+    val gesamtberichtExport = remember(gesamtberichtExportInstance) { gesamtberichtExportInstance ?: GesamtberichtExport(context) }
 
     var zeigeZeitraumDialog by remember { mutableStateOf(false) }
     var zeigeHighEndSheet by remember { mutableStateOf(false) }
@@ -60,25 +65,44 @@ fun BerichtScreen(
     // Messaufbau-/Randbedingungsangaben aus den Einstellungen erzeugen.
     var alsGesamtbericht by remember { mutableStateOf(false) }
 
-    fun erstelleUndTeileZeitraumbericht(von: Long, bis: Long) {
+    fun erstelleUndTeileZeitraumbericht(
+        von: Long,
+        bis: Long,
+    ) {
         zeitraumWirdErstellt = true
         scope.launch {
-            if (alsGesamtbericht) {
-                val datei = withContext(Dispatchers.IO) {
-                    val bericht = ermittleGesamtbericht(db, von, bis)
-                    val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
-                    gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
+            val result =
+                runCatching {
+                    if (alsGesamtbericht) {
+                        val datei =
+                            withContext(Dispatchers.IO) {
+                                val bericht = ermittleGesamtbericht(db, von, bis)
+                                val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
+                                gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
+                            }
+                        gesamtberichtExport.teilen(datei)
+                    } else {
+                        val datei =
+                            withContext(Dispatchers.IO) {
+                                val bericht = ermittlePeriodenBericht(db, von, bis)
+                                periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
+                            }
+                        periodenExport.teilen(datei)
+                    }
                 }
-                gesamtberichtExport.teilen(datei)
-            } else {
-                val datei = withContext(Dispatchers.IO) {
-                    val bericht = ermittlePeriodenBericht(db, von, bis)
-                    periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
-                }
-                periodenExport.teilen(datei)
-            }
             zeitraumWirdErstellt = false
             zeigeZeitraumDialog = false
+            result.onFailure { fehler ->
+                container.diagnosticsReporter.report(
+                    code = DiagnosticCode.REPORT_CREATE_FAILED,
+                    component = "BerichtScreen",
+                    operation = if (alsGesamtbericht) "exportGesamtbericht" else "exportZeitraumbericht",
+                    severity = DiagnosticSeverity.WARN,
+                    cause = fehler,
+                    message = fehler.message ?: "Export fehlgeschlagen",
+                )
+                onShowSnackbar?.invoke(context.getString(R.string.export_failed_message))
+            }
         }
     }
 
@@ -89,7 +113,7 @@ fun BerichtScreen(
                     Text(
                         text = stringResource(R.string.nav_report),
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 },
                 navigationIcon = {
@@ -113,15 +137,16 @@ fun BerichtScreen(
                             )
                         }
                     }
-                }
+                },
             )
-        }
+        },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -186,33 +211,56 @@ fun BerichtScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            erstelleUndTeileZeitraumbericht(bis - 7L * 24 * 60 * 60 * 1000, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_7d")) { Text(stringResource(R.string.period_report_preset_7_days)) }
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            erstelleUndTeileZeitraumbericht(bis - 30L * 24 * 60 * 60 * 1000, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_30d")) { Text(stringResource(R.string.period_report_preset_30_days)) }
-                        TextButton(onClick = {
-                            val bis = System.currentTimeMillis()
-                            val von = Calendar.getInstance().apply {
-                                set(Calendar.DAY_OF_MONTH, 1)
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }.timeInMillis
-                            erstelleUndTeileZeitraumbericht(von, bis)
-                        }, modifier = Modifier.testTag("btn_period_preset_month")) { Text(stringResource(R.string.period_report_preset_this_month)) }
+                        TextButton(
+                            onClick = {
+                                val bis = System.currentTimeMillis()
+                                erstelleUndTeileZeitraumbericht(bis - 7L * 24 * 60 * 60 * 1000, bis)
+                            },
+                            modifier =
+                                Modifier.testTag(
+                                    "btn_period_preset_7d",
+                                ),
+                        ) { Text(stringResource(R.string.period_report_preset_7_days)) }
+                        TextButton(
+                            onClick = {
+                                val bis = System.currentTimeMillis()
+                                erstelleUndTeileZeitraumbericht(bis - 30L * 24 * 60 * 60 * 1000, bis)
+                            },
+                            modifier =
+                                Modifier.testTag(
+                                    "btn_period_preset_30d",
+                                ),
+                        ) { Text(stringResource(R.string.period_report_preset_30_days)) }
+                        TextButton(
+                            onClick = {
+                                val bis = System.currentTimeMillis()
+                                val von =
+                                    Calendar
+                                        .getInstance()
+                                        .apply {
+                                            set(Calendar.DAY_OF_MONTH, 1)
+                                            set(Calendar.HOUR_OF_DAY, 0)
+                                            set(Calendar.MINUTE, 0)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                erstelleUndTeileZeitraumbericht(von, bis)
+                            },
+                            modifier =
+                                Modifier.testTag(
+                                    "btn_period_preset_month",
+                                ),
+                        ) { Text(stringResource(R.string.period_report_preset_this_month)) }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { zeigeZeitraumDialog = false }, enabled = !zeitraumWirdErstellt, modifier = Modifier.testTag("btn_period_dialog_cancel")) {
+                TextButton(onClick = {
+                    zeigeZeitraumDialog = false
+                }, enabled = !zeitraumWirdErstellt, modifier = Modifier.testTag("btn_period_dialog_cancel")) {
                     Text(stringResource(R.string.action_cancel))
                 }
-            }
+            },
         )
     }
 

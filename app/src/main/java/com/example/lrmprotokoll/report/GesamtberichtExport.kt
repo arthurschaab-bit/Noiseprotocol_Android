@@ -29,13 +29,18 @@ import java.util.Locale
  * ohne im Zweifel eine falsche rechtliche Aussage zu drucken. Die App liefert Messdaten und die
  * vom Nutzer eingetragenen Stammdaten - die rechtliche Wuerdigung bleibt aussen vor.
  */
-class GesamtberichtExport(private val context: Context) {
-
+open class GesamtberichtExport(
+    private val context: Context,
+) {
     private val formatierer = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
     private val tagFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
     private val tagKurzFormat = SimpleDateFormat("dd.MM. (EEEE)", Locale.getDefault())
 
-    fun exportierePdf(bericht: Gesamtbericht, stammdaten: GesamtberichtStammdaten, titel: String): File {
+    open fun exportierePdf(
+        bericht: Gesamtbericht,
+        stammdaten: GesamtberichtStammdaten,
+        titel: String,
+    ): File {
         val gesamt = bericht.gesamt
         val kennwerte = gesamt.kennwerte
         val gesamtDatenverfuegbarkeit = berechneGesamtDatenverfuegbarkeit(bericht)
@@ -50,7 +55,11 @@ class GesamtberichtExport(private val context: Context) {
             val textPaint = BerichtLayout.paint(textSize = 10.5f)
             val mutedPaint = BerichtLayout.paint(BerichtLayout.COLOR_TEXT_MUTED, textSize = 9f)
 
-            fun zeile(inhalt: String, paint: Paint = textPaint, hoehe: Float = 16f) {
+            fun zeile(
+                inhalt: String,
+                paint: Paint = textPaint,
+                hoehe: Float = 16f,
+            ) {
                 val y = lauf.platziere(hoehe)
                 canvasGeber()?.drawText(inhalt, x, y + hoehe - 4f, paint)
             }
@@ -60,7 +69,10 @@ class GesamtberichtExport(private val context: Context) {
                 zeile(titel, kopfPaint, 22f)
             }
 
-            fun feld(label: String, wert: String) = zeile("$label: ${wert.oderNichtAngegeben()}")
+            fun feld(
+                label: String,
+                wert: String,
+            ) = zeile("$label: ${wert.oderNichtAngegeben()}")
 
             // ---- Deckblatt ----
             zeile(titel, titelPaint, 26f)
@@ -92,9 +104,12 @@ class GesamtberichtExport(private val context: Context) {
             // ---- Randbedingungen ----
             abschnitt("Randbedingungen")
             feld("Wetter", stammdaten.wetter)
-            zeile("Datenverfügbarkeit: %.1f %% (aus Verbindungsausfällen berechnet)".format(
-                Locale.getDefault(), gesamtDatenverfuegbarkeit,
-            ))
+            zeile(
+                "Datenverfügbarkeit: %.1f %% (aus Verbindungsausfällen berechnet)".format(
+                    Locale.getDefault(),
+                    gesamtDatenverfuegbarkeit,
+                ),
+            )
             if (stammdaten.datenqualitaetHinweis.isNotBlank()) {
                 zeile(stammdaten.datenqualitaetHinweis)
             }
@@ -194,13 +209,16 @@ class GesamtberichtExport(private val context: Context) {
 
         tage.forEachIndexed { index, tag ->
             val zy = lauf.platziere(tabellenZeilenHoehe)
-            val werte = listOf(
-                tagFormat.format(Date(tag.von)),
-                tag.bericht.kennwerte.leqDb?.let { "${formatiereDb(it)} dB" } ?: "–",
-                tag.bericht.kennwerte.maxDb?.let { "${formatiereDb(it)} dB" } ?: "–",
-                "%.0f %%".format(Locale.getDefault(), tag.datenverfuegbarkeitProzent),
-                "${tag.bericht.ausfallbaender.size}",
-            )
+            val werte =
+                listOf(
+                    tagFormat.format(Date(tag.von)),
+                    tag.bericht.kennwerte.leqDb
+                        ?.let { "${formatiereDb(it)} dB" } ?: "–",
+                    tag.bericht.kennwerte.maxDb
+                        ?.let { "${formatiereDb(it)} dB" } ?: "–",
+                    "%.0f %%".format(Locale.getDefault(), tag.datenverfuegbarkeitProzent),
+                    "${tag.bericht.ausfallbaender.size}",
+                )
             // Nach einem Seitenumbruch die Tabellenkopfzeile wiederholen (dasselbe Muster wie
             // TagesberichtPdf) - ohne sie ist eine Folgeseite eine Spaltenwueste.
             if (lauf.seitenNummer != letzteSeite) {
@@ -208,14 +226,28 @@ class GesamtberichtExport(private val context: Context) {
                 kopfY = zy
                 canvasGeber()?.let { BerichtLayout.tabellenKopf(it, x, kopfY, tabellenSpalten, tabellenTitel, tabellenZeilenHoehe) }
                 val neueZeileY = lauf.platziere(tabellenZeilenHoehe)
-                canvasGeber()?.let { BerichtLayout.tabellenZeile(it, x, neueZeileY, tabellenSpalten, werte, tabellenZeilenHoehe, index % 2 == 1) }
+                canvasGeber()?.let {
+                    BerichtLayout.tabellenZeile(
+                        it,
+                        x,
+                        neueZeileY,
+                        tabellenSpalten,
+                        werte,
+                        tabellenZeilenHoehe,
+                        index % 2 == 1,
+                    )
+                }
             } else {
                 canvasGeber()?.let { BerichtLayout.tabellenZeile(it, x, zy, tabellenSpalten, werte, tabellenZeilenHoehe, index % 2 == 1) }
             }
         }
     }
 
-    private fun zeichneTagesseite(lauf: Seitenlauf, canvasGeber: () -> Canvas?, tag: GesamtberichtTag) {
+    private fun zeichneTagesseite(
+        lauf: Seitenlauf,
+        canvasGeber: () -> Canvas?,
+        tag: GesamtberichtTag,
+    ) {
         val x = Seitenlauf.RAND_LINKS
         val rechtsrand = Seitenlauf.SEITE_BREITE - Seitenlauf.RAND_RECHTS
         val kopfPaint = BerichtLayout.paint(BerichtLayout.COLOR_PRIMARY, textSize = 13f, fett = true)
@@ -227,12 +259,13 @@ class GesamtberichtExport(private val context: Context) {
 
         val kennwerte = tag.bericht.kennwerte
         val zy = lauf.platziere(16f)
-        val kennwertZeile = listOfNotNull(
-            kennwerte.leqDb?.let { "${leqBezeichnung(tag.bericht.nurMikrofon)} ${formatiereDb(it)} dB" },
-            kennwerte.maxDb?.let { "Max ${formatiereDb(it)} dB" },
-            kennwerte.minDb?.let { "Min ${formatiereDb(it)} dB" },
-        ).joinToString("  ·  ").ifEmpty { "Keine Messwerte" } +
-            "  ·  Datenverfügbarkeit %.0f %%".format(Locale.getDefault(), tag.datenverfuegbarkeitProzent)
+        val kennwertZeile =
+            listOfNotNull(
+                kennwerte.leqDb?.let { "${leqBezeichnung(tag.bericht.nurMikrofon)} ${formatiereDb(it)} dB" },
+                kennwerte.maxDb?.let { "Max ${formatiereDb(it)} dB" },
+                kennwerte.minDb?.let { "Min ${formatiereDb(it)} dB" },
+            ).joinToString("  ·  ").ifEmpty { "Keine Messwerte" } +
+                "  ·  Datenverfügbarkeit %.0f %%".format(Locale.getDefault(), tag.datenverfuegbarkeitProzent)
         canvasGeber()?.drawText(kennwertZeile, x, zy + 11f, textPaint)
         lauf.abstand(8f)
 
@@ -269,7 +302,7 @@ class GesamtberichtExport(private val context: Context) {
 
     private fun String.oderNichtAngegeben() = ifBlank { "nicht angegeben" }
 
-    fun teilen(file: File) = BerichtDatei.teile(context, file)
+    open fun teilen(file: File) = BerichtDatei.teile(context, file)
 }
 
 /**

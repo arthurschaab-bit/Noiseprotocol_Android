@@ -23,7 +23,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SheetDrehungInstrumentedTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
@@ -55,7 +54,7 @@ class SheetDrehungInstrumentedTest {
                 SessionEntity(
                     startedAt = System.currentTimeMillis(),
                     operatingMode = "METER_PCE",
-                )
+                ),
             )
         }
         composeRule.waitForIdle()
@@ -93,7 +92,7 @@ class SheetDrehungInstrumentedTest {
                 SessionEntity(
                     startedAt = System.currentTimeMillis(),
                     operatingMode = "METER_PCE",
-                )
+                ),
             )
         }
         composeRule.waitForIdle()

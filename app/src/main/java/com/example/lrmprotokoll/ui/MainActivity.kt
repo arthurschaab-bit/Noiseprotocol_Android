@@ -4,16 +4,14 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -22,17 +20,14 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -52,33 +47,27 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
-import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
-import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
-import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.BaulaermKonfiguration
+import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.audio.berechneBaulaermMinutenDesTages
 import com.example.lrmprotokoll.audio.bewerteAlleNeu
 import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
-import com.example.lrmprotokoll.data.MeasurementEntity
-import com.example.lrmprotokoll.data.MinuteAggregateEntity
-import com.example.lrmprotokoll.ui.components.NoiseCard
-import com.example.lrmprotokoll.ui.components.StatusPill
-import com.example.lrmprotokoll.ui.components.StatusPillType
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
-import com.example.lrmprotokoll.diagnose.HealthStatus
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.ui.components.NoiseCard
+import com.example.lrmprotokoll.ui.components.StatusPill
+import com.example.lrmprotokoll.ui.components.StatusPillType
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
-import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -94,13 +83,15 @@ import java.util.*
 // unproblematisch; setContent()/enableEdgeToEdge() bleiben unveraendert nutzbar, da
 // AppCompatActivity ueber FragmentActivity weiterhin eine ComponentActivity ist.
 class MainActivity : AppCompatActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as LaermprotokollApp).container
         val language = container.settingsManager.appLanguage
         if (language.isNotBlank()) {
-            val appLocale = androidx.core.os.LocaleListCompat.forLanguageTags(language)
-            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(appLocale)
+            val appLocale =
+                androidx.core.os.LocaleListCompat
+                    .forLanguageTags(language)
+            androidx.appcompat.app.AppCompatDelegate
+                .setApplicationLocales(appLocale)
         }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -109,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             LaermprotokollTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background,
                 ) {
                     // UX-Feedback: alle Texte sollen markierbar/kopierbar sein - ein einzelner
                     // Wrap um die gesamte Navigation deckt jeden Screen ab, statt jeden Screen
@@ -140,7 +131,7 @@ class MainActivity : AppCompatActivity() {
     private fun behandleEingehendesIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(
                 com.example.lrmprotokoll.audio.EXTRA_REQUEST_STOP_CONFIRMATION,
-                false
+                false,
             ) == true
         ) {
             PendingUiAction.requestStopConfirmation()
@@ -169,7 +160,12 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         return
     }
 
-    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val currentRoute =
+        navController
+            .currentBackStackEntryAsState()
+            .value
+            ?.destination
+            ?.route
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -188,9 +184,10 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     // war schon vor dem Layout-Umbau so (Regressionsfix M7c: "Navileiste fehlt außerhalb von
     // Start") und soll es bleiben, damit man aus jeder Unterseite direkt in einen anderen
     // Haupttab wechseln kann, ohne erst zurückzunavigieren.
-    val showBottomNav = currentRoute == null ||
-        currentRoute in listOf("main", "protokoll", "bericht", "meter", "diagnose") ||
-        currentRoute?.startsWith("settings") == true
+    val showBottomNav =
+        currentRoute == null ||
+            currentRoute in listOf("main", "protokoll", "bericht", "meter", "diagnose") ||
+            currentRoute?.startsWith("settings") == true
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -204,7 +201,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onNavigateToBericht = { navigiereZuTab("bericht") },
                 )
             }
-        }
+        },
     ) { scaffoldPadding ->
         NavHost(
             navController = navController,
@@ -221,28 +218,29 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onNavigateToVideo = { navController.navigate("video") },
                     onShowSnackbar = { msg, action, onAction ->
                         scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = msg,
-                                actionLabel = action,
-                                duration = SnackbarDuration.Short
-                            )
+                            val result =
+                                snackbarHostState.showSnackbar(
+                                    message = msg,
+                                    actionLabel = action,
+                                    duration = SnackbarDuration.Short,
+                                )
                             if (result == SnackbarResult.ActionPerformed) {
                                 onAction?.invoke()
                             }
                         }
-                    }
+                    },
                 )
             }
             composable(
                 "player?path={path}",
-                arguments = listOf(navArgument("path") { defaultValue = "" })
+                arguments = listOf(navArgument("path") { defaultValue = "" }),
             ) { backStackEntry ->
                 val path = backStackEntry.arguments?.getString("path") ?: ""
                 AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
             }
             composable(
                 "settings?tab={tab}",
-                arguments = listOf(navArgument("tab") { defaultValue = SettingsTab.START.routeArg })
+                arguments = listOf(navArgument("tab") { defaultValue = SettingsTab.START.routeArg }),
             ) { backStackEntry ->
                 val tabArg = backStackEntry.arguments?.getString("tab") ?: SettingsTab.START.routeArg
                 SettingsScreen(
@@ -268,23 +266,25 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onOpenSession = { sessionId -> navController.navigate("protokoll/$sessionId") },
                     onStartNewMeasurement = { navigiereZuTab("main") },
                     onOpenSettings = { navigiereZuEinstellungen(SettingsTab.DATEN) },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             composable(
                 "protokoll/{sessionId}",
-                arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+                arguments = listOf(navArgument("sessionId") { type = NavType.LongType }),
             ) { backStackEntry ->
                 val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
                 ProtokollDetailScreen(
                     sessionId = sessionId,
                     onBack = { navController.popBackStack() },
-                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             composable("bericht") {
                 BerichtScreen(
                     onBack = { navController.popBackStack() },
                     onOpenSettings = { navigiereZuEinstellungen(SettingsTab.BERICHT) },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             composable("ki-erklaerung") {
@@ -309,13 +309,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             composable("diagnose") {
                 DiagnoseScreen(
                     onBack = { navController.popBackStack() },
-                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             composable("trash") {
                 TrashScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
         }
@@ -340,27 +340,29 @@ fun AppNavigationBar(
             onClick = onNavigateToStart,
             icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.nav_start)) },
             label = { Text(stringResource(R.string.nav_start)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_main")
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_main"),
         )
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "protokoll"),
             onClick = onNavigateToProtokoll,
             icon = { Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.nav_data)) },
             label = { Text(stringResource(R.string.nav_data)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_protokoll")
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_protokoll"),
         )
         NavigationBarItem(
             selected = istBottomNavZielAktiv(currentRoute, "bericht"),
             onClick = onNavigateToBericht,
             icon = { Icon(Icons.Default.DateRange, contentDescription = stringResource(R.string.nav_report)) },
             label = { Text(stringResource(R.string.nav_report)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_bericht")
+            modifier = Modifier.heightIn(min = 48.dp).testTag("nav_item_bericht"),
         )
     }
 }
 
-internal fun istBottomNavZielAktiv(currentRoute: String?, ziel: String): Boolean =
-    currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
+internal fun istBottomNavZielAktiv(
+    currentRoute: String?,
+    ziel: String,
+): Boolean = currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -372,6 +374,7 @@ fun NoiseProtocolApp(
     onNavigateToDiagnose: () -> Unit,
     onNavigateToVideo: () -> Unit,
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
+    reportManager: ReportManager? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -388,12 +391,14 @@ fun NoiseProtocolApp(
     val records = dao.getAll().collectAsState(initial = emptyList()).value
     val references = dao.getAllReferences().collectAsState(initial = emptyList()).value
     val scope = rememberCoroutineScope()
-    val reportManager = remember { ReportManager(context) }
+    val effectiveReportManager = remember(reportManager) { reportManager ?: ReportManager(context) }
 
     // M11 Etappe A: Sobald ein Messvorgang eine Session eroeffnet hat, nach der Fotodokumentation
     // fragen - erst danach, nie davor (siehe FotoDokumentationSheet). Seit E1 eroeffnet auch ein
     // reiner Mikrofonlauf eine Session, die Aufforderung kommt also fuer beide Messarten.
-    val offeneSession by container.database.sessionDao().offeneSessionFlow()
+    val offeneSession by container.database
+        .sessionDao()
+        .offeneSessionFlow()
         .collectAsState(initial = null)
     var fotoSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
     var zuletztGefragteSession by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -401,7 +406,11 @@ fun NoiseProtocolApp(
         val id = offeneSession?.id
         if (settingsManager.fotoDokuAktiv && id != null && id != zuletztGefragteSession) {
             zuletztGefragteSession = id
-            if (container.database.dokumentationsFotoDao().fuerSession(id).isEmpty()) {
+            if (container.database
+                    .dokumentationsFotoDao()
+                    .fuerSession(id)
+                    .isEmpty()
+            ) {
                 fotoSheetFuerSession = id
             }
         }
@@ -457,8 +466,8 @@ fun NoiseProtocolApp(
                 onlyMeter = settingsManager.filterOnlyMeter,
                 onlyCalibrated = settingsManager.filterOnlyCalibrated,
                 onlyFavorites = settingsManager.filterOnlyFavorites,
-                onlyQuietHours = settingsManager.filterOnlyQuietHours
-            )
+                onlyQuietHours = settingsManager.filterOnlyQuietHours,
+            ),
         )
     }
     var showFilterPanel by remember { mutableStateOf(false) }
@@ -483,28 +492,37 @@ fun NoiseProtocolApp(
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            } else true
+            } else {
+                true
+            },
         )
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { perms ->
-        hasAudioPermission = perms[Manifest.permission.RECORD_AUDIO] == true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            hasNotificationPermission = perms[Manifest.permission.POST_NOTIFICATIONS] == true
-        }
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasAudioPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                hasNotificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-                } else true
+    val permissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { perms ->
+            hasAudioPermission = perms[Manifest.permission.RECORD_AUDIO] == true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                hasNotificationPermission = perms[Manifest.permission.POST_NOTIFICATIONS] == true
             }
         }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    hasAudioPermission =
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                    hasNotificationPermission =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                                PackageManager.PERMISSION_GRANTED
+                        } else {
+                            true
+                        }
+                }
+            }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -512,33 +530,35 @@ fun NoiseProtocolApp(
     // F3: System-Selbstprüfung für Warn-Banner
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
-    val isBatteryOptimizationIgnored = remember {
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-        powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
-    }
-    val healthOverview = remember(hasAudioPermission, hasNotificationPermission, dienstAktiv, verbindungszustand) {
-        bewerteSystemZustand(
-            SystemHealthParams(
-                hasAudioPermission = hasAudioPermission,
-                hasNotificationPermission = hasNotificationPermission,
-                hasBluetoothPermission = true,
-                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                canScheduleExactAlarms = true,
-                isBluetoothAdapterEnabled = true,
-                isMeterPinned = settingsManager.meterDeviceAddress != null,
-                meterConnectionState = verbindungszustand,
-                isAlertingConfigured = settingsManager.alarmierungAktiv,
-                isDriveSyncConfigured = settingsManager.driveSyncEnabled,
-                isDiagnoseLoggingActive = settingsManager.diagnoseLoggingAktiv,
-                isMonitoringActive = dienstAktiv
+    val isBatteryOptimizationIgnored =
+        remember {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        }
+    val healthOverview =
+        remember(hasAudioPermission, hasNotificationPermission, dienstAktiv, verbindungszustand) {
+            bewerteSystemZustand(
+                SystemHealthParams(
+                    hasAudioPermission = hasAudioPermission,
+                    hasNotificationPermission = hasNotificationPermission,
+                    hasBluetoothPermission = true,
+                    isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                    canScheduleExactAlarms = true,
+                    isBluetoothAdapterEnabled = true,
+                    isMeterPinned = settingsManager.meterDeviceAddress != null,
+                    meterConnectionState = verbindungszustand,
+                    isAlertingConfigured = settingsManager.alarmierungAktiv,
+                    isDriveSyncConfigured = settingsManager.driveSyncEnabled,
+                    isDiagnoseLoggingActive = settingsManager.diagnoseLoggingAktiv,
+                    isMonitoringActive = dienstAktiv,
+                ),
             )
-        )
-    }
+        }
 
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         // 1. TopAppBar als Listeneintrag (integriert, kein Nested Scroll Konflikt)
         item {
@@ -548,7 +568,7 @@ fun NoiseProtocolApp(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.testTag("home_title")
+                        modifier = Modifier.testTag("home_title"),
                     )
                 },
                 actions = {
@@ -557,55 +577,67 @@ fun NoiseProtocolApp(
                         recordWavAudio = settingsManager.recordWavAudio,
                         onClick = {
                             if (dienstAktiv) {
-                                val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                    action = ACTION_STOP_AUDIO_RECORDING
-                                }
+                                val intent =
+                                    Intent(context, AudioRecordingService::class.java).apply {
+                                        action = ACTION_STOP_AUDIO_RECORDING
+                                    }
                                 context.startService(intent)
                             } else {
                                 if (hasAudioPermission) {
-                                    val intent = Intent(context, AudioRecordingService::class.java).apply {
-                                        putExtra(EXTRA_START_AUDIO_MONITORING, true)
-                                    }
+                                    val intent =
+                                        Intent(context, AudioRecordingService::class.java).apply {
+                                            putExtra(EXTRA_START_AUDIO_MONITORING, true)
+                                        }
                                     context.startForegroundService(intent)
                                 } else {
                                     permissionLauncher.launch(
                                         arrayOf(
                                             Manifest.permission.RECORD_AUDIO,
-                                            Manifest.permission.POST_NOTIFICATIONS
-                                        )
+                                            Manifest.permission.POST_NOTIFICATIONS,
+                                        ),
                                     )
                                 }
                             }
                         },
-                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 6.dp).testTag("badge_microphone_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 6.dp).testTag("badge_microphone_status"),
                     )
 
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
                         onClick = { showPairingDialog = true },
-                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status")
+                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
 
                     Box {
                         IconButton(
                             onClick = { showOverflowMenu = true },
-                            modifier = Modifier.size(48.dp).testTag("btn_overflow_menu")
+                            modifier = Modifier.size(48.dp).testTag("btn_overflow_menu"),
                         ) {
                             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_options))
                         }
                         DropdownMenu(
                             expanded = showOverflowMenu,
-                            onDismissRequest = { showOverflowMenu = false }
+                            onDismissRequest = { showOverflowMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text(if (showFilterPanel) stringResource(R.string.filter_hide) else stringResource(R.string.filter_title)) },
+                                text = {
+                                    Text(
+                                        if (showFilterPanel) {
+                                            stringResource(
+                                                R.string.filter_hide,
+                                            )
+                                        } else {
+                                            stringResource(R.string.filter_title)
+                                        },
+                                    )
+                                },
                                 leadingIcon = { Icon(AppIcons.FilterList, contentDescription = null) },
                                 onClick = {
                                     showFilterPanel = !showFilterPanel
                                     showOverflowMenu = false
                                 },
-                                modifier = Modifier.testTag("menu_item_filter")
+                                modifier = Modifier.testTag("menu_item_filter"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },
@@ -613,15 +645,16 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showOverflowMenu = false
                                     scope.launch {
-                                        val count = klassifiziereUndSpeichere(
-                                            kandidaten = records.filter { it.detectedLabel == null },
-                                            classifier = classifier.value,
-                                            dao = dao,
-                                            rohdatenDao = rohdatenDao,
-                                        )
+                                        val count =
+                                            klassifiziereUndSpeichere(
+                                                kandidaten = records.filter { it.detectedLabel == null },
+                                                classifier = classifier.value,
+                                                dao = dao,
+                                                rohdatenDao = rohdatenDao,
+                                            )
                                         onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
                                     }
-                                }
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_neu_bewerten)) },
@@ -633,22 +666,25 @@ fun NoiseProtocolApp(
                                         // "korrigiere"): aktuelleKonfiguration() liest synchron
                                         // aus Room - auf Dispatchers.IO statt auf dem
                                         // Main-Thread dieses scope.launch (rememberCoroutineScope).
-                                        val konfiguration = withContext(Dispatchers.IO) {
-                                            classifier.value.aktuelleKonfiguration()
-                                        }
-                                        val count = bewerteAlleNeu(
-                                            noiseDao = dao,
-                                            rohdatenDao = rohdatenDao,
-                                            konfiguration = konfiguration,
-                                        )
-                                        val msg = if (count > 0) {
-                                            context.getString(R.string.ai_reevaluated_count, count)
-                                        } else {
-                                            context.getString(R.string.ai_reevaluated_empty)
-                                        }
+                                        val konfiguration =
+                                            withContext(Dispatchers.IO) {
+                                                classifier.value.aktuelleKonfiguration()
+                                            }
+                                        val count =
+                                            bewerteAlleNeu(
+                                                noiseDao = dao,
+                                                rohdatenDao = rohdatenDao,
+                                                konfiguration = konfiguration,
+                                            )
+                                        val msg =
+                                            if (count > 0) {
+                                                context.getString(R.string.ai_reevaluated_count, count)
+                                            } else {
+                                                context.getString(R.string.ai_reevaluated_empty)
+                                            }
                                         onShowSnackbar(msg, null, null)
                                     }
-                                }
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.protocol_daily_report_title)) },
@@ -661,7 +697,7 @@ fun NoiseProtocolApp(
                                         onShowSnackbar(context.getString(R.string.empty_records_title), null, null)
                                     }
                                 },
-                                modifier = Modifier.testTag("menu_item_tagesbericht")
+                                modifier = Modifier.testTag("menu_item_tagesbericht"),
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -670,11 +706,11 @@ fun NoiseProtocolApp(
                                 onClick = {
                                     showOverflowMenu = false
                                     onNavigateToSettings()
-                                }
+                                },
                             )
                         }
                     }
-                }
+                },
             )
         }
 
@@ -682,22 +718,24 @@ fun NoiseProtocolApp(
         if (healthOverview.hasProblemWhileMonitoring) {
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .testTag("banner_problem_monitoring"),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .testTag("banner_problem_monitoring"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -705,19 +743,23 @@ fun NoiseProtocolApp(
                                 text = stringResource(R.string.monitoring_restriction_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                             )
                             Text(
                                 text = stringResource(R.string.monitoring_restriction_desc),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                             )
                         }
                         TextButton(
                             onClick = onNavigateToDiagnose,
-                            modifier = Modifier.testTag("btn_problem_check")
+                            modifier = Modifier.testTag("btn_problem_check"),
                         ) {
-                            Text(stringResource(R.string.action_check), color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                            Text(
+                                stringResource(R.string.action_check),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                 }
@@ -732,7 +774,7 @@ fun NoiseProtocolApp(
                     onNavigateToDiagnose = onNavigateToDiagnose,
                     onNavigateToMeter = onNavigateToMeter,
                     onNavigateToVideo = onNavigateToVideo,
-                    onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) }
+                    onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) },
                 )
             }
         }
@@ -744,47 +786,56 @@ fun NoiseProtocolApp(
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("card_continuous_session"),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag("card_continuous_session"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = AppIcons.BarChart,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(20.dp),
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isActive) stringResource(R.string.session_continuous_active) else stringResource(R.string.session_continuous_last),
+                                        text =
+                                            if (isActive) {
+                                                stringResource(
+                                                    R.string.session_continuous_active,
+                                                )
+                                            } else {
+                                                stringResource(R.string.session_continuous_last)
+                                            },
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
                                     )
                                 }
                                 TextButton(
                                     onClick = onNavigateToProtokoll,
-                                    modifier = Modifier.testTag("btn_session_view_protocol")
+                                    modifier = Modifier.testTag("btn_session_view_protocol"),
                                 ) {
                                     Text(stringResource(R.string.session_view_in_protocol))
                                 }
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (isActive) {
-                                    stringResource(R.string.session_continuous_active_desc)
-                                } else {
-                                    stringResource(R.string.session_continuous_last_desc)
-                                },
+                                text =
+                                    if (isActive) {
+                                        stringResource(R.string.session_continuous_active_desc)
+                                    } else {
+                                        stringResource(R.string.session_continuous_last_desc)
+                                    },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -797,19 +848,20 @@ fun NoiseProtocolApp(
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("panel_filter_header")
-                                .clickable { showFilterPanel = !showFilterPanel }
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .testTag("panel_filter_header")
+                                    .clickable { showFilterPanel = !showFilterPanel },
                         ) {
                             Icon(
                                 imageVector = if (showFilterPanel) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null
+                                contentDescription = null,
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(stringResource(R.string.filter_title), style = MaterialTheme.typography.titleSmall)
@@ -819,8 +871,14 @@ fun NoiseProtocolApp(
                                     selected = true,
                                     onClick = { updateFilter(RecordFilterState()) },
                                     label = { Text(stringResource(R.string.filter_active_reset)) },
-                                    trailingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                    modifier = Modifier.testTag("chip_filter_reset")
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("chip_filter_reset"),
                                 )
                             }
                         }
@@ -836,20 +894,25 @@ fun NoiseProtocolApp(
                                         if (filterState.query.isNotEmpty()) {
                                             IconButton(
                                                 onClick = { updateFilter(filterState.copy(query = "")) },
-                                                modifier = Modifier.testTag("btn_clear_filter_search")
+                                                modifier = Modifier.testTag("btn_clear_filter_search"),
                                             ) {
                                                 Icon(Icons.Default.Close, contentDescription = null)
                                             }
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().testTag("input_filter_search"),
-                                    singleLine = true
+                                    singleLine = true,
                                 )
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = stringResource(R.string.filter_level_range, filterState.minDb.toInt(), filterState.maxDb.toInt()),
-                                    style = MaterialTheme.typography.bodySmall
+                                    text =
+                                        stringResource(
+                                            R.string.filter_level_range,
+                                            filterState.minDb.toInt(),
+                                            filterState.maxDb.toInt(),
+                                        ),
+                                    style = MaterialTheme.typography.bodySmall,
                                 )
                                 RangeSlider(
                                     value = filterState.minDb..filterState.maxDb,
@@ -857,38 +920,44 @@ fun NoiseProtocolApp(
                                         updateFilter(filterState.copy(minDb = range.start, maxDb = range.endInclusive))
                                     },
                                     valueRange = 0f..120f,
-                                    modifier = Modifier.padding(horizontal = 4.dp).testTag("slider_home_filter_db")
+                                    modifier = Modifier.padding(horizontal = 4.dp).testTag("slider_home_filter_db"),
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
                                     FilterChip(
                                         selected = filterState.onlyFavorites,
                                         onClick = { updateFilter(filterState.copy(onlyFavorites = !filterState.onlyFavorites)) },
                                         label = { Text(stringResource(R.string.filter_favorites)) },
-                                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                        modifier = Modifier.testTag("chip_filter_favorites")
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("chip_filter_favorites"),
                                     )
                                     FilterChip(
                                         selected = filterState.onlyQuietHours,
                                         onClick = { updateFilter(filterState.copy(onlyQuietHours = !filterState.onlyQuietHours)) },
                                         label = { Text(stringResource(R.string.filter_quiet_hours)) },
-                                        modifier = Modifier.testTag("chip_filter_quiet_hours")
+                                        modifier = Modifier.testTag("chip_filter_quiet_hours"),
                                     )
                                     FilterChip(
                                         selected = filterState.onlyMeter,
                                         onClick = { updateFilter(filterState.copy(onlyMeter = !filterState.onlyMeter)) },
                                         label = { Text(stringResource(R.string.filter_only_meter)) },
-                                        modifier = Modifier.testTag("chip_filter_only_meter")
+                                        modifier = Modifier.testTag("chip_filter_only_meter"),
                                     )
                                     FilterChip(
                                         selected = filterState.onlyCalibrated,
                                         onClick = { updateFilter(filterState.copy(onlyCalibrated = !filterState.onlyCalibrated)) },
                                         label = { Text(stringResource(R.string.filter_only_calibrated)) },
-                                        modifier = Modifier.testTag("chip_filter_only_calibrated")
+                                        modifier = Modifier.testTag("chip_filter_only_calibrated"),
                                     )
                                 }
                             }
@@ -905,12 +974,12 @@ fun NoiseProtocolApp(
                     Text(
                         text = stringResource(R.string.learned_patterns_count, references.size),
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         references.forEach { ref ->
                             InputChip(
@@ -920,11 +989,15 @@ fun NoiseProtocolApp(
                                 trailingIcon = {
                                     IconButton(
                                         onClick = { referenceToDelete = ref },
-                                        modifier = Modifier.size(20.dp).testTag("btn_delete_reference_${ref.name}")
+                                        modifier = Modifier.size(20.dp).testTag("btn_delete_reference_${ref.name}"),
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete), modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = stringResource(R.string.action_delete),
+                                            modifier = Modifier.size(16.dp),
+                                        )
                                     }
-                                }
+                                },
                             )
                         }
                     }
@@ -939,29 +1012,30 @@ fun NoiseProtocolApp(
             // Leerzustand: Noch gar keine Aufnahmen
             item {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            tint = MaterialTheme.colorScheme.outline,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.empty_records_title),
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = stringResource(R.string.empty_records_desc),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -970,34 +1044,35 @@ fun NoiseProtocolApp(
             // Leerzustand: Weggefiltert
             item {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = AppIcons.FilterList,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            tint = MaterialTheme.colorScheme.outline,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.empty_filtered_records_title),
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = stringResource(R.string.empty_filtered_records_desc),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = { updateFilter(RecordFilterState()) },
-                            modifier = Modifier.testTag("btn_empty_filter_reset")
+                            modifier = Modifier.testTag("btn_empty_filter_reset"),
                         ) {
                             Text(stringResource(R.string.action_reset_filter))
                         }
@@ -1015,105 +1090,111 @@ fun NoiseProtocolApp(
                         onClick = {
                             if (isCollapsed) collapsedDays.remove(date) else collapsedDays.add(date)
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                            .testTag("day_header_$date"),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .testTag("day_header_$date"),
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.small
+                        shape = MaterialTheme.shapes.small,
                     ) {
-                      Column {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = date,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = stringResource(R.string.protocol_records_count, dailyRecords.size),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            val unklassifizierteDesTages = unklassifizierteAufnahmen(dailyRecords)
-                            if (unklassifizierteDesTages.isNotEmpty()) {
-                                val wirdKlassifiziert = klassifizierendeTage.contains(date)
-                                IconButton(
-                                    onClick = {
-                                        scope.launch {
-                                            klassifizierendeTage.add(date)
-                                            try {
-                                                val count = klassifiziereUndSpeichere(
-                                                    kandidaten = unklassifizierteDesTages,
-                                                    classifier = classifier.value,
-                                                    dao = dao,
-                                                    rohdatenDao = rohdatenDao,
-                                                )
-                                                val msg = if (count > 0) {
-                                                    context.getString(R.string.ai_batch_day_result, count, date)
-                                                } else {
-                                                    context.getString(R.string.ai_batch_day_result_empty)
+                        Column {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null,
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = date,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = stringResource(R.string.protocol_records_count, dailyRecords.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                val unklassifizierteDesTages = unklassifizierteAufnahmen(dailyRecords)
+                                if (unklassifizierteDesTages.isNotEmpty()) {
+                                    val wirdKlassifiziert = klassifizierendeTage.contains(date)
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                klassifizierendeTage.add(date)
+                                                try {
+                                                    val count =
+                                                        klassifiziereUndSpeichere(
+                                                            kandidaten = unklassifizierteDesTages,
+                                                            classifier = classifier.value,
+                                                            dao = dao,
+                                                            rohdatenDao = rohdatenDao,
+                                                        )
+                                                    val msg =
+                                                        if (count > 0) {
+                                                            context.getString(R.string.ai_batch_day_result, count, date)
+                                                        } else {
+                                                            context.getString(R.string.ai_batch_day_result_empty)
+                                                        }
+                                                    onShowSnackbar(msg, null, null)
+                                                } finally {
+                                                    klassifizierendeTage.remove(date)
                                                 }
-                                                onShowSnackbar(msg, null, null)
-                                            } finally {
-                                                klassifizierendeTage.remove(date)
                                             }
+                                        },
+                                        enabled = !wirdKlassifiziert,
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        if (wirdKlassifiziert) {
+                                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch_day))
                                         }
-                                    },
-                                    enabled = !wirdKlassifiziert,
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    if (wirdKlassifiziert) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch_day))
                                     }
                                 }
+                                IconButton(
+                                    onClick = { reportTargetRecords = dailyRecords },
+                                    modifier = Modifier.size(36.dp).testTag("btn_day_report_$date"),
+                                ) {
+                                    Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
+                                }
                             }
-                            IconButton(
-                                onClick = { reportTargetRecords = dailyRecords },
-                                modifier = Modifier.size(36.dp).testTag("btn_day_report_$date")
-                            ) {
-                                Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
-                            }
-                        }
 
-                        // KI-Umbau Etappe 2.7: "wie viele Minuten des Tages als Baulärm
-                        // eingestuft sind - das ist die beweisrelevante Kennzahl". Reine
-                        // Aggregation ueber bereits gespeicherte Rohdaten (kein Datei-/
-                        // Inferenz-Zugriff), darum unbedenklich bei jedem Rendering neu
-                        // berechnet - siehe berechneBaulaermMinutenDesTages()-KDoc.
-                        val baulaermMinuten by produceState(initialValue = 0f, dailyRecords) {
-                            value = berechneBaulaermMinutenDesTages(
-                                records = dailyRecords,
-                                rohdatenDao = rohdatenDao,
-                                konfiguration = BaulaermKonfiguration(
-                                    einSchwelle = settingsManager.aiEinSchwelle,
-                                    ausSchwelle = settingsManager.aiAusSchwelle,
-                                ),
-                            )
+                            // KI-Umbau Etappe 2.7: "wie viele Minuten des Tages als Baulärm
+                            // eingestuft sind - das ist die beweisrelevante Kennzahl". Reine
+                            // Aggregation ueber bereits gespeicherte Rohdaten (kein Datei-/
+                            // Inferenz-Zugriff), darum unbedenklich bei jedem Rendering neu
+                            // berechnet - siehe berechneBaulaermMinutenDesTages()-KDoc.
+                            val baulaermMinuten by produceState(initialValue = 0f, dailyRecords) {
+                                value =
+                                    berechneBaulaermMinutenDesTages(
+                                        records = dailyRecords,
+                                        rohdatenDao = rohdatenDao,
+                                        konfiguration =
+                                            BaulaermKonfiguration(
+                                                einSchwelle = settingsManager.aiEinSchwelle,
+                                                ausSchwelle = settingsManager.aiAusSchwelle,
+                                            ),
+                                    )
+                            }
+                            if (baulaermMinuten > 0f) {
+                                Text(
+                                    text =
+                                        stringResource(
+                                            R.string.protocol_daily_baulaerm_minuten,
+                                            "%.1f".format(baulaermMinuten),
+                                        ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 44.dp, bottom = 6.dp),
+                                )
+                            }
                         }
-                        if (baulaermMinuten > 0f) {
-                            Text(
-                                text = stringResource(
-                                    R.string.protocol_daily_baulaerm_minuten,
-                                    "%.1f".format(baulaermMinuten),
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 44.dp, bottom = 6.dp),
-                            )
-                        }
-                      }
                     }
                 }
 
@@ -1133,22 +1214,30 @@ fun NoiseProtocolApp(
                                 onDelete = {
                                     scope.launch {
                                         dao.softDelete(record.id)
-                                        onShowSnackbar(context.getString(R.string.record_moved_to_trash), context.getString(R.string.action_undo)) {
+                                        onShowSnackbar(
+                                            context.getString(R.string.record_moved_to_trash),
+                                            context.getString(R.string.action_undo),
+                                        ) {
                                             scope.launch { dao.restore(record.id) }
                                         }
                                     }
                                 },
                                 onLearn = { showReferenceDialog = record },
                                 onLongClick = {
-                                    if (selectedIds.contains(record.id)) selectedIds.remove(record.id)
-                                    else selectedIds.add(record.id)
+                                    if (selectedIds.contains(record.id)) {
+                                        selectedIds.remove(record.id)
+                                    } else {
+                                        selectedIds.add(record.id)
+                                    }
                                 },
                                 onAiRecognize = {
                                     scope.launch {
                                         val detected = classifier.value.classify(File(record.filePath))
-                                        dao.update(record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)))
+                                        dao.update(
+                                            record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)),
+                                        )
                                     }
-                                }
+                                },
                             )
                         }
                     }
@@ -1171,7 +1260,7 @@ fun NoiseProtocolApp(
                         onValueChange = { refName = it },
                         label = { Text(stringResource(R.string.learn_pattern_label)) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("input_learn_pattern_name")
+                        modifier = Modifier.fillMaxWidth().testTag("input_learn_pattern_name"),
                     )
                 }
             },
@@ -1190,7 +1279,7 @@ fun NoiseProtocolApp(
                         }
                     },
                     enabled = refName.isNotBlank(),
-                    modifier = Modifier.testTag("btn_learn_pattern_save")
+                    modifier = Modifier.testTag("btn_learn_pattern_save"),
                 ) {
                     Text(stringResource(R.string.action_save))
                 }
@@ -1198,11 +1287,11 @@ fun NoiseProtocolApp(
             dismissButton = {
                 TextButton(
                     onClick = { showReferenceDialog = null },
-                    modifier = Modifier.testTag("btn_learn_pattern_cancel")
+                    modifier = Modifier.testTag("btn_learn_pattern_cancel"),
                 ) {
                     Text(stringResource(R.string.action_cancel))
                 }
-            }
+            },
         )
     }
 
@@ -1222,7 +1311,7 @@ fun NoiseProtocolApp(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.testTag("btn_confirm_delete_reference")
+                    modifier = Modifier.testTag("btn_confirm_delete_reference"),
                 ) {
                     Text(stringResource(R.string.action_delete))
                 }
@@ -1230,11 +1319,11 @@ fun NoiseProtocolApp(
             dismissButton = {
                 TextButton(
                     onClick = { referenceToDelete = null },
-                    modifier = Modifier.testTag("btn_cancel_delete_reference")
+                    modifier = Modifier.testTag("btn_cancel_delete_reference"),
                 ) {
                     Text(stringResource(R.string.action_cancel))
                 }
-            }
+            },
         )
     }
 
@@ -1247,11 +1336,25 @@ fun NoiseProtocolApp(
             confirmButton = {
                 Button(
                     onClick = {
-                        val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
-                        reportManager.createZipAndShare(target, report)
+                        val result =
+                            runCatching {
+                                val report = effectiveReportManager.generateDailyReport(target, settingsManager.meterDeviceName)
+                                effectiveReportManager.createZipAndShare(target, report)
+                            }
                         reportTargetRecords = null
+                        result.onFailure { fehler ->
+                            container.diagnosticsReporter.report(
+                                code = DiagnosticCode.EXPORT_FAILED,
+                                component = "MainActivity",
+                                operation = "dailyReportZipAndShare",
+                                severity = DiagnosticSeverity.WARN,
+                                cause = fehler,
+                                message = fehler.message ?: "Tagesbericht-ZIP-Export fehlgeschlagen",
+                            )
+                            onShowSnackbar(context.getString(R.string.export_failed_message), null, null)
+                        }
                     },
-                    modifier = Modifier.testTag("btn_report_zip")
+                    modifier = Modifier.testTag("btn_report_zip"),
                 ) {
                     Text(stringResource(R.string.report_dialog_zip_button))
                 }
@@ -1259,15 +1362,29 @@ fun NoiseProtocolApp(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        val report = reportManager.generateDailyReport(target, settingsManager.meterDeviceName)
-                        reportManager.shareFile(report)
+                        val result =
+                            runCatching {
+                                val report = effectiveReportManager.generateDailyReport(target, settingsManager.meterDeviceName)
+                                effectiveReportManager.shareFile(report)
+                            }
                         reportTargetRecords = null
+                        result.onFailure { fehler ->
+                            container.diagnosticsReporter.report(
+                                code = DiagnosticCode.EXPORT_FAILED,
+                                component = "MainActivity",
+                                operation = "dailyReportTextShare",
+                                severity = DiagnosticSeverity.WARN,
+                                cause = fehler,
+                                message = fehler.message ?: "Tagesbericht-Text-Export fehlgeschlagen",
+                            )
+                            onShowSnackbar(context.getString(R.string.export_failed_message), null, null)
+                        }
                     },
-                    modifier = Modifier.testTag("btn_report_text_only")
+                    modifier = Modifier.testTag("btn_report_text_only"),
                 ) {
                     Text(stringResource(R.string.report_dialog_text_button))
                 }
-            }
+            },
         )
     }
 
@@ -1284,7 +1401,7 @@ fun NoiseProtocolApp(
                 context.startForegroundService(intent)
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
-            onDismiss = { showPairingDialog = false }
+            onDismiss = { showPairingDialog = false },
         )
     }
 }
@@ -1303,23 +1420,24 @@ fun NoiseRecordItem(
     onDelete: () -> Unit,
     onLearn: () -> Unit,
     onLongClick: () -> Unit,
-    onAiRecognize: () -> Unit
+    onAiRecognize: () -> Unit,
 ) {
     val hasAudio = record.filePath.isNotBlank()
 
     NoiseCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .combinedClickable(
-                onClick = { if (hasAudio) onPlay() },
-                onLongClick = onLongClick
-            ),
-        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .combinedClickable(
+                    onClick = { if (hasAudio) onPlay() },
+                    onLongClick = onLongClick,
+                ),
+        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
@@ -1340,7 +1458,7 @@ fun NoiseRecordItem(
                 // Prominente Anzeige des kalibrierten vs. unkalibrierten Werts mit klarem Herkunfts-Badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 2.dp)
+                    modifier = Modifier.padding(vertical = 2.dp),
                 ) {
                     if (record.calibratedDbA != null) {
                         val unit = if (record.meterWeighting != null) "dB(${record.meterWeighting})" else "dB(A)"
@@ -1350,24 +1468,28 @@ fun NoiseRecordItem(
                             text = "${String.format(Locale.getDefault(), "%.1f", record.calibratedDbA)} $unit",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         if (record.dbValue > 0) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = stringResource(R.string.source_mic_format, record.dbValue),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     } else {
                         StatusPill(text = stringResource(R.string.badge_microphone), type = StatusPillType.NEUTRAL)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${String.format(Locale.getDefault(), "%.1f", record.dbValue)} dB (${stringResource(R.string.badge_microphone)})",
+                            text = "${String.format(
+                                Locale.getDefault(),
+                                "%.1f",
+                                record.dbValue,
+                            )} dB (${stringResource(R.string.badge_microphone)})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -1377,7 +1499,7 @@ fun NoiseRecordItem(
                         text = stringResource(R.string.label_ai_prefix, record.detectedLabel ?: ""),
                         color = MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
                 if (record.label != null) {
@@ -1385,44 +1507,56 @@ fun NoiseRecordItem(
                         text = stringResource(R.string.label_user_prefix, record.label ?: ""),
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
 
             IconButton(
                 onClick = onToggleFavorite,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.Star,
                     contentDescription = stringResource(R.string.filter_favorites),
-                    tint = if (record.favorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
+                    tint = if (record.favorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline,
                 )
             }
 
             if (hasAudio) {
                 IconButton(
                     onClick = onAiRecognize,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp),
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_ai_batch), tint = MaterialTheme.colorScheme.secondary)
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.action_ai_batch),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
                 }
             }
 
             IconButton(
                 onClick = onDelete,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
             ) {
-                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.action_delete),
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
 
             if (hasAudio) {
                 IconButton(
                     onClick = onPlay,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp),
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.audio_play), tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.audio_play),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -1431,24 +1565,24 @@ fun NoiseRecordItem(
 
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             listOf(
                 stringResource(R.string.category_drilling),
                 stringResource(R.string.category_hammering),
-                stringResource(R.string.category_traffic)
+                stringResource(R.string.category_traffic),
             ).forEach { label ->
                 AssistChip(
                     onClick = { onLabel(label) },
                     label = { Text(label) },
-                    modifier = Modifier.height(28.dp)
+                    modifier = Modifier.height(28.dp),
                 )
             }
             AssistChip(
                 onClick = onLearn,
                 label = { Text(stringResource(R.string.action_learn_pattern)) },
                 leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                modifier = Modifier.height(28.dp)
+                modifier = Modifier.height(28.dp),
             )
         }
     }
