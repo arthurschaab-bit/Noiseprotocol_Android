@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -30,11 +31,15 @@ import com.example.lrmprotokoll.data.FotoKategorie
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
+import com.example.lrmprotokoll.messreihe.Integritaetsbefund
+import com.example.lrmprotokoll.messreihe.Messintegritaet
+import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
@@ -98,6 +103,9 @@ fun ProtokollDetailScreen(
     var showAuditDetails by remember { mutableStateOf(false) }
     var beweisvideos by remember { mutableStateOf<List<com.example.lrmprotokoll.data.BeweisVideoEntity>>(emptyList()) }
     var fotos by remember { mutableStateOf<List<DokumentationsFotoEntity>>(emptyList()) }
+    var gapAnzahl by remember { mutableIntStateOf(0) }
+    var unbestaetigteWerte by remember { mutableIntStateOf(0) }
+    var reportConfig by remember { mutableStateOf<ReportConfigEntity?>(null) }
     // Owner-Feature-Auftrag 12.09.2026: Kategoriewahl fuer einen Galerie-Import - eine Auswahl
     // gilt fuer den ganzen (moeglicherweise mehrere Fotos umfassenden) Picker-Vorgang.
     var zeigeGalerieKategorieDialog by remember { mutableStateOf(false) }
@@ -142,6 +150,15 @@ fun ProtokollDetailScreen(
             db.connectionEventDao().fuerSessionFlow(sessionId).collectLatest { events ->
                 ausfallbaender = leiteAusfallbaenderAb(events, session?.endedAt)
             }
+        }
+
+        launch {
+            val config = db.reportConfigDao().get() ?: ReportConfigEntity()
+            reportConfig = config
+            val gaps = db.measurementDao().anzahlGaps(sessionId)
+            gapAnzahl = gaps
+            val unbest = db.measurementDao().anzahlUnbestaetigtFuerSession(sessionId)
+            unbestaetigteWerte = unbest
         }
 
         // Als Flow, nicht als Momentaufnahme: Der Mux-Lauf laeuft im Hintergrund weiter, und
@@ -255,6 +272,23 @@ fun ProtokollDetailScreen(
         val isLive = s.endedAt == null
         val sessionEndeFuerChart = s.endedAt ?: jetzt
 
+        val integritaetsbefund =
+            remember(s.startedAt, s.endedAt, ausfallbaender, gapAnzahl, aggregate.size, unbestaetigteWerte, reportConfig) {
+                if (s.endedAt != null) {
+                    bewerteMessintegritaet(
+                        von = s.startedAt,
+                        bis = s.endedAt,
+                        ausfallbaender = ausfallbaender,
+                        gapAnzahl = gapAnzahl,
+                        verdichteteMinuten = aggregate.size,
+                        unbestaetigteWerte = unbestaetigteWerte,
+                        config = reportConfig ?: ReportConfigEntity(),
+                    )
+                } else {
+                    null
+                }
+            }
+
         val chartSpalten =
             remember(messwerte, aggregate, s.startedAt, sessionEndeFuerChart) {
                 if (messwerte.isNotEmpty()) {
@@ -303,7 +337,16 @@ fun ProtokollDetailScreen(
                         if (isLive) {
                             StatusPill(text = stringResource(R.string.protocol_live_active), type = StatusPillType.CONNECTED)
                         } else {
-                            StatusPill(text = stringResource(R.string.protocol_completed), type = StatusPillType.NEUTRAL)
+                            when (integritaetsbefund?.stufe) {
+                                Messintegritaet.VOLLSTAENDIG ->
+                                    StatusPill(text = stringResource(R.string.protocol_integrity_complete), type = StatusPillType.CONNECTED)
+                                Messintegritaet.EINGESCHRAENKT ->
+                                    StatusPill(text = stringResource(R.string.protocol_integrity_limited), type = StatusPillType.WARNING)
+                                Messintegritaet.LUECKENHAFT ->
+                                    StatusPill(text = stringResource(R.string.protocol_integrity_gaps), type = StatusPillType.ERROR)
+                                null ->
+                                    StatusPill(text = stringResource(R.string.protocol_completed), type = StatusPillType.NEUTRAL)
+                            }
                         }
                     },
                 ) {
@@ -327,6 +370,63 @@ fun ProtokollDetailScreen(
                             "${sessionRecords.size}",
                             modifier = Modifier.weight(1f),
                         )
+                    }
+
+                    integritaetsbefund?.let { befund ->
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val ausfaelleStr =
+                            if (befund.ausfaelle == 1) {
+                                stringResource(R.string.protocol_outage_singular, befund.ausfaelle)
+                            } else {
+                                stringResource(R.string.protocol_outage_plural, befund.ausfaelle)
+                            }
+                        val lueckenStr =
+                            if (befund.gapAnzahl > 0) {
+                                " · " + if (befund.gapAnzahl == 1) {
+                                    stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
+                                } else {
+                                    stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
+                                }
+                            } else {
+                                ""
+                            }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().testTag("detail_integrity_row"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector =
+                                    when (befund.stufe) {
+                                        Messintegritaet.VOLLSTAENDIG -> Icons.Default.CheckCircle
+                                        Messintegritaet.EINGESCHRAENKT -> Icons.Default.Warning
+                                        Messintegritaet.LUECKENHAFT -> Icons.Default.Info
+                                    },
+                                contentDescription = null,
+                                tint =
+                                    when (befund.stufe) {
+                                        Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
+                                        Messintegritaet.EINGESCHRAENKT -> Color(0xFFD97706)
+                                        Messintegritaet.LUECKENHAFT -> MaterialTheme.colorScheme.error
+                                    },
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${stringResource(R.string.protocol_data_availability)}: ${String.format(Locale.GERMAN, "%.1f %%", befund.verfuegbarkeitProzent)} · $ausfaelleStr$lueckenStr",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (befund.rohdatenVerdichtet) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.protocol_raw_data_compressed_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }
@@ -682,6 +782,19 @@ fun ProtokollDetailScreen(
                             AuditDetailRow("Messparameter", "$paramBewertung · $paramZeit")
                             AuditDetailRow("Messpunkte erfasst", "${kennwerte?.sampleCount ?: messwerte.size}")
                             AuditDetailRow("Verbindungsausfälle", "${ausfallbaender.size} Vorfälle")
+                            integritaetsbefund?.let { b ->
+                                AuditDetailRow(
+                                    stringResource(R.string.protocol_data_availability),
+                                    String.format(Locale.GERMAN, "%.1f %%", b.verfuegbarkeitProzent),
+                                )
+                                AuditDetailRow("Datenlücken (GAP)", "${b.gapAnzahl}")
+                                if (b.unbestaetigteWerte > 0) {
+                                    AuditDetailRow("Unbestätigte Werte", "${b.unbestaetigteWerte}")
+                                }
+                                if (b.rohdatenVerdichtet) {
+                                    AuditDetailRow("Rohdaten", "Bereits verdichtet")
+                                }
+                            }
                             kennwerte?.l10Db?.let { AuditDetailRow("L10 (Spitzenpegel)", "%.1f dB".format(Locale.US, it)) }
                             kennwerte?.l50Db?.let { AuditDetailRow("L50 (Median)", "%.1f dB".format(Locale.US, it)) }
                             kennwerte?.l90Db?.let { AuditDetailRow("L90 (Grundgeräusch)", "%.1f dB".format(Locale.US, it)) }

@@ -475,4 +475,22 @@
     <string name="widget_status_inactive">Inactive</string>
     <string name="widget_action_start">Start</string>
     <string name="widget_action_stop">Stop</string>
+
+    <!-- Measurement Integrity (F-12) -->
+    <string name="protocol_integrity_complete">Complete</string>
+    <string name="protocol_integrity_limited">Limited</string>
+    <string name="protocol_integrity_gaps">Incomplete</string>
+    <string name="protocol_data_short">data</string>
+    <string name="protocol_data_availability">Data availability</string>
+    <string name="protocol_outages_short">outages</string>
+    <string name="protocol_outage_singular">%1$d outage</string>
+    <string name="protocol_outage_plural">%1$d outages</string>
+    <string name="protocol_gap_singular">%1$d gap</string>
+    <string name="protocol_gap_plural">%1$d gaps</string>
+    <string name="protocol_raw_data_compressed_hint">Not suitable for high-end report: raw data is already compressed.</string>
+
+    <!-- Recording Notice (F-09, F-11, F-35) -->
+    <string name="cockpit_aufzeichnungshinweis_title">Recording Notice</string>
+    <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnostics</string>
+    <string name="cockpit_aufzeichnungshinweis_action_restart">Restart</string>
 </resources>

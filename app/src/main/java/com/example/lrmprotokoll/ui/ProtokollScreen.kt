@@ -27,10 +27,15 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
+import com.example.lrmprotokoll.messreihe.Integritaetsbefund
+import com.example.lrmprotokoll.messreihe.Messintegritaet
 import com.example.lrmprotokoll.messreihe.SessionFilterState
+import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.gruppiereSessionsNachTag
+import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.messreihe.sessionPasstFilter
 import com.example.lrmprotokoll.report.leqBezeichnung
 import com.example.lrmprotokoll.report.lmaxBezeichnung
@@ -332,7 +337,11 @@ fun ProtokollScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .weight(1f)
+                            // Damit Tests gezielt zu einem Eintrag scrollen koennen, statt sich
+                            // darauf zu verlassen, dass er zufaellig in den Sichtbereich passt.
+                            // Analog zu "home_lazy_column" auf dem Startbildschirm.
+                            .testTag("protokoll_liste"),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 80.dp),
                 ) {
@@ -437,6 +446,7 @@ private fun ModernSessionCard(
     var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
     var eventCount by remember { mutableIntStateOf(0) }
+    var integritaetsbefund by remember { mutableStateOf<Integritaetsbefund?>(null) }
 
     LaunchedEffect(session.id) {
         val agg = db.minuteAggregateDao().fuerSession(session.id)
@@ -451,6 +461,24 @@ private fun ModernSessionCard(
         }
         val records = db.noiseDao().zwischenZeitpunkt(session.startedAt, session.endedAt ?: System.currentTimeMillis())
         eventCount = records.size
+
+        if (session.endedAt != null) {
+            val connectionEvents = db.connectionEventDao().fuerSession(session.id)
+            val ausfallbaender = leiteAusfallbaenderAb(connectionEvents, session.endedAt)
+            val gapCount = db.measurementDao().anzahlGaps(session.id)
+            val unbestaetigt = db.measurementDao().anzahlUnbestaetigtFuerSession(session.id)
+            val config = db.reportConfigDao().get() ?: ReportConfigEntity()
+            integritaetsbefund =
+                bewerteMessintegritaet(
+                    von = session.startedAt,
+                    bis = session.endedAt,
+                    ausfallbaender = ausfallbaender,
+                    gapAnzahl = gapCount,
+                    verdichteteMinuten = agg.size,
+                    unbestaetigteWerte = unbestaetigt,
+                    config = config,
+                )
+        }
     }
 
     val durationStr =
@@ -498,15 +526,32 @@ private fun ModernSessionCard(
 
                 // Status Badge
                 val badgeText =
-                    if (isLive) {
-                        stringResource(
-                            R.string.protocol_badge_active,
-                        )
-                    } else {
-                        stringResource(R.string.protocol_badge_complete)
+                    when {
+                        isLive -> stringResource(R.string.protocol_badge_active)
+                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG ->
+                            stringResource(R.string.protocol_integrity_complete)
+                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT ->
+                            stringResource(R.string.protocol_integrity_limited)
+                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT ->
+                            stringResource(R.string.protocol_integrity_gaps)
+                        else -> stringResource(R.string.protocol_badge_complete)
                     }
-                val badgeBg = if (isLive) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surfaceVariant
-                val badgeTextColor = if (isLive) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
+                val badgeBg =
+                    when {
+                        isLive -> Color(0xFFDCFCE7)
+                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> Color(0xFFDCFCE7)
+                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> Color(0xFFFEF3C7)
+                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> Color(0xFFFEE2E2)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                val badgeTextColor =
+                    when {
+                        isLive -> Color(0xFF15803D)
+                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
+                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> Color(0xFF92400E)
+                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> Color(0xFF991B1B)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
 
                 Box(
                     modifier =
@@ -538,6 +583,64 @@ private fun ModernSessionCard(
                 MetricColumn(label = leqBezeichnung(ohneMessgeraet), value = laeqStr)
                 MetricColumn(label = lmaxBezeichnung(ohneMessgeraet), value = lmaxStr)
                 MetricColumn(label = stringResource(R.string.protocol_metric_events), value = eventCount.toString())
+            }
+
+            integritaetsbefund?.let { befund ->
+                Spacer(modifier = Modifier.height(10.dp))
+                val verfuegbarkeitStr = String.format(Locale.GERMAN, "%.1f %%", befund.verfuegbarkeitProzent)
+                val ausfaelleStr =
+                    if (befund.ausfaelle == 1) {
+                        stringResource(R.string.protocol_outage_singular, befund.ausfaelle)
+                    } else {
+                        stringResource(R.string.protocol_outage_plural, befund.ausfaelle)
+                    }
+                val lueckenStr =
+                    if (befund.gapAnzahl > 0) {
+                        " · " + if (befund.gapAnzahl == 1) {
+                            stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
+                        } else {
+                            stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
+                        }
+                    } else {
+                        ""
+                    }
+                val statusText = "${befund.stufe.anzeigetext()} · $verfuegbarkeitStr ${stringResource(R.string.protocol_data_short)} · $ausfaelleStr$lueckenStr"
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.testTag("session_integrity_${session.id}"),
+                ) {
+                    Icon(
+                        imageVector =
+                            when (befund.stufe) {
+                                Messintegritaet.VOLLSTAENDIG -> Icons.Default.CheckCircle
+                                Messintegritaet.EINGESCHRAENKT -> Icons.Default.Warning
+                                Messintegritaet.LUECKENHAFT -> Icons.Default.Info
+                            },
+                        contentDescription = null,
+                        tint =
+                            when (befund.stufe) {
+                                Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
+                                Messintegritaet.EINGESCHRAENKT -> Color(0xFFD97706)
+                                Messintegritaet.LUECKENHAFT -> MaterialTheme.colorScheme.error
+                            },
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (befund.rohdatenVerdichtet) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = stringResource(R.string.protocol_raw_data_compressed_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))

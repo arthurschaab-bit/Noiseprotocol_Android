@@ -7,8 +7,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.SessionEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,9 +32,24 @@ class ProtokollScreenTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
+    /**
+     * `AppDatabase.getDatabase()` ist ein prozessweites Singleton; ohne Ruecksetzen sieht diese
+     * Klasse die Sitzungen, die andere Testklassen im selben Gradle-Fork hinterlassen haben. Die
+     * Protokollliste wird dadurch laenger, und hoehenabhaengige Zusicherungen schlagen je nach
+     * Ausfuehrungsreihenfolge fehl - genau das ist hier passiert, nachdem F-12 jeden Eintrag um
+     * die Integritaetszeile verlaengert hat. Isoliert war die Klasse gruen, im Gesamtlauf rot.
+     *
+     * Dieselbe Regel steht als Pruefpunkt 3 in docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md und wird
+     * von BerichtErstellenSheetTest bereits so umgesetzt.
+     */
+    @Before
     @After
     fun aufraeumen() {
         AudioRecordingService.testSetzeLaeuft(false)
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        runBlocking(Dispatchers.IO) {
+            app.container.database.clearAllTables()
+        }
     }
 
     @Test
@@ -100,12 +117,23 @@ class ProtokollScreenTest {
         composeRule.setContent {
             ProtokollScreen(onBack = {}, onOpenSession = {}, onStartNewMeasurement = {})
         }
+        val formatter = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        val tagHeute = "protokoll_tagesheader_${formatter.format(java.util.Date(heute))}"
+        val tagGestern = "protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}"
+
+        // Nur auf die erste Ueberschrift warten: In einer LazyColumn wird nicht komponiert, was
+        // ausserhalb des Sichtbereichs liegt. Auf BEIDE Marken gleichzeitig zu warten haengt
+        // davon ab, dass beide zufaellig hineinpassen - und genau das gilt seit F-12 nicht mehr
+        // zuverlaessig, weil jeder Eintrag um die Integritaetszeile gewachsen ist.
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("PCE-323").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(tagHeute).fetchSemanticsNodes().isNotEmpty()
         }
 
-        val formatter = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(heute))}").assertIsDisplayed()
-        composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}").assertIsDisplayed()
+        composeRule.onNodeWithTag(tagHeute).assertIsDisplayed()
+        // Zur zweiten Ueberschrift scrollen statt die Zusicherung auf assertExists abzuschwaechen:
+        // Geprueft werden soll, dass die Tagestrennung SICHTBAR ist, nicht nur im Semantikbaum
+        // steht. Dasselbe Vorgehen wie warteUndScrolleZu() fuer die Startbildschirm-Liste.
+        composeRule.onNodeWithTag("protokoll_liste").performScrollToNode(hasTestTag(tagGestern))
+        composeRule.onNodeWithTag(tagGestern).assertIsDisplayed()
     }
 }

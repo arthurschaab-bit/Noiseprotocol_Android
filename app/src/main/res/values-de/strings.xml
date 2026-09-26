@@ -477,4 +477,22 @@
     <string name="widget_status_inactive">Inaktiv</string>
     <string name="widget_action_start">Starten</string>
     <string name="widget_action_stop">Stoppen</string>
+
+    <!-- Messintegrität (F-12) -->
+    <string name="protocol_integrity_complete">Vollständig</string>
+    <string name="protocol_integrity_limited">Eingeschränkt</string>
+    <string name="protocol_integrity_gaps">Lückenhaft</string>
+    <string name="protocol_data_short">Daten</string>
+    <string name="protocol_data_availability">Datenverfügbarkeit</string>
+    <string name="protocol_outages_short">Ausfälle</string>
+    <string name="protocol_outage_singular">%1$d Ausfall</string>
+    <string name="protocol_outage_plural">%1$d Ausfälle</string>
+    <string name="protocol_gap_singular">%1$d Lücke</string>
+    <string name="protocol_gap_plural">%1$d Lücken</string>
+    <string name="protocol_raw_data_compressed_hint">Für einen High-End-Bericht nicht geeignet: Rohdaten sind bereits verdichtet.</string>
+
+    <!-- Aufzeichnungshinweis (F-09, F-11, F-35) -->
+    <string name="cockpit_aufzeichnungshinweis_title">Aufzeichnungshinweis</string>
+    <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
+    <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -62,6 +63,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
@@ -310,6 +312,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 DiagnoseScreen(
                     onBack = { navController.popBackStack() },
                     onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    onNavigateToSettings = { tab ->
+                        val route = if (tab != null) "settings?tab=$tab" else "settings"
+                        navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onNavigateToMeter = {
+                        navController.navigate("meter") { launchSingleTop = true }
+                    },
                 )
             }
             composable("trash") {
@@ -363,6 +372,15 @@ internal fun istBottomNavZielAktiv(
     currentRoute: String?,
     ziel: String,
 ): Boolean = currentRoute == ziel || currentRoute?.startsWith("$ziel/") == true
+
+/**
+ * Liest, ob die App von der Akku-Optimierung ausgenommen ist. Ausgelagert, damit der Wert bei
+ * jedem ON_RESUME frisch geholt werden kann statt nur einmal beim Aufbau der Komposition.
+ */
+private fun liestAkkuAusnahme(context: Context): Boolean {
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+    return powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+}
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -514,6 +532,25 @@ fun NoiseProtocolApp(
             }
         }
 
+    var hasBluetoothPermission by remember {
+        mutableStateOf(BluetoothPermissions.hasPermissions(context))
+    }
+    val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
+
+    fun kannExakteAlarme() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() == true
+        } else {
+            true
+        }
+    var canScheduleExactAlarms by remember { mutableStateOf(kannExakteAlarme()) }
+
+    // Muss wie die uebrigen Pruefwerte bei ON_RESUME neu gelesen werden: Seit F-05 fuehrt der
+    // Knopf "Beheben" gezielt in die Akku-Einstellungen. Ohne Auffrischung zeigt die
+    // Selbstpruefung nach der Rueckkehr weiter den alten Stand - also genau den Fehler, den F-04
+    // beseitigen sollte, nur an anderer Stelle.
+    var isBatteryOptimizationIgnored by remember { mutableStateOf(liestAkkuAusnahme(context)) }
+
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
@@ -527,6 +564,9 @@ fun NoiseProtocolApp(
                         } else {
                             true
                         }
+                    hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
+                    canScheduleExactAlarms = kannExakteAlarme()
+                    isBatteryOptimizationIgnored = liestAkkuAusnahme(context)
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -536,21 +576,26 @@ fun NoiseProtocolApp(
     // F3: System-Selbstprüfung für Warn-Banner
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
-    val isBatteryOptimizationIgnored =
-        remember {
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
-        }
+    val isBluetoothAdapterEnabled by container.bluetoothAdapterStateObserver.enabled.collectAsState()
     val healthOverview =
-        remember(hasAudioPermission, hasNotificationPermission, dienstAktiv, verbindungszustand) {
+        remember(
+            hasAudioPermission,
+            hasNotificationPermission,
+            hasBluetoothPermission,
+            isBatteryOptimizationIgnored,
+            canScheduleExactAlarms,
+            isBluetoothAdapterEnabled,
+            dienstAktiv,
+            verbindungszustand,
+        ) {
             bewerteSystemZustand(
                 SystemHealthParams(
                     hasAudioPermission = hasAudioPermission,
                     hasNotificationPermission = hasNotificationPermission,
-                    hasBluetoothPermission = true,
+                    hasBluetoothPermission = hasBluetoothPermission,
                     isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                    canScheduleExactAlarms = true,
-                    isBluetoothAdapterEnabled = true,
+                    canScheduleExactAlarms = canScheduleExactAlarms,
+                    isBluetoothAdapterEnabled = isBluetoothAdapterEnabled,
                     isMeterPinned = settingsManager.meterDeviceAddress != null,
                     meterConnectionState = verbindungszustand,
                     isAlertingConfigured = settingsManager.alarmierungAktiv,

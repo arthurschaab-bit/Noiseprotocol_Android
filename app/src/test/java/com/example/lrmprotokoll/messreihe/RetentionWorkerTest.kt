@@ -48,6 +48,8 @@ class RetentionWorkerTest {
         override suspend fun zwischen(von: Long, bis: Long) = emptyList<MeasurementEntity>()
         override suspend fun anzahlZwischen(von: Long, bis: Long) = 0
         override suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long) = 0
+        override suspend fun anzahlGaps(sessionId: Long): Int = 0
+        override suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long): Int = 0
         override suspend fun aelterAls(grenze: Long): List<MeasurementEntity> =
             error("Simulierter DB-Fehler fuer den Retry-Test")
         override suspend fun loescheAelterAls(grenze: Long) {}

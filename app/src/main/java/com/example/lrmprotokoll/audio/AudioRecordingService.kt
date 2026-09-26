@@ -80,10 +80,14 @@ class AudioRecordingService : LifecycleService() {
         private val _laufendesFormat = MutableStateFlow<Aufnahmeformat?>(null)
         val laufendesFormat: StateFlow<Aufnahmeformat?> = _laufendesFormat.asStateFlow()
 
+        private val _aufzeichnungsHinweis = MutableStateFlow<String?>(null)
+        val aufzeichnungsHinweis: StateFlow<String?> = _aufzeichnungsHinweis.asStateFlow()
+
         internal fun testSetzeLaeuft(wert: Boolean) { _laeuft.value = wert }
         internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) { _audioAufnahmeAktiv.value = wert }
         internal fun testSetzeCurrentMicDb(wert: Double?) { _currentMicDb.value = wert }
         internal fun testSetzeLaufendesFormat(wert: Aufnahmeformat?) { _laufendesFormat.value = wert }
+        internal fun testSetzeAufzeichnungsHinweis(wert: String?) { _aufzeichnungsHinweis.value = wert }
     }
 
     data class Aufnahmeformat(val abtastrate: Int, val kanaele: Int)
@@ -337,8 +341,14 @@ class AudioRecordingService : LifecycleService() {
 
         expliziterServiceStopAngefordert = false
         if (!isForegroundActive) {
+            val gestartet = startForegroundService()
+            if (!gestartet) {
+                isForegroundActive = false
+                _laeuft.value = false
+                settingsManager.monitoringWasActive = false
+                return START_NOT_STICKY
+            }
             isForegroundActive = true
-            startForegroundService()
             settingsManager.monitoringWasActive = true
             _laeuft.value = true
         }
@@ -393,7 +403,7 @@ class AudioRecordingService : LifecycleService() {
         return serviceType
     }
 
-    private fun startForegroundService() {
+    private fun startForegroundService(): Boolean {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
             "Lärm-Monitoring Dienst",
@@ -402,14 +412,39 @@ class AudioRecordingService : LifecycleService() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
         val serviceType = berechneForegroundServiceType()
-        try {
-            if (serviceType != 0) {
-                startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value), serviceType)
-            } else {
+        if (serviceType == 0) {
+            Log.w("AudioRecordingService", "Foreground-Service nicht gestartet: weder Mikrofonberechtigung noch gekoppeltes Messgerät vorhanden (F-35)")
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "Foreground-Service bewusst nicht gestartet: serviceType=0 (weder RECORD_AUDIO noch Messgeraet)",
+            )
+            stillerAusfallHinweis = "Kein Messgerät gekoppelt und Mikrofonberechtigung fehlt."
+            // Der Dienst wird von allen Aufrufern mit Context.startForegroundService() gestartet.
+            // Android verlangt danach ZWINGEND ein Service.startForeground() - stopSelf() allein
+            // genuegt ab Android 12 nicht. Ohne diesen Aufruf wirft das System
+            // ForegroundServiceDidNotStartInTimeException, und das ist ein FATAL EXCEPTION der
+            // ganzen App, kein Testproblem: belegt im Logcat von CI-Lauf 36244540843
+            // (ACRA hat ihn als App-Absturz erfasst).
+            //
+            // Deshalb den Vertrag erfuellen und sofort wieder abraeumen. Die Zweiargument-Variante
+            // erbt die Manifest-Typen; sie wurde vor diesem PR an derselben Stelle aufgerufen und
+            // hat dort nachweislich keinen Absturz erzeugt. runCatching, weil sie je nach Geraet
+            // eine SecurityException werfen kann - dann bleibt es beim geordneten Stopp.
+            runCatching {
                 startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value))
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            }.onFailure { fehler ->
+                Log.w("AudioRecordingService", "Vertragserfuellender startForeground fehlgeschlagen", fehler)
             }
+            stopSelf()
+            return false
+        }
+
+        return try {
+            startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value), serviceType)
             aktiverForegroundServiceType = serviceType
             diagnosticsReporter.breadcrumb("AudioService", "Foreground-Service erfolgreich gestartet (types=$serviceType)")
+            true
         } catch (e: Throwable) {
             Log.e("AudioRecordingService", "Foreground Service konnte nicht mit Typen gestartet werden", e)
             diagnosticsReporter.report(
@@ -419,12 +454,10 @@ class AudioRecordingService : LifecycleService() {
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
                 cause = e
             )
-            try {
-                startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value))
-            } catch (fallbackEx: Throwable) {
-                Log.e("AudioRecordingService", "Fallback startForeground fehlgeschlagen", fallbackEx)
-                stopSelf()
-            }
+            // F-35: Wiederholung desselben fehlgeschlagenen Aufrufs unterbinden
+            stillerAusfallHinweis = "Vordergrunddienst konnte nicht gestartet werden."
+            stopSelf()
+            false
         }
     }
 
@@ -521,6 +554,7 @@ class AudioRecordingService : LifecycleService() {
                 isRunning = false
                 _audioAufnahmeAktiv.value = false
                 settingsManager.audioMonitoringWasActive = false
+                stillerAusfallHinweis = "Mikrofonberechtigung fehlt."
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return@launch
@@ -569,6 +603,7 @@ class AudioRecordingService : LifecycleService() {
                 isRunning = false
                 _audioAufnahmeAktiv.value = false
                 settingsManager.audioMonitoringWasActive = false
+                stillerAusfallHinweis = "Mikrofon-Initialisierung fehlgeschlagen. Bitte Berechtigungen und Audio-Geräte prüfen."
                 stopSelf()
                 return@launch
             }
@@ -585,6 +620,7 @@ class AudioRecordingService : LifecycleService() {
                 isRunning = false
                 _audioAufnahmeAktiv.value = false
                 settingsManager.audioMonitoringWasActive = false
+                stillerAusfallHinweis = "Mikrofon ist von einer anderen App belegt – beenden und erneut versuchen."
                 audioRecord.release()
                 stopSelf()
                 return@launch
@@ -604,6 +640,7 @@ class AudioRecordingService : LifecycleService() {
                 isRunning = false
                 _audioAufnahmeAktiv.value = false
                 settingsManager.audioMonitoringWasActive = false
+                stillerAusfallHinweis = "Mikrofon-Aufnahme konnte nicht gestartet werden (von anderer App belegt)."
                 audioRecord.release()
                 stopSelf()
                 return@launch
@@ -617,7 +654,7 @@ class AudioRecordingService : LifecycleService() {
             _laufendesFormat.value = Aufnahmeformat(audioRecord.sampleRate, aktiveKanalzahl ?: 1)
             _audioAufnahmeAktiv.value = true
             audioSollIstFehlerGemeldet = false
-            if (stillerAusfallHinweis == "WAV-/Mikrofon-Aufzeichnung unerwartet inaktiv") stillerAusfallHinweis = null
+            stillerAusfallHinweis = null
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "Mikrofon-Monitoring aktiv",
@@ -958,6 +995,7 @@ class AudioRecordingService : LifecycleService() {
                 "aktiveWavDatei" to activeWavRecorder?.file?.name,
             ),
         )
+        updateNotification(connectionSupervisor.state.value)
     }
 
     private fun pruefeStillenAusfall() {
@@ -1059,7 +1097,11 @@ class AudioRecordingService : LifecycleService() {
     private val activeWavRecorderLock = Any()
     private val triggerWachhund = TriggerWachhund()
     @Volatile private var wavOhneMikrofonGemeldet = false
-    @Volatile private var stillerAusfallHinweis: String? = null
+    private var stillerAusfallHinweis: String?
+        get() = _aufzeichnungsHinweis.value
+        set(value) {
+            _aufzeichnungsHinweis.value = value
+        }
 
     private var audioMonitoringRestartZustand = AudioMonitoringRestartZustand()
 

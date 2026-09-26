@@ -8,6 +8,8 @@ import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,9 +47,11 @@ import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.HealthActionType
 import com.example.lrmprotokoll.diagnose.HealthStatus
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.messreihe.zaehleReconnects
@@ -55,6 +60,9 @@ import com.example.lrmprotokoll.ui.theme.statusColors
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -89,7 +97,10 @@ private fun zaehleSupportOutbox(context: Context): Int =
 @Composable
 fun DiagnoseScreen(
     onBack: () -> Unit,
-    onShowSnackbar: ((String) -> Unit)? = null
+    onShowSnackbar: ((String) -> Unit)? = null,
+    onNavigateToSettings: ((tab: String?) -> Unit)? = null,
+    onNavigateToMeter: (() -> Unit)? = null,
+    exakteAlarmeErlaubtOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -119,25 +130,123 @@ fun DiagnoseScreen(
     var supportBundleOutboxAnzahl by remember { mutableStateOf(0) }
     var supportBundleAktionLaeuft by remember { mutableStateOf(false) }
 
-    val hasAudioPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-        ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    } else true
-    val hasBluetoothPermission = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasScanPermission(context)
+    val alarmManager = remember { context.getSystemService(android.app.AlarmManager::class.java) }
+    fun kannExakteAlarme(): Boolean =
+        exakteAlarmeErlaubtOverride ?: if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() == true
+        } else {
+            true
+        }
+
+    var hasAudioPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+    var hasBluetoothPermission by remember {
+        mutableStateOf(BluetoothPermissions.hasPermissions(context))
+    }
+    var canScheduleExactAlarms by remember {
+        mutableStateOf(kannExakteAlarme())
+    }
+    val isBluetoothAdapterEnabled by container.bluetoothAdapterStateObserver.enabled.collectAsState()
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted
+    }
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasNotificationPermission = granted
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAudioPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else true
+                hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
+                canScheduleExactAlarms = kannExakteAlarme()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun appDetailsIntent(): Intent =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+
+    /**
+     * Oeffnet den ersten Systemdialog, den das Geraet beantwortet.
+     *
+     * Nicht jedes Geraet kennt jeden Settings-Intent, deshalb die Kandidatenliste. Scheitert
+     * JEDER Weg, darf das nicht still passieren: Sonst tippt der Nutzer auf "Beheben" und es
+     * geschieht sichtbar nichts. Genau diese Fehlerklasse hat Phase 1 mit F-27 fuer die
+     * Exportwege beseitigt; sie gehoert hier nicht wieder eingefuehrt.
+     */
+    fun oeffneErsteErreichbare(
+        beschreibung: String,
+        vararg kandidaten: Intent,
+    ) {
+        for (intent in kandidaten) {
+            try {
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {
+                // Naechsten Kandidaten versuchen.
+            }
+        }
+        container.diagnosticsReporter.breadcrumb(
+            "Diagnose",
+            "Kein Systemdialog erreichbar fuer: $beschreibung",
+        )
+        val meldung = "Die Einstellungen für „$beschreibung\" lassen sich auf diesem Gerät nicht öffnen."
+        if (onShowSnackbar != null) {
+            onShowSnackbar(meldung)
+        } else {
+            Toast.makeText(context, meldung, Toast.LENGTH_LONG).show()
+        }
+    }
 
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
     val isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
 
-    val healthOverview = remember(hasAudioPermission, hasNotificationPermission, hasBluetoothPermission, isBatteryOptimizationIgnored, verbindungszustand, dienstAktiv) {
+    val healthOverview = remember(
+        hasAudioPermission,
+        hasNotificationPermission,
+        hasBluetoothPermission,
+        isBatteryOptimizationIgnored,
+        canScheduleExactAlarms,
+        isBluetoothAdapterEnabled,
+        verbindungszustand,
+        dienstAktiv,
+    ) {
         bewerteSystemZustand(
             SystemHealthParams(
                 hasAudioPermission = hasAudioPermission,
                 hasNotificationPermission = hasNotificationPermission,
                 hasBluetoothPermission = hasBluetoothPermission,
                 isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                canScheduleExactAlarms = true,
-                isBluetoothAdapterEnabled = true,
+                canScheduleExactAlarms = canScheduleExactAlarms,
+                isBluetoothAdapterEnabled = isBluetoothAdapterEnabled,
                 isMeterPinned = container.settingsManager.meterDeviceAddress != null,
                 meterConnectionState = verbindungszustand,
                 isAlertingConfigured = container.settingsManager.alarmierungAktiv,
@@ -228,12 +337,70 @@ fun DiagnoseScreen(
                                 }
 
                                 checkItem.actionLabel?.let { label ->
-                                    TextButton(onClick = {
-                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.fromParts("package", context.packageName, null)
-                                        }
-                                        context.startActivity(intent)
-                                    }) {
+                                    TextButton(
+                                        onClick = {
+                                            when (checkItem.actionType) {
+                                                HealthActionType.REQUEST_AUDIO_PERMISSION -> {
+                                                    audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                }
+                                                HealthActionType.REQUEST_BLUETOOTH_PERMISSION -> {
+                                                    bluetoothPermissionLauncher.launch(BluetoothPermissions.requiredPermissions())
+                                                }
+                                                HealthActionType.REQUEST_NOTIFICATION_PERMISSION -> {
+                                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                                    } else {
+                                                        oeffneErsteErreichbare("Benachrichtigungen", appDetailsIntent())
+                                                    }
+                                                }
+                                                HealthActionType.BATTERY_OPTIMIZATION -> {
+                                                    oeffneErsteErreichbare(
+                                                        "Akku-Optimierung",
+                                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                            data = Uri.parse("package:${context.packageName}")
+                                                        },
+                                                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                                        appDetailsIntent(),
+                                                    )
+                                                }
+                                                HealthActionType.EXACT_ALARM_PERMISSION -> {
+                                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                                        oeffneErsteErreichbare(
+                                                            "Exakte Alarme",
+                                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                                                data = Uri.parse("package:${context.packageName}")
+                                                            },
+                                                            appDetailsIntent(),
+                                                        )
+                                                    }
+                                                }
+                                                HealthActionType.ENABLE_BLUETOOTH -> {
+                                                    oeffneErsteErreichbare(
+                                                        "Bluetooth",
+                                                        Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
+                                                        Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE),
+                                                        appDetailsIntent(),
+                                                    )
+                                                }
+                                                HealthActionType.CONNECT_METER -> {
+                                                    onNavigateToMeter?.invoke()
+                                                }
+                                                HealthActionType.CONFIGURE_ALERTING -> {
+                                                    onNavigateToSettings?.invoke(SettingsTab.START.routeArg)
+                                                }
+                                                HealthActionType.CONFIGURE_DRIVE -> {
+                                                    onNavigateToSettings?.invoke(SettingsTab.DATEN.routeArg)
+                                                }
+                                                HealthActionType.OPEN_SETTINGS -> {
+                                                    onNavigateToSettings?.invoke(null)
+                                                }
+                                                null -> {
+                                                    oeffneErsteErreichbare("App-Einstellungen", appDetailsIntent())
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.testTag("health_action_${checkItem.id}"),
+                                    ) {
                                         Text(label)
                                     }
                                 }

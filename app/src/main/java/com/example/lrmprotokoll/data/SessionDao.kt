@@ -90,6 +90,17 @@ interface MeasurementDao {
     @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis AND (flags & 8) = 0 AND (weighting IS NULL OR timeWeighting IS NULL)")
     suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long): Int
 
+    /** Anzahl der Rohwerte mit gesetztem GAP-Flag je Session (F-12). */
+    @Query("SELECT COUNT(*) FROM measurements WHERE sessionId = :sessionId AND (flags & 8) != 0")
+    suspend fun anzahlGaps(sessionId: Long): Int
+
+    /** GAP-Zeilen sind keine bestaetigten Pegelmessungen und zaehlen hier nicht mit (F-12). */
+    @Query(
+        "SELECT COUNT(*) FROM measurements WHERE sessionId = :sessionId AND (flags & 8) = 0 AND " +
+            "(weighting IS NULL OR timeWeighting IS NULL)",
+    )
+    suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long): Int
+
     /** Fuer den Retention-Job (Plan 13.2): Rohwerte aelter als die Grenze. */
     @Query("SELECT * FROM measurements WHERE timestamp < :grenze ORDER BY timestamp")
     suspend fun aelterAls(grenze: Long): List<MeasurementEntity>

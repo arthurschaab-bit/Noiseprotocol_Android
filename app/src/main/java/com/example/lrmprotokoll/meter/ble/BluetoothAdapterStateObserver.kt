@@ -57,4 +57,9 @@ class BluetoothAdapterStateObserver(context: Context) {
             false
         }
     }
+
+    internal fun testSetzeEnabled(wert: Boolean) {
+        _enabled.value = wert
+    }
 }
+
