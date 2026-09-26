@@ -210,38 +210,80 @@ gesperrt. Damit scheidet Ursache 3 („`startButton` wurde vor dem Öffnen der B
 initialisiert") als Erklärung aus, und Ursache 2 ist nur die halbe Wahrheit: nicht die Ladezeit
 selbst blockiert, sondern das, was *während* der Ladezeit gerendert wird.
 
-**Tatsächliche Ursache.** Solange `laedt == true` ist, rendert `BerichtErstellenSheet.kt:163` einen
-`CircularProgressIndicator` — einen *unbestimmten* Fortschrittsindikator, also eine endlose
-Animation. Mit `autoAdvance = true` fordert sie fortlaufend neue Frames an; die Leerlauferkennung
-wird nie fertig, und `waitUntil` läuft in die Zeitüberschreitung, obwohl die Room-Abfrage längst
-zurück ist. Das ist exakt dieselbe Fehlerklasse wie in Abschnitt 4.5 (`BluetoothStatusBadge`,
-`rememberInfiniteTransition`) und beim `ExposedDropdownMenu` in Abschnitt 4.2.
+**Hypothese (26.09.2026, inzwischen widerlegt).** Solange `laedt == true` ist, rendert
+`BerichtErstellenSheet.kt:163` einen `CircularProgressIndicator` — einen *unbestimmten*
+Fortschrittsindikator, also eine endlose Animation. Die naheliegende Erklärung lautete: sie fordert
+fortlaufend neue Frames an, die Leerlauferkennung wird nie fertig, und `waitUntil` läuft in die
+Zeitüberschreitung — dieselbe Fehlerklasse wie in Abschnitt 4.5 (`BluetoothStatusBadge`) und
+Abschnitt 4.2 (`ExposedDropdownMenu`).
 
-Daraus folgt auch, warum die damalige Erhöhung des Timeouts auf 15.000 ms nicht helfen konnte:
-**gegen eine endlose Animation ist kein Timeout groß genug.** Sie hat den Fehlschlag nur nach hinten
-verschoben, nicht beseitigt — und den Abschnitt fälschlich als erledigt erscheinen lassen.
+**Diese Erklärung trägt nicht.** Sie wurde geprüft und ist an den Messwerten gescheitert; die
+Einzelheiten stehen unten unter „Was die Messungen zeigen".
 
-Die beobachteten rund 50 % sind ein Rennen: Kommt die Room-Abfrage zurück, bevor der Indikator in
-die Komposition gelangt, verschwindet er folgenlos; verliert sie das Rennen, blockiert er. Deshalb
-traf es mal die eine, mal die andere Testmethode der Klasse — beide warten auf dieselbe Bedingung.
+**Was unabhängig davon gilt:** Die Erhöhung des Timeouts auf 15.000 ms hat den Fehlschlag nicht
+beseitigt. Die Messreihen unten zeigen ihn weiterhin in rund einem Drittel der Läufe. Der Abschnitt
+galt seit dem 25.09.2026 zu Unrecht als erledigt.
 
-**Gemessene Rate vorher** (`BerichtErstellenSheetTest`, unveränderter Stand, je eigener Gradle-Lauf
-mit `--rerun-tasks`): **3 rot / 3 grün** bei sechs Läufen.
+### Was die Messungen zeigen
 
-**Behebung.** Beide Testmethoden öffnen das Sheet jetzt über die gemeinsame Hilfsmethode
-`oeffneSheetUndWarteAufStartknopf()`. Sie hält die Testuhr an (`mainClock.autoAdvance = false`) und
-stellt sie pro Prüfschritt gezielt weiter; das leert den Main-Looper, ohne die Animation mitlaufen
-zu lassen. `autoAdvance` wird im `finally` wieder eingeschaltet, damit nachfolgende Schritte
-unverändert arbeiten. Das ist dasselbe Muster, mit dem `c7c16f2` das `ExposedDropdownMenu` in
-`ReportConfigSettingsTest` gelöst hat.
+**Drei Varianten, je eigener Gradle-Lauf mit `--rerun-tasks`, auf demselben Rechner:**
 
-**Gemessene Rate nachher:** **3 grün / 0 rot** bei den ersten drei Läufen derselben Messreihe.
-Die Serie wird auf zwölf Läufe fortgesetzt; das Ergebnis wird hier nachgetragen.
+| Variante | rot / gesamt | Rate |
+|---|---|---|
+| unverändert (Basis) | 6 / 16 | 37,5 % |
+| Testuhr anhalten (`autoAdvance = false`, Frames gezielt setzen) | 2 / 12 | 16,7 % |
+| zusätzlich `shadowOf(Looper).idle()` und echte Wartezeit je Prüfschritt | 6 / 16 | 37,5 % |
+
+Die zweite Variante sieht besser aus, ist es aber nicht nachweislich: Fisher-Exakt-Test gegen die
+Basis ergibt p ≈ 0,22. Die dritte Variante ist **exakt** deckungsgleich mit der Basis, obwohl sie
+zwei zusätzliche, unabhängig voneinander plausible Gegenmaßnahmen enthält. Wäre die Animation die
+Ursache, müsste das Anhalten der Uhr zuverlässig wirken. Es tut es nicht.
+
+**Der entscheidende Messwert** stammt aus der Diagnose, die `oeffneSheetUndWarteAufStartknopf()`
+seither bei jeder Zeitüberschreitung ausgibt:
+
+```
+verstricheneMs=15334 pruefungen=1294 startknopfVorhanden=1 deaktiviert=true
+ladeindikatoren=1 direkteAbfrageMs=4 direkteAbfrage=vorhanden
+```
+
+Zu lesen ist das so:
+
+- `verstricheneMs=15334` und `pruefungen=1294` — das Timeout lief über 15 Sekunden **echter** Zeit
+  ab, und die Prüfschleife lief dabei durch. Sie hing nicht.
+- `startknopfVorhanden=1` — das Sheet ist offen. Ursache 3 („`startButton` wurde vor dem Öffnen der
+  BottomSheet initialisiert") ist damit widerlegt.
+- `ladeindikatoren=1` und `deaktiviert=true` — `laedt` ist noch `true`, der `LaunchedEffect` steht.
+- **`direkteAbfrageMs=4`** — im selben Moment führt die Diagnose dieselbe Room-Abfrage direkt aus:
+  sie kommt nach **4 Millisekunden** mit einem Ergebnis zurück.
+
+Die Datenbank ist damit entlastet. Es hängt nicht die Abfrage, sondern die **Rückkehr der
+Coroutine**: `withContext(Dispatchers.IO)` läuft auf einem echten Threadpool und muss auf den
+UI-Dispatcher von Compose zurückspringen. Dieser Rücksprung findet in den betroffenen Läufen
+innerhalb von 15 Sekunden nicht statt.
+
+Ob die dauerlaufende Animation des Indikators zu diesem ausbleibenden Rücksprung beiträgt, ist
+**nicht geklärt** — sie ist nachweislich auf dem Schirm (`ladeindikatoren=1`), aber sie zu
+entschärfen hat die Rate nicht zuverlässig gesenkt.
+
+### Stand und offener Punkt
+
+**Der Flake ist nicht behoben.** Eingebaut ist bisher:
+
+1. Die Hilfsmethode `oeffneSheetUndWarteAufStartknopf()` in beiden Testmethoden. Ihre Wirkung ist
+   **nicht nachgewiesen** (2/12 gegen 6/16, p ≈ 0,22). Sie bleibt vorerst, weil die Ursache noch
+   offen ist und ein Rückbau ohne Erkenntnisgewinn nur weitere Bewegung erzeugt.
+2. Die Diagnose in `diagnose()`, die bei jeder Zeitüberschreitung die Messwerte oben ausgibt —
+   einzeilig, damit `.github/scripts/testbericht.py` sie in die CI-Zusammenfassung übernimmt. Ohne
+   sie ist ein Fehlschlag, der nur in rund einem Drittel der Läufe auftritt, in der CI nicht
+   untersuchbar.
 
 **Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
 `enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
 Roadmap-Phase 3 (`docs/PROMPT_UX_PHASE3.md`), deren Definition of Done ausdrücklich verlangt,
-`BerichtErstellenSheetTest` dabei anzupassen statt zu umgehen.
+`BerichtErstellenSheetTest` dabei anzupassen statt zu umgehen. Wenn dort die Vorbedingungen in eine
+reine Funktion gezogen werden, entfällt der `LaunchedEffect`-Ladepfad als Wartebedingung des Tests —
+das ist der aussichtsreichste Weg, den Flake ursächlich loszuwerden.
 
 ### 4.5 `MeterScreenComposeTest` & `MeterScreenPermissionAndScanTest` (Robolectric)
 - **Analyse PR #179 vs. PR #189:**
@@ -267,7 +309,9 @@ Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidu
    `waitForIdle()` in der Komposition, wird die Leerlauferkennung nie fertig — unabhängig von der
    Höhe des Timeouts. Entweder die Uhr für diesen Abschnitt anhalten (`mainClock.autoAdvance = false`,
    Frames gezielt setzen, im `finally` zurücksetzen) oder auf einen Zustand warten, der den Indikator
-   nicht einschließt. Siehe Nachtrag in Abschnitt 4.4.
+   nicht einschließt. **Achtung:** In Abschnitt 4.4 hat sich genau diese Erklärung als nicht
+   tragfähig erwiesen — der Punkt bleibt als Vorsichtsmaßnahme sinnvoll, ersetzt aber keine
+   Messung im Einzelfall.
 3. **Datenbank-Isolation:** Jede Testklasse, die Komponenten mit DAO-Zugriffen testet, muss `@Before`/`@After`
    `db.clearAllTables()` auf `Dispatchers.IO` ausführen, da Room-Instanzen in Gradle-Test-Forks als
    Singleton fortbestehen.

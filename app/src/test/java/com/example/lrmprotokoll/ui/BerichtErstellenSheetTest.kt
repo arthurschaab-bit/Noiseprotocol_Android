@@ -1,6 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -32,6 +35,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.system.measureTimeMillis
 
 /** Der UI-Pfad erreicht den Runner und zeigt dessen Dateifehler ohne Absturz. */
 @RunWith(RobolectricTestRunner::class)
@@ -65,19 +69,78 @@ class BerichtErstellenSheetTest {
      * docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md Abschnitt 4.5 beschrieben.
      */
     private fun oeffneSheetUndWarteAufStartknopf() {
+        val beginn = System.currentTimeMillis()
+        var pruefungen = 0
         try {
             composeRule.mainClock.autoAdvance = false
             composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
             composeRule.mainClock.advanceTimeBy(500)
             composeRule.waitUntil(timeoutMillis = 15_000L) {
                 composeRule.mainClock.advanceTimeBy(50)
+                pruefungen++
                 runCatching {
                     composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
                 }.isSuccess
             }
+        } catch (zeitueberschreitung: ComposeTimeoutException) {
+            throw AssertionError(diagnose(beginn, pruefungen), zeitueberschreitung)
         } finally {
             composeRule.mainClock.autoAdvance = true
         }
+    }
+
+    /**
+     * Sammelt im Moment der Zeitüberschreitung alles, was die Ursache unterscheidbar macht.
+     *
+     * Der Fehlschlag tritt nur in einem Teil der Läufe auf und in der CI entsprechend selten. Ohne
+     * diese Messwerte in der Fehlermeldung ist er dort nicht untersuchbar - dasselbe Vorgehen wie
+     * bei `SchriftskalierungInstrumentedTest`, dessen Zusicherungen ihre Messwerte mitführen.
+     *
+     * Die Werte trennen die in Frage kommenden Erklärungen:
+     * - `startknopfVorhanden=0` -> das Sheet ist nicht aufgegangen (Animation/Fenster).
+     * - `ladeindikatoren>0` -> `laedt` ist noch `true`, der `LaunchedEffect` steht.
+     * - `direkteAbfrageMs` klein -> die Room-Abfrage selbst ist schnell; dann hängt nicht die
+     *   Datenbank, sondern die Rückkehr der Coroutine auf den Main-Dispatcher.
+     * - `direkteAbfrageMs` groß -> die Datenbank ist die Ursache.
+     */
+    private fun diagnose(
+        beginn: Long,
+        pruefungen: Int,
+    ): String {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val knoten = composeRule.onAllNodesWithTag("btn_bericht_erstellen_start")
+        val gefunden = knoten.fetchSemanticsNodes()
+        val merkmale = gefunden.firstOrNull()?.config
+        val deaktiviert = merkmale?.contains(SemanticsProperties.Disabled)
+        val ladeindikatoren = runCatching { zaehleLadeindikatoren() }.getOrElse { -1 }
+        var abfrageErgebnis = "?"
+        val direkteAbfrageMs = measureTimeMillis { abfrageErgebnis = befrageDatenbank(app) }
+        val verstrichen = System.currentTimeMillis() - beginn
+        val anzahl = gefunden.size
+        return "Startknopf wurde nicht freigegeben. verstricheneMs=$verstrichen " +
+            "pruefungen=$pruefungen startknopfVorhanden=$anzahl deaktiviert=$deaktiviert " +
+            "ladeindikatoren=$ladeindikatoren direkteAbfrageMs=$direkteAbfrageMs " +
+            "direkteAbfrage=$abfrageErgebnis"
+    }
+
+    /** Zaehlt sichtbare Fortschrittsanzeigen; > 0 bedeutet, dass `laedt` noch `true` ist. */
+    private fun zaehleLadeindikatoren(): Int {
+        val merkmal = SemanticsProperties.ProgressBarRangeInfo
+        val treffer = SemanticsMatcher.keyIsDefined(merkmal)
+        val knoten = composeRule.onAllNodes(treffer, useUnmergedTree = true)
+        return knoten.fetchSemanticsNodes().size
+    }
+
+    /** Fuehrt dieselbe Abfrage aus, auf die der LaunchedEffect wartet - zum Zeitvergleich. */
+    private fun befrageDatenbank(app: LaermprotokollApp): String {
+        val db = app.container.database
+        val versuch =
+            runCatching {
+                runBlocking(Dispatchers.IO) { db.reportConfigDao().get() }
+            }
+        val fehler = versuch.exceptionOrNull()
+        if (fehler != null) return "Fehler: " + fehler.javaClass.simpleName
+        return if (versuch.getOrNull() == null) "null" else "vorhanden"
     }
 
     @Test fun neuerBerichtButtonOeffnetAblaufUndDateifehlerIstVerstaendlich() {
