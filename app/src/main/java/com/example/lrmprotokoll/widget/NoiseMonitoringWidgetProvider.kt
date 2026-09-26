@@ -7,13 +7,17 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import android.widget.Toast
+import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
+import com.example.lrmprotokoll.audio.kannDienstInDenVordergrund
 import com.example.lrmprotokoll.ui.MainActivity
 import java.util.Locale
 
-private const val ACTION_TOGGLE = "com.example.lrmprotokoll.widget.ACTION_TOGGLE"
+/** `internal`, damit der Test die Aktion nicht als Zeichenkette verdoppeln muss. */
+internal const val ACTION_TOGGLE = "com.example.lrmprotokoll.widget.ACTION_TOGGLE"
 
 /**
  * F14: Homescreen-Widget mit Zustand und aktuellem Pegel - das Gegenstueck zum Quick Settings
@@ -46,6 +50,13 @@ class NoiseMonitoringWidgetProvider : AppWidgetProvider() {
             service.action = "STOP_SERVICE"
             context.startService(service)
         } else {
+            // F-35: wie bei der Schnelleinstellungs-Kachel - ohne Mikrofonberechtigung und ohne
+            // gekoppeltes Messgeraet kaeme der Dienst nicht in den Vordergrund.
+            val settings = (context.applicationContext as LaermprotokollApp).container.settingsManager
+            if (!kannDienstInDenVordergrund(context, settings)) {
+                Toast.makeText(context, R.string.dienst_start_ohne_quelle, Toast.LENGTH_LONG).show()
+                return
+            }
             service.putExtra(EXTRA_START_AUDIO_MONITORING, true)
             context.startForegroundService(service)
         }

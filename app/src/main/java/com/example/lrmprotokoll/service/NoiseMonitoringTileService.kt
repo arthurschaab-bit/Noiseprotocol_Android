@@ -3,8 +3,12 @@ package com.example.lrmprotokoll.service
 import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import android.widget.Toast
+import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
+import com.example.lrmprotokoll.audio.kannDienstInDenVordergrund
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,6 +41,14 @@ class NoiseMonitoringTileService : TileService() {
             }
             startService(intent)
         } else {
+            // F-35: Ohne Mikrofonberechtigung und ohne gekoppeltes Messgeraet bekaeme der Dienst
+            // keinen erlaubten Foreground-Typ. Er wuerde starten und sich sofort wieder beenden -
+            // der Tipp auf die Kachel bliebe folgenlos, ohne dass der Nutzer erfaehrt warum.
+            val settings = (applicationContext as LaermprotokollApp).container.settingsManager
+            if (!kannDienstInDenVordergrund(this, settings)) {
+                Toast.makeText(this, R.string.dienst_start_ohne_quelle, Toast.LENGTH_LONG).show()
+                return
+            }
             val intent = Intent(this, AudioRecordingService::class.java).apply {
                 putExtra(EXTRA_START_AUDIO_MONITORING, true)
             }

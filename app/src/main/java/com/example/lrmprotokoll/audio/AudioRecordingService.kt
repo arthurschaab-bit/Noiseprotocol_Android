@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.*
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -435,20 +434,6 @@ class AudioRecordingService : LifecycleService() {
      * [aktualisiereForegroundServiceTypeFallsNoetig] (Praefprotokoll-Anhang). */
     private var aktiverForegroundServiceType = 0
 
-    private fun berechneForegroundServiceType(): Int {
-        val hasBluetoothConnect = com.example.lrmprotokoll.meter.ble.BluetoothPermissions.hasConnectPermission(this)
-        val hasRecordAudio = ActivityCompat.checkSelfPermission(
-            this, Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-
-        var serviceType = 0
-        if (hasRecordAudio) serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        if (hasBluetoothConnect && settingsManager.meterDeviceAddress != null) {
-            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        }
-        return serviceType
-    }
-
     private fun startForegroundService(): Boolean {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
@@ -457,7 +442,7 @@ class AudioRecordingService : LifecycleService() {
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
-        val serviceType = berechneForegroundServiceType()
+        val serviceType = berechneForegroundServiceType(this, settingsManager)
         if (serviceType == 0) {
             Log.w(
                 "AudioRecordingService",
@@ -527,7 +512,7 @@ class AudioRecordingService : LifecycleService() {
      */
     private fun aktualisiereForegroundServiceTypeFallsNoetig() {
         if (!isForegroundActive) return
-        val serviceType = berechneForegroundServiceType()
+        val serviceType = berechneForegroundServiceType(this, settingsManager)
         if (serviceType == aktiverForegroundServiceType || serviceType == 0) return
         try {
             startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value), serviceType)
