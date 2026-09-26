@@ -419,6 +419,23 @@ class AudioRecordingService : LifecycleService() {
                 "Foreground-Service bewusst nicht gestartet: serviceType=0 (weder RECORD_AUDIO noch Messgeraet)",
             )
             stillerAusfallHinweis = "Kein Messgerät gekoppelt und Mikrofonberechtigung fehlt."
+            // Der Dienst wird von allen Aufrufern mit Context.startForegroundService() gestartet.
+            // Android verlangt danach ZWINGEND ein Service.startForeground() - stopSelf() allein
+            // genuegt ab Android 12 nicht. Ohne diesen Aufruf wirft das System
+            // ForegroundServiceDidNotStartInTimeException, und das ist ein FATAL EXCEPTION der
+            // ganzen App, kein Testproblem: belegt im Logcat von CI-Lauf 36244540843
+            // (ACRA hat ihn als App-Absturz erfasst).
+            //
+            // Deshalb den Vertrag erfuellen und sofort wieder abraeumen. Die Zweiargument-Variante
+            // erbt die Manifest-Typen; sie wurde vor diesem PR an derselben Stelle aufgerufen und
+            // hat dort nachweislich keinen Absturz erzeugt. runCatching, weil sie je nach Geraet
+            // eine SecurityException werfen kann - dann bleibt es beim geordneten Stopp.
+            runCatching {
+                startForeground(NOTIFICATION_ID, buildNotification(connectionSupervisor.state.value))
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            }.onFailure { fehler ->
+                Log.w("AudioRecordingService", "Vertragserfuellender startForeground fehlgeschlagen", fehler)
+            }
             stopSelf()
             return false
         }
