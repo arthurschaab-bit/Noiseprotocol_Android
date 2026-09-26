@@ -127,10 +127,49 @@ juristische Wertung — „Datenverfügbarkeit 87 %, 2 Lücken", nicht „Messun
 
 ---
 
+## 4a · F-35 — stiller Fehlschlag des Foreground-Service
+
+*Zugeordnet am 26.09.2026. Eine frühere Fassung ordnete F-35 der Phase 6 zu und nannte ihn einen
+Blocker für F-02 — beides war falsch, siehe den Finding-Eintrag im Audit.*
+
+Ohne Mikrofonberechtigung **und** ohne gepinntes Messgerät startet der Dienst, scheitert und
+beendet sich selbst — ohne dass der Nutzer erfährt, warum. Erreichbar etwa bei einer
+Neuinstallation mit verweigertem Mikrofon und noch nicht gekoppeltem Messgerät.
+
+Aus dem Code:
+
+| Stelle | Inhalt |
+|---|---|
+| `AndroidManifest.xml:102` | `android:foregroundServiceType="microphone\|connectedDevice"` |
+| `AudioRecordingService.kt:409` | `startForeground(id, notification)` — try, bei `serviceType == 0` |
+| `AudioRecordingService.kt:423` | **derselbe Aufruf** im catch |
+| `AudioRecordingService.kt:426` | `stopSelf()` |
+
+Die Zweiargument-Variante ist nicht typlos: Sie erbt die Manifest-Typen, also auch `microphone`.
+Der catch-Block wiederholt denselben Aufruf.
+
+**Was zu tun ist — Empfehlung des Audits:** In diesem Zustand gar keinen Foreground-Service
+starten. Der Dienst hat nichts zu überwachen; vorher prüfen, nicht starten, und dem Nutzer
+sagen, was fehlt. Das ist derselbe Mechanismus wie bei F-09 und F-11, deshalb liegt es in
+dieser Phase. Dazu den `catch`-Zweig reparieren.
+
+**Nicht** `SPECIAL_USE` (Begründung gegenüber Google nötig) und **nicht** `dataSync` (ab
+Android 15 rund sechs Stunden Laufzeitgrenze je 24 Stunden — bei tagelanger Protokollierung ein
+Abschaltrisiko). Beide Wege sind im Audit geprüft und verworfen.
+
+**Test:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest` liegt vor und misst das. Er
+sichert derzeit nur die Sicherheitsaussage zu (ohne Berechtigung keine Aufzeichnung) und
+protokolliert den Rest. Im Code steht, dass dort nach der Behebung `assertTrue(imVordergrund)`
+hingehört — **das scharfzuschalten ist Teil des Auftrags**, falls die gewählte Lösung den Dienst
+in den Vordergrund bringt. Startet er bewusst gar nicht mehr, gehört der Test stattdessen auf
+die neue Erwartung umgestellt.
+
+---
+
 ## 5 · Reihenfolge
 
 F-04 und F-05 zuerst (beide in der Diagnose, gleicher Code-Bereich, gemeinsam zu testen), dann
-F-12, zuletzt F-09/F-11 als gemeinsamer Block — der braucht den neuen `StateFlow` und ist der
+F-12, dann F-35, zuletzt F-09/F-11 als gemeinsamer Block — der braucht den neuen `StateFlow` und ist der
 aufwendigste Teil.
 
 ---

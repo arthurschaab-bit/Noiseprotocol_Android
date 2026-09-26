@@ -2832,8 +2832,19 @@ sein, und dann ist es null.
 | [36164004983](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/36164004983) | **1,0** | `Cockpit-Titel: breite=0px hoehe=28px zeilen=1 ueberlaufBreite=false ueberlaufHoehe=true maxBreite=0px` |
 
 Die zweite Zeile ist der eigentliche Befund: **`maxBreite=0px` bei Schriftfaktor 1,0.** Es ist
-also kein reines Schriftgrößenproblem, sondern ein Breitenproblem – auf einem schmalen Gerät
-trifft es den Nutzer ohne jede Sondereinstellung.
+also kein reines Schriftgrößenproblem, sondern ein Breitenproblem.
+
+**Einordnung der Messgrundlage, ergänzt am 26.09.2026:** Beide Läufe fanden auf einem Emulator
+mit **320×640** statt — einer Bildschirmgröße, die es bei heutigen Telefonen nicht gibt; das
+schmalste aktuelle Gerät liegt bei rund 360 dp. Die CI läuft seit PR #204 auf `profile: pixel_5`
+(393×851 dp). **Auf dieser realistischen Breite ist der Befund nicht neu vermessen** — der Test
+sichert den Titel dort bewusst nicht mehr zu und gibt deshalb keine Zahlen aus.
+
+Der Befund selbst bleibt bestehen: Die Titelspalte hat durch `weight(1f, fill = false)` keine
+Untergrenze und kann auf null schrumpfen, sobald die Badges den Platz füllen. Offen ist allein,
+**ab welcher Schriftgröße** das auf einem realen Gerät eintritt. Die ursprüngliche Zuspitzung
+„trifft den Nutzer schon bei Standardschrift" stützt sich auf die 320-px-Messung und ist in
+dieser Form **nicht belegt**.
 
 **Änderung:** Die Titelspalte darf nicht auf null schrumpfen können. Entweder eine Mindestbreite
 (`Modifier.widthIn(min = …)`) in Verbindung mit `weight(1f)` ohne `fill = false`, oder – der
@@ -2852,7 +2863,7 @@ betreffen zwar teilweise dieselbe Kopfzeile, sind aber verschiedene Fehler mit v
 Lösungen.
 
 <a id="f-35"></a>
-#### F-35 · Der „typlose" `startForeground()`-Rückfall ist nicht typlos und greift nicht · **P1**
+#### F-35 · Der „typlose" `startForeground()`-Rückfall ist nicht typlos und greift nicht · **P2**
 
 *Nachgetragen am 25.09.2026 aus dem Emulator-Lauf
 [36165915514](https://github.com/arthurschaab-bit/Noiseprotocol_Android/actions/runs/36165915514)
@@ -2865,8 +2876,21 @@ beobachtet worden.*
 Vordergrund** — er beendet sich selbst. Für den Nutzer heißt das: Ein reines „Verbinden" ohne
 Aufzeichnung ist auf dem heutigen Codepfad nicht möglich.
 
-**Tragweite:** [F-02](#f-02) („Verbinden" von „Messung starten" trennen) setzt genau diesen Pfad
-voraus. F-35 ist damit ein **technischer Blocker für F-02** und gehört vor ihm behoben.
+**Tragweite — korrigiert am 26.09.2026:** Die erste Fassung dieses Findings nannte F-35 einen
+„technischen Blocker für [F-02](#f-02)". **Das war falsch.**
+
+`berechneForegroundServiceType()` liefert nur dann `0`, wenn **weder** Mikrofonberechtigung
+**noch** ein gepinntes Messgerät vorliegt. Der Test, der den Befund erzeugt hat, stellt diesen
+Zustand künstlich her (`settings.meterDeviceAddress = null`). Das Zielverhalten von F-02 lautet
+dagegen ausdrücklich „Beim App-Start wird ein **gepinntes** Gerät automatisch verbunden" — dort
+ist `meterDeviceAddress != null`, der Typ ist `connectedDevice`, und der ist ohne `RECORD_AUDIO`
+zulässig. **Der Pfad, den F-02 braucht, ist nicht betroffen.**
+
+Was bleibt, ist ein **stiller Fehlschlag** im Grenzzustand „keine Mikrofonberechtigung und kein
+gepinntes Gerät": Der Dienst startet, scheitert und beendet sich selbst, ohne dass der Nutzer
+erfährt, warum. Erreichbar etwa bei einer Neuinstallation mit verweigertem Mikrofon und noch
+nicht gekoppeltem Messgerät. Das ist derselbe Fehlertyp wie [F-09](#f-09) und [F-11](#f-11) und
+gehört deshalb zu **Roadmap-Phase 2**, nicht zu Phase 6.
 
 **Technik — was gemessen wurde:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest`
 läuft als isolierter Berechtigungsfall nach `pm revoke android.permission.RECORD_AUDIO` vor dem
@@ -2891,12 +2915,21 @@ also auch `microphone` — für das die Berechtigung gerade fehlt. Der catch-Blo
 `emulator-diagnostics-api-34` abgelegt wird und nicht im Job-Log steht. Dass der catch-Block
 denselben Aufruf wiederholt, ist dagegen unmittelbar aus dem Code ablesbar.
 
-**Änderung:** Der Rückfall muss einen Typ verwenden, den die App auch ohne `RECORD_AUDIO`
-führen darf — in Frage kommen `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` oder `dataSync`, jeweils mit
-passendem Manifest-Eintrag und Begründung. Alternativ startet der „nur verbinden"-Pfad gar keinen
-Foreground-Service. **Welcher Weg richtig ist, ist eine Owner-Entscheidung** (`AGENTS.md` §8a):
-`SPECIAL_USE` verlangt gegenüber Google eine Begründung, `dataSync` hat eigene Laufzeitgrenzen,
-und „kein Foreground-Service" ändert das Verhalten bei Bildschirmsperre.
+**Änderung — empfohlen: in diesem Zustand gar keinen Foreground-Service starten.**
+
+Wenn weder Mikrofon noch Messgerät verfügbar sind, hat der Dienst nichts zu tun. Einen
+Foreground-Service zu starten, der nichts überwachen kann, ist der eigentliche Fehler — nicht
+der fehlende Typ. Richtig ist: vorher prüfen, nicht starten, und dem Nutzer sagen, was fehlt
+(derselbe Mechanismus wie bei [F-09](#f-09)/[F-11](#f-11)). Dazu den `catch`-Zweig reparieren,
+der heute denselben Aufruf wiederholt.
+
+Zwei naheliegende Alternativen wurden geprüft und **verworfen**, weil sie ein Problem lösen, das
+die App nicht hat:
+
+| Weg | Warum nicht |
+|---|---|
+| `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` | Verlangt gegenüber Google eine Begründung bei der Prüfung — Aufwand für einen Zustand, in dem ohnehin nichts passieren kann |
+| `dataSync` | Ab Android 15 gilt dafür eine Laufzeitgrenze von rund sechs Stunden je 24 Stunden. Bei einer App, die Lärm über ganze Tage protokolliert, wäre das ein eingebautes Abschaltrisiko |
 
 **Tests:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest` liegt vor und misst genau
 das. Er sichert die Vordergrund-Erwartung derzeit **nicht** zu, sondern protokolliert sie — eine
@@ -3248,7 +3281,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-04](#f-04), [F-05](#f-05), [F-09](#f-09), [F-11](#f-11), [F-12](#f-12), ~~[F-14](#f-14)~~ (**erledigt**, PR #203) |
+| **Findings** | [F-04](#f-04), [F-05](#f-05), [F-09](#f-09), [F-11](#f-11), [F-12](#f-12), **[F-35](#f-35)** (zugeordnet 26.09.2026), ~~[F-14](#f-14)~~ (**erledigt**, PR #203) |
 | **Komponenten** | `SystemHealthChecker` (Aufrufstellen), `AppContainer` (Observer öffentlich), `DiagnoseScreen`, `AudioRecordingService` (neuer `StateFlow`), `LiveCockpitCard` (Banner), `ProtokollScreen`/`ProtokollDetailScreen` (Integritätsstatus), `SettingsManager` (Onboarding-Default) |
 | **Erwarteter UX-Effekt** | Die sieben internen Zustände aus [Kapitel 19](#19-visibility-of-system-status-was-intern-existiert-und-nicht-ankommt) erreichen den Nutzer; Erstnutzer bekommen eine Einführung |
 | **Risiko** | niedrig bis mittel – `F-14` kann Startup-Tests brechen |
@@ -3288,7 +3321,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | **[F-35](#f-35) zuerst** (technischer Blocker), dann [S-3](#s-3--automatische-geräteverbindung-getrennt-von-der-aufzeichnung) ([F-02](#f-02), [F-03](#f-03)), danach [S-1](#s-1--messbereitschaft-als-eigenes-konzept), [S-4](#s-4--bericht-tab-als-arbeitsplatz-statt-zwischenseite), [S-5](#s-5--ein-filtermodell-für-aufnahmen-und-sessions) ([F-18](#f-18), [F-32](#f-32)) |
+| **Findings** | [S-3](#s-3--automatische-geräteverbindung-getrennt-von-der-aufzeichnung) ([F-02](#f-02), [F-03](#f-03)), danach [S-1](#s-1--messbereitschaft-als-eigenes-konzept), [S-4](#s-4--bericht-tab-als-arbeitsplatz-statt-zwischenseite), [S-5](#s-5--ein-filtermodell-für-aufnahmen-und-sessions) ([F-18](#f-18), [F-32](#f-32)) |
 | **Komponenten** | `AudioRecordingService`, `ConnectionSupervisor`, `AppContainer`, `LiveCockpitCard`, `BerichtScreen`, beide Filtermodelle |
 | **Erwarteter UX-Effekt** | Der Standard-Workflow fällt von 19 auf ~7 Taps ([Kapitel 10.4](#104-kennzahlenvergleich-standard-workflow-returning-user)) |
 | **Risiko** | **hoch** – Foreground-Service-Lebenszyklus, laut README bereits mehrfach Gegenstand von Gerätetest-Befunden |
@@ -3358,7 +3391,7 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 
 | Punkt | Warum offen | Wie zu prüfen |
 |---|---|---|
-| **System-Insets** | ⚠️ *Test liegt vor (`SystemLeistenAbstandInstrumentedTest`, PR #204), hat aber in drei Läufen nichts geprüft: `aosp_atd` bringt keine SystemUI und damit keine Statusleiste mit. Die CI wurde daraufhin auf `target: google_apis` umgestellt (Owner-Entscheidung 25.09.2026); Ergebnis steht aus.* — `enableEdgeToEdge()` + `contentWindowInsets = WindowInsets(0,0,0,0)` im äußeren `Scaffold`; der `NavHost` bekommt nur `bottom`-Padding (`MainActivity.kt:196`, `:209-214`). Ob Inhalte unter der Statusleiste landen, hängt davon ab, wie die inneren `Scaffold`s/`TopAppBar`s ihre Insets anwenden – das ist aus dem Code nicht zuverlässig ableitbar | Emulator, Gestennavigation + 3-Button-Navigation, hoher und niedriger Statusleistenbereich |
+| **System-Insets** | ✅ **Geprüft — kein Befund.** Auf einem Bild mit SystemUI (`google_apis`, Lauf 36169220008) ist `SystemLeistenAbstandInstrumentedTest` gelaufen und war grün: Der Titel des Startbildschirms beginnt unterhalb der Statusleiste. Die CI steht wieder auf `aosp_atd` (google_apis kostet 13 fokusbezogene Fehlschläge), der Test skippt sich dort und bleibt als Regressionsbremse erhalten. Ursprünglicher Zweifel: `enableEdgeToEdge()` + `contentWindowInsets = WindowInsets(0,0,0,0)` im äußeren `Scaffold`; der `NavHost` bekommt nur `bottom`-Padding (`MainActivity.kt:196`, `:209-214`). Ob Inhalte unter der Statusleiste landen, hängt davon ab, wie die inneren `Scaffold`s/`TopAppBar`s ihre Insets anwenden – das ist aus dem Code nicht zuverlässig ableitbar | Emulator, Gestennavigation + 3-Button-Navigation, hoher und niedriger Statusleistenbereich |
 | **Tastatur/IME** | kein `imePadding()` in der gesamten UI; das Stammdaten-Sheet hat 13 Felder in einem scrollenden `ModalBottomSheet` | Emulator: unterstes Feld antippen, prüfen ob es über der Tastatur bleibt |
 | **Dynamische Schriftgrößen** | ✅ **Geprüft und bestätigt** (PR #204, Emulator API 34). Ergebnis schlimmer als vermutet: der Cockpit-Titel wird nicht gekürzt, sondern verschwindet – `maxBreite=0px` bereits bei Schriftfaktor 1,0 auf schmalem Gerät. Als [F-34](#f-34) nachgetragen | erledigt |
 | **Kontrastwerte** | Die Farbpalette ist konsistent definiert, aber es liegen keine gemessenen Kontrastverhältnisse vor | Accessibility Scanner auf Start, Daten, Detail, Einstellungen |
@@ -3367,7 +3400,7 @@ dieser Aussagen wurde im Rest des Dokuments als Tatsache behauptet.
 | **Dark-Mode-Wirkung der 28 Farbliterale** | der Codebefund ist eindeutig, die optische Wirkung nicht gemessen | Screenshot-Vergleich hell/dunkel |
 | **Tatsächliche Dauer des Chaquopy-Berichtslaufs** | keine Messung möglich | Gerätetest mit 30 Messtagen |
 | **Verhalten bei vollem Speicher** | Ableitung aus dem Code; der automatische Neustart nach Schreibfehler ist laut README selbst nur rekonstruiert | Gerätetest mit künstlich gefülltem Speicher |
-| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet. ✅ **Geprüft — und die Antwort ist negativ:** Der Dienst kommt nicht in den Vordergrund, der „typlose" Rückfall ist nicht typlos. Als [F-35](#f-35) nachgetragen; technischer Blocker für [F-02](#f-02) | erledigt — Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
+| **Foreground-Service-Typ ohne `RECORD_AUDIO`** | relevant für [F-02](#f-02): `berechneForegroundServiceType()` kann `0` liefern, der typlose Fallback existiert (`:409`, `:423`), wurde aber in dieser Kombination nicht beobachtet. ✅ **Geprüft — und die Antwort ist negativ:** Der Dienst kommt nicht in den Vordergrund, der „typlose" Rückfall ist nicht typlos. Als [F-35](#f-35) nachgetragen (P2, Phase 2 — **kein** Blocker für [F-02](#f-02), siehe dort) | erledigt — Gerätetest: Mikrofon-Berechtigung entziehen, „nur verbinden" auslösen |
 
 ### 35.2 Owner-Entscheidungen vom 25.09.2026
 
