@@ -65,11 +65,11 @@ class SheetDrehungInstrumentedTest {
 
         // Warten bis Stammdaten-Sheet erscheint
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithTag("input_bericht_geraet_hersteller").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("input_bericht_hersteller").fetchSemanticsNodes().isNotEmpty()
         }
 
         // Felder ausfüllen
-        composeRule.onNodeWithTag("input_bericht_geraet_hersteller").performTextInput("PCE Instruments")
+        composeRule.onNodeWithTag("input_bericht_hersteller").performTextInput("PCE Instruments")
         composeRule.onNodeWithTag("input_bericht_messort").performTextInput("Balkon Süd")
         composeRule.waitForIdle()
 
@@ -79,9 +79,9 @@ class SheetDrehungInstrumentedTest {
 
         // Verifizieren: Sheet ist nach wie vor offen und Eingaben sind erhalten
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithTag("input_bericht_geraet_hersteller").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("input_bericht_hersteller").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("input_bericht_geraet_hersteller").assertTextContains("PCE Instruments")
+        composeRule.onNodeWithTag("input_bericht_hersteller").assertTextContains("PCE Instruments")
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Balkon Süd")
     }
 
