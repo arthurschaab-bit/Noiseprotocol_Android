@@ -46,14 +46,12 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.report.BerichtTag
 import com.example.lrmprotokoll.report.BerichtZeitraum
+import com.example.lrmprotokoll.report.BerichtVoraussetzungId
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
-import com.example.lrmprotokoll.report.auswahlFehler
-import com.example.lrmprotokoll.report.areaSelectionError
-import com.example.lrmprotokoll.report.bewertungsFehler
 import com.example.lrmprotokoll.report.fehlendeStammdatenFelder
 import com.example.lrmprotokoll.report.gewaehlteStammdaten
 import com.example.lrmprotokoll.report.ladeBerichtstage
-import com.example.lrmprotokoll.report.retentionFehler
+import com.example.lrmprotokoll.report.pruefeBerichtVoraussetzungen
 import com.example.lrmprotokoll.report.HighEndReportExport
 import com.example.lrmprotokoll.report.BerichtDatei
 import java.io.File
@@ -97,6 +95,9 @@ fun BerichtErstellenSheet(
     var erzeugt by remember { mutableStateOf(false) }
     var meldung by remember { mutableStateOf<String?>(null) }
     var pdfPfad by remember { mutableStateOf<String?>(null) }
+    val voraussetzungen =
+        pruefeBerichtVoraussetzungen(zeitraum, tage, config, ausgewaehlteIds)
+    val ersterBlocker = voraussetzungen.firstOrNull { !it.erfuellt }
 
     LaunchedEffect(zeitraum, ladezahl) {
         laedt = true
@@ -112,13 +113,11 @@ fun BerichtErstellenSheet(
     fun erzeugen() {
         val aktuell = config
         val fehler = when {
-            zeitraum == null -> "Bitte zuerst einen Datumsbereich wählen."
             laedt || aktuell == null -> "Berichtsdaten werden noch geladen."
-            tage.none { it.rohwerte > 0 } -> "Im gewählten Zeitraum liegen keine Rohdaten für einen Bericht vor."
-            else -> retentionFehler(tage)
-                ?: bewertungsFehler(tage, aktuell)
-                ?: auswahlFehler(tage, ausgewaehlteIds)
-                ?: areaSelectionError(aktuell.gebietseinstufung)
+            else ->
+                pruefeBerichtVoraussetzungen(zeitraum, tage, aktuell, ausgewaehlteIds)
+                    .firstOrNull { !it.erfuellt }
+                    ?.fehler
         }
         if (fehler != null) {
             meldung = fehler
@@ -237,6 +236,31 @@ fun BerichtErstellenSheet(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag("bericht_override_warnung"))
             }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(R.string.report_preconditions_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            voraussetzungen.forEach { voraussetzung ->
+                val label = stringResource(voraussetzung.id.labelRes())
+                val statusText =
+                    if (voraussetzung.erfuellt) {
+                        "✓ $label"
+                    } else {
+                        "✗ $label: ${voraussetzung.fehler}"
+                    }
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color =
+                        if (voraussetzung.erfuellt) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    modifier = Modifier.testTag("bericht_voraussetzung_${voraussetzung.id.name.lowercase(Locale.ROOT)}"),
+                )
+            }
             meldung?.let {
                 Spacer(Modifier.height(12.dp))
                 Text(it, color = MaterialTheme.colorScheme.error,
@@ -256,10 +280,21 @@ fun BerichtErstellenSheet(
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onFertig, enabled = !erzeugt) { Text("Schließen") }
-                Button(onClick = { erzeugen() }, enabled = !erzeugt && !laedt,
-                    modifier = Modifier.testTag("btn_bericht_erstellen_start")) {
+                Button(
+                    onClick = { erzeugen() },
+                    enabled = !erzeugt && !laedt && ersterBlocker == null,
+                    modifier = Modifier.testTag("btn_bericht_erstellen_start"),
+                ) {
                     Text(if (erzeugt) "Erzeuge …" else "Bericht jetzt erzeugen")
                 }
+            }
+            ersterBlocker?.let {
+                Text(
+                    stringResource(R.string.report_precondition_blocked, stringResource(it.id.labelRes())),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("bericht_start_blockiert"),
+                )
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -315,3 +350,13 @@ fun BerichtErstellenSheet(
         )
     }
 }
+
+private fun BerichtVoraussetzungId.labelRes(): Int =
+    when (this) {
+        BerichtVoraussetzungId.ZEITRAUM -> R.string.report_precondition_range
+        BerichtVoraussetzungId.ROHDATEN -> R.string.report_precondition_raw_data
+        BerichtVoraussetzungId.RETENTION -> R.string.report_precondition_retention
+        BerichtVoraussetzungId.BEWERTUNG -> R.string.report_precondition_rating
+        BerichtVoraussetzungId.STAMMDATEN_AUSWAHL -> R.string.report_precondition_master_data
+        BerichtVoraussetzungId.GEBIET -> R.string.report_precondition_area
+    }

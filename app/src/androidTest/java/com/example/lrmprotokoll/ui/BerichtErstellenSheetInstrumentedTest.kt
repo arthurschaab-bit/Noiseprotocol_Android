@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import org.junit.After
@@ -25,7 +26,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class BerichtErstellenSheetInstrumentedTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -56,7 +56,21 @@ class BerichtErstellenSheetInstrumentedTest {
         composeRule.onNodeWithTag("btn_bericht_erstellen_v2").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("btn_bericht_datumsbereich").assertIsDisplayed().performClick()
+        composeRule
+            .onNodeWithTag("btn_bericht_erstellen_start")
+            .performScrollTo()
+            .assertIsNotEnabled()
+        composeRule
+            .onNodeWithTag("bericht_start_blockiert")
+            .assertTextEquals(
+                app.getString(R.string.report_precondition_blocked, app.getString(R.string.report_precondition_range)),
+            )
+
+        composeRule
+            .onNodeWithTag("btn_bericht_datumsbereich")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         composeRule.waitForIdle()
 
         // Der eigentliche Regressionsfall: beide Buttons muessen auf dem echten Bildschirm
