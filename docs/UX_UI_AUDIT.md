@@ -2931,6 +2931,28 @@ die App nicht hat:
 | `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` | Verlangt gegenüber Google eine Begründung bei der Prüfung — Aufwand für einen Zustand, in dem ohnehin nichts passieren kann |
 | `dataSync` | Ab Android 15 gilt dafür eine Laufzeitgrenze von rund sechs Stunden je 24 Stunden. Bei einer App, die Lärm über ganze Tage protokolliert, wäre das ein eingebautes Abschaltrisiko |
 
+**Stand 26.09.2026 — behoben, in zwei Schritten.**
+
+*Dienstseite (PR #213):* `startForegroundService()` gibt jetzt `Boolean` zurück und startet bei
+`serviceType == 0` gar nicht erst in den Vordergrund. Der `catch`-Zweig wiederholt den
+fehlgeschlagenen Aufruf nicht mehr, sondern setzt `stillerAusfallHinweis` und stoppt geordnet.
+Weil alle Aufrufer `Context.startForegroundService()` benutzen, erfüllt der Dienst vorher noch
+den Android-Vertrag (`startForeground` + sofortiges `stopForeground`) — ohne das wirft das System
+ab Android 12 eine `ForegroundServiceDidNotStartInTimeException`, und die ist ein App-Absturz.
+
+*Aufruferseite (dieser Schritt):* Die Bedingung steht jetzt als
+`kannDienstInDenVordergrund()` in `audio/Dienstvoraussetzungen.kt`; `AudioRecordingService`
+benutzt dieselbe Funktion für seine Typberechnung, damit es nur eine Wahrheit gibt. Von den elf
+Aufrufpfaden hatten acht bereits eine Prüfung (Mikrofonberechtigung oder ein gerade gekoppeltes
+Gerät) und konnten `serviceType == 0` gar nicht erreichen. Die drei ohne Prüfung fragen jetzt
+vorher:
+
+| Aufrufstelle | Verhalten ohne Quelle |
+|---|---|
+| `NoiseMonitoringTileService.onClick()` | Toast `dienst_start_ohne_quelle`, kein Start |
+| `NoiseMonitoringWidgetProvider.onReceive()` | Toast `dienst_start_ohne_quelle`, kein Start |
+| `BootCompletedReceiver.onReceive()` | kein Start, Breadcrumb ins Diagnoseprotokoll — nach einem Neustart ist kein Nutzer da, dem man etwas sagen könnte (Owner-Entscheidung 26.09.2026) |
+
 **Tests:** `ForegroundServiceOhneMikrofonPermissionInstrumentedTest` liegt vor und misst genau
 das. Er sichert die Vordergrund-Erwartung derzeit **nicht** zu, sondern protokolliert sie — eine
 harte Zusicherung wäre eine dauerhaft rote CI für einen bekannten, unbehobenen Befund. Im Test

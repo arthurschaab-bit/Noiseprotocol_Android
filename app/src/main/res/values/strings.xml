@@ -495,4 +495,5 @@
     <string name="cockpit_aufzeichnungshinweis_title">Aufzeichnungshinweis</string>
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
+    <string name="dienst_start_ohne_quelle">Überwachung nicht gestartet: keine Mikrofon-Berechtigung und kein Messgerät gekoppelt.</string>
 </resources>
