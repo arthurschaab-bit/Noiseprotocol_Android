@@ -85,6 +85,22 @@ import java.util.*
 // unproblematisch; setContent()/enableEdgeToEdge() bleiben unveraendert nutzbar, da
 // AppCompatActivity ueber FragmentActivity weiterhin eine ComponentActivity ist.
 class MainActivity : AppCompatActivity() {
+    /**
+     * S-3/F-02: baut die Verbindung zum gepinnten Messgeraet auf, sobald die App im Vordergrund
+     * ist - ohne Vordergrunddienst und ohne eine Aufzeichnung zu starten.
+     *
+     * Bewusst hier in der Activity und nicht in einem Composable: die Verbindung gehoert zur App,
+     * nicht zu einem Screen. Ein `DisposableEffect` in der Navigation wuerde bei jedem
+     * Screenwechsel ab- und wieder aufgebaut.
+     *
+     * Deckt zugleich F-03 ab: wartet die Ueberwachung nach erschoepften Versuchen in FAILED,
+     * holt dieser Aufruf den naechsten Anlauf sofort, statt die Wartezeit abzusitzen.
+     */
+    override fun onResume() {
+        super.onResume()
+        (application as LaermprotokollApp).container.meterAutoConnect.verbindeWennGewuenscht()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as LaermprotokollApp).container
         val language = container.settingsManager.appLanguage

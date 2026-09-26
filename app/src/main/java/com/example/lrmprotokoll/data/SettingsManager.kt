@@ -184,6 +184,18 @@ class SettingsManager(
         get() = prefs.getString("meter_device_name", null)
         set(value) = prefs.edit().putString("meter_device_name", value).apply()
 
+    /**
+     * Baut die App beim Start selbsttaetig eine Verbindung zum gepinnten Messgeraet auf?
+     *
+     * Owner-Entscheidung 25.09.2026: freigegeben, **Default an** (S-3/F-02). Die Verbindung
+     * laeuft ohne Vordergrunddienst - der kommt erst dazu, wenn eine Messung startet
+     * (Owner-Entscheidung 26.09.2026). Ohne gepinntes Geraet oder ohne BLUETOOTH_CONNECT
+     * passiert unabhaengig von diesem Schalter nichts.
+     */
+    var meterAutoConnect: Boolean
+        get() = prefs.getBoolean("meter_auto_connect", true)
+        set(value) = prefs.edit().putBoolean("meter_auto_connect", value).apply()
+
     // Fuer die automatische Wiederaufnahme nach einem Geraeteneustart (Plan Abschnitt 5.4):
     // monitoringWasActive haelt fest, ob der Foreground Service beim letzten expliziten Stop
     // noch lief (egal ob wegen Audio- oder Messgeraet-Ueberwachung), audioMonitoringWasActive

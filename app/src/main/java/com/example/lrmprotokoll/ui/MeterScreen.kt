@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -68,7 +69,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
-import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.GeraetePinning
 import com.example.lrmprotokoll.meter.MeasurementRange
@@ -127,9 +127,13 @@ fun MeterScreen(
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
     var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
+    var autoConnect by remember { mutableStateOf(settings.meterAutoConnect) }
 
     fun ensureConnected() {
-        context.startForegroundService(Intent(context, AudioRecordingService::class.java))
+        // S-3/F-02: "Verbinden" startet keinen Vordergrunddienst mehr und damit auch keine
+        // Aufzeichnung. Der ConnectionSupervisor haengt am AppContainer, nicht am Dienst - wer
+        // nur den Pegel sehen will, bekommt genau das (Owner-Entscheidung 26.09.2026).
+        container.meterAutoConnect.verbindeJetzt()
     }
 
     fun starteScan() {
@@ -358,6 +362,29 @@ fun MeterScreen(
                         stringResource(R.string.meter_paired_info, pairedName ?: "Unbekannt", pairedAddress ?: ""),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // S-3/F-02: Owner-Entscheidung 25.09.2026 - Schalter freigegeben, Default an.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = autoConnect,
+                            onCheckedChange = {
+                                autoConnect = it
+                                settings.meterAutoConnect = it
+                                if (it && hasBluetoothPermissions) container.meterAutoConnect.verbindeWennGewuenscht()
+                            },
+                            modifier = Modifier.testTag("switch_meter_auto_connect"),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(stringResource(R.string.meter_auto_connect))
+                            Text(
+                                stringResource(R.string.meter_auto_connect_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

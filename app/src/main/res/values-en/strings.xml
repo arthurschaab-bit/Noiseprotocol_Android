@@ -494,4 +494,6 @@
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnostics</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Restart</string>
     <string name="dienst_start_ohne_quelle">Monitoring not started: no microphone permission and no meter paired.</string>
+    <string name="meter_auto_connect">Connect automatically</string>
+    <string name="meter_auto_connect_hint">Connect to the meter when the app opens. Does not start a recording.</string>
 </resources>

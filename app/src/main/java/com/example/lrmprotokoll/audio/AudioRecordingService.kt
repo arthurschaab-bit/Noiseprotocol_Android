@@ -257,10 +257,27 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
+    /**
+     * S-3/F-02: Die Verbindung zum Messgeraet gehoert nicht mehr zur Messung. Sie wird von
+     * [com.example.lrmprotokoll.meter.MeterAutoConnect] unabhaengig vom Dienst aufgebaut und
+     * lebt weiter, wenn die Messung endet.
+     *
+     * Ein Dienstende darf sie deshalb nur abraeumen, wenn sie sonst niemand haben will. Sonst
+     * waere "Messung beenden" wieder gleichbedeutend mit "Verbindung trennen" - genau der
+     * Zustand, den F-02 beseitigt.
+     */
+    private fun trenneMessgeraetFallsNiemandEsBraucht() {
+        if (settingsManager.meterAutoConnect && settingsManager.meterDeviceAddress != null) {
+            Log.d("AudioRecordingService", "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)")
+            return
+        }
+        connectionSupervisor.stop()
+    }
+
     private fun ensureMeterMonitoringStarted() {
         if (settingsManager.audioTriggerQuelle == "MIKROFON") {
             Log.d("AudioRecordingService", "Trigger-Quelle ist rein Mikrofon - Meter-Monitoring wird übersprungen")
-            connectionSupervisor.stop()
+            trenneMessgeraetFallsNiemandEsBraucht()
             return
         }
         val address = settingsManager.meterDeviceAddress ?: return
@@ -1428,7 +1445,7 @@ class AudioRecordingService : LifecycleService() {
         _laufendesFormat.value = null
         _laeuft.value = false
         NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
-        connectionSupervisor.stop()
+        trenneMessgeraetFallsNiemandEsBraucht()
         alarmCoordinator.stop()
         levelSampleCollector.stop()
         measurementRecorder.stop()

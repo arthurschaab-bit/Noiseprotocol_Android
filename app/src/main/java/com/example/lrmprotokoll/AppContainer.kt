@@ -26,10 +26,12 @@ import com.example.lrmprotokoll.messreihe.RetentionCoordinator
 import java.time.Duration
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
+import com.example.lrmprotokoll.meter.MeterAutoConnect
 import com.example.lrmprotokoll.meter.MeterTransport
 import com.example.lrmprotokoll.meter.ble.BleDevice
 import com.example.lrmprotokoll.meter.ble.BleMeterTransport
 import com.example.lrmprotokoll.meter.ble.BluetoothAdapterStateObserver
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.meter.ble.Pce323Profile
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -126,6 +128,18 @@ class AppContainer(
                     if (settingsManager.entwarnungUeberMeldung) add(ChannelId.LOCAL_NOTIFICATION)
                 },
             ),
+        )
+    }
+
+    /**
+     * S-3/F-02: baut die Verbindung zum gepinnten Messgeraet beim App-Start selbsttaetig auf -
+     * ohne Vordergrunddienst, siehe [com.example.lrmprotokoll.meter.MeterAutoConnect].
+     */
+    val meterAutoConnect: MeterAutoConnect by lazy {
+        MeterAutoConnect(
+            settingsManager = settingsManager,
+            connectionSupervisor = connectionSupervisor,
+            hatVerbindungsberechtigung = { BluetoothPermissions.hasConnectPermission(context.applicationContext) },
         )
     }
 
