@@ -5,7 +5,8 @@ import com.example.lrmprotokoll.data.ReportConfigEntity
 enum class Messintegritaet {
     VOLLSTAENDIG,
     EINGESCHRAENKT,
-    LUECKENHAFT;
+    LUECKENHAFT,
+    ;
 
     fun anzeigetext(): String =
         when (this) {

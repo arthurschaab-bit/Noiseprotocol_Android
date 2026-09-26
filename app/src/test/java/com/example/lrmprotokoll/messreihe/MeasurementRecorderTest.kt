@@ -71,14 +71,18 @@ class MeasurementRecorderTest {
                 (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
                 (it.weighting == null || it.timeWeighting == null)
         }
-        override suspend fun anzahlGaps(sessionId: Long) = geschrieben.count {
-            it.sessionId == sessionId && (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) != 0
-        }
-        override suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long) = geschrieben.count {
-            it.sessionId == sessionId &&
-                (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
-                (it.weighting == null || it.timeWeighting == null)
-        }
+
+        override suspend fun anzahlGaps(sessionId: Long) =
+            geschrieben.count {
+                it.sessionId == sessionId && (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) != 0
+            }
+
+        override suspend fun anzahlUnbestaetigtFuerSession(sessionId: Long) =
+            geschrieben.count {
+                it.sessionId == sessionId &&
+                    (it.flags and com.example.lrmprotokoll.data.MeasurementFlags.GAP) == 0 &&
+                    (it.weighting == null || it.timeWeighting == null)
+            }
         override suspend fun aelterAls(grenze: Long) = geschrieben.filter { it.timestamp < grenze }
         override suspend fun loescheAelterAls(grenze: Long) { geschrieben.removeAll { it.timestamp < grenze } }
         override suspend fun anzahl(): Int = geschrieben.size

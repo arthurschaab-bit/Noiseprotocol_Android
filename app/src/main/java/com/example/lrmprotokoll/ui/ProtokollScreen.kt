@@ -596,15 +596,18 @@ private fun ModernSessionCard(
                     }
                 val lueckenStr =
                     if (befund.gapAnzahl > 0) {
-                        " · " + if (befund.gapAnzahl == 1) {
-                            stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
-                        } else {
-                            stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
-                        }
+                        " · " +
+                            if (befund.gapAnzahl == 1) {
+                                stringResource(R.string.protocol_gap_singular, befund.gapAnzahl)
+                            } else {
+                                stringResource(R.string.protocol_gap_plural, befund.gapAnzahl)
+                            }
                     } else {
                         ""
                     }
-                val statusText = "${befund.stufe.anzeigetext()} · $verfuegbarkeitStr ${stringResource(R.string.protocol_data_short)} · $ausfaelleStr$lueckenStr"
+                val statusText = "${befund.stufe.anzeigetext()} · $verfuegbarkeitStr ${stringResource(
+                    R.string.protocol_data_short,
+                )} · $ausfaelleStr$lueckenStr"
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

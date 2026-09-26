@@ -50,7 +50,6 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class DiagnoseScreenComposeTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -67,7 +66,7 @@ class DiagnoseScreenComposeTest {
                 // Eintrag aus dem Anzeigefenster fallen, wenn zuvor andere Tests viele Zeilen
                 // eingefuegt haben. Deshalb hier auf den Zeileninhalt statt auf die (bei geteilter
                 // Tabelle nicht mehr exakt vorhersagbare) Kopfzeilen-Anzahl gepruefft.
-                DiagnosticLogEntity(timestamp = 4_000_000_000_000L, message = "DEGRADED: Testeintrag")
+                DiagnosticLogEntity(timestamp = 4_000_000_000_000L, message = "DEGRADED: Testeintrag"),
             )
         }
 
@@ -197,5 +196,3 @@ class DiagnoseScreenComposeTest {
         composeRule.onNodeWithTag("health_action_exact_alarm").performClick()
     }
 }
-
-

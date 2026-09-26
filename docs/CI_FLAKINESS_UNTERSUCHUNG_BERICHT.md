@@ -346,8 +346,7 @@ Daraus erklärt sich auch die Sporadik: Es muss ein Verbraucher aktiv sein UND d
 das richtige Zeitfenster fallen. Auf `main` (`fecd048`) war derselbe Test in zwei Läufen grün
 (36231020409, 36231729466).
 
-**Nicht behoben.** Mögliche Wege, keiner davon ohne Abwägung, deshalb dem Owner vorgelegt
-(AGENTS.md §8a):
+**Drei mögliche Wege, dem Owner vorgelegt (AGENTS.md §8a):**
 
 1. Den echten Dienst im Test nicht mitlaufen lassen, sondern seinen Pegelstrom durch eine Attrappe
    ersetzen. Sauberste Trennung, aber der Test prüft gerade das Zusammenspiel mit dem echten Dienst.
@@ -356,6 +355,28 @@ das richtige Zeitfenster fallen. Auf `main` (`fecd048`) war derselbe Test in zwe
 3. `_currentMicDb` im Dienst gedrosselt und auf einem festen Dispatcher veröffentlichen. Greift in
    Produktivcode ein, um ein Testproblem zu lösen — dafür spricht allenfalls, dass ein Pegelwert im
    Audioblocktakt als Compose-Zustand ohnehin viel Rekomposition erzeugt.
+
+**Owner-Entscheidung 26.09.2026: Weg 3.** Umgesetzt in `AudioRecordingService`:
+
+- Alle Schreibungen des Mikrofonpegels aus der Leseschleife laufen über
+  `veroeffentlicheMikrofonPegel()`. Die Funktion schreibt auf dem Main-Thread direkt und postet von
+  jedem anderen Thread über einen `Handler(Looper.getMainLooper())`. Damit wird die Fortsetzung
+  eines Compose-Verbrauchers nie mehr inline auf dem IO-Thread wiederaufgenommen, und
+  `ViewRootImpl.checkThread` sieht immer `main`.
+- Die Veröffentlichung ist auf `MIKROFON_PEGEL_INTERVALL_MS = 100` gedrosselt. Die Leseschleife
+  liefert je nach Puffergröße alle 20–50 ms einen Block; für eine Pegelanzeige sind 10 Hz reichlich.
+  Das ist der Teil der Änderung, der unabhängig vom Testproblem gerechtfertigt ist.
+- Nicht geändert wurden die Zurücksetzungen in `onStartCommand` und `onDestroy`: die laufen bereits
+  auf dem Main-Thread. Betroffen waren nur die beiden Schreibungen innerhalb der Leseschleife
+  (Pegelwert und das `null` beim Verlassen der Schleife).
+- `testSetzeCurrentMicDb()` bleibt eine direkte, synchrone Schreibung — die JVM-Tests sollen keinen
+  Looper-Durchlauf brauchen. Der `Handler` ist deshalb `lazy`.
+
+**Beweislage:** `assembleDebug`, `lintDebug` und `test` sind grün (siehe PR). Ob der Fehlschlag auf
+dem Emulator damit verschwindet, ist **nicht lokal belegbar** — hier steht kein Gerät zur Verfügung.
+Den Nachweis führt erst der Job `emulator / instrumented-tests (34)`, und weil der Fehlschlag
+sporadisch war, belegt ein einzelner grüner Lauf ihn auch nicht. Die stündliche Kontrolle zählt
+weiter mit.
 
 **Fehlzuordnung, die hier festgehalten gehört:** Der Befund wurde zunächst als
 Nebenläufigkeitsfehler im Produktivcode gemeldet, der „auch im Betrieb" auftreten könne. Das war
