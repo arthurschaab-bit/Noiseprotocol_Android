@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.ui
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -58,6 +59,7 @@ import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
@@ -310,6 +312,13 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 DiagnoseScreen(
                     onBack = { navController.popBackStack() },
                     onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    onNavigateToSettings = { tab ->
+                        val route = if (tab != null) "settings?tab=$tab" else "settings"
+                        navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onNavigateToMeter = {
+                        navController.navigate("meter") { launchSingleTop = true }
+                    },
                 )
             }
             composable("trash") {
@@ -508,6 +517,18 @@ fun NoiseProtocolApp(
             }
         }
 
+    var hasBluetoothPermission by remember {
+        mutableStateOf(BluetoothPermissions.hasPermissions(context))
+    }
+    val alarmManager = remember { context.getSystemService(AlarmManager::class.java) }
+    fun kannExakteAlarme() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() == true
+        } else {
+            true
+        }
+    var canScheduleExactAlarms by remember { mutableStateOf(kannExakteAlarme()) }
+
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
@@ -521,6 +542,8 @@ fun NoiseProtocolApp(
                         } else {
                             true
                         }
+                    hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
+                    canScheduleExactAlarms = kannExakteAlarme()
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -530,21 +553,31 @@ fun NoiseProtocolApp(
     // F3: System-Selbstprüfung für Warn-Banner
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
+    val isBluetoothAdapterEnabled by container.bluetoothAdapterStateObserver.enabled.collectAsState()
     val isBatteryOptimizationIgnored =
         remember {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
         }
     val healthOverview =
-        remember(hasAudioPermission, hasNotificationPermission, dienstAktiv, verbindungszustand) {
+        remember(
+            hasAudioPermission,
+            hasNotificationPermission,
+            hasBluetoothPermission,
+            isBatteryOptimizationIgnored,
+            canScheduleExactAlarms,
+            isBluetoothAdapterEnabled,
+            dienstAktiv,
+            verbindungszustand,
+        ) {
             bewerteSystemZustand(
                 SystemHealthParams(
                     hasAudioPermission = hasAudioPermission,
                     hasNotificationPermission = hasNotificationPermission,
-                    hasBluetoothPermission = true,
+                    hasBluetoothPermission = hasBluetoothPermission,
                     isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                    canScheduleExactAlarms = true,
-                    isBluetoothAdapterEnabled = true,
+                    canScheduleExactAlarms = canScheduleExactAlarms,
+                    isBluetoothAdapterEnabled = isBluetoothAdapterEnabled,
                     isMeterPinned = settingsManager.meterDeviceAddress != null,
                     meterConnectionState = verbindungszustand,
                     isAlertingConfigured = settingsManager.alarmierungAktiv,

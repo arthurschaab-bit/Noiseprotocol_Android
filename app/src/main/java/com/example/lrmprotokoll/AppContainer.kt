@@ -56,7 +56,7 @@ class AppContainer(
         meterTransportOverride ?: BleMeterTransport(context.applicationContext)
     }
 
-    private val bluetoothAdapterStateObserver by lazy {
+    val bluetoothAdapterStateObserver by lazy {
         BluetoothAdapterStateObserver(context.applicationContext)
     }
 

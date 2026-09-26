@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.core.app.ApplicationProvider
@@ -138,4 +139,63 @@ class DiagnoseScreenComposeTest {
         val checkTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_self_check_header)
         composeRule.onNodeWithText(checkTitel).assertIsDisplayed()
     }
+
+    @Test
+    fun fehlendeBluetoothBerechtigungBeiGepinntemGeraetZeigtErrorMitAktionsButton() {
+        val container = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container
+        container.settingsManager.meterDeviceAddress = "00:11:22:33:44:55"
+
+        try {
+            composeRule.setContent { DiagnoseScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Bluetooth-Berechtigung").assertIsDisplayed()
+            composeRule.onNodeWithText("Fehlt für PCE-323 Kopplung").assertIsDisplayed()
+            composeRule.onNodeWithTag("health_action_bt_perm").performClick()
+        } finally {
+            container.settingsManager.meterDeviceAddress = null
+        }
+    }
+
+    @Test
+    fun adapterAusBeiGepinntemGeraetZeigtWarningMitAktionsButton() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val container = app.container
+        container.settingsManager.meterDeviceAddress = "00:11:22:33:44:55"
+        container.bluetoothAdapterStateObserver.testSetzeEnabled(false)
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+        )
+
+        try {
+            composeRule.setContent { DiagnoseScreen(onBack = {}) }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Bluetooth-Adapter").assertIsDisplayed()
+            composeRule.onNodeWithText("Bluetooth ist am Smartphone ausgeschaltet").assertIsDisplayed()
+            // Klick auf den Aktionsbutton darf keine Exception werfen
+            composeRule.onNodeWithTag("health_action_bt_adapter").performClick()
+        } finally {
+            container.settingsManager.meterDeviceAddress = null
+            container.bluetoothAdapterStateObserver.testSetzeEnabled(true)
+        }
+    }
+
+    @Test
+    fun exakteAlarmeDeaktiviertZeigtWarningMitAktionsButton() {
+        composeRule.setContent {
+            DiagnoseScreen(
+                onBack = {},
+                exakteAlarmeErlaubtOverride = false,
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Exakte Alarme").assertIsDisplayed()
+        composeRule.onNodeWithText("Eingeschränkt (Timer können verzögert auslösen)").assertIsDisplayed()
+        composeRule.onNodeWithTag("health_action_exact_alarm").performClick()
+    }
 }
+
+
