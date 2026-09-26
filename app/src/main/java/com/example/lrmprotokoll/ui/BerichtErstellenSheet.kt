@@ -37,10 +37,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.report.BerichtTag
 import com.example.lrmprotokoll.report.BerichtZeitraum
@@ -77,6 +79,7 @@ fun BerichtErstellenSheet(
     initialRange: BerichtZeitraum? = null,
 ) {
     val context = LocalContext.current
+    val areaSaveError = stringResource(R.string.report_area_save_error)
     val db = remember { (context.applicationContext as LaermprotokollApp).container.database }
     val diagnosticsReporter = remember { (context.applicationContext as LaermprotokollApp).container.diagnosticsReporter }
     val scope = rememberCoroutineScope()
@@ -160,6 +163,22 @@ fun BerichtErstellenSheet(
                     it.letzterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN)),
                     modifier = Modifier.testTag("bericht_datumsbereich_anzeige"))
             }
+            Spacer(Modifier.height(12.dp))
+            ReportAreaSelection(
+                value = config?.gebietseinstufung.orEmpty(),
+                enabled = !laedt && !erzeugt && config != null,
+                onSelect = { gebiet ->
+                    val aktualisiert = config?.copy(gebietseinstufung = gebiet) ?: return@ReportAreaSelection
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { db.reportConfigDao().speichere(aktualisiert) }
+                            config = aktualisiert
+                        } catch (fehler: Exception) {
+                            meldung = "$areaSaveError: ${fehler.message}"
+                        }
+                    }
+                },
+            )
             if (laedt) {
                 Spacer(Modifier.height(8.dp))
                 CircularProgressIndicator()

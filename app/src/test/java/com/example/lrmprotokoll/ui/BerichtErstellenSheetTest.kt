@@ -191,6 +191,25 @@ class BerichtErstellenSheetTest {
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 
+    @Test fun gebietseinstufungLaesstSichImBerichtsSheetSpeichern() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        composeRule.setContent {
+            BerichtScreen(onBack = {}, onOpenSettings = {})
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("input_report_gebietseinstufung")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("report_area_WA").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            runBlocking(Dispatchers.IO) {
+                app.container.database.reportConfigDao().get()?.gebietseinstufung == "WA"
+            }
+        }
+        assertEquals("WA", runBlocking(Dispatchers.IO) {
+            app.container.database.reportConfigDao().get()?.gebietseinstufung
+        })
+    }
+
     /**
      * Test 3 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3): muss ohne die Änderung rot sein. Eine
      * abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein Breadcrumb, kein

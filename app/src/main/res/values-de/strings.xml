@@ -463,6 +463,7 @@
     <string name="settings_open_meter">Messgerät koppeln</string>
     <string name="settings_open_trash">Papierkorb öffnen</string>
     <string name="bericht_intro_title">Berichte erstellen</string>
+    <string name="report_area_save_error">Gebietseinstufung konnte nicht gespeichert werden</string>
     <string name="bericht_intro_desc">Zeitraumbericht oder vollständiger Gesamtbericht mit Stammdaten, Kennwerten und Fotos – als PDF.</string>
     <string name="period_report_action">Zeitraumbericht erstellen</string>
     <string name="period_report_dialog_title">Zeitraumbericht</string>
