@@ -115,7 +115,8 @@ Zwischen den Szenarien jeweils warten, bis die App wieder **Verbunden** meldet.
 | C1 | Mit dem Telefon aus der Funkreichweite gehen (anderer Raum, Tür zu) | Zustand wechselt auf *Verbinde erneut…*, kein Absturz | |
 | C2 | Zurückkommen | Verbindung stellt sich **von allein** wieder her, ohne Zutun | |
 | C3 | Messgerät ausschalten und aus lassen | Nach rund **zwei Minuten** steht **Fehlgeschlagen** | |
-| C4 | Messgerät wieder einschalten | *(App versucht nach FAILED nicht mehr von allein — erneutes Verbinden über den Screen prüfen)* | |
+| C4 | Messgerät wieder einschalten, App im Vordergrund lassen | Spätestens nach **15 Minuten** läuft ein neuer Anlauf und die Verbindung kommt zurück (seit S-3/F-03; vorher versuchte die App es nie wieder) | |
+| C4b | In **Fehlgeschlagen** die App in den Hintergrund und wieder nach vorn holen | **Sofort** ein neuer Anlauf, ohne die 15 Minuten abzuwarten | |
 | C5 | Bluetooth am Telefon aus | Zustand *Getrennt*, **keine** hektischen Wiederholversuche im Logcat | |
 | C6 | Bluetooth wieder an | Sofortiger Verbindungsversuch, ohne Wartezeit | |
 | C7 | App-Prozess killen: `adb shell am kill com.example.lrmprotokoll` | Dienst startet neu, Verbindung kommt zurück | |
@@ -123,6 +124,9 @@ Zwischen den Szenarien jeweils warten, bis die App wieder **Verbunden** meldet.
 
 **Bei C3 besonders auf die Zeit achten:** Erwartet sind acht Versuche über die Backoff-Folge
 (1, 2, 4, 8, 16, 30, 60, 60 Sekunden). Deutlich schneller oder deutlich langsamer ist ein Befund.
+
+**Bei C4/C4b ins Diagnoseprotokoll sehen:** dort steht „Neuer Anlauf auf Anforderung" (C4b) oder
+„Neuer Anlauf nach 15 min" (C4). Bleibt beides aus, greift F-03 nicht.
 
 **Bei C5 im Logcat prüfen**, dass wirklich pausiert wird — laufende Verbindungsversuche bei
 ausgeschaltetem Bluetooth wären genau der Fehler, den die Adapter-Beobachtung verhindern soll.

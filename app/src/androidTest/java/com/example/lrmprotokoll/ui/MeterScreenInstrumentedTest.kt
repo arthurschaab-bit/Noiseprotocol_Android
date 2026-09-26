@@ -34,6 +34,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -163,11 +164,28 @@ class MeterScreenInstrumentedTest {
         composeRule.waitUntil(5_000L) { settings.meterDeviceAddress == "CC:CC:CC:CC:CC:CC" }
         assertEquals("CC:CC:CC:CC:CC:CC", settings.meterDeviceAddress)
 
-        // pinne() startet in Produktion absichtlich den Foreground Service. Vor dem Cleanup muss
-        // dieser Start vollständig durch onStartCommand/startForeground gelaufen sein; sonst kann
-        // ein zu früher Test-Cleanup selbst den Android-14-FGS-Timeout auslösen.
-        composeRule.waitUntil(timeoutMillis = 5_000L) { AudioRecordingService.laeuft.value }
-        assertTrue("Das bestätigte Pinning muss den Verbindungsdienst starten", AudioRecordingService.laeuft.value)
+        // S-3/F-02, Erwartung umgedreht am 26.09.2026. Bis dahin stand hier, das bestaetigte
+        // Pinning MUESSE den Foreground Service starten - genau das war der Befund: "Verbinden"
+        // und "Messung starten" waren dasselbe, wer nur koppeln wollte, loeste eine Aufzeichnung
+        // aus. pinne() ruft jetzt ueber ensureConnected() den ConnectionSupervisor, der am
+        // AppContainer haengt und keinen Dienst braucht.
+        //
+        // Der Dienst bekommt bewusst dieselben 3 Sekunden, die er zum Starten brauchen wuerde;
+        // erst danach gilt als belegt, dass er ausbleibt. Damit entfaellt zugleich das alte
+        // Cleanup-Problem: ohne Dienststart gibt es keinen Android-14-FGS-Timeout, in den ein zu
+        // frueher Abbau hineinlaufen koennte.
+        //
+        // Dass ensureConnected() tatsaechlich verbindet, prueft MeterAutoConnectTest auf der JVM.
+        // Hier waere es nicht belastbar: ohne BLUETOOTH_CONNECT auf dem Emulator bliebe der
+        // Verbindungsaufbau aus, und der Test haenge an der Umgebung statt am Verhalten.
+        val dienstGestartet =
+            runCatching {
+                composeRule.waitUntil(timeoutMillis = 3_000L) { AudioRecordingService.laeuft.value }
+            }.isSuccess
+        assertFalse(
+            "Das Pinnen darf keine Messung mehr starten - Verbinden und Aufzeichnen sind getrennt (S-3/F-02)",
+            dienstGestartet,
+        )
     }
 
     @Test
