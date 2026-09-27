@@ -275,6 +275,7 @@ fun SettingsScreen(
 
     // Expandable Sektionszustände
     var expAufnahme by remember { mutableStateOf(false) }
+    var expMessgeraet by remember { mutableStateOf(false) }
     var expKi by remember { mutableStateOf(false) }
     var expRuhezeiten by remember { mutableStateOf(false) }
     var expRetention by remember { mutableStateOf(false) }
@@ -761,18 +762,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (onNavigateToMeter != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = onNavigateToMeter,
-                        modifier = Modifier.fillMaxWidth().testTag("btn_open_meter"),
-                    ) {
-                        Icon(AppIcons.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.settings_open_meter))
-                    }
-                }
-
                 if (isProMode) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(stringResource(R.string.settings_pre_roll, preRoll.toInt()))
@@ -807,6 +796,37 @@ fun SettingsScreen(
                             onClick = { sampleRate = 44100; settings.audioSampleRate = 44100 },
                             label = { Text(stringResource(R.string.settings_sample_rate_44k)) }
                         )
+                    }
+                }
+            }
+
+            // Eigene Sektion statt eines Knopfes am Ende von "Schwellenwerte & Audio": dort hat der
+            // Owner sie beim Geraetetest am 27.09.2026 nicht gefunden, und das zu Recht - der
+            // Abschnittstitel erwaehnt kein Messgeraet.
+            SettingsSectionCard(
+                title = stringResource(R.string.settings_section_meter),
+                summary =
+                    settings.meterDeviceName?.takeIf { settings.meterDeviceAddress != null }
+                        ?: settings.meterDeviceAddress
+                        ?: stringResource(R.string.settings_meter_not_paired),
+                expanded = expMessgeraet,
+                onToggle = { expMessgeraet = !expMessgeraet },
+                zeigen = selectedTab == SettingsTab.START,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_section_meter_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (onNavigateToMeter != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onNavigateToMeter,
+                        modifier = Modifier.fillMaxWidth().testTag("btn_open_meter"),
+                    ) {
+                        Icon(AppIcons.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_open_meter))
                     }
                 }
             }

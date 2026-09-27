@@ -34,6 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.system.measureTimeMillis
@@ -88,10 +89,51 @@ class BerichtErstellenSheetTest {
                     composeRule.onNodeWithTag("input_report_gebietseinstufung").assertIsEnabled()
                 }.isSuccess
             }
+            protokolliereMesswert("gruen", beginn, pruefungen)
         } catch (zeitueberschreitung: ComposeTimeoutException) {
             throw AssertionError(diagnose(beginn, pruefungen), zeitueberschreitung)
         } finally {
             composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    /**
+     * Haengt eine Zeile an `app/build/flake_a_messwerte.tsv`.
+     *
+     * Die Diagnoseausgabe aus #210 stand bisher nur in der Fehlermeldung und verfiel mit dem
+     * Testbericht - ueber mehrere Vorkommen liess sich nichts vergleichen. Protokolliert werden
+     * deshalb **beide** Ausgaenge: ohne die Verteilung der gruenen Laeufe sagt ein einzelner
+     * roter nichts darueber, ob sich etwas geaendert hat.
+     *
+     * Ausserhalb einer Messreihe ist die Datei nur ein Nebenprodukt im Build-Verzeichnis; sie
+     * wird nie gelesen und nie zugesichert. runCatching, damit ein Schreibfehler niemals einen
+     * Test rot macht - aber **mit** Meldung: ein stiller Fehlschlag laesst die Messreihe
+     * unbemerkt leer laufen (Review-Befund 27.09.2026). In der CI wird die Datei ueber den
+     * Schritt "Upload test reports" als Artefakt gesichert, auch bei rotem Lauf.
+     */
+    private fun protokolliereMesswert(
+        ergebnis: String,
+        beginn: Long,
+        pruefungen: Int,
+        weitereFelder: String = "",
+    ) {
+        runCatching {
+            val datei = File("build/flake_a_messwerte.tsv")
+            datei.parentFile?.mkdirs()
+            if (!datei.exists()) {
+                datei.appendText(
+                    "zeitstempel\tergebnis\tverstricheneMs\tpruefungen\tstartknopfVorhanden\t" +
+                        "deaktiviert\tladeindikatoren\tdirekteAbfrageMs\tdirekteAbfrage\n",
+                )
+            }
+            val verstrichen = System.currentTimeMillis() - beginn
+            val rest = weitereFelder.ifEmpty { "\t\t\t\t\t" }
+            datei.appendText("${System.currentTimeMillis()}\t$ergebnis\t$verstrichen\t$pruefungen$rest\n")
+        }.onFailure {
+            println(
+                "WARNUNG: Messwert nicht protokolliert (${it.javaClass.simpleName}: ${it.message}) - " +
+                    "die Messreihe zu Flake (a) bleibt fuer diesen Lauf unvollstaendig",
+            )
         }
     }
 
@@ -123,6 +165,12 @@ class BerichtErstellenSheetTest {
         val direkteAbfrageMs = measureTimeMillis { abfrageErgebnis = befrageDatenbank(app) }
         val verstrichen = System.currentTimeMillis() - beginn
         val anzahl = gefunden.size
+        protokolliereMesswert(
+            "rot",
+            beginn,
+            pruefungen,
+            "\t$anzahl\t$deaktiviert\t$ladeindikatoren\t$direkteAbfrageMs\t$abfrageErgebnis",
+        )
         return "Berichtskonfiguration wurde nicht geladen. verstricheneMs=$verstrichen " +
             "pruefungen=$pruefungen startknopfVorhanden=$anzahl deaktiviert=$deaktiviert " +
             "ladeindikatoren=$ladeindikatoren direkteAbfrageMs=$direkteAbfrageMs " +
@@ -189,12 +237,15 @@ class BerichtErstellenSheetTest {
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
-            composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
-                .fetchSemanticsNodes().isNotEmpty()
+            composeRule
+                .onAllNodesWithTag("bericht_erstellen_fehler")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
 
         assertTrue(runnerAufgerufen.get())
-        composeRule.onNodeWithTag("bericht_erstellen_fehler")
+        composeRule
+            .onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 
@@ -211,13 +262,23 @@ class BerichtErstellenSheetTest {
         composeRule.onNodeWithTag("report_area_WA").performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             runBlocking(Dispatchers.IO) {
-                app.container.database.reportConfigDao().get()?.gebietseinstufung == "WA"
+                app
+                    .container
+                    .database
+                    .reportConfigDao()
+                    .get()
+                    ?.gebietseinstufung == "WA"
             }
         }
         assertEquals(
             "WA",
             runBlocking(Dispatchers.IO) {
-                app.container.database.reportConfigDao().get()?.gebietseinstufung
+                app
+                    .container
+                    .database
+                    .reportConfigDao()
+                    .get()
+                    ?.gebietseinstufung
             },
         )
     }
@@ -228,7 +289,8 @@ class BerichtErstellenSheetTest {
             BerichtScreen(onBack = {}, onOpenSettings = {})
         }
         oeffneSheetUndWarteAufStartknopf()
-        composeRule.onNodeWithTag("btn_high_end_preset_7d")
+        composeRule
+            .onNodeWithTag("btn_high_end_preset_7d")
             .performScrollTo()
             .performClick()
 
@@ -244,6 +306,12 @@ class BerichtErstellenSheetTest {
     @Test fun fehlenderZeitraumSperrtStartMitBegruendungOhneReportEvent() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val diagnosticsReporter = app.container.diagnosticsReporter
+        val vorher =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .count {
+                    it.category == "Bericht" && it.message == "High-End-Bericht nicht gestartet"
+                }
 
         // Ohne Zeitraum darf die Vorprüfung nicht erst beim Klick erfolgen.
         composeRule.setContent {
@@ -257,7 +325,7 @@ class BerichtErstellenSheetTest {
         composeRule
             .onNodeWithTag("bericht_voraussetzung_zeitraum")
             .assertTextEquals(
-                "✗ ${app.getString(R.string.report_precondition_range)}: Bitte zuerst einen Datumsbereich wählen.",
+                "✗ ${app.getString(R.string.report_precondition_range)}: ${app.getString(R.string.report_precondition_error_range)}",
             )
         composeRule
             .onNodeWithTag("bericht_start_blockiert")
@@ -266,5 +334,38 @@ class BerichtErstellenSheetTest {
             )
         val reportEvents = diagnosticsReporter.recentEvents().filter { it.code == DiagnosticCode.REPORT_CREATE_FAILED }
         assertTrue("Eine abgelehnte Vorprüfung darf kein Report-Event erzeugen", reportEvents.isEmpty())
+
+        // Die zwei Gebietswechsel rekomponieren das Sheet, ohne es neu zu öffnen.
+        for (gebiet in listOf("WA", "MI")) {
+            composeRule
+                .onNodeWithTag("input_report_gebietseinstufung")
+                .performScrollTo()
+                .performClick()
+            composeRule
+                .onNodeWithTag("report_area_$gebiet")
+                .performClick()
+            composeRule.waitUntil(timeoutMillis = 15_000L) {
+                runBlocking(Dispatchers.IO) {
+                    app
+                        .container
+                        .database
+                        .reportConfigDao()
+                        .get()
+                        ?.gebietseinstufung == gebiet
+                }
+            }
+        }
+        val nachher =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .count {
+                    it.category == "Bericht" && it.message == "High-End-Bericht nicht gestartet"
+                }
+        assertEquals("Rekompositionen dürfen keinen weiteren Breadcrumb erzeugen", 1, nachher - vorher)
+        val blocker =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .last { it.message == "High-End-Bericht nicht gestartet" }
+        assertTrue(blocker.data["voraussetzungen"].toString().contains("ZEITRAUM"))
     }
 }

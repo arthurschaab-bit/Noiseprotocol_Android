@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -115,8 +116,12 @@ class ServiceControlInstrumentedTest {
 
         AudioRecordingService.testSetzeLaeuft(true)
         try {
-            composeRule.onNodeWithTag("home_lazy_column")
-                .performScrollToNode(hasText(measuringRunningText))
+            composeRule
+                .onNodeWithTag("home_lazy_column")
+                .performScrollToNode(hasTestTag("cockpit_measurement_status"))
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodesWithText(measuringRunningText).fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText(measuringRunningText).assertIsDisplayed()
         } finally {
             AudioRecordingService.testSetzeLaeuft(false)

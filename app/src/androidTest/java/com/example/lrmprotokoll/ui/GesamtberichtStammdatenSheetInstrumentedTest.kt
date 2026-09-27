@@ -11,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.standort.FakeStandortErmittlung
 import com.example.lrmprotokoll.standort.Standort
@@ -101,7 +102,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         composeRule.onNodeWithTag("input_bericht_typ").performTextInput("XL2")
         composeRule.onNodeWithTag("input_bericht_messort").performTextInput("Garten")
 
-        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_save)).performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
 
         val eintraege = runBlocking { app.container.database.stammdatenVerlaufDao().letzte(10) }
@@ -122,7 +123,8 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
 
         composeRule.onNodeWithTag("input_bericht_hersteller").assertTextContains("NTI Audio")
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Musterplatz 1")
-        composeRule.onNodeWithTag("input_bericht_wetter")
+        composeRule
+            .onNodeWithTag("input_bericht_wetter")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         composeRule.onNodeWithTag("button_wetter_uebernehmen").performScrollTo().performClick()
         composeRule.onNodeWithTag("input_bericht_wetter").assertTextContains("12 °C, bedeckt")
@@ -137,7 +139,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
             GesamtberichtStammdatenSheet(sessionId = 1L, onFertig = { fertig = true })
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_save)).performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
 
         val dao = app.container.database.stammdatenVerlaufDao()
@@ -156,7 +158,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("input_bericht_messort").performTextClearance()
         composeRule.onNodeWithTag("input_bericht_messort").performTextInput("Musterplatz 2")
-        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_save)).performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
 
         val dao = app.container.database.stammdatenVerlaufDao()

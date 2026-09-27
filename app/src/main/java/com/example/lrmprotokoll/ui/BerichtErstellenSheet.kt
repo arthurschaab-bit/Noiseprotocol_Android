@@ -47,6 +47,7 @@ import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.report.BerichtTag
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.BerichtVoraussetzungId
+import com.example.lrmprotokoll.report.BerichtVoraussetzungFehler
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import com.example.lrmprotokoll.report.fehlendeStammdatenFelder
 import com.example.lrmprotokoll.report.gewaehlteStammdaten
@@ -94,13 +95,27 @@ fun BerichtErstellenSheet(
     var offenesAuswahlDatum by remember { mutableStateOf<LocalDate?>(null) }
     var datumDialogOffen by remember { mutableStateOf(false) }
     var ladezahl by remember { mutableIntStateOf(0) }
-    var laedt by remember { mutableStateOf(false) }
+    var laedt by remember { mutableStateOf(true) }
     var erzeugt by remember { mutableStateOf(false) }
     var meldung by remember { mutableStateOf<String?>(null) }
     var pdfPfad by remember { mutableStateOf<String?>(null) }
     val voraussetzungen =
         pruefeBerichtVoraussetzungen(zeitraum, tage, config, ausgewaehlteIds)
     val ersterBlocker = voraussetzungen.firstOrNull { !it.erfuellt }
+    var blockerBreadcrumbGeschrieben by remember { mutableStateOf(false) }
+
+    // Erst nach der Datenbankabfrage urteilen; eine Rekomposition darf die Ringdatei nicht fluten.
+    LaunchedEffect(if (laedt) null else ersterBlocker?.id) {
+        val blocker = ersterBlocker.takeUnless { laedt }
+        if (!blockerBreadcrumbGeschrieben && blocker != null) {
+            diagnosticsReporter.breadcrumb(
+                "Bericht",
+                "High-End-Bericht nicht gestartet",
+                mapOf("voraussetzungen" to voraussetzungen.filter { !it.erfuellt }.joinToString(",") { it.id.name }),
+            )
+            blockerBreadcrumbGeschrieben = true
+        }
+    }
 
     LaunchedEffect(zeitraum, ladezahl) {
         laedt = true
@@ -123,17 +138,15 @@ fun BerichtErstellenSheet(
     fun erzeugen() {
         val aktuell = config
         val fehler = when {
-            laedt || aktuell == null -> "Berichtsdaten werden noch geladen."
+            laedt || aktuell == null -> BerichtVoraussetzungFehler(R.string.report_precondition_error_loading)
             else ->
                 pruefeBerichtVoraussetzungen(zeitraum, tage, aktuell, ausgewaehlteIds)
                     .firstOrNull { !it.erfuellt }
                     ?.fehler
         }
         if (fehler != null) {
-            meldung = fehler
-            // Eine abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein
-            // Breadcrumb, kein Report-Event (PROMPT_FIX_BERICHT_HIGHEND.md Schritt 1).
-            diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht nicht gestartet: $fehler")
+            val fehlerText = context.getString(fehler.textRes, *fehler.args.toTypedArray())
+            meldung = fehlerText
             return
         }
         erzeugt = true
@@ -273,25 +286,30 @@ fun BerichtErstellenSheet(
                 stringResource(R.string.report_preconditions_title),
                 style = MaterialTheme.typography.titleSmall,
             )
-            voraussetzungen.forEach { voraussetzung ->
-                val label = stringResource(voraussetzung.id.labelRes())
-                val statusText =
-                    if (voraussetzung.erfuellt) {
-                        "✓ $label"
-                    } else {
-                        "✗ $label: ${voraussetzung.fehler}"
-                    }
-                Text(
-                    statusText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
+            if (laedt) {
+                Text(stringResource(R.string.report_preconditions_loading))
+            } else {
+                voraussetzungen.forEach { voraussetzung ->
+                    val label = stringResource(voraussetzung.id.labelRes())
+                    val fehlerText = voraussetzung.fehler?.let { stringResource(it.textRes, *it.args.toTypedArray()) }
+                    val statusText =
                         if (voraussetzung.erfuellt) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            "✓ $label"
                         } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                    modifier = Modifier.testTag("bericht_voraussetzung_${voraussetzung.id.name.lowercase(Locale.ROOT)}"),
-                )
+                            "✗ $label: $fehlerText"
+                        }
+                    Text(
+                        statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (voraussetzung.erfuellt) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        modifier = Modifier.testTag("bericht_voraussetzung_${voraussetzung.id.name.lowercase(Locale.ROOT)}"),
+                    )
+                }
             }
             meldung?.let {
                 Spacer(Modifier.height(12.dp))
@@ -320,7 +338,7 @@ fun BerichtErstellenSheet(
                     Text(if (erzeugt) "Erzeuge …" else "Bericht jetzt erzeugen")
                 }
             }
-            ersterBlocker?.let {
+            ersterBlocker?.takeUnless { laedt }?.let {
                 Text(
                     stringResource(R.string.report_precondition_blocked, stringResource(it.id.labelRes())),
                     style = MaterialTheme.typography.bodySmall,
@@ -334,8 +352,18 @@ fun BerichtErstellenSheet(
 
     if (datumDialogOffen) {
         val picker = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = zeitraum?.ersterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
-            initialSelectedEndDateMillis = zeitraum?.letzterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+            initialSelectedStartDateMillis =
+                zeitraum
+                    ?.ersterTag
+                    ?.atStartOfDay(ZoneOffset.UTC)
+                    ?.toInstant()
+                    ?.toEpochMilli(),
+            initialSelectedEndDateMillis =
+                zeitraum
+                    ?.letzterTag
+                    ?.atStartOfDay(ZoneOffset.UTC)
+                    ?.toInstant()
+                    ?.toEpochMilli(),
         )
         // Review-Befund (Owner-Meldung 15.09.2026, echtes Geraet): DateRangePicker in einem
         // DatePickerDialog ist ohne Hoehenbegrenzung hoeher als der Bildschirm - Uebernehmen/

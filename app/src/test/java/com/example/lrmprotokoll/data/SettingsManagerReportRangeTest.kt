@@ -19,7 +19,8 @@ class SettingsManagerReportRangeTest {
     @Before
     @After
     fun entferneTestwerte() {
-        context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+        context
+            .getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
             .edit()
             .remove("high_end_bericht_erster_tag")
             .remove("high_end_bericht_letzter_tag")
@@ -37,7 +38,8 @@ class SettingsManagerReportRangeTest {
 
     @Test
     fun ignoriertUnvollstaendigGespeichertenZeitraum() {
-        context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+        context
+            .getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
             .edit()
             .putLong("high_end_bericht_erster_tag", 20_000L)
             .commit()
