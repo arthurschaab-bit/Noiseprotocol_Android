@@ -466,6 +466,7 @@ fun NoiseProtocolApp(
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
     var stammdatenSheetFuerSession by remember { mutableStateOf<Long?>(null) }
     var stammdatenSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
+    var korrekturZiel by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
         val session = offeneSession
         if (!settingsManager.stammdatenAbfrageAktiv || session == null) {
@@ -495,6 +496,14 @@ fun NoiseProtocolApp(
                     stammdatenSheetFuerMessvorgang = null
                 }
             },
+        )
+    }
+    korrekturZiel?.let { (sessionId, messvorgangId) ->
+        GesamtberichtStammdatenSheet(
+            sessionId = sessionId,
+            giltFuerTagStart = null,
+            messvorgangId = messvorgangId,
+            onFertig = { korrekturZiel = null },
         )
     }
     // Lazy statt sofort per remember: siehe Begruendung in ProtokollDetailScreen.kt - der
@@ -1024,7 +1033,7 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
-                                onClick = { s?.id?.let { stammdatenSheetFuerSession = it } },
+                                onClick = { s?.let { korrekturZiel = it.id to it.messvorgangId } },
                                 modifier = Modifier.testTag("btn_session_edit_stammdaten"),
                             ) {
                                 Text(stringResource(R.string.report_metadata_edit_current))

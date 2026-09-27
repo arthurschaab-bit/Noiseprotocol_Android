@@ -188,7 +188,7 @@ class DriveSyncWorkerTest {
 
         // Fuer gestern fehlen Rohdaten: der gezielte Dateiversuch meldet einen Fehler.
         // Ein voller Sync ohne Daten waere dagegen erfolgreich als "keine Aenderung".
-        assertTrue(worker.doWork() is Result.Retry)
+        assertTrue(worker.doWork() is Result.Failure)
     }
 
     /**

@@ -91,7 +91,7 @@ class DriveSyncWorker @JvmOverloads constructor(
                     details = mapOf("grund" to ergebnis.grund, "httpCode" to (ergebnis.httpCode ?: -1))
                 )
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
-                Result.retry()
+                if (ergebnis.wiederholbar) Result.retry() else Result.failure()
             }
         }
     }

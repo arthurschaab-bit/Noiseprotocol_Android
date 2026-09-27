@@ -308,36 +308,39 @@ class MainActivityNavigationAndroidTest {
         val database = app.container.database
         val sessionDao = database.sessionDao()
         val stammdatenDao = database.stammdatenVerlaufDao()
-        runBlocking {
-            sessionDao.insert(
-                SessionEntity(
-                    startedAt = System.currentTimeMillis(),
-                    endedAt = null,
-                    deviceAddress = "",
-                    deviceName = "Smartphone-Mikrofon",
-                    weighting = "A",
-                    timeWeighting = "FAST",
-                ),
-            )
-            stammdatenDao.insert(
-                StammdatenVerlaufEntity(
-                    erstelltAm = System.currentTimeMillis(),
-                    geraetHersteller = "NTI Audio",
-                    geraetTyp = "XL2",
-                    geraetGenauigkeitsklasse = "Klasse 1",
-                    geraetSeriennummer = "12345",
-                    geraetKalibrierung = "94 dB(A)",
-                    messort = "Alter Messort",
-                    mikrofonposition = "Fensterbank",
-                    mikrofonhoehe = "1,5 m",
-                    entfernungZurQuelle = "3 m",
-                    innenAussen = "Innen",
-                    fensterzustand = "geschlossen",
-                    wetter = "bedeckt",
-                    datenqualitaetHinweis = "",
-                ),
-            )
-        }
+        val sessionId =
+            runBlocking {
+                val id =
+                    sessionDao.insertMitMessvorgang(
+                        SessionEntity(
+                            startedAt = System.currentTimeMillis(),
+                            endedAt = null,
+                            deviceAddress = "",
+                            deviceName = "Smartphone-Mikrofon",
+                            weighting = "A",
+                            timeWeighting = "FAST",
+                        ),
+                    )
+                stammdatenDao.insert(
+                    StammdatenVerlaufEntity(
+                        erstelltAm = System.currentTimeMillis(),
+                        geraetHersteller = "NTI Audio",
+                        geraetTyp = "XL2",
+                        geraetGenauigkeitsklasse = "Klasse 1",
+                        geraetSeriennummer = "12345",
+                        geraetKalibrierung = "94 dB(A)",
+                        messort = "Alter Messort",
+                        mikrofonposition = "Fensterbank",
+                        mikrofonhoehe = "1,5 m",
+                        entfernungZurQuelle = "3 m",
+                        innenAussen = "Innen",
+                        fensterzustand = "geschlossen",
+                        wetter = "bedeckt",
+                        datenqualitaetHinweis = "",
+                    ),
+                )
+                id
+            }
 
         setNavigationContent()
         composeRule.warteUndScrolleZu(hasTestTag("btn_session_edit_stammdaten"))
@@ -366,5 +369,7 @@ class MainActivityNavigationAndroidTest {
         assertEquals(2, eintraege.size)
         assertEquals("Korrigierter Messort", eintraege.first().messort)
         assertEquals("Alter Messort", eintraege.last().messort)
+        assertEquals(sessionId, eintraege.first().messvorgangId)
+        assertFalse(runBlocking { sessionDao.byId(sessionId)!!.metadataPromptCompleted })
     }
 }

@@ -80,7 +80,7 @@ class DriveSyncCoordinator(
         data object KeineAenderung : SyncErgebnis
         data class Erfolgreich(val zeilen: Int) : SyncErgebnis
         data class OrdnerNichtGefunden(val httpCode: Int?) : SyncErgebnis
-        data class Fehlgeschlagen(val grund: String, val httpCode: Int?) : SyncErgebnis
+        data class Fehlgeschlagen(val grund: String, val httpCode: Int?, val wiederholbar: Boolean = true) : SyncErgebnis
     }
 
     /**
@@ -121,15 +121,27 @@ class DriveSyncCoordinator(
                 UploadDateiTyp.TAGESDATEI -> wiederholeTagesdatei(ziel.kennung, ordnerId)
                 UploadDateiTyp.FOTO -> {
                     val id = ziel.kennung.toLongOrNull()
-                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Foto-ID", null)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Foto-ID", null, wiederholbar = false)
                     if (!settings.fotoDokuDriveUpload) return SyncErgebnis.SyncAusgeschaltet
+                    val foto = dokumentationsFotoDao?.byId(id)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Foto nicht mehr vorhanden", null, wiederholbar = false)
+                    if (foto.driveFileId != null) return SyncErgebnis.KeineAenderung
+                    if (!java.io.File(foto.dateiPfad).exists()) {
+                        return SyncErgebnis.Fehlgeschlagen("Fotodatei fehlt lokal", null, wiederholbar = false)
+                    }
                     if (ladeFotosHoch(ordnerId, id)) SyncErgebnis.Erfolgreich(1)
                     else SyncErgebnis.Fehlgeschlagen("Foto konnte nicht hochgeladen werden", null)
                 }
                 UploadDateiTyp.VIDEO -> {
                     val id = ziel.kennung.toLongOrNull()
-                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Video-ID", null)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Video-ID", null, wiederholbar = false)
                     if (!settings.videoDriveUpload) return SyncErgebnis.SyncAusgeschaltet
+                    val video = beweisVideoDao?.byId(id)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Video nicht mehr vorhanden", null, wiederholbar = false)
+                    if (video.driveFileId != null) return SyncErgebnis.KeineAenderung
+                    if (!video.tonGemuxt || !java.io.File(video.dateiPfad).exists()) {
+                        return SyncErgebnis.Fehlgeschlagen("Fertige Videodatei fehlt lokal", null, wiederholbar = false)
+                    }
                     if (ladeVideosHoch(ordnerId, id)) SyncErgebnis.Erfolgreich(1)
                     else SyncErgebnis.Fehlgeschlagen("Video konnte nicht hochgeladen werden", null)
                 }
@@ -151,11 +163,11 @@ class DriveSyncCoordinator(
 
     private suspend fun wiederholeTagesdatei(datum: String, ordnerId: String): SyncErgebnis {
         val tag = runCatching { LocalDate.parse(datum) }.getOrElse {
-            return SyncErgebnis.Fehlgeschlagen("Ungültiges Tagesdatum", null)
+            return SyncErgebnis.Fehlgeschlagen("Ungültiges Tagesdatum", null, wiederholbar = false)
         }
         val von = tag.atStartOfDay(zone).toInstant()
         val bis = minOf(tag.plusDays(1).atStartOfDay(zone).toInstant(), now.now())
-        if (bis <= von) return SyncErgebnis.Fehlgeschlagen("Keine Messwerte für diesen Tag vorhanden", null)
+        if (bis <= von) return SyncErgebnis.Fehlgeschlagen("Keine Messwerte für diesen Tag vorhanden", null, wiederholbar = false)
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), bis.toEpochMilli()).map {
             ProtokollEreignis(
                 at = Instant.ofEpochMilli(it.timestamp),
@@ -169,7 +181,7 @@ class DriveSyncCoordinator(
             von, bis, ereignisse, Duration.ofSeconds(settings.driveAggregationSekunden.toLong()),
         )
         if (!abschnitte.hatteRohwerte || abschnitte.zeilen.isEmpty()) {
-            return SyncErgebnis.Fehlgeschlagen("Rohdaten für diesen Tag fehlen", null)
+            return SyncErgebnis.Fehlgeschlagen("Rohdaten für diesen Tag fehlen", null, wiederholbar = false)
         }
         val registry = dailyFileDao.byDate(datum)
         val zielordner = ordnerbaum.ordnerFuer(ordnerId, datum, DriveKategorie.SCHALLMESSUNG).getOrThrow()
