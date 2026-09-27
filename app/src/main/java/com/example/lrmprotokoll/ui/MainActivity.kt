@@ -480,11 +480,11 @@ fun NoiseProtocolApp(
     }
     LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv, heutigerMesstag) {
         val session = offeneSession
-        if (!settingsManager.stammdatenAbfrageAktiv || session == null) {
+        if (!settingsManager.stammdatenAbfrageAktiv) {
             stammdatenSheetFuerSession = null
             stammdatenSheetFuerMessvorgang = null
             stammdatenSheetTagStart = null
-        } else {
+        } else if (session != null) {
             val zone = ZoneId.systemDefault()
             val (von, bis) = messtagGrenzen(heutigerMesstag, zone)
             val messvorgangId = session.messvorgangId
