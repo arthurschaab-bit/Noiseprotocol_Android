@@ -65,6 +65,7 @@ import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
 import com.example.lrmprotokoll.report.messtagGrenzen
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
@@ -445,6 +446,13 @@ fun NoiseProtocolApp(
     // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
     var stammdatenSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    /**
+     * Messtag, dem die Eingabe zugeordnet wird - `null` heisst "heute, regulaerer Weg"
+     * (Review-Befund zu PR #220). Beide Stellen, die [stammdatenSheetFuerSession] setzen, setzen
+     * auch diesen Wert; sonst traegt das Sheet den Messtag der zuletzt geoeffneten Session weiter.
+     */
+    var stammdatenSheetMesstag by rememberSaveable { mutableStateOf<Long?>(null) }
     var zuletztGefragteStammdatenSession by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
         val id = offeneSession?.id
@@ -460,11 +468,19 @@ fun NoiseProtocolApp(
                     val eintraege = dao.fuerTag(von, bis)
                     eintraege.isNotEmpty()
                 }
-            if (!heuteBestaetigt) stammdatenSheetFuerSession = id
+            if (!heuteBestaetigt) {
+                // Die Tagesbestaetigung beim Messbeginn gilt immer heute - hier nie ein Messtag.
+                stammdatenSheetMesstag = null
+                stammdatenSheetFuerSession = id
+            }
         }
     }
     stammdatenSheetFuerSession?.let { id ->
-        GesamtberichtStammdatenSheet(sessionId = id, onFertig = { stammdatenSheetFuerSession = null })
+        GesamtberichtStammdatenSheet(
+            sessionId = id,
+            onFertig = { stammdatenSheetFuerSession = null },
+            giltFuerTagStart = stammdatenSheetMesstag,
+        )
     }
     // Lazy statt sofort per remember: siehe Begruendung in ProtokollDetailScreen.kt - der
     // init-Block von NoiseClassifier laedt synchron das YAMNet-Modell und wird hier nur bei
@@ -902,7 +918,22 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
-                                onClick = { s?.id?.let { stammdatenSheetFuerSession = it } },
+                                onClick = {
+                                    // Dieser Knopf erscheint auch fuer die zuletzt BEENDETE
+                                    // Session. Ohne Messtag landet eine Korrektur von gestern
+                                    // beim heutigen Tag, und der gestrige Bericht sieht sie nie
+                                    // (Review-Befund zu PR #220).
+                                    s?.let { session ->
+                                        stammdatenSheetMesstag =
+                                            messtagFuerStammdatenKorrektur(
+                                                startedAt = session.startedAt,
+                                                endedAt = session.endedAt,
+                                                jetzt = System.currentTimeMillis(),
+                                                zone = ZoneId.systemDefault(),
+                                            )
+                                        stammdatenSheetFuerSession = session.id
+                                    }
+                                },
                                 modifier = Modifier.testTag("btn_session_edit_stammdaten"),
                             ) {
                                 Text(stringResource(R.string.report_metadata_edit_current))
