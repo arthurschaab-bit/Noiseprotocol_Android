@@ -1477,8 +1477,12 @@ fun NoiseProtocolApp(
                 settingsManager.meterDeviceAddress = device.address
                 settingsManager.meterDeviceName = device.name
                 showPairingDialog = false
-                val intent = Intent(context, AudioRecordingService::class.java)
-                context.startForegroundService(intent)
+                // S-3/F-02: Koppeln ist kein Messbeginn. Vorher startete diese Stelle den
+                // Vordergrunddienst - ohne EXTRA_START_AUDIO_MONITORING zwar ohne Audioaufnahme,
+                // aber mit _laeuft = true und Notification, also sichtbar als "MESSUNG LAEUFT".
+                // Der Weg ueber den Statusbadge ist fuer viele der einzige zum Koppeln
+                // (Owner-Geraetetest 27.09.2026), und genau dort blieb F-02 damit wirkungslos.
+                container.meterAutoConnect.verbindeJetzt()
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false },
