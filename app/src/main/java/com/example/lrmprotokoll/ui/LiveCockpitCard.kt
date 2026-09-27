@@ -438,6 +438,7 @@ fun LiveCockpitCard(
                 Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
+                    .testTag("cockpit_measurement_status")
                     .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
