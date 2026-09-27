@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -416,6 +417,15 @@ class SettingsManager(
     var stammdatenAbfrageAktiv: Boolean
         get() = prefs.getBoolean("stammdaten_abfrage_aktiv", true)
         set(value) = prefs.edit().putBoolean("stammdaten_abfrage_aktiv", value).apply()
+
+    /** Auch bei einem ueber Mitternacht laufenden Messvorgang nur einmal je Messtag fragen. */
+    fun stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId: Long, tagStart: Long): Boolean =
+        prefs.getString("stammdaten_abfrage_letzter_tag", null) == "$messvorgangId:$tagStart"
+
+    @SuppressLint("ApplySharedPref") // Die Antwort muss vor einem moeglichen Prozessende dauerhaft sein.
+    fun stammdatenAbfrageFuerTagAbschliessen(messvorgangId: Long, tagStart: Long) {
+        prefs.edit().putString("stammdaten_abfrage_letzter_tag", "$messvorgangId:$tagStart").commit()
+    }
 
     /**
      * Automatische, vollstaendige Datenbank-Sicherung nach Drive (`<Ordner>/BACKUP/`), Default

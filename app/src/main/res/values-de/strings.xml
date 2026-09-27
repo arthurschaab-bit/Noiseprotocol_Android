@@ -463,6 +463,9 @@
     <string name="label_ai_prefix">KI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
     <string name="settings_open_meter">Messgerät koppeln</string>
+    <string name="settings_section_meter">Messgerät (PCE-323)</string>
+    <string name="settings_section_meter_desc">Kalibriertes Schallpegelmessgerät per Bluetooth koppeln, verbinden und trennen. Ohne Messgerät misst die App über das Smartphone-Mikrofon, unkalibriert.</string>
+    <string name="settings_meter_not_paired">Nicht gekoppelt</string>
     <string name="settings_open_trash">Papierkorb öffnen</string>
     <string name="bericht_intro_title">Berichte erstellen</string>
     <string name="report_area_save_error">Gebietseinstufung konnte nicht gespeichert werden</string>

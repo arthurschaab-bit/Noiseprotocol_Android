@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -13,6 +14,7 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.meter.FakeMeterTransport
+import com.example.lrmprotokoll.report.messtagGrenzen
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -23,6 +25,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDate
+import java.time.ZoneId
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityNavigationAndroidTest {
@@ -45,6 +49,11 @@ class MainActivityNavigationAndroidTest {
         // Stammdaten-Abfrage darf dabei keinen Dialog ueber die Startliste legen.
         previousStammdatenAbfrageAktiv = app.container.settingsManager.stammdatenAbfrageAktiv
         app.container.settingsManager.stammdatenAbfrageAktiv = false
+        app
+            .getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+            .edit()
+            .remove("stammdaten_abfrage_letzter_tag")
+            .commit()
         app.container.database.clearAllTables()
     }
 
@@ -52,6 +61,11 @@ class MainActivityNavigationAndroidTest {
     fun tearDown() {
         app.container.settingsManager.fotoDokuAktiv = false
         app.container.settingsManager.stammdatenAbfrageAktiv = previousStammdatenAbfrageAktiv
+        app
+            .getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+            .edit()
+            .remove("stammdaten_abfrage_letzter_tag")
+            .commit()
         app.container.database.clearAllTables()
         app.resetContainer()
     }
@@ -161,14 +175,71 @@ class MainActivityNavigationAndroidTest {
     }
 
     @Test
+    fun mehrtaegigeMessungFragtAmDrittenTagErneutNachStammdaten() {
+        app.container.settingsManager.stammdatenAbfrageAktiv = true
+        val zone = ZoneId.systemDefault()
+        val tagEins = LocalDate.now(zone).minusDays(2)
+        val tagZwei = tagEins.plusDays(1)
+        val tagDrei = tagZwei.plusDays(1)
+        val (tagEinsVon, tagEinsBis) = messtagGrenzen(tagEins, zone)
+        val (tagZweiVon, _) = messtagGrenzen(tagZwei, zone)
+        val (tagDreiVon, _) = messtagGrenzen(tagDrei, zone)
+        val messvorgangId =
+            runBlocking {
+                val id =
+                    app.container.database.sessionDao().insertMitMessvorgang(
+                        SessionEntity(
+                            startedAt = tagEinsVon + (tagEinsBis - tagEinsVon) / 2,
+                            endedAt = null,
+                            deviceAddress = "",
+                            deviceName = "Mikrofon",
+                            weighting = null,
+                            timeWeighting = null,
+                            metadataPromptCompleted = true,
+                        ),
+                    )
+                app.container.database.stammdatenVerlaufDao().insert(
+                    StammdatenVerlaufEntity(
+                        erstelltAm = tagEinsVon + (tagEinsBis - tagEinsVon) / 2,
+                        geraetHersteller = "",
+                        geraetTyp = "",
+                        geraetGenauigkeitsklasse = "",
+                        geraetSeriennummer = "",
+                        geraetKalibrierung = "",
+                        messort = "Tag eins",
+                        mikrofonposition = "",
+                        mikrofonhoehe = "",
+                        entfernungZurQuelle = "",
+                        innenAussen = "",
+                        fensterzustand = "",
+                        wetter = "",
+                        datenqualitaetHinweis = "",
+                        messvorgangId = id,
+                    ),
+                )
+                id
+            }
+        app.container.settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, tagZweiVon)
+
+        setNavigationContent()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Überspringen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Überspringen").performClick()
+        composeRule.waitUntil(10_000) {
+            app.container.settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, tagDreiVon)
+        }
+    }
+
+    @Test
     fun ausgeschalteterDriveSyncErscheintImCockpitNeutral() {
         val vorher = app.container.settingsManager.driveSyncEnabled
         try {
             app.container.settingsManager.driveSyncEnabled = false
             setNavigationContent()
-            composeRule.onNodeWithTag("home_lazy_column")
-                .performScrollToNode(hasTestTag("card_drive_status"))
-            composeRule.onNodeWithText("Ausgeschaltet – Messdaten bleiben lokal").assertIsDisplayed()
+            val statusText = app.getString(R.string.drive_status_disabled)
+            composeRule.warteUndScrolleZu(hasText(statusText))
+            composeRule.onNodeWithText(statusText).assertIsDisplayed()
         } finally {
             app.container.settingsManager.driveSyncEnabled = vorher
         }
@@ -371,5 +442,93 @@ class MainActivityNavigationAndroidTest {
         assertEquals("Alter Messort", eintraege.last().messort)
         assertEquals(sessionId, eintraege.first().messvorgangId)
         assertFalse(runBlocking { sessionDao.byId(sessionId)!!.metadataPromptCompleted })
+    }
+
+    /**
+     * Review-Befund zu PR #220: derselbe Knopf erscheint auch fuer die zuletzt **beendete**
+     * Session. Wird er am Folgetag benutzt, muss die Korrektur zum Messtag der Session gehoeren -
+     * sonst erzeugt sie einen Eintrag fuer heute und der gestrige Bericht sieht sie nie.
+     *
+     * Der Test ist bewusst hier und nicht nur als Unit-Test auf
+     * [com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur]: der Fehler lag nicht in
+     * einer Berechnung, sondern darin, dass der Messtag gar nicht erst an das Sheet uebergeben
+     * wurde. Eine reine Funktionspruefung haette ihn nicht gefunden.
+     *
+     * Die Zusicherungen unterscheiden die beiden Faelle eindeutig:
+     * - mit Korrektur: der neue Eintrag steht in `fuerTag(gestern)` und **nicht** in `letzte()`,
+     *   weil ein Nachtrag (`giltFuerTagStart` gesetzt) dort bewusst uebersprungen wird.
+     * - ohne Korrektur (der alte Fehler): der Eintrag haette `giltFuerTagStart = null` und
+     *   `erstelltAm = heute` - er stuende in `letzte()` und nicht in `fuerTag(gestern)`.
+     */
+    @Test
+    fun stammdatenKorrekturEinerGestrigenSessionGehoertZumGestrigenMesstag() {
+        val zone = ZoneId.systemDefault()
+        val gestern = LocalDate.now(zone).minusDays(1)
+        val (gesternVon, gesternBis) = messtagGrenzen(gestern, zone)
+        val gesternMittag = gesternVon + (gesternBis - gesternVon) / 2
+
+        val database = app.container.database
+        val sessionDao = database.sessionDao()
+        val stammdatenDao = database.stammdatenVerlaufDao()
+        runBlocking {
+            sessionDao.insert(
+                SessionEntity(
+                    startedAt = gesternMittag,
+                    endedAt = gesternMittag + 60 * 60 * 1000,
+                    deviceAddress = "",
+                    deviceName = "Smartphone-Mikrofon",
+                    weighting = "A",
+                    timeWeighting = "FAST",
+                ),
+            )
+            stammdatenDao.insert(
+                StammdatenVerlaufEntity(
+                    erstelltAm = gesternMittag,
+                    geraetHersteller = "NTI Audio",
+                    geraetTyp = "XL2",
+                    geraetGenauigkeitsklasse = "Klasse 1",
+                    geraetSeriennummer = "12345",
+                    geraetKalibrierung = "94 dB(A)",
+                    messort = "Alter Messort",
+                    mikrofonposition = "Fensterbank",
+                    mikrofonhoehe = "1,5 m",
+                    entfernungZurQuelle = "3 m",
+                    innenAussen = "Innen",
+                    fensterzustand = "geschlossen",
+                    wetter = "bedeckt",
+                    datenqualitaetHinweis = "",
+                ),
+            )
+        }
+
+        setNavigationContent()
+        composeRule.warteUndScrolleZu(hasTestTag("btn_session_edit_stammdaten"))
+        composeRule.onNodeWithTag("btn_session_edit_stammdaten").performClick()
+        composeRule
+            .onNodeWithTag("input_bericht_messort")
+            .performScrollTo()
+            .performTextClearance()
+        composeRule
+            .onNodeWithTag("input_bericht_messort")
+            .performTextInput("Korrektur von gestern")
+        composeRule
+            .onNodeWithText(app.getString(R.string.report_metadata_save))
+            .performScrollTo()
+            .performClick()
+        composeRule.waitUntil(10_000) {
+            runBlocking { stammdatenDao.fuerTag(gesternVon, gesternBis) }.size == 2
+        }
+
+        val fuerGestern = runBlocking { stammdatenDao.fuerTag(gesternVon, gesternBis) }
+        assertEquals("Korrektur von gestern", fuerGestern.first().messort)
+        assertEquals(gesternVon, fuerGestern.first().giltFuerTagStart)
+
+        val regulaere = runBlocking { stammdatenDao.letzte(10) }
+        assertEquals(
+            "Ein Nachtrag darf nicht als Vorbelegung der naechsten Messung auftauchen, war $regulaere",
+            1,
+            regulaere.size,
+        )
+        assertEquals("Alter Messort", regulaere.first().messort)
     }
 }

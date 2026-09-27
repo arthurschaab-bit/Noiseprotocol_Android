@@ -278,6 +278,122 @@ entschärfen hat die Rate nicht zuverlässig gesenkt.
    sie ist ein Fehlschlag, der nur in rund einem Drittel der Läufe auftritt, in der CI nicht
    untersuchbar.
 
+### Messreihe 26.09.2026 — drei Hypothesen widerlegt, die Ursache eingegrenzt
+
+Owner-Auftrag: Messreihe fahren und die Werte in eine Datei schreiben. Die Diagnose aus #210
+landete bis dahin nur in der Fehlermeldung und verfiel mit dem Testbericht — über mehrere
+Vorkommen ließ sich nichts vergleichen.
+
+**Neu: `protokolliereMesswert()`** hängt jede Messung an `app/build/flake_a_messwerte.tsv`, und
+zwar für **beide** Ausgänge. Ohne die Verteilung der grünen Läufe sagt ein einzelner roter nichts
+darüber, ob sich etwas geändert hat. Das erste Ergebnis daraus ist schon ein Befund:
+
+| Ausgang | verstricheneMs | Prüfungen |
+|---|---|---|
+| grün | 52, 56, 619 | **1** |
+| rot | 15292, 15311, 15340, 15387, 15430 | 1282–1294 |
+
+**Streng zweigipflig.** Entweder ist der Knopf bei der *ersten* Prüfung frei, oder er wird es nie.
+Kein Mittelfeld — „zu langsam" scheidet damit als Erklärung aus.
+
+**Was geprüft und widerlegt wurde:**
+
+| # | Hypothese | Vorgehen | Ergebnis |
+|---|---|---|---|
+| 1 | `advanceTimeBy` holt die auf den Main-Looper gepostete Fortsetzung nicht ab | `shadowOf(Looper.getMainLooper()).idle()` je Prüfschritt | **widerlegt** — schon der erste Lauf rot (15387 ms) |
+| 2 | Der Main-Dispatcher läuft unter `autoAdvance = false` nicht, oder der Rückweg vom IO-Sprung kommt nicht an | Zwei Sonden: Coroutine auf `Dispatchers.Main`, und eine mit `withContext(Dispatchers.IO)` und zurück | **widerlegt** — `sondeMain=true sondeNachIo=true` in *jedem* roten Lauf |
+| 3 | Die Zustandsänderung erreicht die Komposition nicht, weil keine Snapshot-Benachrichtigung zugestellt wird | `Snapshot.sendApplyNotifications()` je Prüfschritt, 16 Läufe | **widerlegt** — 5/16 rot gegen 10/28 der Basis, kein Effekt |
+
+**Ein eigener Fehler, der hier festgehalten gehört:** Die Diagnose aus #210 misst mit
+`runBlocking(Dispatchers.IO)`. Das umgeht den Main-Dispatcher vollständig und belegt nur den
+*Hinweg* zur Datenbank, nie den Rückweg. Auf diese Messung war die Aussage „die Room-Abfrage ist
+schnell, also nicht die Ursache" gestützt — sie trug weniger, als ihr zugeschrieben wurde. Zudem
+prüfte sie nur `reportConfigDao().get()`, also die **erste** der beiden IO-Abfragen des Effekts;
+`ladeBerichtstage()` war nie gemessen. Eine dritte Sonde holt das nach: sie kehrt in 521 ms zurück,
+**während** das Sheet hängt.
+
+**Was die Ursache eingrenzt.** Zähler im `LaunchedEffect` (temporär, nicht eingecheckt) liefern im
+roten Lauf:
+
+```
+effektStart=1 nachConfig=1 nachTage=1 effektEnde=1 abbruch=null
+```
+
+Der Effekt lief **einmal vollständig durch**. `laedt = false` wurde ausgeführt, kein Abbruch, keine
+Ausnahme. Der Knopf hängt an `enabled = !erzeugt && !laedt`, und `erzeugt` ist zu diesem Zeitpunkt
+noch `false`. Er müsste frei sein — der Test sieht ihn 1287 Prüfungen lang als gesperrt.
+
+**Was daraus folgt — und was nicht.** Review-Befund 27.09.2026: eine frühere Fassung dieses
+Abschnitts schloss aus den Zählern, der Produktivzustand sei korrekt und der Hänger könne Nutzer
+nicht treffen. Das trägt die Messung nicht. Die Zähler stammen aus **einem beobachteten
+Robolectric-Lauf** mit `autoAdvance = false`; sie sagen etwas über diesen Testfall, nicht über das
+Verhalten auf Geräten. Ein Gerätelauf zu diesem Zustand fehlt.
+
+- Belegt ist: **in den beobachteten roten Läufen** lief der `LaunchedEffect` vollständig durch und
+  führte `laedt = false` aus, während die Komposition desselben Laufs den fertigen Zustand nicht
+  übernahm.
+- Belegt ist ebenso: weder Dispatcher noch Looper noch Datenbank noch Snapshot-Benachrichtigungen
+  erklären das; alle drei Hypothesen sind widerlegt (Tabelle oben).
+- **Offen** bleibt die Ursache: der Verdacht richtet sich auf `autoAdvance = false` selbst — den
+  Behelf aus #209 gegen die endlose `CircularProgressIndicator`-Animation. **Warum** die
+  Rekomposition in diesem Modus ausbleibt, ließ sich ohne tiefen Einstieg in Compose-Interna nicht
+  klären.
+- **Offen** bleibt damit auch die Produktwirkung. Solange die Ursache unbekannt ist, lässt sich
+  nicht ausschließen, dass derselbe Mechanismus auf einem Gerät eine Entsprechung hat. Die
+  ursprüngliche Sorge — ein dauerhaft gesperrter Knopf mit Endlosspinner — ist damit **nicht**
+  ausgeräumt, sondern unbeantwortet. Sie zu beantworten braucht einen Gerätelauf, nicht noch eine
+  Messreihe in Robolectric.
+
+### Nach Phase 3 (PR #218, 27.09.2026): reproduziert nicht mehr — aber nicht aus dem erwarteten Grund
+
+Phase 3 ist gemergt. Messreihe auf dem neuen Stand, dieselbe Methodik:
+
+| | rote Läufe | Messungen |
+|---|---|---|
+| vor Phase 3 | **10 von 28** | rot bei 15292–15430 ms / 1282–1294 Prüfungen |
+| nach Phase 3 | **0 von 12** | **48 von 48 grün**, Median 104 ms, Maximum 1150 ms, 1–2 Prüfungen |
+
+Fisher exakt, zweiseitig, auf Laufebene: **p = 0,019**. Bei der alten Rate wären in 12 Läufen
+rund 4,3 rote zu erwarten gewesen. Der Effekt ist damit belegt — anders als bei PR #209, wo ich
+aus drei grünen Läufen zu früh einen Erfolg gemacht habe.
+
+**Meine Vorhersage war im Mechanismus falsch.** Ich hatte F-07 als den Weg benannt: „wenn die
+Vorbedingungen in eine reine Funktion gezogen werden, entfällt der `LaunchedEffect`-Ladepfad als
+Wartebedingung". F-07 hat die Vorbedingungen nach `report/BerichtVoraussetzungen.kt` gezogen, aber
+`autoAdvance = false` und den `LaunchedEffect`-Ladepfad **unverändert gelassen**. Geholfen hat
+stattdessen **F-08**: der Helfer wartet nicht mehr auf `btn_bericht_erstellen_start`, dessen
+`enabled` an `laedt` hing, sondern auf das neue Feld `input_report_gebietseinstufung`.
+
+**Was damit NICHT belegt ist.** Dass das zugrundeliegende Problem weg ist. Belegt ist nur, dass
+dieser Test nicht mehr davon abhängt. Der Befund von oben — der `LaunchedEffect` läuft durch,
+`laedt = false` wird ausgeführt, die Komposition des Tests übernimmt es unter `autoAdvance = false`
+trotzdem nicht — ist dadurch nicht widerlegt und auch nicht erklärt. **Ein anderer Test, der auf
+einen von `laedt` abhängigen Knoten wartet, kann erneut darauf laufen.** Wer so einen Test
+schreibt, sollte diesen Abschnitt kennen.
+
+**Nachtrag 27.09.2026 — die Datei hat sofort geliefert, wofür sie da ist.** Beim Nachbessern der
+Review-Befunde zu diesem PR lief die Klasse noch einmal, und dabei trat ein roter Lauf auf:
+
+```
+1790511171756	rot	15025	1425	0	null	0	4	null
+```
+
+Danach 20 von 20 grün in fünf weiteren Läufen. Auf diesem Branch stehen damit **1 rot in 24
+Messungen** statt der oben genannten 0 von 12. Der Effekt von Phase 3 bleibt bestehen, die
+Formulierung „reproduziert nicht mehr" ist aber zu stark — seltener, nicht weg.
+
+**Die Signatur ist zudem eine andere.** `startknopfVorhanden=0`: das Sheet ging gar nicht erst auf.
+Die dokumentierten roten Läufe von vorher hatten den Knopf sehr wohl, nur dauerhaft gesperrt
+(`ladeindikatoren>0`). Das ist nach der Tabelle in `sammleDiagnose` der Zweig „Animation/Fenster",
+nicht der Ladepfad. Ob das derselbe Mechanismus unter anderem Vorzeichen ist oder ein zweiter,
+ist **offen** — eine Messung reicht für keine Aussage.
+
+Die Messwertdatei `app/build/flake_a_messwerte.tsv` bleibt eingebaut. Sie kostet nichts und ist
+genau das Werkzeug, mit dem ein Wiederauftreten in einer Runde statt in einem Tag erkennbar ist —
+siehe den Nachtrag oben, der ohne sie nur eine unerklärte rote Zeile im Testbericht gewesen wäre.
+In der CI wird sie über den Schritt „Upload test reports" als Artefakt gesichert, auch bei rotem
+Lauf; ohne das verfielen die Vergleichswerte mit dem Runner (Review-Befund 27.09.2026).
+
 **Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
 `enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
 Roadmap-Phase 3 (`docs/PROMPT_UX_PHASE3.md`), deren Definition of Done ausdrücklich verlangt,

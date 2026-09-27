@@ -34,6 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.system.measureTimeMillis
@@ -88,10 +89,51 @@ class BerichtErstellenSheetTest {
                     composeRule.onNodeWithTag("input_report_gebietseinstufung").assertIsEnabled()
                 }.isSuccess
             }
+            protokolliereMesswert("gruen", beginn, pruefungen)
         } catch (zeitueberschreitung: ComposeTimeoutException) {
             throw AssertionError(diagnose(beginn, pruefungen), zeitueberschreitung)
         } finally {
             composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    /**
+     * Haengt eine Zeile an `app/build/flake_a_messwerte.tsv`.
+     *
+     * Die Diagnoseausgabe aus #210 stand bisher nur in der Fehlermeldung und verfiel mit dem
+     * Testbericht - ueber mehrere Vorkommen liess sich nichts vergleichen. Protokolliert werden
+     * deshalb **beide** Ausgaenge: ohne die Verteilung der gruenen Laeufe sagt ein einzelner
+     * roter nichts darueber, ob sich etwas geaendert hat.
+     *
+     * Ausserhalb einer Messreihe ist die Datei nur ein Nebenprodukt im Build-Verzeichnis; sie
+     * wird nie gelesen und nie zugesichert. runCatching, damit ein Schreibfehler niemals einen
+     * Test rot macht - aber **mit** Meldung: ein stiller Fehlschlag laesst die Messreihe
+     * unbemerkt leer laufen (Review-Befund 27.09.2026). In der CI wird die Datei ueber den
+     * Schritt "Upload test reports" als Artefakt gesichert, auch bei rotem Lauf.
+     */
+    private fun protokolliereMesswert(
+        ergebnis: String,
+        beginn: Long,
+        pruefungen: Int,
+        weitereFelder: String = "",
+    ) {
+        runCatching {
+            val datei = File("build/flake_a_messwerte.tsv")
+            datei.parentFile?.mkdirs()
+            if (!datei.exists()) {
+                datei.appendText(
+                    "zeitstempel\tergebnis\tverstricheneMs\tpruefungen\tstartknopfVorhanden\t" +
+                        "deaktiviert\tladeindikatoren\tdirekteAbfrageMs\tdirekteAbfrage\n",
+                )
+            }
+            val verstrichen = System.currentTimeMillis() - beginn
+            val rest = weitereFelder.ifEmpty { "\t\t\t\t\t" }
+            datei.appendText("${System.currentTimeMillis()}\t$ergebnis\t$verstrichen\t$pruefungen$rest\n")
+        }.onFailure {
+            println(
+                "WARNUNG: Messwert nicht protokolliert (${it.javaClass.simpleName}: ${it.message}) - " +
+                    "die Messreihe zu Flake (a) bleibt fuer diesen Lauf unvollstaendig",
+            )
         }
     }
 
@@ -123,6 +165,12 @@ class BerichtErstellenSheetTest {
         val direkteAbfrageMs = measureTimeMillis { abfrageErgebnis = befrageDatenbank(app) }
         val verstrichen = System.currentTimeMillis() - beginn
         val anzahl = gefunden.size
+        protokolliereMesswert(
+            "rot",
+            beginn,
+            pruefungen,
+            "\t$anzahl\t$deaktiviert\t$ladeindikatoren\t$direkteAbfrageMs\t$abfrageErgebnis",
+        )
         return "Berichtskonfiguration wurde nicht geladen. verstricheneMs=$verstrichen " +
             "pruefungen=$pruefungen startknopfVorhanden=$anzahl deaktiviert=$deaktiviert " +
             "ladeindikatoren=$ladeindikatoren direkteAbfrageMs=$direkteAbfrageMs " +

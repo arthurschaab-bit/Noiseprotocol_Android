@@ -1057,6 +1057,10 @@ class SettingsScreenInstrumentedTest {
     /**
      * Checkliste Button/Screen-Coverage Phase 6.2: der "Zur Messgeraet-Kopplung"-Button war
      * bislang nie geklickt worden, nur seine Sichtbarkeit gepruft.
+     *
+     * Der Knopf liegt seit dem Auffindbarkeits-Fix in der eigenen Sektion "Messgeraet (PCE-323)"
+     * statt am Ende von "Schwellenwerte & Audio" - der Test klappt deshalb eine andere Karte auf.
+     * Die Zusicherung selbst ist unveraendert.
      */
     @Test
     fun btnOpenMeterRuftOnNavigateToMeterAuf() {
@@ -1064,7 +1068,7 @@ class SettingsScreenInstrumentedTest {
         composeRule.setContent { SettingsScreen(onBack = {}, onNavigateToMeter = { geklickt = true }) }
         composeRule.waitForIdle()
 
-        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
+        val titel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_meter)
         composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
 

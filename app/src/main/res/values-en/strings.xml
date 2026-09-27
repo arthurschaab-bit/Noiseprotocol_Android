@@ -461,6 +461,9 @@
     <string name="label_ai_prefix">AI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
     <string name="settings_open_meter">Pair measuring device</string>
+    <string name="settings_section_meter">Sound level meter (PCE-323)</string>
+    <string name="settings_section_meter_desc">Pair, connect and disconnect a calibrated sound level meter over Bluetooth. Without a meter the app measures through the phone microphone, uncalibrated.</string>
+    <string name="settings_meter_not_paired">Not paired</string>
     <string name="settings_open_trash">Open trash</string>
     <string name="bericht_intro_title">Create reports</string>
     <string name="report_area_save_error">Could not save the area classification</string>

@@ -66,12 +66,14 @@ import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
 import com.example.lrmprotokoll.report.messtagGrenzen
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -464,44 +466,66 @@ fun NoiseProtocolApp(
     // nicht mehr fest in den Einstellungen, sondern beim Messbeginn abfragen - dieselbe
     // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
-    var stammdatenSheetFuerSession by remember { mutableStateOf<Long?>(null) }
-    var stammdatenSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
-    var korrekturZiel by remember { mutableStateOf<Pair<Long, Long>?>(null) }
-    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
+    var stammdatenSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    var stammdatenSheetFuerMessvorgang by rememberSaveable { mutableStateOf<Long?>(null) }
+    var stammdatenSheetTagStart by rememberSaveable { mutableStateOf<Long?>(null) }
+    var korrekturZiel by remember { mutableStateOf<Triple<Long, Long, Long?>?>(null) }
+    var heutigerMesstag by remember { mutableStateOf(LocalDate.now(ZoneId.systemDefault())) }
+    LaunchedEffect(offeneSession?.id) {
+        while (offeneSession != null) {
+            val heute = LocalDate.now(ZoneId.systemDefault())
+            if (heutigerMesstag != heute) heutigerMesstag = heute
+            delay(60_000)
+        }
+    }
+    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv, heutigerMesstag) {
         val session = offeneSession
         if (!settingsManager.stammdatenAbfrageAktiv || session == null) {
             stammdatenSheetFuerSession = null
             stammdatenSheetFuerMessvorgang = null
-        } else if (stammdatenSheetFuerMessvorgang != session.messvorgangId) {
+            stammdatenSheetTagStart = null
+        } else {
+            val zone = ZoneId.systemDefault()
+            val (von, bis) = messtagGrenzen(heutigerMesstag, zone)
             val messvorgangId = session.messvorgangId
-            val bereitsAbgeschlossen = container.database.sessionDao().fuerMessvorgang(messvorgangId)
-                .any { it.metadataPromptCompleted }
-            val hatStammdaten = container.database.stammdatenVerlaufDao().fuerMessvorgang(messvorgangId)
-                .isNotEmpty()
-            if (!bereitsAbgeschlossen && !hatStammdaten) {
+            val (ersteSession, stammdaten) = withContext(Dispatchers.IO) {
+                container.database.sessionDao().fuerMessvorgang(messvorgangId).firstOrNull() to
+                    container.database.stammdatenVerlaufDao().fuerMessvorgang(messvorgangId)
+            }
+            val ersterTagBereitsAbgeschlossen = ersteSession?.let {
+                it.metadataPromptCompleted && it.startedAt in von until bis
+            } ?: false
+            val hatStammdaten = stammdaten.any { it.erstelltAm in von until bis && it.giltFuerTagStart == null }
+            if (!settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von) &&
+                !ersterTagBereitsAbgeschlossen && !hatStammdaten && stammdatenSheetTagStart != von
+            ) {
                 stammdatenSheetFuerSession = session.id
                 stammdatenSheetFuerMessvorgang = messvorgangId
+                stammdatenSheetTagStart = von
             }
         }
     }
     stammdatenSheetFuerSession?.let { id ->
         val messvorgangId = stammdatenSheetFuerMessvorgang ?: id
+        val tagStart = stammdatenSheetTagStart
         GesamtberichtStammdatenSheet(
             sessionId = id,
             messvorgangId = messvorgangId,
             onFertig = {
                 scope.launch {
+                    if (tagStart != null) settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, tagStart)
                     container.database.sessionDao().stammdatenAbfrageAbgeschlossen(messvorgangId)
                     stammdatenSheetFuerSession = null
                     stammdatenSheetFuerMessvorgang = null
+                    stammdatenSheetTagStart = null
                 }
             },
         )
     }
-    korrekturZiel?.let { (sessionId, messvorgangId) ->
+    korrekturZiel?.let { (sessionId, messvorgangId, messtag) ->
         GesamtberichtStammdatenSheet(
             sessionId = sessionId,
-            giltFuerTagStart = null,
+            giltFuerTagStart = messtag,
             messvorgangId = messvorgangId,
             onFertig = { korrekturZiel = null },
         )
@@ -1033,7 +1057,18 @@ fun NoiseProtocolApp(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             TextButton(
-                                onClick = { s?.let { korrekturZiel = it.id to it.messvorgangId } },
+                                onClick = {
+                                    s?.let { session ->
+                                        val messtag =
+                                            messtagFuerStammdatenKorrektur(
+                                                startedAt = session.startedAt,
+                                                endedAt = session.endedAt,
+                                                jetzt = System.currentTimeMillis(),
+                                                zone = ZoneId.systemDefault(),
+                                            )
+                                        korrekturZiel = Triple(session.id, session.messvorgangId, messtag)
+                                    }
+                                },
                                 modifier = Modifier.testTag("btn_session_edit_stammdaten"),
                             ) {
                                 Text(stringResource(R.string.report_metadata_edit_current))
