@@ -422,50 +422,76 @@ fun NoiseProtocolApp(
         .sessionDao()
         .offeneSessionFlow()
         .collectAsState(initial = null)
-    var fotoSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
-    var zuletztGefragteSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    var fotoSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var fotoSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv) {
-        val id = offeneSession?.id
-        if (settingsManager.fotoDokuAktiv && id != null && id != zuletztGefragteSession) {
-            zuletztGefragteSession = id
-            if (container.database
-                    .dokumentationsFotoDao()
-                    .fuerSession(id)
-                    .isEmpty()
-            ) {
-                fotoSheetFuerSession = id
+        val session = offeneSession
+        if (!settingsManager.fotoDokuAktiv || session == null) {
+            fotoSheetFuerSession = null
+            fotoSheetFuerMessvorgang = null
+        } else if (fotoSheetFuerMessvorgang != session.messvorgangId) {
+            val messvorgangId = session.messvorgangId
+            val bereitsAbgeschlossen = container.database.sessionDao().fuerMessvorgang(messvorgangId)
+                .any { it.photoPromptCompleted }
+            val hatFoto = container.database.dokumentationsFotoDao().fuerMessvorgang(messvorgangId)
+                .isNotEmpty()
+            if (!bereitsAbgeschlossen && !hatFoto) {
+                fotoSheetFuerSession = session.id
+                fotoSheetFuerMessvorgang = messvorgangId
             }
         }
     }
     fotoSheetFuerSession?.let { id ->
-        FotoDokumentationSheet(sessionId = id, onFertig = { fotoSheetFuerSession = null })
+        val messvorgangId = fotoSheetFuerMessvorgang ?: id
+        FotoDokumentationSheet(
+            sessionId = id,
+            messvorgangId = messvorgangId,
+            onFertig = {
+                scope.launch {
+                    container.database.sessionDao().fotoAbfrageAbgeschlossen(messvorgangId)
+                    fotoSheetFuerSession = null
+                    fotoSheetFuerMessvorgang = null
+                }
+            },
+        )
     }
 
     // Owner-Anfrage 10.09.2026: Gesamtbericht-Stammdaten (Geraet, Messaufbau, Randbedingungen)
     // nicht mehr fest in den Einstellungen, sondern beim Messbeginn abfragen - dieselbe
     // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
-    var stammdatenSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
-    var zuletztGefragteStammdatenSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    var stammdatenSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var stammdatenSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
-        val id = offeneSession?.id
-        if (settingsManager.stammdatenAbfrageAktiv && id != null && id != zuletztGefragteStammdatenSession) {
-            zuletztGefragteStammdatenSession = id
-            val zone = ZoneId.systemDefault()
-            val heute = LocalDate.now(zone)
-            val (von, bis) = messtagGrenzen(heute, zone)
-            val heuteBestaetigt =
-                withContext(Dispatchers.IO) {
-                    val database = container.database
-                    val dao = database.stammdatenVerlaufDao()
-                    val eintraege = dao.fuerTag(von, bis)
-                    eintraege.isNotEmpty()
-                }
-            if (!heuteBestaetigt) stammdatenSheetFuerSession = id
+        val session = offeneSession
+        if (!settingsManager.stammdatenAbfrageAktiv || session == null) {
+            stammdatenSheetFuerSession = null
+            stammdatenSheetFuerMessvorgang = null
+        } else if (stammdatenSheetFuerMessvorgang != session.messvorgangId) {
+            val messvorgangId = session.messvorgangId
+            val bereitsAbgeschlossen = container.database.sessionDao().fuerMessvorgang(messvorgangId)
+                .any { it.metadataPromptCompleted }
+            val hatStammdaten = container.database.stammdatenVerlaufDao().fuerMessvorgang(messvorgangId)
+                .isNotEmpty()
+            if (!bereitsAbgeschlossen && !hatStammdaten) {
+                stammdatenSheetFuerSession = session.id
+                stammdatenSheetFuerMessvorgang = messvorgangId
+            }
         }
     }
     stammdatenSheetFuerSession?.let { id ->
-        GesamtberichtStammdatenSheet(sessionId = id, onFertig = { stammdatenSheetFuerSession = null })
+        val messvorgangId = stammdatenSheetFuerMessvorgang ?: id
+        GesamtberichtStammdatenSheet(
+            sessionId = id,
+            messvorgangId = messvorgangId,
+            onFertig = {
+                scope.launch {
+                    container.database.sessionDao().stammdatenAbfrageAbgeschlossen(messvorgangId)
+                    stammdatenSheetFuerSession = null
+                    stammdatenSheetFuerMessvorgang = null
+                }
+            },
+        )
     }
     // Lazy statt sofort per remember: siehe Begruendung in ProtokollDetailScreen.kt - der
     // init-Block von NoiseClassifier laedt synchron das YAMNet-Modell und wird hier nur bei

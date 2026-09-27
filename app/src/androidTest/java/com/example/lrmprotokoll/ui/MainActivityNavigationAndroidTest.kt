@@ -73,7 +73,7 @@ class MainActivityNavigationAndroidTest {
     fun fotoAbfrageBleibtNachNavigationErledigtUndSessionUnveraendert() {
         app.container.settingsManager.fotoDokuAktiv = true
         val sessionId = runBlocking {
-            app.container.database.sessionDao().insert(
+            app.container.database.sessionDao().insertMitMessvorgang(
                 SessionEntity(startedAt = System.currentTimeMillis(), endedAt = null,
                     deviceAddress = "", deviceName = "Mikrofon", weighting = null, timeWeighting = null)
             )
@@ -84,7 +84,9 @@ class MainActivityNavigationAndroidTest {
             composeRule.onAllNodesWithText("Ohne Foto fortfahren").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Ohne Foto fortfahren").performClick()
-        composeRule.waitForIdle()
+        composeRule.waitUntil(10_000) {
+            runBlocking { app.container.database.sessionDao().byId(sessionId)?.photoPromptCompleted == true }
+        }
         val startEntry = navController.currentBackStackEntry!!.id
         repeat(3) {
             composeRule.onNodeWithTag("nav_item_protokoll").performClick()
@@ -94,6 +96,67 @@ class MainActivityNavigationAndroidTest {
             composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
             assertEquals(sessionId, runBlocking { app.container.database.sessionDao().offeneSession()!!.id })
         }
+        runBlocking {
+            val dao = app.container.database.sessionDao()
+            dao.update(dao.byId(sessionId)!!.copy(endedAt = System.currentTimeMillis()))
+            dao.insertMitMessvorgang(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis() + 1,
+                    endedAt = null,
+                    deviceAddress = "PCE",
+                    deviceName = "PCE-323",
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+                sessionId,
+            )
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+    }
+
+    @Test
+    fun stammdatenAbfrageBleibtNachQuellenwechselUndNeuemUiStateErledigt() {
+        app.container.settingsManager.stammdatenAbfrageAktiv = true
+        val sessionId = runBlocking {
+            app.container.database.sessionDao().insertMitMessvorgang(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis(),
+                    endedAt = null,
+                    deviceAddress = "",
+                    deviceName = "Mikrofon",
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+            )
+        }
+        setNavigationContent()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Überspringen").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Überspringen").performClick()
+        composeRule.waitUntil(10_000) {
+            runBlocking { app.container.database.sessionDao().byId(sessionId)?.metadataPromptCompleted == true }
+        }
+        runBlocking {
+            val dao = app.container.database.sessionDao()
+            dao.update(dao.byId(sessionId)!!.copy(endedAt = System.currentTimeMillis()))
+            dao.insertMitMessvorgang(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis() + 1,
+                    endedAt = null,
+                    deviceAddress = "PCE",
+                    deviceName = "PCE-323",
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+                sessionId,
+            )
+        }
+        composeRule.onNodeWithTag("nav_item_protokoll").performClick()
+        composeRule.onNodeWithTag("nav_item_main").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Überspringen").assertDoesNotExist()
     }
 
     @Test
