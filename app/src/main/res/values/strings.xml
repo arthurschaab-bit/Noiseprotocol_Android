@@ -508,4 +508,17 @@
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
     <string name="dienst_start_ohne_quelle">Überwachung nicht gestartet: keine Mikrofon-Berechtigung und kein Messgerät gekoppelt.</string>
+    <!-- Drive im Messfluss (F-13) -->
+    <string name="drive_status_title">Drive-Sicherung</string>
+    <string name="drive_status_disabled">Ausgeschaltet – Messdaten bleiben lokal</string>
+    <string name="drive_status_no_folder">Noch kein Zielordner eingerichtet</string>
+    <string name="drive_status_failed_days">%1$d Tagesdateien fehlgeschlagen</string>
+    <string name="drive_status_active_empty">Aktiv – noch kein Upload abgeschlossen</string>
+    <string name="drive_status_uploads">Uploads</string>
+    <string name="drive_status_setup">Einrichten</string>
+    <string name="drive_retry_queued">Upload dieser Datei eingeplant</string>
+    <string name="drive_retry_enqueue_failed">Upload konnte nicht eingeplant werden</string>
+    <string name="drive_retry_action">Erneut versuchen</string>
+    <string name="drive_upload_now_action">Jetzt hochladen</string>
+    <string name="drive_resume_action">Fortsetzen</string>
 </resources>

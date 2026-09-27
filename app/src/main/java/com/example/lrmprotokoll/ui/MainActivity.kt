@@ -56,6 +56,7 @@ import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.audio.berechneBaulaermMinutenDesTages
 import com.example.lrmprotokoll.audio.bewerteAlleNeu
 import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
+import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
@@ -221,6 +222,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onNavigateToProtokoll = { navigiereZuTab("protokoll") },
                     onNavigateToDiagnose = { navigiereZuTab("diagnose") },
                     onNavigateToVideo = { navController.navigate("video") },
+                    onNavigateToDriveUploads = { navController.navigate("drive-uploads") },
                     onShowSnackbar = { msg, action, onAction ->
                         scope.launch {
                             val result =
@@ -394,6 +396,7 @@ fun NoiseProtocolApp(
     onNavigateToProtokoll: () -> Unit,
     onNavigateToDiagnose: () -> Unit,
     onNavigateToVideo: () -> Unit,
+    onNavigateToDriveUploads: () -> Unit = {},
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
     reportManager: ReportManager? = null,
     batchClassifyOverride: (suspend (List<NoiseRecord>, (Int, Int) -> Unit) -> Int)? = null,
@@ -412,6 +415,7 @@ fun NoiseProtocolApp(
     // liess. Hier gelesen, loest jede Aenderung eine normale Rekomposition aus.
     val records = dao.getAll().collectAsState(initial = emptyList()).value
     val references = dao.getAllReferences().collectAsState(initial = emptyList()).value
+    val driveTagesdateien = db.driveDailyFileDao().alle().collectAsState(initial = emptyList()).value
     val scope = rememberCoroutineScope()
     val effectiveReportManager = remember(reportManager) { reportManager ?: ReportManager(context) }
 
@@ -919,6 +923,45 @@ fun NoiseProtocolApp(
                     onNavigateToVideo = onNavigateToVideo,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) },
                 )
+            }
+        }
+
+        item {
+            val driveAktiv = settingsManager.driveSyncEnabled
+            val ordnerEingerichtet = settingsManager.driveFolderId != null
+            val fehlgeschlageneTage = driveTagesdateien.count { it.state == DriveSyncState.FAILED }
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("card_drive_status"),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (driveAktiv && fehlgeschlageneTage > 0) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.drive_status_title), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when {
+                                !driveAktiv -> stringResource(R.string.drive_status_disabled)
+                                !ordnerEingerichtet -> stringResource(R.string.drive_status_no_folder)
+                                fehlgeschlageneTage > 0 -> stringResource(R.string.drive_status_failed_days, fehlgeschlageneTage)
+                                else -> settingsManager.driveSyncLastMessage?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.drive_status_active_empty)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    TextButton(onClick = if (driveAktiv && ordnerEingerichtet) onNavigateToDriveUploads else onNavigateToSettings) {
+                        Text(stringResource(if (driveAktiv && ordnerEingerichtet) R.string.drive_status_uploads else R.string.drive_status_setup))
+                    }
+                }
             }
         }
 

@@ -8,6 +8,11 @@ import com.example.lrmprotokoll.data.DriveSyncState
 /** In welchem Zustand ein Eintrag der Upload-Uebersicht steht. */
 enum class UploadZustand { HOCHGELADEN, LAEUFT, OFFEN, FEHLGESCHLAGEN }
 
+enum class UploadDateiTyp { TAGESDATEI, FOTO, VIDEO }
+
+/** Stabile Kennung fuer einen gezielten Wiederholungsversuch. */
+data class UploadDateiZiel(val typ: UploadDateiTyp, val kennung: String)
+
 /**
  * Eine Zeile der Upload-Uebersicht.
  *
@@ -17,12 +22,14 @@ enum class UploadZustand { HOCHGELADEN, LAEUFT, OFFEN, FEHLGESCHLAGEN }
  * Fortschrittsbalken zu erfinden, wo keiner gemessen wird, waere gelogen.
  */
 data class UploadEintrag(
+    val ziel: UploadDateiZiel,
     val bezeichnung: String,
     val kategorie: DriveKategorie,
     val zustand: UploadZustand,
     val zeitpunkt: Long,
     val gesendeteBytes: Long = 0,
     val gesamtBytes: Long = 0,
+    val retryMoeglich: Boolean = true,
 ) {
     val prozent: Int?
         get() = if (zustand == UploadZustand.LAEUFT && gesamtBytes > 0) {
@@ -51,6 +58,7 @@ object DriveUploadUebersicht {
 
         tagesdateien.forEach { tag ->
             eintraege += UploadEintrag(
+                ziel = UploadDateiZiel(UploadDateiTyp.TAGESDATEI, tag.date),
                 bezeichnung = "Messwerte ${tag.date}",
                 kategorie = DriveKategorie.SCHALLMESSUNG,
                 zustand = when (tag.state) {
@@ -64,6 +72,7 @@ object DriveUploadUebersicht {
 
         fotos.forEach { foto ->
             eintraege += UploadEintrag(
+                ziel = UploadDateiZiel(UploadDateiTyp.FOTO, foto.id.toString()),
                 bezeichnung = foto.dateiPfad.substringAfterLast('/'),
                 kategorie = DriveKategorie.FOTOS,
                 zustand = if (foto.driveFileId != null) UploadZustand.HOCHGELADEN else UploadZustand.OFFEN,
@@ -73,6 +82,7 @@ object DriveUploadUebersicht {
 
         videos.forEach { video ->
             eintraege += UploadEintrag(
+                ziel = UploadDateiZiel(UploadDateiTyp.VIDEO, video.id.toString()),
                 bezeichnung = video.dateiPfad.substringAfterLast('/'),
                 kategorie = DriveKategorie.VIDEOS,
                 zustand = when {
@@ -85,6 +95,7 @@ object DriveUploadUebersicht {
                 zeitpunkt = video.gestartetAm,
                 gesendeteBytes = video.hochgeladeneBytes,
                 gesamtBytes = video.groesseBytes,
+                retryMoeglich = video.tonGemuxt,
             )
         }
 

@@ -414,6 +414,21 @@ class DriveSyncCoordinatorTest {
             )
     }
 
+    @Test
+    fun gezielterTagesdateiRetryBeruehrtKeineAnderenTage() = runTest {
+        fuegeSampleFuerTagHinzu(tageZurueck = 1, sekundenSeitMitternacht = 3600, db = 55.0)
+        fuegeSampleFuerTagHinzu(tageZurueck = 2, sekundenSeitMitternacht = 3600, db = 60.0)
+        val gestern = uhr.now().atZone(zone).toLocalDate().minusDays(1).toString()
+
+        val ergebnis = baueKoordinator().wiederholeDatei(
+            UploadDateiZiel(UploadDateiTyp.TAGESDATEI, gestern),
+        )
+
+        assertTrue(ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+        assertEquals(setOf(gestern), dailyFileDao.zeilen.keys)
+        assertEquals(1, driveApi.anlegenAufrufe)
+    }
+
     // ---------------------------------------------------------------- 30-Tage-Nachholsync (Praefprotokoll-Anhang)
 
     @Test
@@ -945,6 +960,39 @@ class DriveSyncCoordinatorTest {
         zone = zone,
         beweisVideoDao = dao,
     )
+
+    @Test
+    fun gezielterVideoRetryLaedtNurDasGewaehltVideoHoch() = runTest {
+        settings.videoDriveUpload = true
+        val erstes = videoEintrag(id = 1, pfad = tempVideo().absolutePath)
+        val zweites = videoEintrag(id = 2, pfad = tempVideo().absolutePath)
+        val dao = FakeBeweisVideoDao(listOf(erstes, zweites))
+        val client = ResumableClient(driveApi)
+
+        val ergebnis = koordinatorMitVideos(dao, client).wiederholeDatei(
+            UploadDateiZiel(UploadDateiTyp.VIDEO, "2"),
+        )
+
+        assertTrue(ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+        assertEquals(1, client.aufrufe)
+        assertEquals(null, dao.zeilen.getValue(1L).driveFileId)
+        assertEquals("drive-video-1", dao.zeilen.getValue(2L).driveFileId)
+    }
+
+    @Test
+    fun gezielterRetryBeiAusgeschaltetemDriveSyncLaedtNichtsHoch() = runTest {
+        settings.driveSyncEnabled = false
+        settings.videoDriveUpload = true
+        val dao = FakeBeweisVideoDao(listOf(videoEintrag(pfad = tempVideo().absolutePath)))
+        val client = ResumableClient(driveApi)
+
+        val ergebnis = koordinatorMitVideos(dao, client).wiederholeDatei(
+            UploadDateiZiel(UploadDateiTyp.VIDEO, "1"),
+        )
+
+        assertEquals(DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet, ergebnis)
+        assertEquals(0, client.aufrufe)
+    }
 
     @Test
     fun beiDeaktiviertemVideoUploadGehtKeinVideoRaus() =

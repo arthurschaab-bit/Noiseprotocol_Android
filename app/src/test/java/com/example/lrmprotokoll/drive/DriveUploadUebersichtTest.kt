@@ -62,6 +62,14 @@ class DriveUploadUebersichtTest {
     }
 
     @Test
+    fun ungemuxtesVideoKannNichtVorzeitigErneutHochgeladenWerden() {
+        val eintrag = DriveUploadUebersicht.baue(
+            emptyList(), emptyList(), listOf(video(1).copy(tonGemuxt = false)),
+        ).single()
+        assertEquals(false, eintrag.retryMoeglich)
+    }
+
+    @Test
     fun fuerNichtLaufendeUploadsGibtEsKeinenProzentwert() {
         // Fotos und CSV gehen in einem einzigen Aufruf raus - einen Fortschritt zu erfinden,
         // wo keiner gemessen wird, waere gelogen.
@@ -124,5 +132,23 @@ class DriveUploadUebersichtTest {
     @Test
     fun eineLeereUebersichtIstKeinFehler() {
         assertEquals(emptyList<UploadEintrag>(), DriveUploadUebersicht.baue(emptyList(), emptyList(), emptyList()))
+    }
+
+    @Test
+    fun jederEintragHatDieEindeutigeQuelleFuerEinenGezieltenRetry() {
+        val eintraege = DriveUploadUebersicht.baue(
+            listOf(tagesdatei("2026-09-03", DriveSyncState.FAILED)),
+            listOf(foto(17, hochgeladen = false)),
+            listOf(video(29)),
+        )
+
+        assertEquals(
+            setOf(
+                UploadDateiZiel(UploadDateiTyp.TAGESDATEI, "2026-09-03"),
+                UploadDateiZiel(UploadDateiTyp.FOTO, "17"),
+                UploadDateiZiel(UploadDateiTyp.VIDEO, "29"),
+            ),
+            eintraege.map { it.ziel }.toSet(),
+        )
     }
 }

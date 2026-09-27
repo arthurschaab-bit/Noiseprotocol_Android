@@ -506,4 +506,17 @@
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnostics</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Restart</string>
     <string name="dienst_start_ohne_quelle">Monitoring not started: no microphone permission and no meter paired.</string>
+    <!-- Drive in the measurement flow (F-13) -->
+    <string name="drive_status_title">Drive backup</string>
+    <string name="drive_status_disabled">Off – measurements remain on this device</string>
+    <string name="drive_status_no_folder">No destination folder configured yet</string>
+    <string name="drive_status_failed_days">%1$d daily files failed</string>
+    <string name="drive_status_active_empty">On – no upload completed yet</string>
+    <string name="drive_status_uploads">Uploads</string>
+    <string name="drive_status_setup">Set up</string>
+    <string name="drive_retry_queued">Upload of this file queued</string>
+    <string name="drive_retry_enqueue_failed">Could not queue upload</string>
+    <string name="drive_retry_action">Try again</string>
+    <string name="drive_upload_now_action">Upload now</string>
+    <string name="drive_resume_action">Resume</string>
 </resources>

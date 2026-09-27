@@ -8,6 +8,7 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
+import androidx.work.workDataOf
 import com.example.lrmprotokoll.alert.TestUhr
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
@@ -165,14 +166,30 @@ class DriveSyncWorkerTest {
         zone = zone,
     )
 
-    private fun bauWorker(coordinator: DriveSyncCoordinator) =
+    private fun bauWorker(coordinator: DriveSyncCoordinator, ziel: UploadDateiZiel? = null) =
         TestListenableWorkerBuilder<DriveSyncWorker>(context)
+            .apply {
+                if (ziel != null) {
+                    setInputData(workDataOf("retry_typ" to ziel.typ.name, "retry_kennung" to ziel.kennung))
+                }
+            }
             .setWorkerFactory(object : WorkerFactory() {
                 override fun createWorker(
                     appContext: Context, workerClassName: String, workerParameters: WorkerParameters,
                 ) = DriveSyncWorker(appContext, workerParameters, coordinator)
             })
             .build()
+
+    @Test
+    fun gezielterRetryWirdNichtAlsVollerSyncAusgefuehrt() = runTest {
+        val worker = bauWorker(
+            baueKoordinator(), UploadDateiZiel(UploadDateiTyp.TAGESDATEI, "2026-08-18"),
+        )
+
+        // Fuer gestern fehlen Rohdaten: der gezielte Dateiversuch meldet einen Fehler.
+        // Ein voller Sync ohne Daten waere dagegen erfolgreich als "keine Aenderung".
+        assertTrue(worker.doWork() is Result.Retry)
+    }
 
     /**
      * Ein Pegelwert eine Stunde vor der fixen Testuhr-Zeit ([uhr]) - unabhaengig von der echten

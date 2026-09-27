@@ -160,6 +160,20 @@ class MainActivityNavigationAndroidTest {
     }
 
     @Test
+    fun ausgeschalteterDriveSyncErscheintImCockpitNeutral() {
+        val vorher = app.container.settingsManager.driveSyncEnabled
+        try {
+            app.container.settingsManager.driveSyncEnabled = false
+            setNavigationContent()
+            composeRule.onNodeWithTag("home_lazy_column")
+                .performScrollToNode(hasTestTag("card_drive_status"))
+            composeRule.onNodeWithText("Ausgeschaltet – Messdaten bleiben lokal").assertIsDisplayed()
+        } finally {
+            app.container.settingsManager.driveSyncEnabled = vorher
+        }
+    }
+
+    @Test
     fun vorhandeneFotosUnterdrueckenAbfrageAuchBeiNeuemUiState() {
         app.container.settingsManager.fotoDokuAktiv = true
         val sessionId = runBlocking {
