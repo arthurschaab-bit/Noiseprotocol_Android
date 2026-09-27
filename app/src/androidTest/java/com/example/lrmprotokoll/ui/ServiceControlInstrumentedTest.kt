@@ -14,7 +14,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -115,8 +114,14 @@ class ServiceControlInstrumentedTest {
 
         AudioRecordingService.testSetzeLaeuft(true)
         try {
-            composeRule.onNodeWithTag("home_lazy_column")
-                .performScrollToNode(hasText(measuringRunningText))
+            // testSetzeLaeuft setzt einen StateFlow aus dem Testthread. Bis collectAsState ihn
+            // eingesammelt und Compose rekomponiert hat, gibt es den Knoten noch nicht - ein
+            // einmaliger performScrollToNode hat dafuer keine Toleranz und scheitert sofort
+            // ("No node found ... in scrollable container", CI-Lauf 36299826685). warteUndScrolleZu
+            // wiederholt den Scroll bis 10 s und deckt beides ab: die Verzoegerung UND den in der
+            // LazyColumn noch nicht komponierten Knoten, an dem der fruehere waitUntil-Ansatz
+            // gescheitert ist.
+            composeRule.warteUndScrolleZu(hasText(measuringRunningText))
             composeRule.onNodeWithText(measuringRunningText).assertIsDisplayed()
         } finally {
             AudioRecordingService.testSetzeLaeuft(false)
