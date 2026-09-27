@@ -2961,6 +2961,51 @@ bleibt die Sicherheitsaussage, dass ohne Berechtigung keine Audioaufzeichnung l�
 
 ---
 
+<a id="f-36"></a>
+
+#### F-36 · Der Verbindungszustand ist an der Statusanzeige nicht ablesbar · **P2**
+
+*Nachgetragen am 27.09.2026 aus dem Owner-Gerätetest zu PR #216 (S-3, echtes PCE-323). Der
+Owner konnte die Schritte A1, A5 und B3 des Testplans nicht beantworten — nicht wegen eines
+Fehlers in der Verbindungslogik, sondern weil die Anzeige den Zustand nicht hergibt: „die obere
+PCE-Anzeige wechselt in unterschiedliche Farben, die nicht viel aussagen. Manchmal wird eine
+Ampel angezeigt, manchmal nicht, der Rahmen hat unterschiedliche Farben. Das gleiche für die
+Nebenkachel WAV."*
+
+**UX:** Die Statusanzeige beantwortet die einzige Frage nicht, die der Nutzer an sie hat: *ist
+das Messgerät jetzt verbunden oder nicht?* Drei Ursachen greifen zusammen:
+
+1. **Zwei Zustände, eine Farbe.** `IDLE` und `DISCONNECTED` sind beide `Color(0xFF616161)`
+   (`ui/BluetoothStatusBadge.kt:55-56`). „Noch nie verbunden" und „Verbindung verloren" sehen
+   identisch aus, obwohl das eine harmlos und das andere ein Messausfall ist.
+2. **Bewegung nur in der Hälfte der Zustände.** Das Pulsieren läuft in `SCANNING`,
+   `CONNECTING`, `DISCOVERING`, `SUBSCRIBING` und `RECONNECTING` (`:59-64`), in den übrigen
+   fünf nicht. Dass die Animation fehlt, ist selbst eine Information — sie wird aber nirgends
+   erklärt, und der Nutzer liest sie als „mal ist eine Ampel da, mal nicht".
+3. **Zwei Bildsprachen nebeneinander.** Der Badge nutzt Punkt plus Containerfarbe, die
+   WAV-Kachel im Cockpit eine andere Gestaltung. Direkt benachbart entsteht der Eindruck, die
+   Farben bedeuteten in beiden dasselbe.
+
+*Betroffener Use Case:* jede Messung mit Messgerät. *Häufigkeit:* dauernd.
+
+*Zielverhalten:* Der Zustand steht **als Text** am Badge (den Text gibt es schon, siehe
+`BluetoothStatusBadge.kt:101` — er ist nur nicht die tragende Information), `IDLE` und
+`DISCONNECTED` werden unterscheidbar, und die beiden Kacheln folgen einer Bildsprache.
+
+**Technik:** `ui/BluetoothStatusBadge.kt:46-64` (Farb- und Animationszuordnung),
+`ui/LiveCockpitCard.kt` (Badge-Einbettung und WAV-Kachel daneben). Reine Anzeigeänderung: keine
+Zustandsmaschine, keine Persistenz, keine Migration. `ConnectionState` bleibt unverändert.
+
+**Was dieser Befund nicht ist:** kein Fehler in der Verbindungslogik. Die Stelle, die die
+Verbindung beim Messungsende bewusst stehen lässt, ist korrekt abgesichert
+(`audio/AudioRecordingService.kt`, `trenneMessgeraetFallsNiemandEsBraucht()`). Sie schreibt seit
+PR #216 einen Breadcrumb, damit Gerätetest B3 ohne die Farbe entscheidbar ist — das ersetzt die
+Anzeige aber nicht, sondern umgeht sie nur für den Test.
+
+**Tests:** `androidTest/.../ui/BluetoothStatusBadgeInstrumentedTest.kt` erweitern (je Zustand die
+erwartete Textausgabe, nicht die Farbe). Kein bestehender Test sichert heute eine Farbe zu, ein
+Umbau bricht also nichts.
+
 ## 30. Quick Wins
 
 Aufnahmekriterien: erkennbarer UX-Nutzen · geringes Risiko · überschaubarer Aufwand · klar
@@ -3333,7 +3378,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-10](#f-10), [F-21](#f-21), [F-22](#f-22), [F-23](#f-23), [F-31](#f-31), [F-33](#f-33), **[F-34](#f-34)** (nachgetragen 25.09.2026) |
+| **Findings** | [F-10](#f-10), [F-21](#f-21), [F-22](#f-22), [F-23](#f-23), [F-31](#f-31), [F-33](#f-33), **[F-34](#f-34)** (nachgetragen 25.09.2026), **[F-36](#f-36)** (nachgetragen 27.09.2026) |
 | **Komponenten** | neue Speicher-Prüffunktion, `LiveCockpitCard`, Badges, `MainActivity` (Snackbar-Kanäle) |
 | **Erwarteter UX-Effekt** | Messungen scheitern nicht mehr still an Speicher; zentrale Bedienelemente sind bedienbar und für TalkBack korrekt |
 | **Risiko** | niedrig |

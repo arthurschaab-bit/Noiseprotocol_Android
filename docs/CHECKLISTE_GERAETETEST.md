@@ -112,6 +112,8 @@ Zwischen den Szenarien jeweils warten, bis die App wieder **Verbunden** meldet.
 
 | # | Szenario | Erwartung | Ergebnis |
 |---|----------|-----------|----------|
+| C0a | Messgerät an, App öffnen, **keine** Messung starten | Im Cockpit läuft der Pegel mit, darunter steht **„Live-Pegel · wird nicht aufgezeichnet"**, und es erscheint **keine** Notification (seit S-3/F-02; vorher zeigte das Cockpit ohne Messung "--.-") | |
+| C0b | Nach C0a eine Messung starten und wieder beenden | Der Pegel läuft danach weiter, der Hinweis erscheint wieder. Beweis im Diagnoseprotokoll: „Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)" | |
 | C1 | Mit dem Telefon aus der Funkreichweite gehen (anderer Raum, Tür zu) | Zustand wechselt auf *Verbinde erneut…*, kein Absturz | |
 | C2 | Zurückkommen | Verbindung stellt sich **von allein** wieder her, ohne Zutun | |
 | C3 | Messgerät ausschalten und aus lassen | Nach rund **zwei Minuten** steht **Fehlgeschlagen** | |
