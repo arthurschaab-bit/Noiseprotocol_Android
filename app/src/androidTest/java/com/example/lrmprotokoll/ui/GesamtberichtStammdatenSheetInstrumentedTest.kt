@@ -120,6 +120,46 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
 
         composeRule.onNodeWithTag("input_bericht_hersteller").assertTextContains("NTI Audio")
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Musterplatz 1")
+        composeRule.onNodeWithTag("input_bericht_wetter").assertTextEquals("")
+        composeRule.onNodeWithTag("button_wetter_uebernehmen").performScrollTo().performClick()
+        composeRule.onNodeWithTag("input_bericht_wetter").assertTextContains("12 °C, bedeckt")
+    }
+
+    @Test
+    fun unveraenderteZweiteBestaetigungAmSelbenTagLegtKeinenEintragAn() {
+        legeVerlaufseintragAn(messort = "Musterplatz 1", erstelltAm = System.currentTimeMillis())
+        var fertig = false
+
+        composeRule.setContent {
+            GesamtberichtStammdatenSheet(sessionId = 1L, onFertig = { fertig = true })
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
+
+        val dao = app.container.database.stammdatenVerlaufDao()
+        val eintraege = runBlocking { dao.letzte(10) }
+        assertEquals(1, eintraege.size)
+    }
+
+    @Test
+    fun geaenderterWertAmSelbenTagErzeugtKorrektureintrag() {
+        legeVerlaufseintragAn(messort = "Musterplatz 1", erstelltAm = System.currentTimeMillis())
+        var fertig = false
+
+        composeRule.setContent {
+            GesamtberichtStammdatenSheet(sessionId = 1L, onFertig = { fertig = true })
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("input_bericht_messort").performTextClearance()
+        composeRule.onNodeWithTag("input_bericht_messort").performTextInput("Musterplatz 2")
+        composeRule.onNodeWithText("Speichern").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000L) { fertig }
+
+        val dao = app.container.database.stammdatenVerlaufDao()
+        val eintraege = runBlocking { dao.letzte(10) }
+        assertEquals(2, eintraege.size)
+        assertEquals("Musterplatz 2", eintraege.first().messort)
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.example.lrmprotokoll.messreihe.berechneDatenverfuegbarkeitProzent
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.Locale
 
 /**
  * Frei ausfuellbare Geraete-/Messaufbau-/Randbedingungsangaben - seit Owner-Anfrage 10.09.2026 am
@@ -76,6 +77,31 @@ data class GesamtberichtStammdaten(
         wetter = wetter,
         datenqualitaetHinweis = datenqualitaetHinweis,
     )
+
+    /** Vergleicht nur die fachlichen Angaben; ID, Erfassungszeit und Messtag sind Metadaten. */
+    fun entsprichtEintrag(eintrag: StammdatenVerlaufEntity): Boolean {
+        fun String.normalisiert(grossKleinRelevant: Boolean = false): String {
+            val vereinheitlicht = trim().replace(Regex("\\s+"), " ")
+            return if (grossKleinRelevant) vereinheitlicht else vereinheitlicht.lowercase(Locale.ROOT)
+        }
+
+        val seriennummerGleich =
+            geraetSeriennummer.normalisiert(grossKleinRelevant = true) ==
+                eintrag.geraetSeriennummer.normalisiert(grossKleinRelevant = true)
+        return geraetHersteller.normalisiert() == eintrag.geraetHersteller.normalisiert() &&
+            geraetTyp.normalisiert() == eintrag.geraetTyp.normalisiert() &&
+            geraetGenauigkeitsklasse.normalisiert() == eintrag.geraetGenauigkeitsklasse.normalisiert() &&
+            seriennummerGleich &&
+            geraetKalibrierung.normalisiert() == eintrag.geraetKalibrierung.normalisiert() &&
+            messort.normalisiert() == eintrag.messort.normalisiert() &&
+            mikrofonposition.normalisiert() == eintrag.mikrofonposition.normalisiert() &&
+            mikrofonhoehe.normalisiert() == eintrag.mikrofonhoehe.normalisiert() &&
+            entfernungZurQuelle.normalisiert() == eintrag.entfernungZurQuelle.normalisiert() &&
+            innenAussen.normalisiert() == eintrag.innenAussen.normalisiert() &&
+            fensterzustand.normalisiert() == eintrag.fensterzustand.normalisiert() &&
+            wetter.normalisiert() == eintrag.wetter.normalisiert() &&
+            datenqualitaetHinweis.normalisiert() == eintrag.datenqualitaetHinweis.normalisiert()
+    }
 }
 
 /** Ein [PeriodenBericht] fuer genau einen Kalendertag, plus die daraus abgeleitete Datenverfuegbarkeit. */
