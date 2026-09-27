@@ -140,6 +140,18 @@ jobs:
             logs/python-tests.xml
           retention-days: 7
 
+      - name: Upload Bildschirmfotos
+        # Der Zweck der Werkstatt ist, dass der Owner die Screens ansehen kann - ohne Upload
+        # sind die PNGs mit dem Runner weg. "!cancelled()" statt "success()", weil gerade ein
+        # fehlgeschlagener Testlauf das Bild braucht (Review-Befund zu PR #221).
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bildschirmfotos
+          path: app/build/screenshots/
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload Coverage-Report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
