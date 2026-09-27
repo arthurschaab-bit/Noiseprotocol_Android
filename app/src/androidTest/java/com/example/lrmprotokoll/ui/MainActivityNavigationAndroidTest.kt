@@ -278,7 +278,7 @@ class MainActivityNavigationAndroidTest {
             .onNodeWithTag("input_bericht_messort")
             .performTextInput("Korrigierter Messort")
         composeRule
-            .onNodeWithText("Speichern")
+            .onNodeWithText(app.getString(R.string.report_metadata_save))
             .performScrollTo()
             .performClick()
         composeRule.waitUntil(10_000) {

@@ -47,6 +47,7 @@ import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.report.BerichtTag
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.BerichtVoraussetzungId
+import com.example.lrmprotokoll.report.BerichtVoraussetzungFehler
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import com.example.lrmprotokoll.report.fehlendeStammdatenFelder
 import com.example.lrmprotokoll.report.gewaehlteStammdaten
@@ -123,17 +124,18 @@ fun BerichtErstellenSheet(
     fun erzeugen() {
         val aktuell = config
         val fehler = when {
-            laedt || aktuell == null -> "Berichtsdaten werden noch geladen."
+            laedt || aktuell == null -> BerichtVoraussetzungFehler(R.string.report_precondition_error_loading)
             else ->
                 pruefeBerichtVoraussetzungen(zeitraum, tage, aktuell, ausgewaehlteIds)
                     .firstOrNull { !it.erfuellt }
                     ?.fehler
         }
         if (fehler != null) {
-            meldung = fehler
+            val fehlerText = context.getString(fehler.textRes, *fehler.args.toTypedArray())
+            meldung = fehlerText
             // Eine abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein
             // Breadcrumb, kein Report-Event (PROMPT_FIX_BERICHT_HIGHEND.md Schritt 1).
-            diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht nicht gestartet: $fehler")
+            diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht nicht gestartet: $fehlerText")
             return
         }
         erzeugt = true
@@ -275,11 +277,12 @@ fun BerichtErstellenSheet(
             )
             voraussetzungen.forEach { voraussetzung ->
                 val label = stringResource(voraussetzung.id.labelRes())
+                val fehlerText = voraussetzung.fehler?.let { stringResource(it.textRes, *it.args.toTypedArray()) }
                 val statusText =
                     if (voraussetzung.erfuellt) {
                         "✓ $label"
                     } else {
-                        "✗ $label: ${voraussetzung.fehler}"
+                        "✗ $label: $fehlerText"
                     }
                 Text(
                     statusText,

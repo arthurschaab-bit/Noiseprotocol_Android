@@ -257,7 +257,7 @@ class BerichtErstellenSheetTest {
         composeRule
             .onNodeWithTag("bericht_voraussetzung_zeitraum")
             .assertTextEquals(
-                "✗ ${app.getString(R.string.report_precondition_range)}: Bitte zuerst einen Datumsbereich wählen.",
+                "✗ ${app.getString(R.string.report_precondition_range)}: ${app.getString(R.string.report_precondition_error_range)}",
             )
         composeRule
             .onNodeWithTag("bericht_start_blockiert")
