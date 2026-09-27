@@ -64,6 +64,7 @@ class MeasurementRecorderTest {
         override fun offeneSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
         override fun letzteSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun letzteBeendete(): SessionEntity? =
             zeilen.values.filter { it.endedAt != null }.maxByOrNull { it.endedAt ?: Long.MIN_VALUE }
         override fun alle() = throw NotImplementedError("im Test nicht benoetigt")

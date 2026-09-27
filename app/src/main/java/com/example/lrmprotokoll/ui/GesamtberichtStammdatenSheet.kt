@@ -38,10 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.report.GesamtberichtStammdaten
 import com.example.lrmprotokoll.report.lokalerMesstag
@@ -84,6 +86,7 @@ fun GesamtberichtStammdatenSheet(
     messvorgangId: Long? = null,
 ) {
     val context = LocalContext.current
+    val speicherFehler = stringResource(R.string.report_metadata_save_error)
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -260,7 +263,7 @@ fun GesamtberichtStammdatenSheet(
             } catch (abbruch: CancellationException) {
                 throw abbruch
             } catch (_: Exception) {
-                hinweis = "Speichern fehlgeschlagen. Bitte erneut versuchen."
+                hinweis = speicherFehler
                 speichert = false
             }
         }
@@ -340,13 +343,13 @@ fun GesamtberichtStammdatenSheet(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = geraetKalibrierung, onValueChange = { geraetKalibrierung = it },
-                label = { Text("Kalibrierung") },
+                label = { Text(stringResource(R.string.report_metadata_calibration)) },
                 placeholder = { Text("z. B. 94 dB(A) mit Kalibrator XY; vor Messung protokolliert") },
                 modifier = Modifier.testTag("input_bericht_kalibrierung").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
-                    feld = "Kalibrierung",
+                ZeitgebundenerWertHinweis(
+                    feld = stringResource(R.string.report_metadata_calibration),
                     wert = quelle.geraetKalibrierung,
                     aktuellerWert = geraetKalibrierung,
                     bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
@@ -409,11 +412,12 @@ fun GesamtberichtStammdatenSheet(
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = wetter, onValueChange = { wetter = it },
-                label = { Text("Wetter") }, modifier = Modifier.testTag("input_bericht_wetter").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_weather)) },
+                modifier = Modifier.testTag("input_bericht_wetter").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
-                    feld = "Wetter",
+                ZeitgebundenerWertHinweis(
+                    feld = stringResource(R.string.report_metadata_weather),
                     wert = quelle.wetter,
                     aktuellerWert = wetter,
                     bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
@@ -443,8 +447,8 @@ fun GesamtberichtStammdatenSheet(
                 modifier = Modifier.testTag("input_bericht_datenqualitaet").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
-                    feld = "Datenqualität",
+                ZeitgebundenerWertHinweis(
+                    feld = stringResource(R.string.report_metadata_data_quality),
                     wert = quelle.datenqualitaetHinweis,
                     aktuellerWert = datenqualitaetHinweis,
                     bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
@@ -459,7 +463,7 @@ fun GesamtberichtStammdatenSheet(
                     Text("Überspringen")
                 }
                 Button(onClick = { speichern() }, enabled = !speichert, modifier = Modifier.weight(1f)) {
-                    Text(if (speichert) "Speichert …" else "Speichern")
+                    Text(stringResource(if (speichert) R.string.report_metadata_saving else R.string.report_metadata_save))
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -468,7 +472,7 @@ fun GesamtberichtStammdatenSheet(
 }
 
 @Composable
-private fun zeitgebundenerWertHinweis(
+private fun ZeitgebundenerWertHinweis(
     feld: String,
     wert: String,
     aktuellerWert: String,
@@ -478,13 +482,13 @@ private fun zeitgebundenerWertHinweis(
 ) {
     if (wert.isBlank()) return
     Text(
-        "$feld zuletzt bestätigt am $bestaetigtAm: $wert",
+        stringResource(R.string.report_metadata_last_confirmed, feld, bestaetigtAm, wert),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     if (aktuellerWert.isBlank()) {
         TextButton(onClick = onUebernehmen, modifier = Modifier.testTag(testTag)) {
-            Text("Letzten Wert bewusst übernehmen")
+            Text(stringResource(R.string.report_metadata_confirm_previous))
         }
     }
 }

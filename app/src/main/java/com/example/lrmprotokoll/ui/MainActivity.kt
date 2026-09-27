@@ -1023,6 +1023,12 @@ fun NoiseProtocolApp(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            TextButton(
+                                onClick = { s?.id?.let { stammdatenSheetFuerSession = it } },
+                                modifier = Modifier.testTag("btn_session_edit_stammdaten"),
+                            ) {
+                                Text(stringResource(R.string.report_metadata_edit_current))
+                            }
                         }
                     }
                 }
