@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -48,6 +49,12 @@ data class SessionEntity(
      * `null`, solange die Session noch laeuft oder fuer Altsessions vor Einfuehrung dieser Spalte.
      */
     val rohdatenPruefsumme: String? = null,
+    /** Fasst Teil-Sessions eines Messvorgangs zusammen; bei einer neuen Session anfangs deren ID. */
+    @ColumnInfo(defaultValue = "0") val messvorgangId: Long = 0,
+    /** Auch ein bewusstes Fortfahren ohne Foto beendet die Abfrage für diesen Messvorgang. */
+    @ColumnInfo(defaultValue = "0") val photoPromptCompleted: Boolean = false,
+    /** Verhindert eine erneute Abfrage nach bewusstem Überspringen ohne Stammdatenzeile. */
+    @ColumnInfo(defaultValue = "0") val metadataPromptCompleted: Boolean = false,
 )
 
 /**

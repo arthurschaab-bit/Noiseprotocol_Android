@@ -42,6 +42,8 @@ data class StammdatenVerlaufEntity(
     val wetter: String,
     val datenqualitaetHinweis: String,
     val giltFuerTagStart: Long? = null,
+    /** Reguläre Bestätigung am Messbeginn; historische Nachträge behalten null. */
+    val messvorgangId: Long? = null,
 )
 
 @Dao
