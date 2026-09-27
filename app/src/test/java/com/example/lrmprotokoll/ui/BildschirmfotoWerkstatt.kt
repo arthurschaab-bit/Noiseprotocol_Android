@@ -13,7 +13,6 @@ import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
-import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import org.junit.Rule
@@ -92,21 +91,26 @@ class BildschirmfotoWerkstatt {
         speichere("einstellungen_schwellenwerte_aufgeklappt")
     }
 
+    /**
+     * Zeigt das Cockpit ohne laufende Messung. **Nicht** im verbundenen Zustand, obwohl genau der
+     * für Gerätetest A5 zu PR #216 gebraucht würde - das geht hier nicht, und der Grund ist
+     * gemessen: mit einem [FakeMeterTransport] erreicht der Transport zwar STREAMING, der
+     * [com.example.lrmprotokoll.meter.ConnectionSupervisor] bleibt aber auf DISCONNECTED stehen.
+     * Er veröffentlicht `supervisorOverride ?: fromTransport`, und der Override, den seine
+     * Versuchsschleife in dieser Umgebung setzt, maskiert den weitergereichten Zustand dauerhaft.
+     * `clearOverride()` und `setOverride()` sind privat, eine Nahtstelle dafür gibt es nicht.
+     *
+     * Gemessener Verlauf über 3 s: `supervisor=DISCONNECTED transport=STREAMING`, 30 von 30
+     * Stichproben. Eine Testnahtstelle am Supervisor wäre eine Produktivcode-Änderung und damit
+     * eine Owner-Entscheidung (AGENTS.md §8a), kein Alleingang dieser Werkstatt.
+     */
     @Test
-    fun cockpitVerbundenOhneMessung() {
-        val transport = FakeMeterTransport()
-        app.setCustomContainer(AppContainer(app, transport))
+    fun cockpitOhneMessung() {
+        app.setCustomContainer(AppContainer(app, FakeMeterTransport()))
         app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
         app.container.settingsManager.meterDeviceName = "PCE-323"
         AudioRecordingService.testSetzeLaeuft(false)
-        app.container.connectionSupervisor.start(BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323"))
-        Thread.sleep(1500)
-
-        composeRule.mainClock.autoAdvance = false
-        composeRule.setContent { LaermprotokollTheme { LiveCockpitCard() } }
-        beruhige()
-        println("Verbindungszustand: ${app.container.connectionSupervisor.state.value}")
-        speichere("cockpit_verbunden_ohne_messung")
+        nimmAuf("cockpit_ohne_messung") { LiveCockpitCard() }
         app.resetContainer()
     }
 
