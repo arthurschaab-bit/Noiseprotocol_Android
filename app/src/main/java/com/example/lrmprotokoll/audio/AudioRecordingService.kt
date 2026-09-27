@@ -267,10 +267,23 @@ class AudioRecordingService : LifecycleService() {
      * Zustand, den F-02 beseitigt.
      */
     private fun trenneMessgeraetFallsNiemandEsBraucht() {
-        if (settingsManager.meterAutoConnect && settingsManager.meterDeviceAddress != null) {
-            Log.d("AudioRecordingService", "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)")
-            return
+        val bleibtBestehen = settingsManager.meterAutoConnect && settingsManager.meterDeviceAddress != null
+        // Der Breadcrumb ist der Nachweis fuer Gerätetest B3: ob das Messungsende die Verbindung
+        // stehen laesst, ist am Badge nicht ablesbar (IDLE und DISCONNECTED haben dieselbe Farbe).
+        // isInitialized wie in uncaughtException: onDestroy kann auch nach einem Abbruch in
+        // onCreate laufen, bevor der Reporter gesetzt war.
+        if (::diagnosticsReporter.isInitialized) {
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                if (bleibtBestehen) {
+                    "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)"
+                } else {
+                    "Messgeraet-Verbindung wird getrennt (niemand braucht sie)"
+                },
+                data = mapOf("meterState" to connectionSupervisor.state.value.name, "automatik" to settingsManager.meterAutoConnect),
+            )
         }
+        if (bleibtBestehen) return
         connectionSupervisor.stop()
     }
 

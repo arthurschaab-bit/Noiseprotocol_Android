@@ -203,9 +203,20 @@ fun LiveCockpitCard(
     // Mikrofonwert ueberhaupt ein FALLBACK - bei einem reinen Mikrofonlauf ist er schon immer die
     // normale, einzige Quelle und bleibt unveraendert ohne diese Kennzeichnung.
     val istMeterFallback = dienstAktiv && !istMikrofonMessung && !isCalibrated
-    val liveLevel = if (isCalibrated) letzterFrame?.level else if (dienstAktiv) micDb else null
+    // S-3/F-02: der kalibrierte Pegel haengt an der Verbindung, nicht am Dienst. Vor diesem
+    // Fix zeigte das Cockpit ohne laufende Messung "--.-", obwohl das Messgeraet Werte lieferte -
+    // damit war die Trennung von Verbindung und Aufzeichnung am Geraet nicht nachweisbar
+    // (Owner-Gerätetest A5/B4 zu PR #216).
+    val pegelAnzeige =
+        leitePegelAnzeigeAb(
+            dienstAktiv = dienstAktiv,
+            verbindungszustand = verbindungszustand,
+            messgeraetPegel = letzterFrame?.level,
+            mikrofonPegel = micDb,
+        )
+    val liveLevel = pegelAnzeige.wert
     val weightingText = when {
-        isCalibrated -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
+        pegelAnzeige.kalibriert -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
         istMeterFallback -> stringResource(R.string.cockpit_meter_fallback_unit)
         else -> "dB"
     }
@@ -467,6 +478,14 @@ fun LiveCockpitCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 10.dp),
                     maxLines = 1
+                )
+            }
+            if (pegelAnzeige.nurLive) {
+                Text(
+                    text = stringResource(R.string.cockpit_live_level_not_recorded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("cockpit_live_pegel_hinweis"),
                 )
             }
 

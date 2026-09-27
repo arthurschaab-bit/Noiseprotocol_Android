@@ -79,3 +79,39 @@ fun formatiereDauer(millis: Long): String {
         String.format(Locale.GERMANY, "%d:%02d", minuten, sekunden)
     }
 }
+
+/**
+ * Welcher Pegel im Cockpit steht und wie er zu lesen ist.
+ *
+ * [nurLive] heißt: das Messgerät liefert Werte, aber es läuft keine Aufzeichnung. Vor S-3 war
+ * dieser Zustand unmöglich, weil "verbinden" den Vordergrunddienst startete - seit F-02 ist er
+ * der Normalfall und muss sichtbar sein, ohne wie eine laufende Messung auszusehen
+ * (Owner-Entscheidung 27.09.2026, nach Gerätetest A5/B4 zu PR #216).
+ */
+data class PegelAnzeige(
+    val wert: Double?,
+    val nurLive: Boolean,
+    val kalibriert: Boolean,
+)
+
+/**
+ * Der kalibrierte Wert des Messgeräts hat Vorrang und braucht den Dienst nicht - der
+ * Mikrofonpegel entsteht dagegen erst in der Aufzeichnung und ist ohne sie nicht vorhanden.
+ * Ein Pegel ohne [ConnectionState.STREAMING] wäre ein Restwert aus einer früheren Verbindung,
+ * dieselbe Schranke wie in [leiteDashboardAnzeigeAb] und im MeterScreen.
+ */
+fun leitePegelAnzeigeAb(
+    dienstAktiv: Boolean,
+    verbindungszustand: ConnectionState,
+    messgeraetPegel: Double?,
+    mikrofonPegel: Double?,
+): PegelAnzeige {
+    val messgeraetWert = messgeraetPegel?.takeIf { verbindungszustand == ConnectionState.STREAMING }
+    if (messgeraetWert != null) {
+        return PegelAnzeige(wert = messgeraetWert, nurLive = !dienstAktiv, kalibriert = true)
+    }
+    if (dienstAktiv) {
+        return PegelAnzeige(wert = mikrofonPegel, nurLive = false, kalibriert = false)
+    }
+    return PegelAnzeige(wert = null, nurLive = false, kalibriert = false)
+}

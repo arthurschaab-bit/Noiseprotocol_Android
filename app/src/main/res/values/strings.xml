@@ -107,6 +107,7 @@
     <!-- Owner-Feedback 12.09.2026: Anzeige waehrend eines PCE-323-Verbindungsausfalls in einer
          Messgeraet-Session - der Mikrofonwert bleibt sichtbar, aber erkennbar als Fallback. -->
     <string name="cockpit_meter_fallback_unit">dB (Mikrofon-Fallback)</string>
+    <string name="cockpit_live_level_not_recorded">Live-Pegel · wird nicht aufgezeichnet</string>
     <string name="cockpit_meter_fallback_hint">Verbindung zum Messgerät unterbrochen – Anzeige wechselt auf unkalibriertes Mikrofon, bis die Verbindung wiederhergestellt ist.</string>
     <string name="cockpit_quick_event">Schnell-Ereignis (Manuell)</string>
     <string name="cockpit_tap_start_monitoring">Tippen, um Schwellenwert-Überwachung zu starten</string>
