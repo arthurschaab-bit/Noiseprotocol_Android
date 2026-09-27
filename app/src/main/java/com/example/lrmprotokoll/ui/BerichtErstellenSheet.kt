@@ -95,7 +95,7 @@ fun BerichtErstellenSheet(
     var offenesAuswahlDatum by remember { mutableStateOf<LocalDate?>(null) }
     var datumDialogOffen by remember { mutableStateOf(false) }
     var ladezahl by remember { mutableIntStateOf(0) }
-    var laedt by remember { mutableStateOf(false) }
+    var laedt by remember { mutableStateOf(true) }
     var erzeugt by remember { mutableStateOf(false) }
     var meldung by remember { mutableStateOf<String?>(null) }
     var pdfPfad by remember { mutableStateOf<String?>(null) }
@@ -275,26 +275,30 @@ fun BerichtErstellenSheet(
                 stringResource(R.string.report_preconditions_title),
                 style = MaterialTheme.typography.titleSmall,
             )
-            voraussetzungen.forEach { voraussetzung ->
-                val label = stringResource(voraussetzung.id.labelRes())
-                val fehlerText = voraussetzung.fehler?.let { stringResource(it.textRes, *it.args.toTypedArray()) }
-                val statusText =
-                    if (voraussetzung.erfuellt) {
-                        "✓ $label"
-                    } else {
-                        "✗ $label: $fehlerText"
-                    }
-                Text(
-                    statusText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
+            if (laedt) {
+                Text(stringResource(R.string.report_preconditions_loading))
+            } else {
+                voraussetzungen.forEach { voraussetzung ->
+                    val label = stringResource(voraussetzung.id.labelRes())
+                    val fehlerText = voraussetzung.fehler?.let { stringResource(it.textRes, *it.args.toTypedArray()) }
+                    val statusText =
                         if (voraussetzung.erfuellt) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            "✓ $label"
                         } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                    modifier = Modifier.testTag("bericht_voraussetzung_${voraussetzung.id.name.lowercase(Locale.ROOT)}"),
-                )
+                            "✗ $label: $fehlerText"
+                        }
+                    Text(
+                        statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (voraussetzung.erfuellt) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        modifier = Modifier.testTag("bericht_voraussetzung_${voraussetzung.id.name.lowercase(Locale.ROOT)}"),
+                    )
+                }
             }
             meldung?.let {
                 Spacer(Modifier.height(12.dp))
@@ -323,7 +327,7 @@ fun BerichtErstellenSheet(
                     Text(if (erzeugt) "Erzeuge …" else "Bericht jetzt erzeugen")
                 }
             }
-            ersterBlocker?.let {
+            ersterBlocker?.takeUnless { laedt }?.let {
                 Text(
                     stringResource(R.string.report_precondition_blocked, stringResource(it.id.labelRes())),
                     style = MaterialTheme.typography.bodySmall,
