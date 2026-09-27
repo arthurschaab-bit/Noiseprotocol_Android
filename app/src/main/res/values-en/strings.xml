@@ -418,6 +418,8 @@
     <string name="learned_patterns_count">Learned noise patterns (%1$d)</string>
     <string name="ai_classified_count">%1$d recording(s) classified by AI</string>
     <string name="action_ai_batch">AI batch recognition</string>
+    <string name="ai_batch_running">AI processing in progress …</string>
+    <string name="ai_batch_progress">AI processing: %1$d of %2$d</string>
     <string name="action_ai_batch_day">Classify unclassified recordings for this day now</string>
     <string name="ai_batch_day_result">%1$d recording(s) classified for %2$s</string>
     <string name="ai_batch_day_result_empty">None of the selected recordings could be classified</string>

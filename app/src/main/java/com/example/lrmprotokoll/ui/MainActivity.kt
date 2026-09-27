@@ -396,6 +396,7 @@ fun NoiseProtocolApp(
     onNavigateToVideo: () -> Unit,
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
     reportManager: ReportManager? = null,
+    batchClassifyOverride: (suspend (List<NoiseRecord>, (Int, Int) -> Unit) -> Int)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -485,6 +486,8 @@ fun NoiseProtocolApp(
     val latestFrame by container.meterTransport.frames.collectAsState(initial = null)
     var refName by remember { mutableStateOf("") }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var batchLaeuft by remember { mutableStateOf(false) }
+    var batchFortschritt by remember { mutableStateOf(0 to 0) }
 
     val selectedIds = remember { mutableStateListOf<Long>() }
     val collapsedDays = remember { mutableStateListOf<String>() }
@@ -619,6 +622,11 @@ fun NoiseProtocolApp(
             )
         }
 
+    // Beide States hier lesen, damit der gesamte Screen auf den Batch-Zustand reagiert. Nur
+    // innerhalb des LazyColumn-Builders gelesen koennte eine spaetere Aenderung unsichtbar bleiben.
+    val istBatchAktiv = batchLaeuft
+    val aktuellerBatchFortschritt = batchFortschritt
+
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
@@ -707,48 +715,72 @@ fun NoiseProtocolApp(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
+                                    if (batchLaeuft) return@DropdownMenuItem
                                     showOverflowMenu = false
+                                    batchLaeuft = true
+                                    val kandidaten = records.filter { it.detectedLabel == null }
+                                    batchFortschritt = 0 to kandidaten.size
                                     scope.launch {
-                                        val count =
-                                            klassifiziereUndSpeichere(
-                                                kandidaten = records.filter { it.detectedLabel == null },
-                                                classifier = classifier.value,
-                                                dao = dao,
-                                                rohdatenDao = rohdatenDao,
-                                            )
-                                        onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
+                                        try {
+                                            val onFortschritt: (Int, Int) -> Unit =
+                                                { fertig, gesamt -> batchFortschritt = fertig to gesamt }
+                                            val count =
+                                                if (batchClassifyOverride != null) {
+                                                    batchClassifyOverride(kandidaten, onFortschritt)
+                                                } else {
+                                                    klassifiziereUndSpeichere(
+                                                        kandidaten = kandidaten,
+                                                        classifier = classifier.value,
+                                                        dao = dao,
+                                                        rohdatenDao = rohdatenDao,
+                                                        onFortschritt = onFortschritt,
+                                                    )
+                                                }
+                                            onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
+                                        } finally {
+                                            batchLaeuft = false
+                                        }
                                     }
                                 },
+                                enabled = !istBatchAktiv,
+                                modifier = Modifier.testTag("menu_item_ai_batch"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_neu_bewerten)) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
+                                    if (batchLaeuft) return@DropdownMenuItem
                                     showOverflowMenu = false
+                                    batchLaeuft = true
+                                    batchFortschritt = 0 to 0
                                     scope.launch {
-                                        // Praefprotokoll-Anhang (Owner-Entscheidung 11.09.2026,
-                                        // "korrigiere"): aktuelleKonfiguration() liest synchron
-                                        // aus Room - auf Dispatchers.IO statt auf dem
-                                        // Main-Thread dieses scope.launch (rememberCoroutineScope).
-                                        val konfiguration =
-                                            withContext(Dispatchers.IO) {
-                                                classifier.value.aktuelleKonfiguration()
-                                            }
-                                        val count =
-                                            bewerteAlleNeu(
-                                                noiseDao = dao,
-                                                rohdatenDao = rohdatenDao,
-                                                konfiguration = konfiguration,
-                                            )
-                                        val msg =
-                                            if (count > 0) {
-                                                context.getString(R.string.ai_reevaluated_count, count)
-                                            } else {
-                                                context.getString(R.string.ai_reevaluated_empty)
-                                            }
-                                        onShowSnackbar(msg, null, null)
+                                        try {
+                                            // aktuelleKonfiguration() liest synchron aus Room.
+                                            val konfiguration =
+                                                withContext(Dispatchers.IO) {
+                                                    classifier.value.aktuelleKonfiguration()
+                                                }
+                                            val count =
+                                                bewerteAlleNeu(
+                                                    noiseDao = dao,
+                                                    rohdatenDao = rohdatenDao,
+                                                    konfiguration = konfiguration,
+                                                    onFortschritt = { fertig, gesamt -> batchFortschritt = fertig to gesamt },
+                                                )
+                                            val msg =
+                                                if (count > 0) {
+                                                    context.getString(R.string.ai_reevaluated_count, count)
+                                                } else {
+                                                    context.getString(R.string.ai_reevaluated_empty)
+                                                }
+                                            onShowSnackbar(msg, null, null)
+                                        } finally {
+                                            batchLaeuft = false
+                                        }
                                     }
                                 },
+                                enabled = !istBatchAktiv,
+                                modifier = Modifier.testTag("menu_item_ai_reevaluate"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.protocol_daily_report_title)) },
@@ -776,6 +808,27 @@ fun NoiseProtocolApp(
                     }
                 },
             )
+        }
+
+        if (istBatchAktiv) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    val (fertig, gesamt) = aktuellerBatchFortschritt
+                    Text(
+                        text =
+                            if (gesamt > 0) {
+                                stringResource(R.string.ai_batch_progress, fertig, gesamt)
+                            } else {
+                                stringResource(R.string.ai_batch_running)
+                            },
+                        modifier = Modifier.testTag("ai_batch_progress"),
+                    )
+                    LinearProgressIndicator(
+                        progress = { if (gesamt > 0) fertig.toFloat() / gesamt else 0f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
 
         // 2. F3: Problem-Banner bei aktiver Überwachung
@@ -1189,6 +1242,9 @@ fun NoiseProtocolApp(
                                     val wirdKlassifiziert = klassifizierendeTage.contains(date)
                                     IconButton(
                                         onClick = {
+                                            if (batchLaeuft) return@IconButton
+                                            batchLaeuft = true
+                                            batchFortschritt = 0 to unklassifizierteDesTages.size
                                             scope.launch {
                                                 klassifizierendeTage.add(date)
                                                 try {
@@ -1198,6 +1254,7 @@ fun NoiseProtocolApp(
                                                             classifier = classifier.value,
                                                             dao = dao,
                                                             rohdatenDao = rohdatenDao,
+                                                            onFortschritt = { fertig, gesamt -> batchFortschritt = fertig to gesamt },
                                                         )
                                                     val msg =
                                                         if (count > 0) {
@@ -1208,10 +1265,11 @@ fun NoiseProtocolApp(
                                                     onShowSnackbar(msg, null, null)
                                                 } finally {
                                                     klassifizierendeTage.remove(date)
+                                                    batchLaeuft = false
                                                 }
                                             }
                                         },
-                                        enabled = !wirdKlassifiziert,
+                                        enabled = !istBatchAktiv && !wirdKlassifiziert,
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         if (wirdKlassifiziert) {

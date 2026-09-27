@@ -29,20 +29,26 @@ suspend fun klassifiziereUndSpeichere(
     classifier: RohdatenClassifier,
     dao: NoiseDao,
     rohdatenDao: KlassifikationsRohdatenDao,
+    onFortschritt: (bearbeitet: Int, gesamt: Int) -> Unit = { _, _ -> },
 ): Int {
     var anzahl = 0
-    for (record in kandidaten) {
-        val file = File(record.filePath)
-        if (!file.exists() || !file.isFile) continue
-        val ergebnis = classifier.klassifiziereMitRohdaten(file) ?: continue
-        // Ersetzt statt anzuhaeufen: eine erneute Batch-Klassifizierung derselben Aufnahme (z.B.
-        // weil der erste Versuch kein Label ueber der Schwelle fand) soll nicht mehrere
-        // Rohdatensaetze fuer dieselbe recordId hinterlassen.
-        rohdatenDao.loescheFuerRecord(record.id)
-        rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
-        val erkannt = ergebnis.label ?: continue
-        dao.update(record.copy(detectedLabel = erkannt))
-        anzahl++
+    onFortschritt(0, kandidaten.size)
+    for ((index, record) in kandidaten.withIndex()) {
+        try {
+            val file = File(record.filePath)
+            if (!file.exists() || !file.isFile) continue
+            val ergebnis = classifier.klassifiziereMitRohdaten(file) ?: continue
+            // Ersetzt statt anzuhaeufen: eine erneute Batch-Klassifizierung derselben Aufnahme
+            // (z.B. weil der erste Versuch kein Label ueber der Schwelle fand) soll nicht mehrere
+            // Rohdatensaetze fuer dieselbe recordId hinterlassen.
+            rohdatenDao.loescheFuerRecord(record.id)
+            rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
+            val erkannt = ergebnis.label ?: continue
+            dao.update(record.copy(detectedLabel = erkannt))
+            anzahl++
+        } finally {
+            onFortschritt(index + 1, kandidaten.size)
+        }
     }
     return anzahl
 }
