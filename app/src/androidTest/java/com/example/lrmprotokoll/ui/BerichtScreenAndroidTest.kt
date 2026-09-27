@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.ui
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -8,7 +9,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -41,6 +46,42 @@ class BerichtScreenAndroidTest {
         app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         db = app.container.database
         db.clearAllTables()
+        val editor = app.getSharedPreferences("noise_settings", Context.MODE_PRIVATE).edit()
+        editor.remove("high_end_bericht_erster_tag")
+        editor.remove("high_end_bericht_letzter_tag")
+        editor.commit()
+    }
+
+    @Test
+    fun highEndBerichtStartetMitLetzterBeendeterMessung() {
+        val messtag = LocalDate.of(2026, 9, 25)
+        val zone = ZoneId.systemDefault()
+        val beginn = messtag.atTime(10, 0).atZone(zone).toInstant().toEpochMilli()
+        val ende = messtag.atTime(11, 0).atZone(zone).toInstant().toEpochMilli()
+        runBlocking {
+            db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = beginn,
+                    endedAt = ende,
+                    deviceAddress = "Test",
+                    deviceName = "Testgerät",
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+            )
+        }
+
+        composeRule.setContent {
+            LaermprotokollTheme {
+                BerichtScreen(onBack = {}, onOpenSettings = {})
+            }
+        }
+        composeRule.onNodeWithTag("btn_bericht_erstellen_v2").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("bericht_datumsbereich_anzeige").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("bericht_datumsbereich_anzeige").assertTextEquals("25.09.2026 – 25.09.2026")
     }
 
     @After

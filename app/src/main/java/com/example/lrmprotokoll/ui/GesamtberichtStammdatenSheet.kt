@@ -44,9 +44,14 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.report.GesamtberichtStammdaten
+import com.example.lrmprotokoll.report.lokalerMesstag
+import com.example.lrmprotokoll.report.messtagGrenzen
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,9 +86,10 @@ fun GesamtberichtStammdatenSheet(
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val zeitFormat = remember { SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()) }
+    val zeitFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
 
     var verlauf by remember { mutableStateOf<List<StammdatenVerlaufEntity>>(emptyList()) }
+    var zeitgebundeneQuelle by remember { mutableStateOf<StammdatenVerlaufEntity?>(null) }
     var auswahlOffen by remember { mutableStateOf(false) }
 
     var bereitsInitialisiert by rememberSaveable(sessionId) { mutableStateOf(false) }
@@ -105,9 +111,11 @@ fun GesamtberichtStammdatenSheet(
     var standortLaedt by remember { mutableStateOf(false) }
     var wetterLaedt by remember { mutableStateOf(false) }
     var hinweis by remember { mutableStateOf<String?>(null) }
+    var speichert by remember { mutableStateOf(false) }
     var pendingAktion by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun uebernehmen(eintrag: StammdatenVerlaufEntity) {
+        zeitgebundeneQuelle = eintrag
         geraetHersteller = eintrag.geraetHersteller
         geraetTyp = eintrag.geraetTyp
         geraetGenauigkeitsklasse = eintrag.geraetGenauigkeitsklasse
@@ -123,11 +131,27 @@ fun GesamtberichtStammdatenSheet(
         datenqualitaetHinweis = eintrag.datenqualitaetHinweis
     }
 
-    LaunchedEffect(sessionId) {
-        val letzte = withContext(Dispatchers.IO) { container.database.stammdatenVerlaufDao().letzte(10) }
+    LaunchedEffect(sessionId, giltFuerTagStart) {
+        val zone = ZoneId.systemDefault()
+        val tag = giltFuerTagStart?.let { lokalerMesstag(it, zone) } ?: LocalDate.now(zone)
+        val (von, bis) = messtagGrenzen(tag, zone)
+        val (letzte, fuerTag) =
+            withContext(Dispatchers.IO) {
+                val dao = container.database.stammdatenVerlaufDao()
+                dao.letzte(10) to dao.fuerTag(von, bis).firstOrNull()
+            }
         verlauf = letzte
+        val quelle = fuerTag ?: letzte.firstOrNull()
+        zeitgebundeneQuelle = quelle
         if (!bereitsInitialisiert) {
-            letzte.firstOrNull()?.let { uebernehmen(it) }
+            quelle?.let {
+                uebernehmen(it)
+                if (fuerTag == null) {
+                    geraetKalibrierung = ""
+                    wetter = ""
+                    datenqualitaetHinweis = ""
+                }
+            }
             bereitsInitialisiert = true
         }
     }
@@ -196,6 +220,8 @@ fun GesamtberichtStammdatenSheet(
     }
 
     fun speichern() {
+        if (speichert) return
+        speichert = true
         val stammdaten = GesamtberichtStammdaten(
             geraetHersteller = geraetHersteller,
             geraetTyp = geraetTyp,
@@ -212,12 +238,25 @@ fun GesamtberichtStammdatenSheet(
             datenqualitaetHinweis = datenqualitaetHinweis,
         )
         scope.launch {
-            withContext(Dispatchers.IO) {
-                container.database.stammdatenVerlaufDao().insert(
-                    stammdaten.zuEntity(System.currentTimeMillis()).copy(giltFuerTagStart = giltFuerTagStart)
-                )
+            try {
+                withContext(Dispatchers.IO) {
+                    val jetzt = System.currentTimeMillis()
+                    val zone = ZoneId.systemDefault()
+                    val tag = lokalerMesstag(giltFuerTagStart ?: jetzt, zone)
+                    val (von, bis) = messtagGrenzen(tag, zone)
+                    val dao = container.database.stammdatenVerlaufDao()
+                    val letzterFuerTag = dao.fuerTag(von, bis).firstOrNull()
+                    if (letzterFuerTag == null || !stammdaten.entsprichtEintrag(letzterFuerTag)) {
+                        dao.insert(stammdaten.zuEntity(jetzt).copy(giltFuerTagStart = giltFuerTagStart))
+                    }
+                }
+                onFertig()
+            } catch (abbruch: CancellationException) {
+                throw abbruch
+            } catch (_: Exception) {
+                hinweis = "Speichern fehlgeschlagen. Bitte erneut versuchen."
+                speichert = false
             }
-            onFertig()
         }
     }
 
@@ -299,6 +338,16 @@ fun GesamtberichtStammdatenSheet(
                 placeholder = { Text("z. B. 94 dB(A) mit Kalibrator XY; vor Messung protokolliert") },
                 modifier = Modifier.testTag("input_bericht_kalibrierung").fillMaxWidth(),
             )
+            zeitgebundeneQuelle?.let { quelle ->
+                zeitgebundenerWertHinweis(
+                    feld = "Kalibrierung",
+                    wert = quelle.geraetKalibrierung,
+                    aktuellerWert = geraetKalibrierung,
+                    bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
+                    testTag = "button_kalibrierung_uebernehmen",
+                    onUebernehmen = { geraetKalibrierung = quelle.geraetKalibrierung },
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
             Text("Messaufbau", style = MaterialTheme.typography.titleSmall)
@@ -356,6 +405,16 @@ fun GesamtberichtStammdatenSheet(
                 value = wetter, onValueChange = { wetter = it },
                 label = { Text("Wetter") }, modifier = Modifier.testTag("input_bericht_wetter").fillMaxWidth(),
             )
+            zeitgebundeneQuelle?.let { quelle ->
+                zeitgebundenerWertHinweis(
+                    feld = "Wetter",
+                    wert = quelle.wetter,
+                    aktuellerWert = wetter,
+                    bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
+                    testTag = "button_wetter_uebernehmen",
+                    onUebernehmen = { wetter = quelle.wetter },
+                )
+            }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 OutlinedButton(
@@ -377,17 +436,49 @@ fun GesamtberichtStammdatenSheet(
                 placeholder = { Text("z. B. bekannte Ursache einer Messlücke") },
                 modifier = Modifier.testTag("input_bericht_datenqualitaet").fillMaxWidth(),
             )
+            zeitgebundeneQuelle?.let { quelle ->
+                zeitgebundenerWertHinweis(
+                    feld = "Datenqualität",
+                    wert = quelle.datenqualitaetHinweis,
+                    aktuellerWert = datenqualitaetHinweis,
+                    bestaetigtAm = zeitFormat.format(Date(quelle.erstelltAm)),
+                    testTag = "button_datenqualitaet_uebernehmen",
+                    onUebernehmen = { datenqualitaetHinweis = quelle.datenqualitaetHinweis },
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onFertig, modifier = Modifier.weight(1f)) {
                     Text("Überspringen")
                 }
-                Button(onClick = { speichern() }, modifier = Modifier.weight(1f)) {
-                    Text("Speichern")
+                Button(onClick = { speichern() }, enabled = !speichert, modifier = Modifier.weight(1f)) {
+                    Text(if (speichert) "Speichert …" else "Speichern")
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun zeitgebundenerWertHinweis(
+    feld: String,
+    wert: String,
+    aktuellerWert: String,
+    bestaetigtAm: String,
+    testTag: String,
+    onUebernehmen: () -> Unit,
+) {
+    if (wert.isBlank()) return
+    Text(
+        "$feld zuletzt bestätigt am $bestaetigtAm: $wert",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (aktuellerWert.isBlank()) {
+        TextButton(onClick = onUebernehmen, modifier = Modifier.testTag(testTag)) {
+            Text("Letzten Wert bewusst übernehmen")
         }
     }
 }
