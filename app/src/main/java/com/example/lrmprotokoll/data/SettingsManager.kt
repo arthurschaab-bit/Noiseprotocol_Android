@@ -739,9 +739,13 @@ class SettingsManager(
         return if (ersterTag <= letzterTag) ersterTag to letzterTag else null
     }
 
-    fun speichereHighEndBerichtszeitraum(ersterTag: Long, letzterTag: Long) {
+    fun speichereHighEndBerichtszeitraum(
+        ersterTag: Long,
+        letzterTag: Long,
+    ) {
         require(ersterTag <= letzterTag)
-        prefs.edit()
+        prefs
+            .edit()
             .putLong("high_end_bericht_erster_tag", ersterTag)
             .putLong("high_end_bericht_letzter_tag", letzterTag)
             .apply()

@@ -11,6 +11,7 @@ import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.SessionEntity
+import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.runBlocking
@@ -223,5 +224,70 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("card_continuous_session").assertIsDisplayed()
         composeRule.onNodeWithTag("btn_session_view_protocol").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("nav_item_protokoll").assertIsSelected()
+    }
+
+    @Test
+    fun stammdatenKorrekturImCockpitErzeugtGenauEinenNeuenTageseintrag() {
+        val database = app.container.database
+        val sessionDao = database.sessionDao()
+        val stammdatenDao = database.stammdatenVerlaufDao()
+        runBlocking {
+            sessionDao.insert(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis(),
+                    endedAt = null,
+                    deviceAddress = "",
+                    deviceName = "Smartphone-Mikrofon",
+                    weighting = "A",
+                    timeWeighting = "FAST",
+                ),
+            )
+            stammdatenDao.insert(
+                StammdatenVerlaufEntity(
+                    erstelltAm = System.currentTimeMillis(),
+                    geraetHersteller = "NTI Audio",
+                    geraetTyp = "XL2",
+                    geraetGenauigkeitsklasse = "Klasse 1",
+                    geraetSeriennummer = "12345",
+                    geraetKalibrierung = "94 dB(A)",
+                    messort = "Alter Messort",
+                    mikrofonposition = "Fensterbank",
+                    mikrofonhoehe = "1,5 m",
+                    entfernungZurQuelle = "3 m",
+                    innenAussen = "Innen",
+                    fensterzustand = "geschlossen",
+                    wetter = "bedeckt",
+                    datenqualitaetHinweis = "",
+                ),
+            )
+        }
+
+        setNavigationContent()
+        composeRule.warteUndScrolleZu(hasTestTag("btn_session_edit_stammdaten"))
+        composeRule
+            .onNodeWithTag("btn_session_edit_stammdaten")
+            .performClick()
+        composeRule
+            .onNodeWithTag("input_bericht_messort")
+            .performScrollTo()
+            .assertTextContains("Alter Messort")
+        composeRule
+            .onNodeWithTag("input_bericht_messort")
+            .performTextClearance()
+        composeRule
+            .onNodeWithTag("input_bericht_messort")
+            .performTextInput("Korrigierter Messort")
+        composeRule
+            .onNodeWithText(app.getString(R.string.report_metadata_save))
+            .performScrollTo()
+            .performClick()
+        composeRule.waitUntil(10_000) {
+            runBlocking { stammdatenDao.letzte(10) }.size == 2
+        }
+
+        val eintraege = runBlocking { stammdatenDao.letzte(10) }
+        assertEquals(2, eintraege.size)
+        assertEquals("Korrigierter Messort", eintraege.first().messort)
+        assertEquals("Alter Messort", eintraege.last().messort)
     }
 }

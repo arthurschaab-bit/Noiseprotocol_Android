@@ -179,23 +179,26 @@ fun BerichtScreen(
                 onClick = {
                     highEndWirdVorbereitet = true
                     scope.launch {
-                        val letzteSession = withContext(Dispatchers.IO) {
-                            runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
-                        }
-                        val zone = ZoneId.systemDefault()
-                        letzteMessungZeitraum = letzteSession?.let { session ->
-                            session.endedAt?.let { ende ->
-                                runCatching {
-                                    BerichtZeitraum(
-                                        Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
-                                        Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
-                                    )
-                                }.getOrNull()
+                        val letzteSession =
+                            withContext(Dispatchers.IO) {
+                                runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
                             }
-                        }
-                        val gespeichert = container.settingsManager.letzterHighEndBerichtszeitraum()?.let { (von, bis) ->
-                            runCatching { BerichtZeitraum(LocalDate.ofEpochDay(von), LocalDate.ofEpochDay(bis)) }.getOrNull()
-                        }
+                        val zone = ZoneId.systemDefault()
+                        letzteMessungZeitraum =
+                            letzteSession?.let { session ->
+                                session.endedAt?.let { ende ->
+                                    runCatching {
+                                        BerichtZeitraum(
+                                            Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
+                                            Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
+                                        )
+                                    }.getOrNull()
+                                }
+                            }
+                        val gespeichert =
+                            container.settingsManager.letzterHighEndBerichtszeitraum()?.let { (von, bis) ->
+                                runCatching { BerichtZeitraum(LocalDate.ofEpochDay(von), LocalDate.ofEpochDay(bis)) }.getOrNull()
+                            }
                         highEndZeitraum = initialHighEndRange ?: gespeichert ?: letzteMessungZeitraum
                         highEndWirdVorbereitet = false
                         zeigeHighEndSheet = true

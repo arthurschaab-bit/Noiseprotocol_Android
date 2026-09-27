@@ -11,8 +11,6 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -20,6 +18,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Instrumentierte UI-Tests für den [BerichtScreen] - Nachfolger von
@@ -56,8 +56,18 @@ class BerichtScreenAndroidTest {
     fun highEndBerichtStartetMitLetzterBeendeterMessung() {
         val messtag = LocalDate.of(2026, 9, 25)
         val zone = ZoneId.systemDefault()
-        val beginn = messtag.atTime(10, 0).atZone(zone).toInstant().toEpochMilli()
-        val ende = messtag.atTime(11, 0).atZone(zone).toInstant().toEpochMilli()
+        val beginn =
+            messtag
+                .atTime(10, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
+        val ende =
+            messtag
+                .atTime(11, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
         runBlocking {
             db.sessionDao().insert(
                 SessionEntity(
