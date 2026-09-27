@@ -65,6 +65,7 @@ import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.report.messtagGrenzen
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
@@ -74,6 +75,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.*
 
 // Bugfix (UX-Feedback): AppCompatDelegate.setApplicationLocales() (Sprachumschaltung Deutsch/
@@ -463,7 +466,17 @@ fun NoiseProtocolApp(
         val id = offeneSession?.id
         if (settingsManager.stammdatenAbfrageAktiv && id != null && id != zuletztGefragteStammdatenSession) {
             zuletztGefragteStammdatenSession = id
-            stammdatenSheetFuerSession = id
+            val zone = ZoneId.systemDefault()
+            val heute = LocalDate.now(zone)
+            val (von, bis) = messtagGrenzen(heute, zone)
+            val heuteBestaetigt =
+                withContext(Dispatchers.IO) {
+                    val database = container.database
+                    val dao = database.stammdatenVerlaufDao()
+                    val eintraege = dao.fuerTag(von, bis)
+                    eintraege.isNotEmpty()
+                }
+            if (!heuteBestaetigt) stammdatenSheetFuerSession = id
         }
     }
     stammdatenSheetFuerSession?.let { id ->

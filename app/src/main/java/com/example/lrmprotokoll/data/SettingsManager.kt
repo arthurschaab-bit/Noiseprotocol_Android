@@ -740,6 +740,24 @@ class SettingsManager(
     var letzteDiagnoseId: String?
         get() = prefs.getString("letzte_diagnose_id", null)
         set(value) = prefs.edit().putString("letzte_diagnose_id", value).apply()
+
+    /** Kalenderdaten als Epoch-Day: die UTC-Grenzen des DatePickers sind keine lokalen Messtage. */
+    fun letzterHighEndBerichtszeitraum(): Pair<Long, Long>? {
+        if (!prefs.contains("high_end_bericht_erster_tag") || !prefs.contains("high_end_bericht_letzter_tag")) {
+            return null
+        }
+        val ersterTag = prefs.getLong("high_end_bericht_erster_tag", 0L)
+        val letzterTag = prefs.getLong("high_end_bericht_letzter_tag", 0L)
+        return if (ersterTag <= letzterTag) ersterTag to letzterTag else null
+    }
+
+    fun speichereHighEndBerichtszeitraum(ersterTag: Long, letzterTag: Long) {
+        require(ersterTag <= letzterTag)
+        prefs.edit()
+            .putLong("high_end_bericht_erster_tag", ersterTag)
+            .putLong("high_end_bericht_letzter_tag", letzterTag)
+            .apply()
+    }
 }
 
 /**

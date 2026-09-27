@@ -34,6 +34,10 @@ interface SessionDao {
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC LIMIT 1")
     suspend fun letzte(): SessionEntity?
 
+    /** Der Berichtszeitraum darf nicht aus einer noch offenen Messung vorbelegt werden. */
+    @Query("SELECT * FROM sessions WHERE endedAt IS NOT NULL ORDER BY endedAt DESC LIMIT 1")
+    suspend fun letzteBeendete(): SessionEntity?
+
     @Query("SELECT * FROM sessions ORDER BY startedAt DESC LIMIT 1")
     fun letzteSessionFlow(): Flow<SessionEntity?>
 
