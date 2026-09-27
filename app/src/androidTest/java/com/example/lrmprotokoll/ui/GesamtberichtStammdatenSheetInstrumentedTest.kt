@@ -2,8 +2,10 @@ package com.example.lrmprotokoll.ui
 
 import android.Manifest
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.AppContainer
@@ -120,7 +122,8 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
 
         composeRule.onNodeWithTag("input_bericht_hersteller").assertTextContains("NTI Audio")
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Musterplatz 1")
-        composeRule.onNodeWithTag("input_bericht_wetter").assertTextEquals("")
+        composeRule.onNodeWithTag("input_bericht_wetter")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         composeRule.onNodeWithTag("button_wetter_uebernehmen").performScrollTo().performClick()
         composeRule.onNodeWithTag("input_bericht_wetter").assertTextContains("12 °C, bedeckt")
     }
