@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -13,12 +14,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
-import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
 import kotlinx.coroutines.Dispatchers
@@ -53,10 +54,15 @@ class BerichtErstellenSheetTest {
         runBlocking(Dispatchers.IO) {
             app.container.database.clearAllTables()
         }
+        app.getSharedPreferences("noise_settings", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .remove("high_end_bericht_erster_tag")
+            .remove("high_end_bericht_letzter_tag")
+            .commit()
     }
 
     /**
-     * Öffnet das Sheet über "Neuer Bericht" und wartet, bis der Startknopf freigegeben ist.
+     * Öffnet das Sheet über "Neuer Bericht" und wartet, bis die Konfiguration geladen ist.
      *
      * Solange `laedt == true` ist, zeigt `BerichtErstellenSheet` einen `CircularProgressIndicator`
      * - eine unbestimmte, also endlose Animation. Mit `autoAdvance = true` fordert sie fortlaufend
@@ -80,7 +86,7 @@ class BerichtErstellenSheetTest {
                 composeRule.mainClock.advanceTimeBy(50)
                 pruefungen++
                 runCatching {
-                    composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
+                    composeRule.onNodeWithTag("input_report_gebietseinstufung").assertIsEnabled()
                 }.isSuccess
             }
             protokolliereMesswert("gruen", beginn, pruefungen)
@@ -158,7 +164,7 @@ class BerichtErstellenSheetTest {
             pruefungen,
             "\t$anzahl\t$deaktiviert\t$ladeindikatoren\t$direkteAbfrageMs\t$abfrageErgebnis",
         )
-        return "Startknopf wurde nicht freigegeben. verstricheneMs=$verstrichen " +
+        return "Berichtskonfiguration wurde nicht geladen. verstricheneMs=$verstrichen " +
             "pruefungen=$pruefungen startknopfVorhanden=$anzahl deaktiviert=$deaktiviert " +
             "ladeindikatoren=$ladeindikatoren direkteAbfrageMs=$direkteAbfrageMs " +
             "direkteAbfrage=$abfrageErgebnis"
@@ -221,6 +227,7 @@ class BerichtErstellenSheetTest {
             )
         }
         oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
@@ -232,40 +239,72 @@ class BerichtErstellenSheetTest {
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 
-    /**
-     * Test 3 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3): muss ohne die Änderung rot sein. Eine
-     * abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein Breadcrumb, kein
-     * REPORT_CREATE_FAILED (das war bisher nirgends verwendet, siehe docs/BEFUNDE_P30_2026-09-23.md
-     * Abschnitt 3).
-     */
-    @Test fun abgelehnteVorpruefungHinterlaesstBreadcrumbOhneReportEvent() {
+    @Test fun gebietseinstufungLaesstSichImBerichtsSheetSpeichern() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-        val diagnosticsReporter = app.container.diagnosticsReporter
-
-        // Bewusst OHNE initialHighEndRange: erzeugen() lehnt bereits den fehlenden Datumsbereich ab,
-        // bevor HighEndReportExport.generate() je aufgerufen wird.
         composeRule.setContent {
             BerichtScreen(onBack = {}, onOpenSettings = {})
         }
         oeffneSheetUndWarteAufStartknopf()
-        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 15_000L) {
-            composeRule
-                .onAllNodesWithTag("bericht_erstellen_fehler")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-
         composeRule
-            .onNodeWithTag("bericht_erstellen_fehler")
-            .assertTextEquals("Bitte zuerst einen Datumsbereich wählen.")
-        val nichtGestartet =
-            diagnosticsReporter.recentBreadcrumbs().filter {
-                it.category == "Bericht" &&
-                    it.message == "High-End-Bericht nicht gestartet: Bitte zuerst einen Datumsbereich wählen."
+            .onNodeWithTag("input_report_gebietseinstufung")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag("report_area_WA").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            runBlocking(Dispatchers.IO) {
+                app.container.database.reportConfigDao().get()?.gebietseinstufung == "WA"
             }
-        assertEquals("Genau ein Breadcrumb für die abgelehnte Vorprüfung", 1, nichtGestartet.size)
-        assertEquals(DiagnosticSeverity.INFO, nichtGestartet.single().level)
+        }
+        assertEquals(
+            "WA",
+            runBlocking(Dispatchers.IO) {
+                app.container.database.reportConfigDao().get()?.gebietseinstufung
+            },
+        )
+    }
+
+    @Test fun siebenTagePresetWirdFuerDenNaechstenBerichtGemerkt() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        composeRule.setContent {
+            BerichtScreen(onBack = {}, onOpenSettings = {})
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("btn_high_end_preset_7d")
+            .performScrollTo()
+            .performClick()
+
+        val gespeichert = app.container.settingsManager.letzterHighEndBerichtszeitraum()
+        assertEquals(6L, gespeichert!!.second - gespeichert.first)
+        assertEquals(LocalDate.now().toEpochDay(), gespeichert.second)
+    }
+
+    /**
+     * Eine nicht erfüllte Vorbedingung verhindert den Start schon vor dem Klick und erzeugt kein
+     * REPORT_CREATE_FAILED-Ereignis.
+     */
+    @Test fun fehlenderZeitraumSperrtStartMitBegruendungOhneReportEvent() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val diagnosticsReporter = app.container.diagnosticsReporter
+
+        // Ohne Zeitraum darf die Vorprüfung nicht erst beim Klick erfolgen.
+        composeRule.setContent {
+            BerichtScreen(onBack = {}, onOpenSettings = {})
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule
+            .onNodeWithTag("btn_bericht_erstellen_start")
+            .performScrollTo()
+            .assertIsNotEnabled()
+        composeRule
+            .onNodeWithTag("bericht_voraussetzung_zeitraum")
+            .assertTextEquals(
+                "✗ ${app.getString(R.string.report_precondition_range)}: Bitte zuerst einen Datumsbereich wählen.",
+            )
+        composeRule
+            .onNodeWithTag("bericht_start_blockiert")
+            .assertTextEquals(
+                app.getString(R.string.report_precondition_blocked, app.getString(R.string.report_precondition_range)),
+            )
         val reportEvents = diagnosticsReporter.recentEvents().filter { it.code == DiagnosticCode.REPORT_CREATE_FAILED }
         assertTrue("Eine abgelehnte Vorprüfung darf kein Report-Event erzeugen", reportEvents.isEmpty())
     }

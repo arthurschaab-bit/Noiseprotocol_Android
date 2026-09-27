@@ -37,6 +37,16 @@ class SessionDaoTest {
     )
 
     @Test
+    fun letzteBeendeteIgnoriertEineNeuereOffeneSession() = runBlocking {
+        val dao = dao()
+        val basis = 3_000_000_000_000L
+        dao.insert(session(basis, basis + 1_000))
+        dao.insert(session(basis + 2_000, null))
+
+        assertEquals(basis, dao.letzteBeendete()?.startedAt)
+    }
+
+    @Test
     fun findetSessionDieVollstaendigImZeitraumLiegt() = runBlocking {
         val dao = dao()
         val basis = 2_000_000_000_000L

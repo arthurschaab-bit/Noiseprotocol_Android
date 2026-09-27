@@ -27,6 +27,9 @@ import com.example.lrmprotokoll.report.ermittlePeriodenBericht
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Calendar
 
 /**
@@ -58,6 +61,9 @@ fun BerichtScreen(
 
     var zeigeZeitraumDialog by remember { mutableStateOf(false) }
     var zeigeHighEndSheet by remember { mutableStateOf(false) }
+    var highEndZeitraum by remember { mutableStateOf(initialHighEndRange) }
+    var letzteMessungZeitraum by remember { mutableStateOf<BerichtZeitraum?>(null) }
+    var highEndWirdVorbereitet by remember { mutableStateOf(false) }
     var zeitraumWirdErstellt by remember { mutableStateOf(false) }
     var zeigeMenue by remember { mutableStateOf(false) }
     // Owner-Anfrage 09.09.2026: derselbe Zeitraum-Dialog soll wahlweise den knappen
@@ -170,7 +176,32 @@ fun BerichtScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { zeigeHighEndSheet = true },
+                onClick = {
+                    highEndWirdVorbereitet = true
+                    scope.launch {
+                        val letzteSession = withContext(Dispatchers.IO) {
+                            runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
+                        }
+                        val zone = ZoneId.systemDefault()
+                        letzteMessungZeitraum = letzteSession?.let { session ->
+                            session.endedAt?.let { ende ->
+                                runCatching {
+                                    BerichtZeitraum(
+                                        Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
+                                        Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
+                                    )
+                                }.getOrNull()
+                            }
+                        }
+                        val gespeichert = container.settingsManager.letzterHighEndBerichtszeitraum()?.let { (von, bis) ->
+                            runCatching { BerichtZeitraum(LocalDate.ofEpochDay(von), LocalDate.ofEpochDay(bis)) }.getOrNull()
+                        }
+                        highEndZeitraum = initialHighEndRange ?: gespeichert ?: letzteMessungZeitraum
+                        highEndWirdVorbereitet = false
+                        zeigeHighEndSheet = true
+                    }
+                },
+                enabled = !highEndWirdVorbereitet,
                 modifier = Modifier.fillMaxWidth().testTag("btn_bericht_erstellen_v2"),
             ) {
                 Text("High-End-Bericht jetzt erzeugen")
@@ -268,7 +299,8 @@ fun BerichtScreen(
         BerichtErstellenSheet(
             onFertig = { zeigeHighEndSheet = false },
             runner = highEndRunner ?: { parameter -> ChaquopyReportRunner(context).erzeugeBericht(parameter) },
-            initialRange = initialHighEndRange,
+            initialRange = highEndZeitraum,
+            recentRange = letzteMessungZeitraum,
         )
     }
 }

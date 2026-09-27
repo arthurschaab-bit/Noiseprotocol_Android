@@ -463,6 +463,16 @@
     <string name="settings_open_meter">Messgerät koppeln</string>
     <string name="settings_open_trash">Papierkorb öffnen</string>
     <string name="bericht_intro_title">Berichte erstellen</string>
+    <string name="report_area_save_error">Gebietseinstufung konnte nicht gespeichert werden</string>
+    <string name="report_preconditions_title">Voraussetzungen für den Bericht</string>
+    <string name="report_precondition_range">Zeitraum gewählt</string>
+    <string name="report_precondition_raw_data">Rohdaten vorhanden</string>
+    <string name="report_precondition_retention">Rohdaten nicht verdichtet</string>
+    <string name="report_precondition_rating">A-/Zeitbewertung geklärt</string>
+    <string name="report_precondition_master_data">Stammdaten je Tag eindeutig</string>
+    <string name="report_precondition_area">Gebietseinstufung gesetzt</string>
+    <string name="report_precondition_blocked">Bericht gesperrt: %1$s</string>
+    <string name="report_preset_recent_measurement">Letzte Messung</string>
     <string name="bericht_intro_desc">Zeitraumbericht oder vollständiger Gesamtbericht mit Stammdaten, Kennwerten und Fotos – als PDF.</string>
     <string name="period_report_action">Zeitraumbericht erstellen</string>
     <string name="period_report_dialog_title">Zeitraumbericht</string>

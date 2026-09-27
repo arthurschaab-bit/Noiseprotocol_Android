@@ -12,8 +12,10 @@ import androidx.room.Query
  * den Einstellungen "hardcodiert" sein, sondern bei jedem Messbeginn erfasst werden, wobei die
  * zuletzt verwendeten Werte als Vorschlag dienen.
  *
- * Jede Bestätigung des Stammdaten-Dialogs (siehe `GesamtberichtStammdatenSheet`) legt eine neue
- * Zeile an - bewusst kein Update einer einzigen "aktuellen" Zeile: Nur so lässt sich rückblickend
+ * Die erste Bestätigung eines Messtags und jede fachliche Korrektur im Stammdaten-Dialog
+ * (siehe `GesamtberichtStammdatenSheet`) legen eine neue Zeile an; eine unveränderte erneute
+ * Bestätigung desselben Tages nicht. Bewusst kein Update einer einzigen "aktuellen" Zeile:
+ * Nur so lässt sich rückblickend
  * aus den letzten (bis zu) 10 Einträgen auswählen, wie es der Owner verlangt hat. Es wird nichts
  * gelöscht - die Auswahl auf die letzten 10 beschränkt sich allein über
  * [StammdatenVerlaufDao.letzte]s `LIMIT`.
