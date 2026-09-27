@@ -9,15 +9,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -154,24 +153,31 @@ class ConnectionSupervisor(
     private var currentDevice: BoundDevice? = null
 
     /**
-     * Bittet um einen sofortigen neuen Anlauf, wenn die Ueberwachung nach [maxAttempts] in
-     * [ConnectionState.FAILED] wartet (F-03). Ausserhalb dieses Wartezustands folgenlos.
+     * Zaehlt die Bitten um einen sofortigen neuen Anlauf (F-03). Die Warteschleife merkt sich
+     * den Stand, bevor sie FAILED setzt, und laeuft los, sobald er sich aendert.
      *
-     * Gepuffert mit Kapazitaet 1 und [BufferOverflow.DROP_OLDEST], damit [tryEmit] nie
-     * blockiert und nie fehlschlaegt: der Aufrufer ist die UI (jedes ON_RESUME), die darf
-     * weder warten noch einen stillen Fehlschlag bekommen. Mehrfaches Bitten vor dem naechsten
-     * Anlauf ist dasselbe wie einmal - mehr als einen Anlauf gleichzeitig gibt es nicht.
+     * **Ein Zaehler, kein [kotlinx.coroutines.flow.SharedFlow]** (Review-Befund 27.09.2026):
+     * ein SharedFlow mit `replay = 0` verwirft eine Emission, solange kein Sammler
+     * registriert ist - `extraBufferCapacity` puffert nur fuer vorhandene, langsame Sammler.
+     * Zwischen `setOverride(FAILED)` und dem Sammler in der Warteschleife liegt aber genau so
+     * ein Fenster: ein `onResume()` in diesem Moment haette `tryEmit` mit Erfolg quittiert
+     * bekommen, der Anstoss waere trotzdem verfallen und der Nutzer haette bis zu
+     * [failedRetryInterval] gewartet. Ein [MutableStateFlow] hat immer einen aktuellen Wert,
+     * den ein spaeter hinzukommender Sammler sieht - das Fenster gibt es damit nicht mehr.
+     *
+     * Der Stand wird vor dem Setzen von FAILED gelesen, nicht danach: nur so zaehlt
+     * ausschliesslich, was waehrend dieser Wartezeit angefordert wurde. Mehrfaches Bitten vor
+     * dem naechsten Anlauf ist dasselbe wie einmal - mehr als einen Anlauf gleichzeitig gibt
+     * es nicht.
      */
-    private val anlaufAnforderung =
-        MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val anlaufAnforderungen = MutableStateFlow(0L)
 
-    /** Siehe [anlaufAnforderung]. Darf aus jedem Thread aufgerufen werden. */
+    /** Siehe [anlaufAnforderungen]. Darf aus jedem Thread aufgerufen werden. */
     fun erneutVersuchen() {
-        // Nur im Wartezustand emittieren. Sonst bliebe die Anforderung im Puffer liegen und
-        // wuerde beim naechsten Erreichen von FAILED die Wartezeit sofort ueberspringen - ein
-        // Anstoss von vor einer Stunde soll aber keinen Anlauf von heute vorziehen.
+        // Nur im Wartezustand zaehlen. Sonst wuerde ein Anstoss von vor einer Stunde die
+        // naechste Wartezeit ueberspringen - er soll keinen Anlauf von heute vorziehen.
         if (_state.value != ConnectionState.FAILED) return
-        anlaufAnforderung.tryEmit(Unit)
+        anlaufAnforderungen.update { it + 1 }
     }
 
     /**
@@ -255,6 +261,10 @@ class ConnectionSupervisor(
                             diagnosticLogger?.protokolliere(
                                 "Verbindung fehlgeschlagen nach $consecutiveFailures Versuchen - warte auf neuen Anlauf",
                             )
+                            // Stand vor dem Setzen von FAILED lesen: ab FAILED darf
+                            // [erneutVersuchen] zaehlen, und genau diese Erhoehungen sollen die
+                            // Wartezeit beenden - fruehere nicht. Siehe [anlaufAnforderungen].
+                            val standVorDemWarten = anlaufAnforderungen.value
                             setOverride(ConnectionState.FAILED)
                             // F-03: Frueher endete die Schleife hier mit return@coroutineScope und
                             // die Verbindung blieb tot, bis der Nutzer eingriff. Jetzt bleibt sie in
@@ -263,7 +273,7 @@ class ConnectionSupervisor(
                             // ruft - was immer zuerst kommt.
                             val anforderung =
                                 withTimeoutOrNull(failedRetryInterval.toMillis()) {
-                                    anlaufAnforderung.first()
+                                    anlaufAnforderungen.first { it != standVorDemWarten }
                                 }
                             val angestossen = anforderung != null
                             diagnosticLogger?.protokolliere(

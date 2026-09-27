@@ -371,7 +371,15 @@ fun MeterScreen(
                             onCheckedChange = {
                                 autoConnect = it
                                 settings.meterAutoConnect = it
-                                if (it && hasBluetoothPermissions) container.meterAutoConnect.verbindeWennGewuenscht()
+                                // Review-Befund 27.09.2026: hier stand zusaetzlich
+                                // "&& hasBluetoothPermissions". Das verlangt ab API 31 SCAN *und*
+                                // CONNECT, fuer ein bereits gepinntes Geraet braucht es aber nur
+                                // CONNECT. Wer SCAN entzogen hat, bekam den Schalter auf "an"
+                                // gespeichert, aber keinen Verbindungsaufbau (Gerätetest C3).
+                                // Die Berechtigung pruefen ist Sache von MeterAutoConnect
+                                // (hatVerbindungsberechtigung -> hasConnectPermission); eine
+                                // zweite Entscheidung an dieser Stelle konnte nur abweichen.
+                                if (it) container.meterAutoConnect.verbindeWennGewuenscht()
                             },
                             modifier = Modifier.testTag("switch_meter_auto_connect"),
                         )
@@ -392,7 +400,11 @@ fun MeterScreen(
                     ) {
                         Button(
                             onClick = {
-                                if (hasBluetoothPermissions) ensureConnected()
+                                // Derselbe Befund wie beim Automatik-Schalter daneben: ein
+                                // gepinntes Geraet zu verbinden braucht CONNECT, nicht SCAN.
+                                // Mit hasBluetoothPermissions fragte dieser Knopf bei entzogenem
+                                // SCAN erneut nach Berechtigungen, statt zu verbinden.
+                                if (BluetoothPermissions.hasConnectPermission(context)) ensureConnected()
                                 else permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                             },
                             modifier = Modifier.testTag("btn_meter_connect")

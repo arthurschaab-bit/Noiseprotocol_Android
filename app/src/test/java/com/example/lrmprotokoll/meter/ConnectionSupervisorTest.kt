@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -294,6 +295,58 @@ class ConnectionSupervisorTest {
             "erneutVersuchen() muss den naechsten Anlauf sofort ausloesen, ohne die Stunde abzuwarten",
             transport.connectTimestampsMillis.size > nachErstemAnlauf,
         )
+    }
+
+    /**
+     * Review-Befund 27.09.2026: `erneutVersuchenHoltDenAnlaufVorDieWartezeit` ruft `runCurrent()`
+     * vor `erneutVersuchen()` und laesst damit die Warteschleife ihren Sammler registrieren -
+     * genau das Fenster, in dem die fruehere Loesung den Anstoss verlor, wird dort also
+     * uebersprungen. Ein [kotlinx.coroutines.flow.MutableSharedFlow] mit `replay = 0` verwirft
+     * eine Emission ohne Sammler; `tryEmit` meldet trotzdem Erfolg.
+     *
+     * Dieser Test macht das Fenster deterministisch: der Beobachter sammelt auf einem
+     * [UnconfinedTestDispatcher] und ruft [ConnectionSupervisor.erneutVersuchen] **im Moment
+     * der Veroeffentlichung von FAILED** - also noch waehrend `setOverride(FAILED)` laeuft und
+     * damit sicher, bevor die Warteschleife ihren Sammler hat. Mit dem alten SharedFlow ging
+     * der Anstoss hier verloren und der Nutzer wartete bis zu einer Stunde.
+     */
+    @Test
+    fun anstossImMomentVonFailedGehtNichtVerloren() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 3,
+                failedRetryInterval = Duration.ofHours(1),
+            )
+
+        // Nur einmal anstossen: sonst loeste jeder neue Fehlschlag sofort den naechsten Anlauf
+        // aus und der Test liefe endlos im Kreis.
+        var schonAngestossen = false
+        val beobachter =
+            launch(UnconfinedTestDispatcher(testScheduler)) {
+                supervisor.state.collect {
+                    if (it == ConnectionState.FAILED && !schonAngestossen) {
+                        schonAngestossen = true
+                        supervisor.erneutVersuchen()
+                    }
+                }
+            }
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertTrue("Der Beobachter muss FAILED gesehen und angestossen haben", schonAngestossen)
+        val nachErstemAnlauf = transport.connectTimestampsMillis.size
+        assertTrue(
+            "Der Anstoss aus dem Moment des FAILED muss einen neuen Anlauf ausgeloest haben, " +
+                "nicht in einem Puffer ohne Sammler verfallen (Versuche: $nachErstemAnlauf)",
+            nachErstemAnlauf > 3,
+        )
+        beobachter.cancel()
     }
 
     /**
