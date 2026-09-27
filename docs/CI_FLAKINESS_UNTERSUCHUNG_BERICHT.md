@@ -335,6 +335,36 @@ noch `false`. Er müsste frei sein — der Test sieht ihn 1287 Prüfungen lang a
   ausbleibt, ist weiterhin offen; das ließ sich ohne tiefen Einstieg in Compose-Interna nicht
   klären.
 
+### Nach Phase 3 (PR #218, 27.09.2026): reproduziert nicht mehr — aber nicht aus dem erwarteten Grund
+
+Phase 3 ist gemergt. Messreihe auf dem neuen Stand, dieselbe Methodik:
+
+| | rote Läufe | Messungen |
+|---|---|---|
+| vor Phase 3 | **10 von 28** | rot bei 15292–15430 ms / 1282–1294 Prüfungen |
+| nach Phase 3 | **0 von 12** | **48 von 48 grün**, Median 104 ms, Maximum 1150 ms, 1–2 Prüfungen |
+
+Fisher exakt, zweiseitig, auf Laufebene: **p = 0,019**. Bei der alten Rate wären in 12 Läufen
+rund 4,3 rote zu erwarten gewesen. Der Effekt ist damit belegt — anders als bei PR #209, wo ich
+aus drei grünen Läufen zu früh einen Erfolg gemacht habe.
+
+**Meine Vorhersage war im Mechanismus falsch.** Ich hatte F-07 als den Weg benannt: „wenn die
+Vorbedingungen in eine reine Funktion gezogen werden, entfällt der `LaunchedEffect`-Ladepfad als
+Wartebedingung". F-07 hat die Vorbedingungen nach `report/BerichtVoraussetzungen.kt` gezogen, aber
+`autoAdvance = false` und den `LaunchedEffect`-Ladepfad **unverändert gelassen**. Geholfen hat
+stattdessen **F-08**: der Helfer wartet nicht mehr auf `btn_bericht_erstellen_start`, dessen
+`enabled` an `laedt` hing, sondern auf das neue Feld `input_report_gebietseinstufung`.
+
+**Was damit NICHT belegt ist.** Dass das zugrundeliegende Problem weg ist. Belegt ist nur, dass
+dieser Test nicht mehr davon abhängt. Der Befund von oben — der `LaunchedEffect` läuft durch,
+`laedt = false` wird ausgeführt, die Komposition des Tests übernimmt es unter `autoAdvance = false`
+trotzdem nicht — ist dadurch nicht widerlegt und auch nicht erklärt. **Ein anderer Test, der auf
+einen von `laedt` abhängigen Knoten wartet, kann erneut darauf laufen.** Wer so einen Test
+schreibt, sollte diesen Abschnitt kennen.
+
+Die Messwertdatei `app/build/flake_a_messwerte.tsv` bleibt eingebaut. Sie kostet nichts und ist
+genau das Werkzeug, mit dem ein Wiederauftreten in einer Runde statt in einem Tag erkennbar ist.
+
 **Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
 `enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
 Roadmap-Phase 3 (`docs/PROMPT_UX_PHASE3.md`), deren Definition of Done ausdrücklich verlangt,
