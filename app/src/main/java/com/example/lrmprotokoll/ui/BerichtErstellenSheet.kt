@@ -352,8 +352,18 @@ fun BerichtErstellenSheet(
 
     if (datumDialogOffen) {
         val picker = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = zeitraum?.ersterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
-            initialSelectedEndDateMillis = zeitraum?.letzterTag?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+            initialSelectedStartDateMillis =
+                zeitraum
+                    ?.ersterTag
+                    ?.atStartOfDay(ZoneOffset.UTC)
+                    ?.toInstant()
+                    ?.toEpochMilli(),
+            initialSelectedEndDateMillis =
+                zeitraum
+                    ?.letzterTag
+                    ?.atStartOfDay(ZoneOffset.UTC)
+                    ?.toInstant()
+                    ?.toEpochMilli(),
         )
         // Review-Befund (Owner-Meldung 15.09.2026, echtes Geraet): DateRangePicker in einem
         // DatePickerDialog ist ohne Hoehenbegrenzung hoeher als der Bildschirm - Uebernehmen/

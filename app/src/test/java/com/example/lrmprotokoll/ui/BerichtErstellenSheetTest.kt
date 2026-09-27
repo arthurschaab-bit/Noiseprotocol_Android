@@ -189,12 +189,15 @@ class BerichtErstellenSheetTest {
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
-            composeRule.onAllNodesWithTag("bericht_erstellen_fehler")
-                .fetchSemanticsNodes().isNotEmpty()
+            composeRule
+                .onAllNodesWithTag("bericht_erstellen_fehler")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
 
         assertTrue(runnerAufgerufen.get())
-        composeRule.onNodeWithTag("bericht_erstellen_fehler")
+        composeRule
+            .onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
     }
 
@@ -211,13 +214,23 @@ class BerichtErstellenSheetTest {
         composeRule.onNodeWithTag("report_area_WA").performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             runBlocking(Dispatchers.IO) {
-                app.container.database.reportConfigDao().get()?.gebietseinstufung == "WA"
+                app
+                    .container
+                    .database
+                    .reportConfigDao()
+                    .get()
+                    ?.gebietseinstufung == "WA"
             }
         }
         assertEquals(
             "WA",
             runBlocking(Dispatchers.IO) {
-                app.container.database.reportConfigDao().get()?.gebietseinstufung
+                app
+                    .container
+                    .database
+                    .reportConfigDao()
+                    .get()
+                    ?.gebietseinstufung
             },
         )
     }
@@ -228,7 +241,8 @@ class BerichtErstellenSheetTest {
             BerichtScreen(onBack = {}, onOpenSettings = {})
         }
         oeffneSheetUndWarteAufStartknopf()
-        composeRule.onNodeWithTag("btn_high_end_preset_7d")
+        composeRule
+            .onNodeWithTag("btn_high_end_preset_7d")
             .performScrollTo()
             .performClick()
 
