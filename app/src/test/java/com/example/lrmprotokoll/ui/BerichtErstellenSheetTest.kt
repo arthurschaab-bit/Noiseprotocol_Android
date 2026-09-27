@@ -244,6 +244,12 @@ class BerichtErstellenSheetTest {
     @Test fun fehlenderZeitraumSperrtStartMitBegruendungOhneReportEvent() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val diagnosticsReporter = app.container.diagnosticsReporter
+        val vorher =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .count {
+                    it.category == "Bericht" && it.message == "High-End-Bericht nicht gestartet"
+                }
 
         // Ohne Zeitraum darf die Vorprüfung nicht erst beim Klick erfolgen.
         composeRule.setContent {
@@ -266,5 +272,38 @@ class BerichtErstellenSheetTest {
             )
         val reportEvents = diagnosticsReporter.recentEvents().filter { it.code == DiagnosticCode.REPORT_CREATE_FAILED }
         assertTrue("Eine abgelehnte Vorprüfung darf kein Report-Event erzeugen", reportEvents.isEmpty())
+
+        // Die zwei Gebietswechsel rekomponieren das Sheet, ohne es neu zu öffnen.
+        for (gebiet in listOf("WA", "MI")) {
+            composeRule
+                .onNodeWithTag("input_report_gebietseinstufung")
+                .performScrollTo()
+                .performClick()
+            composeRule
+                .onNodeWithTag("report_area_$gebiet")
+                .performClick()
+            composeRule.waitUntil(timeoutMillis = 15_000L) {
+                runBlocking(Dispatchers.IO) {
+                    app
+                        .container
+                        .database
+                        .reportConfigDao()
+                        .get()
+                        ?.gebietseinstufung == gebiet
+                }
+            }
+        }
+        val nachher =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .count {
+                    it.category == "Bericht" && it.message == "High-End-Bericht nicht gestartet"
+                }
+        assertEquals("Rekompositionen dürfen keinen weiteren Breadcrumb erzeugen", 1, nachher - vorher)
+        val blocker =
+            diagnosticsReporter
+                .recentBreadcrumbs()
+                .last { it.message == "High-End-Bericht nicht gestartet" }
+        assertTrue(blocker.data["voraussetzungen"].toString().contains("ZEITRAUM"))
     }
 }

@@ -102,6 +102,20 @@ fun BerichtErstellenSheet(
     val voraussetzungen =
         pruefeBerichtVoraussetzungen(zeitraum, tage, config, ausgewaehlteIds)
     val ersterBlocker = voraussetzungen.firstOrNull { !it.erfuellt }
+    var blockerBreadcrumbGeschrieben by remember { mutableStateOf(false) }
+
+    // Erst nach der Datenbankabfrage urteilen; eine Rekomposition darf die Ringdatei nicht fluten.
+    LaunchedEffect(if (laedt) null else ersterBlocker?.id) {
+        val blocker = ersterBlocker.takeUnless { laedt }
+        if (!blockerBreadcrumbGeschrieben && blocker != null) {
+            diagnosticsReporter.breadcrumb(
+                "Bericht",
+                "High-End-Bericht nicht gestartet",
+                mapOf("voraussetzungen" to voraussetzungen.filter { !it.erfuellt }.joinToString(",") { it.id.name }),
+            )
+            blockerBreadcrumbGeschrieben = true
+        }
+    }
 
     LaunchedEffect(zeitraum, ladezahl) {
         laedt = true
@@ -133,9 +147,6 @@ fun BerichtErstellenSheet(
         if (fehler != null) {
             val fehlerText = context.getString(fehler.textRes, *fehler.args.toTypedArray())
             meldung = fehlerText
-            // Eine abgelehnte Vorprüfung ist eine Nutzerangabe, kein Fehler - deshalb nur ein
-            // Breadcrumb, kein Report-Event (PROMPT_FIX_BERICHT_HIGHEND.md Schritt 1).
-            diagnosticsReporter.breadcrumb("Bericht", "High-End-Bericht nicht gestartet: $fehlerText")
             return
         }
         erzeugt = true
