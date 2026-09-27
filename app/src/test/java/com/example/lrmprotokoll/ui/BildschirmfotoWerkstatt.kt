@@ -6,12 +6,10 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -46,6 +44,11 @@ import java.io.File
  * solche Bilder taugen für eine Aussage über Auffindbarkeit. [BILDSCHIRM_LANG] ist unrealistisch
  * hoch und dient allein dazu, einen langen Screen am Stück zu zeigen - was dort ohne Scrollen
  * sichtbar wirkt, ist es auf einem echten Telefon nicht (Review-Befund zu PR #221).
+ *
+ * Die Werkstatt hat damit bereits etwas bewirkt: sie hat belegt, dass "Messgerät koppeln" am Ende
+ * der Sektion "Schwellenwerte & Audio" bei y=935 px auf einem 891 px hohen Bildschirm lag, also
+ * unerreichbar ohne Scrollen. PR #223 hat daraufhin eine eigene Messgerät-Sektion angelegt; die
+ * Messung steht jetzt bei y=548 px, und [messgeraetKoppelnIstOhneScrollenSichtbar] hält das fest.
  *
  * Jede Aufnahme prüft, dass der erwartete Screen tatsächlich im Bild ist - siehe [speichere].
  *
@@ -107,44 +110,49 @@ class BildschirmfotoWerkstatt {
         composeRule.onNodeWithText(app.getString(R.string.permission_bluetooth_title)).assertDoesNotExist()
     }
 
-    /** Der aufgeklappte Abschnitt am Stück - siehe [BILDSCHIRM_LANG] zur Einordnung. */
+    /** Die aufgeklappte Messgerät-Sektion am Stück - siehe [BILDSCHIRM_LANG] zur Einordnung. */
     @Test
-    fun einstellungenAbschnittSchwellenwerteAufgeklappt() {
-        zeigeEinstellungenMitAufgeklapptenSchwellenwerten()
-        speichere("einstellungen_schwellenwerte_aufgeklappt", R.string.settings_open_meter)
+    fun einstellungenAbschnittMessgeraetAufgeklappt() {
+        zeigeEinstellungenMitAufgeklappterMessgeraetSektion()
+        speichere("einstellungen_messgeraet_aufgeklappt", R.string.settings_open_meter)
     }
 
     /**
-     * Derselbe Screen auf einem realistischen Telefon - und hier zeigt sich, was die lange Fassung
-     * verschleiert: "Messgerät koppeln" liegt nach dem Aufklappen **außerhalb** des Bildschirms.
-     * Genau darum geht es beim Befund zur Auffindbarkeit (Review-Befund zu PR #221).
+     * Der Screen auf einem realistischen Telefon - **und dieser Test hat sein Vorzeichen
+     * gewechselt.**
      *
-     * Zwei Bilder: vor dem Scrollen (der Knopf fehlt) und nach dem Scrollen (der Knopf ist da).
-     * Der Abstand von der Bildschirmoberkante wird gemessen und ausgegeben, damit die
-     * Gerätetest-Anleitung den nötigen Scrollweg nennen kann statt ihn zu schätzen.
+     * Ursprünglich sicherte er zu, dass "Messgerät koppeln" **nicht** ohne Scrollen sichtbar ist:
+     * der Knopf lag am Ende der Sektion "Schwellenwerte & Audio", gemessen bei y=935 px auf einem
+     * 891 px hohen Bildschirm. Das war der Befund zur Auffindbarkeit, der PR #223 ausgelöst hat.
+     * Im KDoc stand damals: schlägt die Zusicherung eines Tages fehl, ist der Befund behoben und
+     * dieser Test gehört angepasst.
      *
-     * Schlägt [assertIsNotDisplayed] fehl, ist der Knopf ohne Scrollen erreichbar geworden - dann
-     * ist der Befund behoben und dieser Test samt Audit-Eintrag gehört angepasst.
+     * Genau das ist eingetreten. #223 hat den Knopf in eine eigene Sektion "Messgerät (PCE-323)"
+     * gezogen; die Messung auf demselben Bildschirm ergibt jetzt **y=548 px** statt 935. Die
+     * Zusicherung ist deshalb umgedreht statt entfernt - sie hält fest, dass die Verbesserung
+     * besteht, und schlägt an, wenn jemand den Knopf wieder nach unten schiebt.
+     *
+     * Der Abstand wird weiterhin gemessen und ausgegeben, damit eine Gerätetest-Anleitung ihn
+     * nennen kann statt ihn zu schätzen.
      */
     @Test
     @Config(qualifiers = BILDSCHIRM_ECHT)
-    fun einstellungenAufEchtemBildschirmBrauchtScrollen() {
-        zeigeEinstellungenMitAufgeklapptenSchwellenwerten()
+    fun messgeraetKoppelnIstOhneScrollenSichtbar() {
+        zeigeEinstellungenMitAufgeklappterMessgeraetSektion()
 
         val knopf = composeRule.onNodeWithTag("btn_open_meter")
         val hoeheDerAnzeige = composeRule.activity.window.decorView.height
-        val obenVorScrollen = knopf.fetchSemanticsNode().positionInRoot.y
+        val obenOhneScrollen = knopf.fetchSemanticsNode().positionInRoot.y
         println(
-            "Auffindbarkeit: \"Messgerät koppeln\" beginnt bei y=$obenVorScrollen px, " +
-                "sichtbarer Bereich ist $hoeheDerAnzeige px hoch",
+            "Auffindbarkeit: \"Messgerät koppeln\" beginnt bei y=$obenOhneScrollen px, " +
+                "sichtbarer Bereich ist $hoeheDerAnzeige px hoch (vor PR #223: y=935 px)",
         )
-        knopf.assertIsNotDisplayed()
-        speichere("echt_einstellungen_ohne_scrollen", R.string.settings_section_thresholds)
-
-        knopf.performScrollTo()
-        beruhige()
         knopf.assertIsDisplayed()
-        speichere("echt_einstellungen_nach_scrollen", R.string.settings_open_meter)
+        assertTrue(
+            "Der Knopf muss ohne Scrollen im Bild liegen, war y=$obenOhneScrollen bei $hoeheDerAnzeige px",
+            obenOhneScrollen < hoeheDerAnzeige,
+        )
+        speichere("echt_einstellungen_messgeraet", R.string.settings_open_meter)
     }
 
     /**
@@ -170,7 +178,7 @@ class BildschirmfotoWerkstatt {
         app.resetContainer()
     }
 
-    private fun zeigeEinstellungenMitAufgeklapptenSchwellenwerten() {
+    private fun zeigeEinstellungenMitAufgeklappterMessgeraetSektion() {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             LaermprotokollTheme { SettingsScreen(onBack = {}, onNavigateToMeter = {}) }
@@ -179,7 +187,7 @@ class BildschirmfotoWerkstatt {
         // Kein performScrollTo() vor diesem Klick: gemessen, dass der Klick dann verschluckt wird
         // (Abschnitt bleibt zu, "Messgerät koppeln" fehlt im Semantik-Baum). Der Abschnittskopf
         // ist die zweite Karte und ohnehin ohne Scrollen sichtbar.
-        composeRule.onNodeWithText(app.getString(R.string.settings_section_thresholds)).performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_section_meter)).performClick()
         beruhige()
     }
 
