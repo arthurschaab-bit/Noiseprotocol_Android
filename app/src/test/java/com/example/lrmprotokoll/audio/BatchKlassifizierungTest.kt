@@ -229,10 +229,15 @@ class BatchKlassifizierungTest {
             sampleRecord(2, unerkannt.path),
             sampleRecord(3, fehlend.path),
         )
+        val fortschritt = mutableListOf<Pair<Int, Int>>()
 
-        val anzahl = klassifiziereUndSpeichere(kandidaten, classifier, dao, rohdatenDao)
+        val anzahl =
+            klassifiziereUndSpeichere(kandidaten, classifier, dao, rohdatenDao) { fertig, gesamt ->
+                fortschritt += fertig to gesamt
+            }
 
         assertEquals(1, anzahl)
+        assertEquals(listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3), fortschritt)
         assertEquals(1L, dao.aktualisiert.single().id)
         assertEquals("Bohren", dao.aktualisiert.single().detectedLabel)
         assertEquals(

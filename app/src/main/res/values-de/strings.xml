@@ -420,6 +420,8 @@
     <string name="learned_patterns_count">Gelernte Geräusch-Muster (%1$d)</string>
     <string name="ai_classified_count">%1$d Aufnahme(n) durch KI klassifiziert</string>
     <string name="action_ai_batch">KI-Batch-Erkennung</string>
+    <string name="ai_batch_running">KI-Verarbeitung läuft …</string>
+    <string name="ai_batch_progress">KI-Verarbeitung: %1$d von %2$d</string>
     <string name="action_ai_batch_day">Unklassifizierte Aufnahmen dieses Tages jetzt klassifizieren</string>
     <string name="ai_batch_day_result">%1$d Aufnahme(n) für %2$s klassifiziert</string>
     <string name="ai_batch_day_result_empty">Keine der ausgewählten Aufnahmen konnte klassifiziert werden</string>
@@ -528,4 +530,17 @@
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
     <string name="dienst_start_ohne_quelle">Überwachung nicht gestartet: keine Mikrofon-Berechtigung und kein Messgerät gekoppelt.</string>
+    <!-- Drive im Messfluss (F-13) -->
+    <string name="drive_status_title">Drive-Sicherung</string>
+    <string name="drive_status_disabled">Ausgeschaltet – Messdaten bleiben lokal</string>
+    <string name="drive_status_no_folder">Noch kein Zielordner eingerichtet</string>
+    <string name="drive_status_failed_days">%1$d Tagesdateien fehlgeschlagen</string>
+    <string name="drive_status_active_empty">Aktiv – noch kein Upload abgeschlossen</string>
+    <string name="drive_status_uploads">Uploads</string>
+    <string name="drive_status_setup">Einrichten</string>
+    <string name="drive_retry_queued">Upload dieser Datei eingeplant</string>
+    <string name="drive_retry_enqueue_failed">Upload konnte nicht eingeplant werden</string>
+    <string name="drive_retry_action">Erneut versuchen</string>
+    <string name="drive_upload_now_action">Jetzt hochladen</string>
+    <string name="drive_resume_action">Fortsetzen</string>
 </resources>
