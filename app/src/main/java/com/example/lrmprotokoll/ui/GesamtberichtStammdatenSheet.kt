@@ -71,8 +71,8 @@ import kotlinx.coroutines.withContext
  * ([com.example.lrmprotokoll.wetter.WetterProvider]) - beides bleibt danach normaler,
  * editierbarer Text, ein Fehlschlag (kein Standort, kein Netz) blockiert das Speichern nicht.
  *
- * "Überspringen" schließt ohne zu speichern - der Verlauf bleibt unverändert, der nächste Dialog
- * schlägt wieder denselben letzten Eintrag vor.
+ * "Überspringen" schließt ohne zu speichern - der Verlauf bleibt unverändert. Erst ein neuer
+ * Messvorgang fragt erneut und schlägt wieder den letzten Eintrag vor.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +81,7 @@ fun GesamtberichtStammdatenSheet(
     onFertig: () -> Unit,
     /** Nur bei Nacherfassung: Messtag statt des heutigen Erfassungsdatums zuordnen. */
     giltFuerTagStart: Long? = null,
+    messvorgangId: Long? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -247,7 +248,12 @@ fun GesamtberichtStammdatenSheet(
                     val dao = container.database.stammdatenVerlaufDao()
                     val letzterFuerTag = dao.fuerTag(von, bis).firstOrNull()
                     if (letzterFuerTag == null || !stammdaten.entsprichtEintrag(letzterFuerTag)) {
-                        dao.insert(stammdaten.zuEntity(jetzt).copy(giltFuerTagStart = giltFuerTagStart))
+                        dao.insert(
+                            stammdaten.zuEntity(jetzt).copy(
+                                giltFuerTagStart = giltFuerTagStart,
+                                messvorgangId = if (giltFuerTagStart == null) messvorgangId else null,
+                            ),
+                        )
                     }
                 }
                 onFertig()
