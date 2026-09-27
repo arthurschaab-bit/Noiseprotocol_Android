@@ -107,7 +107,9 @@ class BerichtErstellenSheetTest {
      *
      * Ausserhalb einer Messreihe ist die Datei nur ein Nebenprodukt im Build-Verzeichnis; sie
      * wird nie gelesen und nie zugesichert. runCatching, damit ein Schreibfehler niemals einen
-     * Test rot macht.
+     * Test rot macht - aber **mit** Meldung: ein stiller Fehlschlag laesst die Messreihe
+     * unbemerkt leer laufen (Review-Befund 27.09.2026). In der CI wird die Datei ueber den
+     * Schritt "Upload test reports" als Artefakt gesichert, auch bei rotem Lauf.
      */
     private fun protokolliereMesswert(
         ergebnis: String,
@@ -127,6 +129,11 @@ class BerichtErstellenSheetTest {
             val verstrichen = System.currentTimeMillis() - beginn
             val rest = weitereFelder.ifEmpty { "\t\t\t\t\t" }
             datei.appendText("${System.currentTimeMillis()}\t$ergebnis\t$verstrichen\t$pruefungen$rest\n")
+        }.onFailure {
+            println(
+                "WARNUNG: Messwert nicht protokolliert (${it.javaClass.simpleName}: ${it.message}) - " +
+                    "die Messreihe zu Flake (a) bleibt fuer diesen Lauf unvollstaendig",
+            )
         }
     }
 

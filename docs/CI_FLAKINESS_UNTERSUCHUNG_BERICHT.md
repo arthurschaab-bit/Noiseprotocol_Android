@@ -323,17 +323,26 @@ Der Effekt lief **einmal vollständig durch**. `laedt = false` wurde ausgeführt
 Ausnahme. Der Knopf hängt an `enabled = !erzeugt && !laedt`, und `erzeugt` ist zu diesem Zeitpunkt
 noch `false`. Er müsste frei sein — der Test sieht ihn 1287 Prüfungen lang als gesperrt.
 
-**Damit steht fest:**
+**Was daraus folgt — und was nicht.** Review-Befund 27.09.2026: eine frühere Fassung dieses
+Abschnitts schloss aus den Zählern, der Produktivzustand sei korrekt und der Hänger könne Nutzer
+nicht treffen. Das trägt die Messung nicht. Die Zähler stammen aus **einem beobachteten
+Robolectric-Lauf** mit `autoAdvance = false`; sie sagen etwas über diesen Testfall, nicht über das
+Verhalten auf Geräten. Ein Gerätelauf zu diesem Zustand fehlt.
 
-- Der **Produktivzustand ist korrekt**. Das ist *kein* Fehler, der Nutzer treffen kann — die
-  gegenteilige Vermutung (ein dauerhaft gesperrter Knopf mit Endlosspinner) ist ausgeräumt.
-- Der Fehlschlag liegt darin, dass die **Komposition des Tests** den fertigen Zustand nicht
-  übernimmt. Weder Dispatcher noch Looper noch Datenbank noch Snapshot-Benachrichtigungen erklären
-  das.
-- Der Verdacht richtet sich damit auf `autoAdvance = false` selbst — den Behelf aus #209 gegen die
-  endlose `CircularProgressIndicator`-Animation. **Warum** die Rekomposition in diesem Modus
-  ausbleibt, ist weiterhin offen; das ließ sich ohne tiefen Einstieg in Compose-Interna nicht
+- Belegt ist: **in den beobachteten roten Läufen** lief der `LaunchedEffect` vollständig durch und
+  führte `laedt = false` aus, während die Komposition desselben Laufs den fertigen Zustand nicht
+  übernahm.
+- Belegt ist ebenso: weder Dispatcher noch Looper noch Datenbank noch Snapshot-Benachrichtigungen
+  erklären das; alle drei Hypothesen sind widerlegt (Tabelle oben).
+- **Offen** bleibt die Ursache: der Verdacht richtet sich auf `autoAdvance = false` selbst — den
+  Behelf aus #209 gegen die endlose `CircularProgressIndicator`-Animation. **Warum** die
+  Rekomposition in diesem Modus ausbleibt, ließ sich ohne tiefen Einstieg in Compose-Interna nicht
   klären.
+- **Offen** bleibt damit auch die Produktwirkung. Solange die Ursache unbekannt ist, lässt sich
+  nicht ausschließen, dass derselbe Mechanismus auf einem Gerät eine Entsprechung hat. Die
+  ursprüngliche Sorge — ein dauerhaft gesperrter Knopf mit Endlosspinner — ist damit **nicht**
+  ausgeräumt, sondern unbeantwortet. Sie zu beantworten braucht einen Gerätelauf, nicht noch eine
+  Messreihe in Robolectric.
 
 ### Nach Phase 3 (PR #218, 27.09.2026): reproduziert nicht mehr — aber nicht aus dem erwarteten Grund
 
@@ -362,8 +371,28 @@ trotzdem nicht — ist dadurch nicht widerlegt und auch nicht erklärt. **Ein an
 einen von `laedt` abhängigen Knoten wartet, kann erneut darauf laufen.** Wer so einen Test
 schreibt, sollte diesen Abschnitt kennen.
 
+**Nachtrag 27.09.2026 — die Datei hat sofort geliefert, wofür sie da ist.** Beim Nachbessern der
+Review-Befunde zu diesem PR lief die Klasse noch einmal, und dabei trat ein roter Lauf auf:
+
+```
+1790511171756	rot	15025	1425	0	null	0	4	null
+```
+
+Danach 20 von 20 grün in fünf weiteren Läufen. Auf diesem Branch stehen damit **1 rot in 24
+Messungen** statt der oben genannten 0 von 12. Der Effekt von Phase 3 bleibt bestehen, die
+Formulierung „reproduziert nicht mehr" ist aber zu stark — seltener, nicht weg.
+
+**Die Signatur ist zudem eine andere.** `startknopfVorhanden=0`: das Sheet ging gar nicht erst auf.
+Die dokumentierten roten Läufe von vorher hatten den Knopf sehr wohl, nur dauerhaft gesperrt
+(`ladeindikatoren>0`). Das ist nach der Tabelle in `sammleDiagnose` der Zweig „Animation/Fenster",
+nicht der Ladepfad. Ob das derselbe Mechanismus unter anderem Vorzeichen ist oder ein zweiter,
+ist **offen** — eine Messung reicht für keine Aussage.
+
 Die Messwertdatei `app/build/flake_a_messwerte.tsv` bleibt eingebaut. Sie kostet nichts und ist
-genau das Werkzeug, mit dem ein Wiederauftreten in einer Runde statt in einem Tag erkennbar ist.
+genau das Werkzeug, mit dem ein Wiederauftreten in einer Runde statt in einem Tag erkennbar ist —
+siehe den Nachtrag oben, der ohne sie nur eine unerklärte rote Zeile im Testbericht gewesen wäre.
+In der CI wird sie über den Schritt „Upload test reports" als Artefakt gesichert, auch bei rotem
+Lauf; ohne das verfielen die Vergleichswerte mit dem Runner (Review-Befund 27.09.2026).
 
 **Kein Produktivcode geändert.** Der `CircularProgressIndicator` und die Freigabelogik
 `enabled = !erzeugt && !laedt` bleiben, wie sie sind. Der Umbau dieser Stelle gehört zu **F-07** in
