@@ -178,8 +178,7 @@ suspend fun ladeBerichtstage(db: AppDatabase, zeitraum: BerichtZeitraum, zone: Z
     val rohTage = coroutineScope {
         zeitraum.tage().map { datum ->
             async {
-                val von = datum.atStartOfDay(zone).toInstant().toEpochMilli()
-                val bis = datum.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val (von, bis) = messtagGrenzen(datum, zone)
                 val sessions = async { db.sessionDao().zwischen(von, bis) }
                 val rohwerte = async { db.measurementDao().anzahlZwischen(von, bis) }
                 val verdichtet = async { db.minuteAggregateDao().anzahlZwischen(von, bis) }

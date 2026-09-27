@@ -339,7 +339,7 @@ fun GesamtberichtStammdatenSheet(
                 modifier = Modifier.testTag("input_bericht_kalibrierung").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
+                ZeitgebundenerWertHinweis(
                     feld = "Kalibrierung",
                     wert = quelle.geraetKalibrierung,
                     aktuellerWert = geraetKalibrierung,
@@ -406,7 +406,7 @@ fun GesamtberichtStammdatenSheet(
                 label = { Text("Wetter") }, modifier = Modifier.testTag("input_bericht_wetter").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
+                ZeitgebundenerWertHinweis(
                     feld = "Wetter",
                     wert = quelle.wetter,
                     aktuellerWert = wetter,
@@ -437,7 +437,7 @@ fun GesamtberichtStammdatenSheet(
                 modifier = Modifier.testTag("input_bericht_datenqualitaet").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
-                zeitgebundenerWertHinweis(
+                ZeitgebundenerWertHinweis(
                     feld = "Datenqualität",
                     wert = quelle.datenqualitaetHinweis,
                     aktuellerWert = datenqualitaetHinweis,
@@ -462,7 +462,7 @@ fun GesamtberichtStammdatenSheet(
 }
 
 @Composable
-private fun zeitgebundenerWertHinweis(
+private fun ZeitgebundenerWertHinweis(
     feld: String,
     wert: String,
     aktuellerWert: String,
