@@ -781,7 +781,7 @@ fun NoiseProtocolApp(
                                     if (batchLaeuft) return@DropdownMenuItem
                                     showOverflowMenu = false
                                     batchLaeuft = true
-                                    val kandidaten = records.filter { it.detectedLabel == null }
+                                    val kandidaten = unklassifizierteAufnahmen(records)
                                     batchFortschritt = 0 to kandidaten.size
                                     scope.launch {
                                         try {
@@ -1443,6 +1443,7 @@ fun NoiseProtocolApp(
                         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
                             NoiseRecordItem(
                                 record = record,
+                                aiMode = settingsManager.aiMode,
                                 isSelected = selectedIds.contains(record.id),
                                 onPlay = { onNavigateToPlayer(record.filePath) },
                                 onLabel = { label -> scope.launch { dao.update(record.copy(label = label)) } },
@@ -1472,10 +1473,11 @@ fun NoiseProtocolApp(
                                 },
                                 onAiRecognize = {
                                     scope.launch {
-                                        val detected = classifier.value.classify(File(record.filePath))
-                                        dao.update(
-                                            record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)),
-                                        )
+                                        val file = File(record.filePath)
+                                        if (file.exists() && file.isFile) {
+                                            val detected = classifier.value.classify(file)
+                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL))
+                                        }
                                     }
                                 },
                             )
@@ -1657,6 +1659,7 @@ fun NoiseProtocolApp(
 @Composable
 fun NoiseRecordItem(
     record: NoiseRecord,
+    aiMode: String = "BATCH",
     isSelected: Boolean,
     onPlay: () -> Unit,
     onLabel: (String) -> Unit,
@@ -1738,9 +1741,16 @@ fun NoiseRecordItem(
                     }
                 }
 
-                if (record.detectedLabel != null) {
+                val kiStatus = klassifizierungsStatus(record, aiMode)
+                if (kiStatus != null) {
+                    val kiText = when (kiStatus) {
+                        KlassifizierungsStatus.DEAKTIVIERT -> stringResource(R.string.status_ai_disabled)
+                        KlassifizierungsStatus.AUSSTEHEND -> stringResource(R.string.status_not_classified)
+                        KlassifizierungsStatus.NICHT_ERKANNT -> stringResource(R.string.status_not_recognized)
+                        KlassifizierungsStatus.ERKANNT -> record.detectedLabel.orEmpty()
+                    }
                     Text(
-                        text = stringResource(R.string.label_ai_prefix, record.detectedLabel ?: ""),
+                        text = stringResource(R.string.label_ai_prefix, kiText),
                         color = MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
