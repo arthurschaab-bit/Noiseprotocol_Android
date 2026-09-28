@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -50,6 +49,7 @@ import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.NoiseHeaderCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
+import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -407,8 +407,8 @@ fun ProtokollDetailScreen(
                                 contentDescription = null,
                                 tint =
                                     when (befund.stufe) {
-                                        Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
-                                        Messintegritaet.EINGESCHRAENKT -> Color(0xFFD97706)
+                                        Messintegritaet.VOLLSTAENDIG -> MaterialTheme.colorScheme.statusColors.connected
+                                        Messintegritaet.EINGESCHRAENKT -> MaterialTheme.colorScheme.statusColors.warning
                                         Messintegritaet.LUECKENHAFT -> MaterialTheme.colorScheme.error
                                     },
                                 modifier = Modifier.size(16.dp),
