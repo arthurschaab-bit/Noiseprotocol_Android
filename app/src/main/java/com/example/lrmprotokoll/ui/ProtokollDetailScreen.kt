@@ -53,6 +53,7 @@ import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -147,9 +148,12 @@ fun ProtokollDetailScreen(
         }
 
         launch {
-            db.connectionEventDao().fuerSessionFlow(sessionId).collectLatest { events ->
-                ausfallbaender = leiteAusfallbaenderAb(events, session?.endedAt)
-            }
+            combine(
+                db.connectionEventDao().fuerSessionFlow(sessionId),
+                db.sessionDao().byIdFlow(sessionId),
+            ) { events, aktuelleSession ->
+                leiteAusfallbaenderAb(events, aktuelleSession?.endedAt)
+            }.collectLatest { ausfallbaender = it }
         }
 
         launch {
@@ -176,13 +180,6 @@ fun ProtokollDetailScreen(
             }
         }
 
-        val initialSession = db.sessionDao().byId(sessionId)
-        if (initialSession != null) {
-            session = initialSession
-            val events = db.connectionEventDao().fuerSession(sessionId)
-            ausfallbaender = leiteAusfallbaenderAb(events, initialSession.endedAt)
-        }
-        geladen = true
     }
 
     LaunchedEffect(session?.endedAt) {
