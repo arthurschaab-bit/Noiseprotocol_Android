@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +31,8 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.ui.theme.statusColors
+import com.example.lrmprotokoll.ui.theme.statusContainer
 
 const val WAV_STOP_CONFIRM_DIALOG_TAG = "wav_stop_confirm_dialog"
 
@@ -80,23 +81,14 @@ fun MicrophoneStatusBadge(
         }
     }
 
-    val (statusColor, containerColor, text) = when {
-        !recordWavAudio -> Triple(
-            Color(0xFF475569),
-            Color(0xFFF1F5F9),
-            "WAV: AUS (DSGVO)",
-        )
-        runtimeAudioActive -> Triple(
-            Color(0xFF15803D),
-            Color(0xFFDCFCE7),
-            "WAV: AKTIV",
-        )
-        else -> Triple(
-            Color(0xFFB45309),
-            Color(0xFFFFF7ED),
-            "WAV: INAKTIV",
-        )
-    }
+    val colors = MaterialTheme.colorScheme.statusColors
+    val (statusColor, text) =
+        when {
+            !recordWavAudio -> colors.idle to "WAV: AUS (DSGVO)"
+            runtimeAudioActive -> colors.connected to "WAV: AKTIV"
+            else -> colors.warning to "WAV: INAKTIV"
+        }
+    val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
 
     Surface(
         shape = RoundedCornerShape(16.dp),

@@ -16,12 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.ui.theme.statusColors
+import com.example.lrmprotokoll.ui.theme.statusContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
@@ -536,21 +537,20 @@ private fun ModernSessionCard(
                             stringResource(R.string.protocol_integrity_gaps)
                         else -> stringResource(R.string.protocol_badge_complete)
                     }
-                val badgeBg =
-                    when {
-                        isLive -> Color(0xFFDCFCE7)
-                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> Color(0xFFDCFCE7)
-                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> Color(0xFFFEF3C7)
-                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> Color(0xFFFEE2E2)
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    }
+                val statusColors = MaterialTheme.colorScheme.statusColors
                 val badgeTextColor =
                     when {
-                        isLive -> Color(0xFF15803D)
-                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
-                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> Color(0xFF92400E)
-                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> Color(0xFF991B1B)
+                        isLive -> statusColors.connected
+                        integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> statusColors.connected
+                        integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> statusColors.warning
+                        integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> statusColors.error
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                val badgeBg =
+                    if (isLive || integritaetsbefund != null) {
+                        MaterialTheme.colorScheme.statusContainer(badgeTextColor)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
                     }
 
                 Box(
@@ -623,8 +623,8 @@ private fun ModernSessionCard(
                         contentDescription = null,
                         tint =
                             when (befund.stufe) {
-                                Messintegritaet.VOLLSTAENDIG -> Color(0xFF15803D)
-                                Messintegritaet.EINGESCHRAENKT -> Color(0xFFD97706)
+                                Messintegritaet.VOLLSTAENDIG -> MaterialTheme.colorScheme.statusColors.connected
+                                Messintegritaet.EINGESCHRAENKT -> MaterialTheme.colorScheme.statusColors.warning
                                 Messintegritaet.LUECKENHAFT -> MaterialTheme.colorScheme.error
                             },
                         modifier = Modifier.size(15.dp),

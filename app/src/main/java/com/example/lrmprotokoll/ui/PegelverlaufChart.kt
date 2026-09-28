@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -98,6 +97,7 @@ fun PegelverlaufChart(
     val thresholdColor = statusColors.error
     val leqColor = statusColors.connected
     val outageColor = statusColors.outageBand
+    val eventPinCenterColor = MaterialTheme.colorScheme.surface
 
     // contentDescription (PROMPT_M9_UX.md Aufgabe 4): das Canvas zeichnet nur Pixel, ein
     // Screenreader sieht davon nichts - hier die Kernaussage als ein Satz statt der leeren
@@ -323,12 +323,12 @@ fun PegelverlaufChart(
                     val eventY = y(eventDb)
 
                     drawCircle(
-                        color = Color(0xFFFFA000),
+                        color = statusColors.warning,
                         radius = 4.5f.dp.toPx(),
                         center = Offset(eventX, eventY)
                     )
                     drawCircle(
-                        color = Color(0xFFFFD54F),
+                        color = eventPinCenterColor,
                         radius = 2.5f.dp.toPx(),
                         center = Offset(eventX, eventY)
                     )

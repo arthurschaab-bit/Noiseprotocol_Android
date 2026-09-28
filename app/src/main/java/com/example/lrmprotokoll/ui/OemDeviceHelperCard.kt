@@ -20,11 +20,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.ui.theme.statusColors
+import com.example.lrmprotokoll.ui.theme.statusContainer
 import androidx.core.content.ContextCompat
 
 const val OEM_HELPER_CARD_TAG = "oem_helper_card"
@@ -119,7 +120,7 @@ fun OemDeviceHelperCard(
                     Icon(
                         imageVector = if (hasIssues) Icons.Default.Warning else Icons.Default.Check,
                         contentDescription = null,
-                        tint = if (hasIssues) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                        tint = if (hasIssues) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.statusColors.connected,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -132,12 +133,13 @@ fun OemDeviceHelperCard(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (hasIssues) MaterialTheme.colorScheme.errorContainer else Color(0xFFE8F5E9)
+                    color = if (hasIssues) MaterialTheme.colorScheme.errorContainer else
+                        MaterialTheme.colorScheme.statusContainer(MaterialTheme.colorScheme.statusColors.connected)
                 ) {
                     Text(
                         text = if (hasIssues) "Prüfung nötig" else "Optimal konfiguriert",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (hasIssues) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                        color = if (hasIssues) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.statusColors.connected,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )

@@ -72,6 +72,7 @@ import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.GeraetePinning
 import com.example.lrmprotokoll.meter.MeasurementRange
+import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.meter.PinningBefund
 import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
@@ -529,17 +530,18 @@ private fun rangeLabel(range: MeasurementRange?): String = when (range) {
 
 @Composable
 private fun connectionStateDisplay(state: ConnectionState): Triple<ImageVector, String, Color> {
+    val colors = MaterialTheme.colorScheme.statusColors
     val (icon, color) = when (state) {
-        ConnectionState.IDLE -> Icons.Default.Info to Color.Gray
-        ConnectionState.SCANNING -> Icons.Default.Refresh to Color(0xFF1976D2)
+        ConnectionState.IDLE -> Icons.Default.Info to colors.idle
+        ConnectionState.SCANNING -> Icons.Default.Refresh to colors.connecting
         ConnectionState.CONNECTING,
         ConnectionState.DISCOVERING,
-        ConnectionState.SUBSCRIBING -> Icons.Default.Refresh to Color(0xFF1976D2)
-        ConnectionState.STREAMING -> Icons.Default.Check to Color(0xFF4CAF50)
-        ConnectionState.DEGRADED -> Icons.Default.Warning to Color(0xFFFFA000)
-        ConnectionState.RECONNECTING -> Icons.Default.Refresh to Color(0xFFFFA000)
-        ConnectionState.DISCONNECTED -> Icons.Default.Close to Color.Gray
-        ConnectionState.FAILED -> Icons.Default.Warning to Color(0xFFD32F2F)
+        ConnectionState.SUBSCRIBING -> Icons.Default.Refresh to colors.connecting
+        ConnectionState.STREAMING -> Icons.Default.Check to colors.connected
+        ConnectionState.DEGRADED -> Icons.Default.Warning to colors.warning
+        ConnectionState.RECONNECTING -> Icons.Default.Refresh to colors.warning
+        ConnectionState.DISCONNECTED -> Icons.Default.Close to colors.idle
+        ConnectionState.FAILED -> Icons.Default.Warning to colors.error
     }
     return Triple(icon, state.label(), color)
 }
