@@ -38,6 +38,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.Messintegritaet
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_LABEL
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
@@ -581,8 +582,10 @@ fun ProtokollDetailScreen(
                                                     } else {
                                                         null
                                                     }
-                                                if (detected != null) {
-                                                    container.database.noiseDao().update(record.copy(detectedLabel = detected))
+                                                if (file.exists() && file.isFile) {
+                                                    container.database.noiseDao().update(
+                                                        record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL),
+                                                    )
                                                 }
                                             } finally {
                                                 klassifizierendeIds.remove(record.id)

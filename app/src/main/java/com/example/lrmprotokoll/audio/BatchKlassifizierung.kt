@@ -3,11 +3,13 @@ package com.example.lrmprotokoll.audio
 import com.example.lrmprotokoll.data.KlassifikationsRohdatenDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_LABEL
 import java.io.File
 
 /**
- * Klassifiziert jede der übergebenen Aufnahmen per KI nach und schreibt ein erkanntes Label in
- * die Datenbank. Gemeinsame Schleife für den globalen ("Alle klassifizieren") und den
+ * Klassifiziert jede der übergebenen Aufnahmen per KI nach und schreibt das erkannte Label oder
+ * den Status "Nicht erkannt" in die Datenbank. Gemeinsame Schleife für den globalen
+ * ("Alle klassifizieren") und den
  * Pro-Tag-Batch auf dem Home-Screen (`NoiseProtocolApp`) - vorher zweimal fast identisch inline
  * in Compose-Callbacks, hier ohne Compose testbar.
  *
@@ -22,7 +24,7 @@ import java.io.File
  * jede Aufnahme wird sonst nur einmal ueberhaupt inferenziert, hier ist bereits eine `recordId`
  * bekannt (anders als beim Online-Pfad), die Rohdaten koennen also direkt mitgespeichert werden.
  *
- * @return Anzahl der tatsächlich neu klassifizierten Aufnahmen.
+ * @return Anzahl der Aufnahmen mit gespeicherter Klassifizierungsentscheidung.
  */
 suspend fun klassifiziereUndSpeichere(
     kandidaten: List<NoiseRecord>,
@@ -43,7 +45,7 @@ suspend fun klassifiziereUndSpeichere(
             // Rohdatensaetze fuer dieselbe recordId hinterlassen.
             rohdatenDao.loescheFuerRecord(record.id)
             rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
-            val erkannt = ergebnis.label ?: continue
+            val erkannt = ergebnis.label ?: NICHT_ERKANNT_LABEL
             dao.update(record.copy(detectedLabel = erkannt))
             anzahl++
         } finally {

@@ -90,8 +90,9 @@ class NoiseRecordGroupingTest {
         val mitKiLabel = sampleRecord(2, 2L, detectedLabel = "Hund")
         val mitManuellemLabel = sampleRecord(3, 3L, label = "Baustelle")
         val ohneAudio = sampleRecord(4, 4L, filePath = "")
+        val ohneTreffer = sampleRecord(5, 5L, detectedLabel = NICHT_ERKANNT_LABEL)
 
-        val ergebnis = unklassifizierteAufnahmen(listOf(ok, mitKiLabel, mitManuellemLabel, ohneAudio))
+        val ergebnis = unklassifizierteAufnahmen(listOf(ok, mitKiLabel, mitManuellemLabel, ohneAudio, ohneTreffer))
 
         assertEquals(listOf(ok), ergebnis)
     }
@@ -99,5 +100,25 @@ class NoiseRecordGroupingTest {
     @Test
     fun unklassifizierteAufnahmenMitLeererListeErgibtLeereListe() {
         assertTrue(unklassifizierteAufnahmen(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun klassifizierungsStatusUnterscheidetAlleZustaendeUndEintraegeOhneAudio() {
+        val offen = sampleRecord(1, 1L)
+        assertEquals(KlassifizierungsStatus.AUSSTEHEND, klassifizierungsStatus(offen, "BATCH"))
+        assertEquals(KlassifizierungsStatus.DEAKTIVIERT, klassifizierungsStatus(offen, "OFF"))
+        assertEquals(
+            KlassifizierungsStatus.NICHT_ERKANNT,
+            klassifizierungsStatus(offen.copy(detectedLabel = NICHT_ERKANNT_LABEL), "BATCH"),
+        )
+        assertEquals(
+            KlassifizierungsStatus.NICHT_ERKANNT,
+            klassifizierungsStatus(offen.copy(detectedLabel = "Not recognized"), "BATCH"),
+        )
+        assertEquals(
+            KlassifizierungsStatus.ERKANNT,
+            klassifizierungsStatus(offen.copy(detectedLabel = "Bohren"), "OFF"),
+        )
+        assertEquals(null, klassifizierungsStatus(offen.copy(filePath = ""), "BATCH"))
     }
 }

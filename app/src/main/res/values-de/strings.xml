@@ -114,6 +114,7 @@
 
     <!-- PCE-323 Meter Screen -->
     <string name="meter_screen_title">Schallpegelmesser PCE-323</string>
+    <string name="meter_manage_action">Gerät verwalten</string>
     <string name="meter_paired_card_title">Gekoppeltes PCE-323</string>
     <string name="meter_no_device_paired">Kein Messgerät gekoppelt</string>
     <string name="meter_action_disconnect">Verbindung trennen</string>
@@ -439,6 +440,8 @@
     <string name="delete_pattern_success">Muster \'%1$s\' gelöscht</string>
     <string name="record_moved_to_trash">Aufnahme in Papierkorb verschoben</string>
     <string name="status_not_recognized">Nicht erkannt</string>
+    <string name="status_not_classified">Noch nicht klassifiziert</string>
+    <string name="status_ai_disabled">Aus</string>
     <string name="meter_paired_success">PCE-323 (%1$s) gekoppelt</string>
     <string name="source_mic_format">(Mikrofon: %1$.1f dB)</string>
     <string name="report_dialog_desc">Möchten Sie den PDF-Bericht oder ein ZIP-Paket inkl. Audioaufnahmen (%1$d Dateien) teilen?</string>
