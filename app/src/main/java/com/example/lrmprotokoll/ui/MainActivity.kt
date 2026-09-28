@@ -220,9 +220,9 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 NoiseProtocolApp(
                     onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
                     onNavigateToSettings = { navigiereZuEinstellungen(SettingsTab.START) },
-                    onNavigateToMeter = { navigiereZuTab("meter") },
+                    onNavigateToMeter = { navController.navigate("meter") },
                     onNavigateToProtokoll = { navigiereZuTab("protokoll") },
-                    onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                    onNavigateToDiagnose = { navController.navigate("diagnose") },
                     onNavigateToVideo = { navController.navigate("video") },
                     onNavigateToDriveUploads = { navController.navigate("drive-uploads") },
                     onShowSnackbar = { msg, action, onAction ->
@@ -1642,6 +1642,10 @@ fun NoiseProtocolApp(
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false },
+            onManage = {
+                showPairingDialog = false
+                onNavigateToMeter()
+            },
         )
     }
 }

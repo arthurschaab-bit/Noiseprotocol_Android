@@ -329,6 +329,20 @@ class MainActivityNavigationAndroidTest {
     }
 
     @Test
+    fun bluetoothBadgeFuehrtZurGeraeteverwaltungUndZurueckZumCockpit() {
+        val navController = TestNavHostController(composeRule.activity)
+        setNavigationContent(navController)
+
+        composeRule.onNodeWithTag("badge_bluetooth_status").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("btn_manage_meter").assertIsDisplayed().performClick()
+        assertEquals("meter", navController.currentDestination?.route)
+
+        composeRule.runOnUiThread { navController.popBackStack() }
+        composeRule.waitForIdle()
+        assertEquals("main", navController.currentDestination?.route)
+    }
+
+    @Test
     fun topAppBarOverflowMenuZeigtOptionenUndNavigiert() {
         setNavigationContent()
         composeRule.onNodeWithTag("btn_overflow_menu").assertIsDisplayed().performClick()
