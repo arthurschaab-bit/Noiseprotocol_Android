@@ -952,7 +952,6 @@ fun NoiseProtocolApp(
                 LiveCockpitCard(
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToDiagnose = onNavigateToDiagnose,
-                    onNavigateToMeter = onNavigateToMeter,
                     onNavigateToVideo = onNavigateToVideo,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) },
                 )
