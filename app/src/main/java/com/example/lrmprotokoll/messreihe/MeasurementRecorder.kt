@@ -34,8 +34,8 @@ private const val TAG = "MeasurementRecorder"
 const val MIKROFON_GERAETENAME = "Smartphone-Mikrofon"
 
 /**
- * Schreibt die Messreihe fuer M4 (Plan Abschnitt 8.1/8.2): eine [SessionEntity] pro
- * Ueberwachungsperiode, [MeasurementEntity] je Messwert, [ConnectionEventEntity] je
+ * Schreibt die Messreihe fuer M4 (Plan Abschnitt 8.1/8.2): eine [SessionEntity] je Messquelle
+ * innerhalb eines Messvorgangs, [MeasurementEntity] je Messwert und [ConnectionEventEntity] je
  * Verbindungsaenderung. Kennt nur [ConnectionState] und [MeterFrame] - weder BLE noch Room-
  * Implementierungsdetails ausserhalb der DAOs - und ist damit wie [com.example.lrmprotokoll.alert.AlarmCoordinator]
  * vollstaendig gegen Fakes testbar.
@@ -212,7 +212,7 @@ class MeasurementRecorder(
             sessionMutex.withLock {
                 if (aktiveSessionId != null) return@launch
                 schliesseVerwaisteSessions()
-                aktiveSessionId = sessionDao.insert(
+                aktiveSessionId = sessionDao.insertMitMessvorgang(
                     SessionEntity(
                         startedAt = now.now().toEpochMilli(),
                         endedAt = null,
@@ -298,14 +298,16 @@ class MeasurementRecorder(
         sessionMutex.withLock {
             if (aktiveSessionId != null && !aktiveSessionIstMikrofon) return
 
-            // Laeuft gerade ein reiner Mikrofonlauf, endet er hier: Die Messquelle wechselt vom
-            // Mikrofon auf das kalibrierte Geraet, und das sind zwei verschiedene Messvorgaenge.
-            // Beide in eine Session zu werfen wuerde einen Teil der Werte mit der falschen
-            // Quelle ausweisen.
+            // Beim Wechsel vom Mikrofon auf das kalibrierte Geraet entstehen zwei Sessions fuer
+            // getrennt ausgewiesene
+            // Messwerte, aber derselbe Messvorgang fuer die einmaligen Nachfragen.
+            val mikrofonSession =
+                aktiveSessionId?.takeIf { aktiveSessionIstMikrofon }?.let { sessionDao.byId(it) }
+            val messvorgangId = mikrofonSession?.messvorgangId
             beendeMikrofonSession()
             schliesseVerwaisteSessions()
 
-            aktiveSessionId = sessionDao.insert(
+            aktiveSessionId = sessionDao.insertMitMessvorgang(
                 SessionEntity(
                     startedAt = now.now().toEpochMilli(),
                     endedAt = null,
@@ -313,7 +315,10 @@ class MeasurementRecorder(
                     deviceName = geraet.name,
                     weighting = null,
                     timeWeighting = null,
-                )
+                    photoPromptCompleted = mikrofonSession?.photoPromptCompleted ?: false,
+                    metadataPromptCompleted = mikrofonSession?.metadataPromptCompleted ?: false,
+                ),
+                bestehenderMessvorgangId = messvorgangId,
             )
         }
     }

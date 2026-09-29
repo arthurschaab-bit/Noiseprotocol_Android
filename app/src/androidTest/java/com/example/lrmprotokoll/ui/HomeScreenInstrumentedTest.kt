@@ -1,6 +1,9 @@
 package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -418,5 +421,43 @@ class HomeScreenInstrumentedTest {
 
         val micBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.badge_microphone)
         composeRule.onNodeWithText("55.0 dB ($micBadge)", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun noiseRecordItemZeigtUnterschiedlicheKiStatus() {
+        var record by mutableStateOf(
+            NoiseRecord(
+                id = 7L,
+                timestamp = 1716000000000L,
+                dbValue = 55.0,
+                amplitude = 8000.0,
+                filePath = "/fake/path/audio.wav",
+            ),
+        )
+        var aiMode by mutableStateOf("BATCH")
+        composeRule.setContent {
+            NoiseRecordItem(
+                record = record,
+                aiMode = aiMode,
+                isSelected = false,
+                onPlay = {},
+                onLabel = {},
+                onToggleFavorite = {},
+                onDelete = {},
+                onLearn = {},
+                onLongClick = {},
+                onAiRecognize = {},
+            )
+        }
+        fun statusText(resId: Int): String =
+            composeRule.activity.getString(
+                com.example.lrmprotokoll.R.string.label_ai_prefix,
+                composeRule.activity.getString(resId),
+            )
+        composeRule.onNodeWithText(statusText(com.example.lrmprotokoll.R.string.status_not_classified)).assertIsDisplayed()
+        composeRule.runOnUiThread { aiMode = "OFF" }
+        composeRule.onNodeWithText(statusText(com.example.lrmprotokoll.R.string.status_ai_disabled)).assertIsDisplayed()
+        composeRule.runOnUiThread { record = record.copy(detectedLabel = "Nicht erkannt") }
+        composeRule.onNodeWithText(statusText(com.example.lrmprotokoll.R.string.status_not_recognized)).assertIsDisplayed()
     }
 }

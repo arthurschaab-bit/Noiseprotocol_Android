@@ -136,7 +136,7 @@ class BatchKlassifizierungTest {
     }
 
     @Test
-    fun classifierOhneLabelWirdNichtAlsGelabeltGezaehltAberRohdatenBleiben() = runTest {
+    fun classifierOhneTrefferSpeichertStatusUndRohdaten() = runTest {
         val datei = tempFolder.newFile("unklar.wav")
         val record = sampleRecord(1, datei.path)
         val dao = FakeNoiseDao()
@@ -145,8 +145,8 @@ class BatchKlassifizierungTest {
 
         val anzahl = klassifiziereUndSpeichere(listOf(record), classifier, dao, rohdatenDao)
 
-        assertEquals(0, anzahl)
-        assertEquals(0, dao.aktualisiert.size)
+        assertEquals(1, anzahl)
+        assertEquals("Nicht erkannt", dao.aktualisiert.single().detectedLabel)
         assertEquals(
             "Auch ohne ableitbares Label sind die Rohscores wertvoll fuer eine spaetere " +
                 "Neubewertung mit anderen Schwellen",
@@ -229,12 +229,17 @@ class BatchKlassifizierungTest {
             sampleRecord(2, unerkannt.path),
             sampleRecord(3, fehlend.path),
         )
+        val fortschritt = mutableListOf<Pair<Int, Int>>()
 
-        val anzahl = klassifiziereUndSpeichere(kandidaten, classifier, dao, rohdatenDao)
+        val anzahl =
+            klassifiziereUndSpeichere(kandidaten, classifier, dao, rohdatenDao) { fertig, gesamt ->
+                fortschritt += fertig to gesamt
+            }
 
-        assertEquals(1, anzahl)
-        assertEquals(1L, dao.aktualisiert.single().id)
-        assertEquals("Bohren", dao.aktualisiert.single().detectedLabel)
+        assertEquals(2, anzahl)
+        assertEquals(listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3), fortschritt)
+        assertEquals(listOf(1L, 2L), dao.aktualisiert.map { it.id })
+        assertEquals(listOf("Bohren", "Nicht erkannt"), dao.aktualisiert.map { it.detectedLabel })
         assertEquals(
             "Fuer beide vorhandenen Dateien (erkannt+unerkannt) muessen Rohdaten entstehen, " +
                 "nur die fehlende Datei wird uebersprungen",

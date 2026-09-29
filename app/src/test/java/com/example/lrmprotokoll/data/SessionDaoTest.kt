@@ -37,14 +37,15 @@ class SessionDaoTest {
     )
 
     @Test
-    fun letzteBeendeteIgnoriertEineNeuereOffeneSession() = runBlocking {
-        val dao = dao()
-        val basis = 3_000_000_000_000L
-        dao.insert(session(basis, basis + 1_000))
-        dao.insert(session(basis + 2_000, null))
+    fun letzteBeendeteIgnoriertEineNeuereOffeneSession() =
+        runBlocking {
+            val dao = dao()
+            val basis = 3_000_000_000_000L
+            dao.insert(session(basis, basis + 1_000))
+            dao.insert(session(basis + 2_000, null))
 
-        assertEquals(basis, dao.letzteBeendete()?.startedAt)
-    }
+            assertEquals(basis, dao.letzteBeendete()?.startedAt)
+        }
 
     @Test
     fun findetSessionDieVollstaendigImZeitraumLiegt() = runBlocking {
@@ -99,5 +100,53 @@ class SessionDaoTest {
         val gefunden = dao.zwischen(basis, basis + 10_000)
 
         assertTrue(gefunden.none { it.startedAt == basis + 20_000 })
+    }
+
+    @Test
+    fun teilSessionsTeilenFotosStammdatenUndAbschlussmerker() = runBlocking {
+        val database = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.database
+        val dao = database.sessionDao()
+        val basis = 3_100_000_000_000L
+        val mikrofonId = dao.insertMitMessvorgang(session(basis, basis + 1_000))
+        val messgeraetId = dao.insertMitMessvorgang(session(basis + 1_001, null), mikrofonId)
+        val fremdId = dao.insertMitMessvorgang(session(basis + 2_000, null))
+        database.dokumentationsFotoDao().insert(
+            DokumentationsFotoEntity(
+                sessionId = mikrofonId,
+                kategorie = FotoKategorie.MESSAUFBAU.name,
+                dateiPfad = "test-$basis.jpg",
+                aufgenommenAm = basis,
+            ),
+        )
+        database.stammdatenVerlaufDao().insert(
+            StammdatenVerlaufEntity(
+                erstelltAm = basis,
+                geraetHersteller = "",
+                geraetTyp = "",
+                geraetGenauigkeitsklasse = "",
+                geraetSeriennummer = "",
+                geraetKalibrierung = "",
+                messort = "Testort",
+                mikrofonposition = "",
+                mikrofonhoehe = "",
+                entfernungZurQuelle = "",
+                innenAussen = "",
+                fensterzustand = "",
+                wetter = "",
+                datenqualitaetHinweis = "",
+                messvorgangId = mikrofonId,
+            ),
+        )
+
+        assertEquals(listOf(mikrofonId, messgeraetId), dao.fuerMessvorgang(mikrofonId).map { it.id })
+        assertEquals(1, database.dokumentationsFotoDao().fuerMessvorgang(mikrofonId).size)
+        assertEquals(1, database.stammdatenVerlaufDao().fuerMessvorgang(mikrofonId).size)
+        assertTrue(database.dokumentationsFotoDao().fuerMessvorgang(fremdId).isEmpty())
+        assertTrue(database.stammdatenVerlaufDao().fuerMessvorgang(fremdId).isEmpty())
+
+        dao.fotoAbfrageAbgeschlossen(mikrofonId)
+        dao.stammdatenAbfrageAbgeschlossen(mikrofonId)
+        assertTrue(dao.fuerMessvorgang(mikrofonId).all { it.photoPromptCompleted && it.metadataPromptCompleted })
+        assertTrue(dao.byId(fremdId)?.photoPromptCompleted == false)
     }
 }

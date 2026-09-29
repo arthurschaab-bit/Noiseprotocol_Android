@@ -56,6 +56,7 @@ import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.audio.berechneBaulaermMinutenDesTages
 import com.example.lrmprotokoll.audio.bewerteAlleNeu
 import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
+import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
@@ -65,12 +66,14 @@ import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
 import com.example.lrmprotokoll.report.messtagGrenzen
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -233,10 +236,11 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 NoiseProtocolApp(
                     onNavigateToPlayer = { filePath -> navController.navigate("player?path=$filePath") },
                     onNavigateToSettings = { navigiereZuEinstellungen(SettingsTab.START) },
-                    onNavigateToMeter = { navigiereZuTab("meter") },
+                    onNavigateToMeter = { navController.navigate("meter") },
                     onNavigateToProtokoll = { navigiereZuTab("protokoll") },
-                    onNavigateToDiagnose = { navigiereZuTab("diagnose") },
+                    onNavigateToDiagnose = { navController.navigate("diagnose") },
                     onNavigateToVideo = { navController.navigate("video") },
+                    onNavigateToDriveUploads = { navController.navigate("drive-uploads") },
                     onShowSnackbar = { msg, action, onAction ->
                         scope.launch {
                             val result =
@@ -410,8 +414,10 @@ fun NoiseProtocolApp(
     onNavigateToProtokoll: () -> Unit,
     onNavigateToDiagnose: () -> Unit,
     onNavigateToVideo: () -> Unit,
+    onNavigateToDriveUploads: () -> Unit = {},
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
     reportManager: ReportManager? = null,
+    batchClassifyOverride: (suspend (List<NoiseRecord>, (Int, Int) -> Unit) -> Int)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -427,6 +433,7 @@ fun NoiseProtocolApp(
     // liess. Hier gelesen, loest jede Aenderung eine normale Rekomposition aus.
     val records = dao.getAll().collectAsState(initial = emptyList()).value
     val references = dao.getAllReferences().collectAsState(initial = emptyList()).value
+    val driveTagesdateien = db.driveDailyFileDao().alle().collectAsState(initial = emptyList()).value
     val scope = rememberCoroutineScope()
     val effectiveReportManager = remember(reportManager) { reportManager ?: ReportManager(context) }
 
@@ -437,23 +444,38 @@ fun NoiseProtocolApp(
         .sessionDao()
         .offeneSessionFlow()
         .collectAsState(initial = null)
-    var fotoSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
-    var zuletztGefragteSession by rememberSaveable { mutableStateOf<Long?>(null) }
+    var fotoSheetFuerSession by remember { mutableStateOf<Long?>(null) }
+    var fotoSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv) {
-        val id = offeneSession?.id
-        if (settingsManager.fotoDokuAktiv && id != null && id != zuletztGefragteSession) {
-            zuletztGefragteSession = id
-            if (container.database
-                    .dokumentationsFotoDao()
-                    .fuerSession(id)
-                    .isEmpty()
-            ) {
-                fotoSheetFuerSession = id
+        val session = offeneSession
+        if (!settingsManager.fotoDokuAktiv || session == null) {
+            fotoSheetFuerSession = null
+            fotoSheetFuerMessvorgang = null
+        } else if (fotoSheetFuerMessvorgang != session.messvorgangId) {
+            val messvorgangId = session.messvorgangId
+            val bereitsAbgeschlossen = container.database.sessionDao().fuerMessvorgang(messvorgangId)
+                .any { it.photoPromptCompleted }
+            val hatFoto = container.database.dokumentationsFotoDao().fuerMessvorgang(messvorgangId)
+                .isNotEmpty()
+            if (!bereitsAbgeschlossen && !hatFoto) {
+                fotoSheetFuerSession = session.id
+                fotoSheetFuerMessvorgang = messvorgangId
             }
         }
     }
     fotoSheetFuerSession?.let { id ->
-        FotoDokumentationSheet(sessionId = id, onFertig = { fotoSheetFuerSession = null })
+        val messvorgangId = fotoSheetFuerMessvorgang ?: id
+        FotoDokumentationSheet(
+            sessionId = id,
+            messvorgangId = messvorgangId,
+            onFertig = {
+                scope.launch {
+                    container.database.sessionDao().fotoAbfrageAbgeschlossen(messvorgangId)
+                    fotoSheetFuerSession = null
+                    fotoSheetFuerMessvorgang = null
+                }
+            },
+        )
     }
 
     // Owner-Anfrage 10.09.2026: Gesamtbericht-Stammdaten (Geraet, Messaufbau, Randbedingungen)
@@ -461,26 +483,68 @@ fun NoiseProtocolApp(
     // offeneSessionFlow()-Erkennung wie oben bei der Fotodokumentation, unabhaengig davon
     // gesteuert (eigener Schalter, eigene "schon gefragt"-Session-ID).
     var stammdatenSheetFuerSession by rememberSaveable { mutableStateOf<Long?>(null) }
-    var zuletztGefragteStammdatenSession by rememberSaveable { mutableStateOf<Long?>(null) }
-    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv) {
-        val id = offeneSession?.id
-        if (settingsManager.stammdatenAbfrageAktiv && id != null && id != zuletztGefragteStammdatenSession) {
-            zuletztGefragteStammdatenSession = id
+    var stammdatenSheetFuerMessvorgang by rememberSaveable { mutableStateOf<Long?>(null) }
+    var stammdatenSheetTagStart by rememberSaveable { mutableStateOf<Long?>(null) }
+    var korrekturZiel by remember { mutableStateOf<Triple<Long, Long, Long?>?>(null) }
+    var heutigerMesstag by remember { mutableStateOf(LocalDate.now(ZoneId.systemDefault())) }
+    LaunchedEffect(offeneSession?.id) {
+        while (offeneSession != null) {
+            val heute = LocalDate.now(ZoneId.systemDefault())
+            if (heutigerMesstag != heute) heutigerMesstag = heute
+            delay(60_000)
+        }
+    }
+    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv, heutigerMesstag) {
+        val session = offeneSession
+        if (!settingsManager.stammdatenAbfrageAktiv) {
+            stammdatenSheetFuerSession = null
+            stammdatenSheetFuerMessvorgang = null
+            stammdatenSheetTagStart = null
+        } else if (session != null) {
             val zone = ZoneId.systemDefault()
-            val heute = LocalDate.now(zone)
-            val (von, bis) = messtagGrenzen(heute, zone)
-            val heuteBestaetigt =
-                withContext(Dispatchers.IO) {
-                    val database = container.database
-                    val dao = database.stammdatenVerlaufDao()
-                    val eintraege = dao.fuerTag(von, bis)
-                    eintraege.isNotEmpty()
-                }
-            if (!heuteBestaetigt) stammdatenSheetFuerSession = id
+            val (von, bis) = messtagGrenzen(heutigerMesstag, zone)
+            val messvorgangId = session.messvorgangId
+            val (ersteSession, stammdaten) = withContext(Dispatchers.IO) {
+                container.database.sessionDao().fuerMessvorgang(messvorgangId).firstOrNull() to
+                    container.database.stammdatenVerlaufDao().fuerMessvorgang(messvorgangId)
+            }
+            val ersterTagBereitsAbgeschlossen = ersteSession?.let {
+                it.metadataPromptCompleted && it.startedAt in von until bis
+            } ?: false
+            val hatStammdaten = stammdaten.any { it.erstelltAm in von until bis && it.giltFuerTagStart == null }
+            if (!settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von) &&
+                !ersterTagBereitsAbgeschlossen && !hatStammdaten && stammdatenSheetTagStart != von
+            ) {
+                stammdatenSheetFuerSession = session.id
+                stammdatenSheetFuerMessvorgang = messvorgangId
+                stammdatenSheetTagStart = von
+            }
         }
     }
     stammdatenSheetFuerSession?.let { id ->
-        GesamtberichtStammdatenSheet(sessionId = id, onFertig = { stammdatenSheetFuerSession = null })
+        val messvorgangId = stammdatenSheetFuerMessvorgang ?: id
+        val tagStart = stammdatenSheetTagStart
+        GesamtberichtStammdatenSheet(
+            sessionId = id,
+            messvorgangId = messvorgangId,
+            onFertig = {
+                scope.launch {
+                    if (tagStart != null) settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, tagStart)
+                    container.database.sessionDao().stammdatenAbfrageAbgeschlossen(messvorgangId)
+                    stammdatenSheetFuerSession = null
+                    stammdatenSheetFuerMessvorgang = null
+                    stammdatenSheetTagStart = null
+                }
+            },
+        )
+    }
+    korrekturZiel?.let { (sessionId, messvorgangId, messtag) ->
+        GesamtberichtStammdatenSheet(
+            sessionId = sessionId,
+            giltFuerTagStart = messtag,
+            messvorgangId = messvorgangId,
+            onFertig = { korrekturZiel = null },
+        )
     }
     // Lazy statt sofort per remember: siehe Begruendung in ProtokollDetailScreen.kt - der
     // init-Block von NoiseClassifier laedt synchron das YAMNet-Modell und wird hier nur bei
@@ -501,6 +565,8 @@ fun NoiseProtocolApp(
     val latestFrame by container.meterTransport.frames.collectAsState(initial = null)
     var refName by remember { mutableStateOf("") }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var batchLaeuft by remember { mutableStateOf(false) }
+    var batchFortschritt by remember { mutableStateOf(0 to 0) }
 
     val selectedIds = remember { mutableStateListOf<Long>() }
     val collapsedDays = remember { mutableStateListOf<String>() }
@@ -635,6 +701,11 @@ fun NoiseProtocolApp(
             )
         }
 
+    // Beide States hier lesen, damit der gesamte Screen auf den Batch-Zustand reagiert. Nur
+    // innerhalb des LazyColumn-Builders gelesen koennte eine spaetere Aenderung unsichtbar bleiben.
+    val istBatchAktiv = batchLaeuft
+    val aktuellerBatchFortschritt = batchFortschritt
+
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
@@ -723,48 +794,72 @@ fun NoiseProtocolApp(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
+                                    if (batchLaeuft) return@DropdownMenuItem
                                     showOverflowMenu = false
+                                    batchLaeuft = true
+                                    val kandidaten = unklassifizierteAufnahmen(records)
+                                    batchFortschritt = 0 to kandidaten.size
                                     scope.launch {
-                                        val count =
-                                            klassifiziereUndSpeichere(
-                                                kandidaten = records.filter { it.detectedLabel == null },
-                                                classifier = classifier.value,
-                                                dao = dao,
-                                                rohdatenDao = rohdatenDao,
-                                            )
-                                        onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
+                                        try {
+                                            val onFortschritt: (Int, Int) -> Unit =
+                                                { fertig, gesamt -> batchFortschritt = fertig to gesamt }
+                                            val count =
+                                                if (batchClassifyOverride != null) {
+                                                    batchClassifyOverride(kandidaten, onFortschritt)
+                                                } else {
+                                                    klassifiziereUndSpeichere(
+                                                        kandidaten = kandidaten,
+                                                        classifier = classifier.value,
+                                                        dao = dao,
+                                                        rohdatenDao = rohdatenDao,
+                                                        onFortschritt = onFortschritt,
+                                                    )
+                                                }
+                                            onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
+                                        } finally {
+                                            batchLaeuft = false
+                                        }
                                     }
                                 },
+                                enabled = !istBatchAktiv,
+                                modifier = Modifier.testTag("menu_item_ai_batch"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_neu_bewerten)) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
+                                    if (batchLaeuft) return@DropdownMenuItem
                                     showOverflowMenu = false
+                                    batchLaeuft = true
+                                    batchFortschritt = 0 to 0
                                     scope.launch {
-                                        // Praefprotokoll-Anhang (Owner-Entscheidung 11.09.2026,
-                                        // "korrigiere"): aktuelleKonfiguration() liest synchron
-                                        // aus Room - auf Dispatchers.IO statt auf dem
-                                        // Main-Thread dieses scope.launch (rememberCoroutineScope).
-                                        val konfiguration =
-                                            withContext(Dispatchers.IO) {
-                                                classifier.value.aktuelleKonfiguration()
-                                            }
-                                        val count =
-                                            bewerteAlleNeu(
-                                                noiseDao = dao,
-                                                rohdatenDao = rohdatenDao,
-                                                konfiguration = konfiguration,
-                                            )
-                                        val msg =
-                                            if (count > 0) {
-                                                context.getString(R.string.ai_reevaluated_count, count)
-                                            } else {
-                                                context.getString(R.string.ai_reevaluated_empty)
-                                            }
-                                        onShowSnackbar(msg, null, null)
+                                        try {
+                                            // aktuelleKonfiguration() liest synchron aus Room.
+                                            val konfiguration =
+                                                withContext(Dispatchers.IO) {
+                                                    classifier.value.aktuelleKonfiguration()
+                                                }
+                                            val count =
+                                                bewerteAlleNeu(
+                                                    noiseDao = dao,
+                                                    rohdatenDao = rohdatenDao,
+                                                    konfiguration = konfiguration,
+                                                    onFortschritt = { fertig, gesamt -> batchFortschritt = fertig to gesamt },
+                                                )
+                                            val msg =
+                                                if (count > 0) {
+                                                    context.getString(R.string.ai_reevaluated_count, count)
+                                                } else {
+                                                    context.getString(R.string.ai_reevaluated_empty)
+                                                }
+                                            onShowSnackbar(msg, null, null)
+                                        } finally {
+                                            batchLaeuft = false
+                                        }
                                     }
                                 },
+                                enabled = !istBatchAktiv,
+                                modifier = Modifier.testTag("menu_item_ai_reevaluate"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.protocol_daily_report_title)) },
@@ -792,6 +887,27 @@ fun NoiseProtocolApp(
                     }
                 },
             )
+        }
+
+        if (istBatchAktiv) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    val (fertig, gesamt) = aktuellerBatchFortschritt
+                    Text(
+                        text =
+                            if (gesamt > 0) {
+                                stringResource(R.string.ai_batch_progress, fertig, gesamt)
+                            } else {
+                                stringResource(R.string.ai_batch_running)
+                            },
+                        modifier = Modifier.testTag("ai_batch_progress"),
+                    )
+                    LinearProgressIndicator(
+                        progress = { if (gesamt > 0) fertig.toFloat() / gesamt else 0f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
 
         // 2. F3: Problem-Banner bei aktiver Überwachung
@@ -852,10 +968,48 @@ fun NoiseProtocolApp(
                 LiveCockpitCard(
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToDiagnose = onNavigateToDiagnose,
-                    onNavigateToMeter = onNavigateToMeter,
                     onNavigateToVideo = onNavigateToVideo,
                     onShowSnackbar = { msg -> onShowSnackbar(msg, null, null) },
                 )
+            }
+        }
+
+        item {
+            val driveAktiv = settingsManager.driveSyncEnabled
+            val ordnerEingerichtet = settingsManager.driveFolderId != null
+            val fehlgeschlageneTage = driveTagesdateien.count { it.state == DriveSyncState.FAILED }
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("card_drive_status"),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (driveAktiv && fehlgeschlageneTage > 0) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.drive_status_title), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when {
+                                !driveAktiv -> stringResource(R.string.drive_status_disabled)
+                                !ordnerEingerichtet -> stringResource(R.string.drive_status_no_folder)
+                                fehlgeschlageneTage > 0 -> stringResource(R.string.drive_status_failed_days, fehlgeschlageneTage)
+                                else -> settingsManager.driveSyncLastMessage?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.drive_status_active_empty)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    TextButton(onClick = if (driveAktiv && ordnerEingerichtet) onNavigateToDriveUploads else onNavigateToSettings) {
+                        Text(stringResource(if (driveAktiv && ordnerEingerichtet) R.string.drive_status_uploads else R.string.drive_status_setup))
+                    }
+                }
             }
         }
 
@@ -917,6 +1071,23 @@ fun NoiseProtocolApp(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            TextButton(
+                                onClick = {
+                                    s?.let { session ->
+                                        val messtag =
+                                            messtagFuerStammdatenKorrektur(
+                                                startedAt = session.startedAt,
+                                                endedAt = session.endedAt,
+                                                jetzt = System.currentTimeMillis(),
+                                                zone = ZoneId.systemDefault(),
+                                            )
+                                        korrekturZiel = Triple(session.id, session.messvorgangId, messtag)
+                                    }
+                                },
+                                modifier = Modifier.testTag("btn_session_edit_stammdaten"),
+                            ) {
+                                Text(stringResource(R.string.report_metadata_edit_current))
+                            }
                         }
                     }
                 }
@@ -1205,6 +1376,9 @@ fun NoiseProtocolApp(
                                     val wirdKlassifiziert = klassifizierendeTage.contains(date)
                                     IconButton(
                                         onClick = {
+                                            if (batchLaeuft) return@IconButton
+                                            batchLaeuft = true
+                                            batchFortschritt = 0 to unklassifizierteDesTages.size
                                             scope.launch {
                                                 klassifizierendeTage.add(date)
                                                 try {
@@ -1214,6 +1388,7 @@ fun NoiseProtocolApp(
                                                             classifier = classifier.value,
                                                             dao = dao,
                                                             rohdatenDao = rohdatenDao,
+                                                            onFortschritt = { fertig, gesamt -> batchFortschritt = fertig to gesamt },
                                                         )
                                                     val msg =
                                                         if (count > 0) {
@@ -1224,10 +1399,11 @@ fun NoiseProtocolApp(
                                                     onShowSnackbar(msg, null, null)
                                                 } finally {
                                                     klassifizierendeTage.remove(date)
+                                                    batchLaeuft = false
                                                 }
                                             }
                                         },
-                                        enabled = !wirdKlassifiziert,
+                                        enabled = !istBatchAktiv && !wirdKlassifiziert,
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         if (wirdKlassifiziert) {
@@ -1283,6 +1459,7 @@ fun NoiseProtocolApp(
                         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
                             NoiseRecordItem(
                                 record = record,
+                                aiMode = settingsManager.aiMode,
                                 isSelected = selectedIds.contains(record.id),
                                 onPlay = { onNavigateToPlayer(record.filePath) },
                                 onLabel = { label -> scope.launch { dao.update(record.copy(label = label)) } },
@@ -1312,10 +1489,11 @@ fun NoiseProtocolApp(
                                 },
                                 onAiRecognize = {
                                     scope.launch {
-                                        val detected = classifier.value.classify(File(record.filePath))
-                                        dao.update(
-                                            record.copy(detectedLabel = detected ?: context.getString(R.string.status_not_recognized)),
-                                        )
+                                        val file = File(record.filePath)
+                                        if (file.exists() && file.isFile) {
+                                            val detected = classifier.value.classify(file)
+                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL))
+                                        }
                                     }
                                 },
                             )
@@ -1486,6 +1664,10 @@ fun NoiseProtocolApp(
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false },
+            onManage = {
+                showPairingDialog = false
+                onNavigateToMeter()
+            },
         )
     }
 }
@@ -1497,6 +1679,7 @@ fun NoiseProtocolApp(
 @Composable
 fun NoiseRecordItem(
     record: NoiseRecord,
+    aiMode: String = "BATCH",
     isSelected: Boolean,
     onPlay: () -> Unit,
     onLabel: (String) -> Unit,
@@ -1578,9 +1761,16 @@ fun NoiseRecordItem(
                     }
                 }
 
-                if (record.detectedLabel != null) {
+                val kiStatus = klassifizierungsStatus(record, aiMode)
+                if (kiStatus != null) {
+                    val kiText = when (kiStatus) {
+                        KlassifizierungsStatus.DEAKTIVIERT -> stringResource(R.string.status_ai_disabled)
+                        KlassifizierungsStatus.AUSSTEHEND -> stringResource(R.string.status_not_classified)
+                        KlassifizierungsStatus.NICHT_ERKANNT -> stringResource(R.string.status_not_recognized)
+                        KlassifizierungsStatus.ERKANNT -> record.detectedLabel.orEmpty()
+                    }
                     Text(
-                        text = stringResource(R.string.label_ai_prefix, record.detectedLabel ?: ""),
+                        text = stringResource(R.string.label_ai_prefix, kiText),
                         color = MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,

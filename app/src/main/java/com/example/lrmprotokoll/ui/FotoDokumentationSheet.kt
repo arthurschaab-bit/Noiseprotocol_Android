@@ -69,6 +69,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FotoDokumentationSheet(
     sessionId: Long,
+    messvorgangId: Long = sessionId,
     onFertig: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -134,9 +135,10 @@ fun FotoDokumentationSheet(
         }
     }
 
-    LaunchedEffect(sessionId) {
+    LaunchedEffect(messvorgangId) {
         gezaehlt.value = withContext(Dispatchers.IO) {
-            fotoDoku.fuerSession(sessionId).groupingBy { FotoKategorie.vonName(it.kategorie) }.eachCount()
+            container.database.dokumentationsFotoDao().fuerMessvorgang(messvorgangId)
+                .groupingBy { FotoKategorie.vonName(it.kategorie) }.eachCount()
         }
     }
 

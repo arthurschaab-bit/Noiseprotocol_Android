@@ -7,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,9 +62,9 @@ fun StatusPill(
             statusColors.idle.copy(alpha = 0.25f)
         )
         StatusPillType.CALIBRATED -> Triple(
-            Color(0xFF388E3C).copy(alpha = 0.18f),
-            Color(0xFF81C784),
-            Color(0xFF388E3C).copy(alpha = 0.4f)
+            statusColors.connected.copy(alpha = 0.18f),
+            statusColors.connected,
+            statusColors.connected.copy(alpha = 0.4f)
         )
         StatusPillType.ACCENT -> Triple(
             MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),

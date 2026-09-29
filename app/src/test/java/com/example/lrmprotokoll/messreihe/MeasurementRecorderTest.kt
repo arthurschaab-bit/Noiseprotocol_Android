@@ -47,11 +47,24 @@ class MeasurementRecorderTest {
         override suspend fun update(session: SessionEntity) { zeilen[session.id] = session }
         override suspend fun byId(id: Long): SessionEntity? = zeilen[id]
         override fun byIdFlow(id: Long) = throw NotImplementedError("im Test nicht benoetigt")
+        override suspend fun fuerMessvorgang(messvorgangId: Long) =
+            zeilen.values.filter { it.messvorgangId == messvorgangId }.sortedBy { it.startedAt }
+        override suspend fun fotoAbfrageAbgeschlossen(messvorgangId: Long) {
+            zeilen.replaceAll { _, zeile ->
+                if (zeile.messvorgangId == messvorgangId) zeile.copy(photoPromptCompleted = true) else zeile
+            }
+        }
+        override suspend fun stammdatenAbfrageAbgeschlossen(messvorgangId: Long) {
+            zeilen.replaceAll { _, zeile ->
+                if (zeile.messvorgangId == messvorgangId) zeile.copy(metadataPromptCompleted = true) else zeile
+            }
+        }
         override suspend fun alleOffenen(): List<SessionEntity> = zeilen.values.filter { it.endedAt == null }.sortedBy { it.startedAt }
         override suspend fun offeneSession(): SessionEntity? = zeilen.values.firstOrNull { it.endedAt == null }
         override fun offeneSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
         override suspend fun letzte(): SessionEntity? = zeilen.values.maxByOrNull { it.startedAt }
         override fun letzteSessionFlow() = throw NotImplementedError("im Test nicht benoetigt")
+
         override suspend fun letzteBeendete(): SessionEntity? =
             zeilen.values.filter { it.endedAt != null }.maxByOrNull { it.endedAt ?: Long.MIN_VALUE }
         override fun alle() = throw NotImplementedError("im Test nicht benoetigt")
@@ -593,6 +606,7 @@ class MeasurementRecorderTest {
         assertEquals(MIKROFON_GERAETENAME, session.deviceName)
         assertNull("Ohne Messgeraet gibt es keine bestaetigte Bewertung", session.weighting)
         assertNull("Laeuft noch", session.endedAt)
+        assertEquals(session.id, session.messvorgangId)
     }
 
     @Test
@@ -685,6 +699,8 @@ class MeasurementRecorderTest {
         recorder.starteMikrofonMessung()
         runCurrent()
         val mikrofonSessionId = recorder.laufendeSessionId
+        sessionDao.fotoAbfrageAbgeschlossen(mikrofonSessionId!!)
+        sessionDao.stammdatenAbfrageAbgeschlossen(mikrofonSessionId)
         recorder.mikrofonPegel(58.0)
         runCurrent()
 
@@ -703,6 +719,12 @@ class MeasurementRecorderTest {
             measurementDao.geschrieben.map { it.sessionId },
         )
         assertEquals(2, sessionDao.zeilen.size)
+        assertEquals(
+            mikrofonSessionId,
+            sessionDao.zeilen[recorder.laufendeSessionId]?.messvorgangId,
+        )
+        assertEquals(true, sessionDao.zeilen[recorder.laufendeSessionId]?.photoPromptCompleted)
+        assertEquals(true, sessionDao.zeilen[recorder.laufendeSessionId]?.metadataPromptCompleted)
     }
 
     @Test

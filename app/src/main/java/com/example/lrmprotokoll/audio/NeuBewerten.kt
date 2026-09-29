@@ -28,13 +28,16 @@ suspend fun bewerteAlleNeu(
     noiseDao: NoiseDao,
     rohdatenDao: KlassifikationsRohdatenDao,
     konfiguration: AbleitungsKonfiguration,
+    onFortschritt: (bearbeitet: Int, gesamt: Int) -> Unit = { _, _ -> },
 ): Int {
     val alleRohdaten = rohdatenDao.alle()
-    alleRohdaten.forEach { rohdaten ->
+    onFortschritt(0, alleRohdaten.size)
+    alleRohdaten.forEachIndexed { index, rohdaten ->
         val kalibrierterPegel = noiseDao.getCalibratedDbA(rohdaten.recordId)
         val befund = leiteLabelAb(rohdaten, konfiguration, kalibrierterPegel)
         val neuesLabel = formatiereBaulaermBefund(befund, konfiguration.labelMapping)
         noiseDao.setDetectedLabel(rohdaten.recordId, neuesLabel)
+        onFortschritt(index + 1, alleRohdaten.size)
     }
     return alleRohdaten.size
 }

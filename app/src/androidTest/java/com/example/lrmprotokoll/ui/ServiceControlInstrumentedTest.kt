@@ -7,9 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -115,9 +116,16 @@ class ServiceControlInstrumentedTest {
 
         AudioRecordingService.testSetzeLaeuft(true)
         try {
-            composeRule.onNodeWithTag("home_lazy_column")
-                .performScrollToNode(hasText(measuringRunningText))
-            composeRule.onNodeWithText(measuringRunningText).assertIsDisplayed()
+            val laufenderStatus =
+                hasTestTag("cockpit_measurement_status") and hasText(measuringRunningText, substring = true)
+            composeRule.waitUntil(10_000) {
+                // Das Warn-Banner kann beim Statuswechsel vor dem Cockpit erscheinen. In der
+                // LazyColumn muss der Status deshalb nach jeder Umbau-Phase sichtbar bleiben.
+                composeRule.onNodeWithTag("home_lazy_column")
+                    .performScrollToNode(hasTestTag("cockpit_measurement_status"))
+                composeRule.onAllNodes(laufenderStatus).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNode(laufenderStatus).assertIsDisplayed()
         } finally {
             AudioRecordingService.testSetzeLaeuft(false)
         }

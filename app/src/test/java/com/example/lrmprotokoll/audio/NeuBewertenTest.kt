@@ -90,10 +90,17 @@ class NeuBewertenTest {
             referenzMuster = listOf(referenz), labelMapping = mapOf("Hammer" to "Hämmern"),
         )
         val noiseDao = FakeNoiseDao()
+        val fortschritt = mutableListOf<Pair<Int, Int>>()
 
-        val anzahl = bewerteAlleNeu(noiseDao, FakeRohdatenDao(listOf(rohdaten1, rohdaten2)), konfigurationMitReferenz)
+        val anzahl =
+            bewerteAlleNeu(
+                noiseDao,
+                FakeRohdatenDao(listOf(rohdaten1, rohdaten2)),
+                konfigurationMitReferenz,
+            ) { fertig, gesamt -> fortschritt += fertig to gesamt }
 
         assertEquals(2, anzahl)
+        assertEquals(listOf(0 to 2, 1 to 2, 2 to 2), fortschritt)
         assertEquals("Gelernt: Baustelle Hofseite (100%)", noiseDao.gesetzteLabels[1])
         assertEquals(
             "Ohne Referenztreffer und ohne auswertbare Frames (frameAnzahl=0) ist die Aussage " +

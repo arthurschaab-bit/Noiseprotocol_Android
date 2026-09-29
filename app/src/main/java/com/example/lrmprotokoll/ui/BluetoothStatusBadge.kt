@@ -24,12 +24,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.label
+import com.example.lrmprotokoll.ui.theme.statusColors
+import com.example.lrmprotokoll.ui.theme.statusContainer
 
 /**
  * Status-Badge fuer die obere rechte Bildschirmecke. Der Text nennt den PCE-Zustand bewusst
@@ -43,18 +44,24 @@ fun BluetoothStatusBadge(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val (statusColor, containerColor) = when (state) {
-        ConnectionState.STREAMING -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
-        ConnectionState.SCANNING,
-        ConnectionState.CONNECTING,
-        ConnectionState.DISCOVERING,
-        ConnectionState.SUBSCRIBING -> Color(0xFF1565C0) to Color(0xFFE3F2FD)
-        ConnectionState.RECONNECTING,
-        ConnectionState.DEGRADED -> Color(0xFFE65100) to Color(0xFFFFF3E0)
-        ConnectionState.FAILED -> Color(0xFFC62828) to Color(0xFFFFEBEE)
-        ConnectionState.IDLE,
-        ConnectionState.DISCONNECTED -> Color(0xFF616161) to Color(0xFFF5F5F5)
-    }
+    val colors = MaterialTheme.colorScheme.statusColors
+    val statusColor =
+        when (state) {
+            ConnectionState.STREAMING -> colors.connected
+            ConnectionState.SCANNING,
+            ConnectionState.CONNECTING,
+            ConnectionState.DISCOVERING,
+            ConnectionState.SUBSCRIBING,
+            -> colors.connecting
+            ConnectionState.RECONNECTING,
+            ConnectionState.DEGRADED,
+            -> colors.warning
+            ConnectionState.FAILED -> colors.error
+            ConnectionState.IDLE,
+            ConnectionState.DISCONNECTED,
+            -> colors.idle
+        }
+    val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
 
     val isAnimating = state == ConnectionState.SCANNING ||
         state == ConnectionState.CONNECTING ||

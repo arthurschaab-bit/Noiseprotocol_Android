@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -12,6 +13,17 @@ interface SessionDao {
     @Insert
     suspend fun insert(session: SessionEntity): Long
 
+    /** Legt eine neue Klammer mit eigener ID oder eine Folgesession derselben Messung an.
+     * Der erste Insert und das Setzen der eigenen ID bleiben fuer Room-Beobachter atomar. */
+    @Transaction
+    suspend fun insertMitMessvorgang(session: SessionEntity, bestehenderMessvorgangId: Long? = null): Long {
+        val id = insert(session.copy(messvorgangId = bestehenderMessvorgangId ?: 0))
+        if (bestehenderMessvorgangId == null) {
+            update(session.copy(id = id, messvorgangId = id))
+        }
+        return id
+    }
+
     @Update
     suspend fun update(session: SessionEntity)
 
@@ -20,6 +32,15 @@ interface SessionDao {
 
     @Query("SELECT * FROM sessions WHERE id = :id")
     fun byIdFlow(id: Long): Flow<SessionEntity?>
+
+    @Query("SELECT * FROM sessions WHERE messvorgangId = :messvorgangId ORDER BY startedAt")
+    suspend fun fuerMessvorgang(messvorgangId: Long): List<SessionEntity>
+
+    @Query("UPDATE sessions SET photoPromptCompleted = 1 WHERE messvorgangId = :messvorgangId")
+    suspend fun fotoAbfrageAbgeschlossen(messvorgangId: Long)
+
+    @Query("UPDATE sessions SET metadataPromptCompleted = 1 WHERE messvorgangId = :messvorgangId")
+    suspend fun stammdatenAbfrageAbgeschlossen(messvorgangId: Long)
 
     /** Die noch offene Session, falls es eine gibt - fuer die Wiederaufnahme nach Prozess-Tod
      * (dasselbe Muster wie AlertDao.offenerAusfall in M5). */

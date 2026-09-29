@@ -115,6 +115,7 @@
 
     <!-- PCE-323 Meter Screen -->
     <string name="meter_screen_title">Schallpegelmesser PCE-323</string>
+    <string name="meter_manage_action">Gerät verwalten</string>
     <string name="meter_paired_card_title">Gekoppeltes PCE-323</string>
     <string name="meter_no_device_paired">Kein Messgerät gekoppelt</string>
     <string name="meter_action_disconnect">Verbindung trennen</string>
@@ -421,6 +422,8 @@
     <string name="learned_patterns_count">Gelernte Geräusch-Muster (%1$d)</string>
     <string name="ai_classified_count">%1$d Aufnahme(n) durch KI klassifiziert</string>
     <string name="action_ai_batch">KI-Batch-Erkennung</string>
+    <string name="ai_batch_running">KI-Verarbeitung läuft …</string>
+    <string name="ai_batch_progress">KI-Verarbeitung: %1$d von %2$d</string>
     <string name="action_ai_batch_day">Unklassifizierte Aufnahmen dieses Tages jetzt klassifizieren</string>
     <string name="ai_batch_day_result">%1$d Aufnahme(n) für %2$s klassifiziert</string>
     <string name="ai_batch_day_result_empty">Keine der ausgewählten Aufnahmen konnte klassifiziert werden</string>
@@ -438,6 +441,8 @@
     <string name="delete_pattern_success">Muster \'%1$s\' gelöscht</string>
     <string name="record_moved_to_trash">Aufnahme in Papierkorb verschoben</string>
     <string name="status_not_recognized">Nicht erkannt</string>
+    <string name="status_not_classified">Noch nicht klassifiziert</string>
+    <string name="status_ai_disabled">Aus</string>
     <string name="meter_paired_success">PCE-323 (%1$s) gekoppelt</string>
     <string name="source_mic_format">(Mikrofon: %1$.1f dB)</string>
     <string name="report_dialog_desc">Möchten Sie den PDF-Bericht oder ein ZIP-Paket inkl. Audioaufnahmen (%1$d Dateien) teilen?</string>
@@ -462,10 +467,23 @@
     <string name="label_ai_prefix">KI: %1$s</string>
     <string name="label_user_prefix">Label: %1$s</string>
     <string name="settings_open_meter">Messgerät koppeln</string>
+    <string name="settings_section_meter">Messgerät (PCE-323)</string>
+    <string name="settings_section_meter_desc">Kalibriertes Schallpegelmessgerät per Bluetooth koppeln, verbinden und trennen. Ohne Messgerät misst die App über das Smartphone-Mikrofon, unkalibriert.</string>
+    <string name="settings_meter_not_paired">Nicht gekoppelt</string>
     <string name="settings_open_trash">Papierkorb öffnen</string>
     <string name="bericht_intro_title">Berichte erstellen</string>
     <string name="report_area_save_error">Gebietseinstufung konnte nicht gespeichert werden</string>
+    <string name="report_metadata_edit_current">Stammdaten dieser Messung bearbeiten</string>
     <string name="report_preconditions_title">Voraussetzungen für den Bericht</string>
+    <string name="report_preconditions_loading">Voraussetzungen werden geprüft …</string>
+    <string name="report_metadata_calibration">Kalibrierung</string>
+    <string name="report_metadata_weather">Wetter</string>
+    <string name="report_metadata_data_quality">Datenqualität</string>
+    <string name="report_metadata_save">Speichern</string>
+    <string name="report_metadata_saving">Speichert …</string>
+    <string name="report_metadata_save_error">Speichern fehlgeschlagen. Bitte erneut versuchen.</string>
+    <string name="report_metadata_last_confirmed">%1$s zuletzt bestätigt am %2$s: %3$s</string>
+    <string name="report_metadata_confirm_previous">Letzten Wert bewusst übernehmen</string>
     <string name="report_precondition_range">Zeitraum gewählt</string>
     <string name="report_precondition_raw_data">Rohdaten vorhanden</string>
     <string name="report_precondition_retention">Rohdaten nicht verdichtet</string>
@@ -473,6 +491,15 @@
     <string name="report_precondition_master_data">Stammdaten je Tag eindeutig</string>
     <string name="report_precondition_area">Gebietseinstufung gesetzt</string>
     <string name="report_precondition_blocked">Bericht gesperrt: %1$s</string>
+    <string name="report_precondition_error_loading">Berichtskonfiguration wird geladen.</string>
+    <string name="report_precondition_error_range">Bitte zuerst einen Datumsbereich wählen.</string>
+    <string name="report_precondition_error_raw_data">Im gewählten Zeitraum liegen keine Rohdaten für einen Bericht vor.</string>
+    <string name="report_precondition_error_retention">Bericht nicht möglich: Rohdaten wurden bereits verdichtet am %1$s.</string>
+    <string name="report_precondition_error_rating">Bericht nicht möglich: A-/Zeitbewertung ist nicht bestätigt. In den Berichtsparametern kann ein bewusster Override aktiviert werden.</string>
+    <string name="report_precondition_error_selection">Bitte Stammdaten für diese Tage auswählen: %1$s.</string>
+    <string name="report_precondition_error_area_missing">Bitte in den Berichtsparametern eine Gebietseinstufung auswählen.</string>
+    <string name="report_precondition_error_area_unknown">Gebietseinstufung nicht erkannt: %1$s. Bitte in den Berichtsparametern neu auswählen.</string>
+    <string name="report_precondition_error_area_unverified">Für das Gebiet %1$s ist die Richtwertzuordnung noch nicht geprüft. Ein Bericht ist damit noch nicht möglich.</string>
     <string name="report_preset_recent_measurement">Letzte Messung</string>
     <string name="bericht_intro_desc">Zeitraumbericht oder vollständiger Gesamtbericht mit Stammdaten, Kennwerten und Fotos – als PDF.</string>
     <string name="period_report_action">Zeitraumbericht erstellen</string>
@@ -507,6 +534,19 @@
     <string name="cockpit_aufzeichnungshinweis_action_diagnose">Diagnose</string>
     <string name="cockpit_aufzeichnungshinweis_action_restart">Neu starten</string>
     <string name="dienst_start_ohne_quelle">Überwachung nicht gestartet: keine Mikrofon-Berechtigung und kein Messgerät gekoppelt.</string>
+    <!-- Drive im Messfluss (F-13) -->
+    <string name="drive_status_title">Drive-Sicherung</string>
+    <string name="drive_status_disabled">Ausgeschaltet – Messdaten bleiben lokal</string>
+    <string name="drive_status_no_folder">Noch kein Zielordner eingerichtet</string>
+    <string name="drive_status_failed_days">%1$d Tagesdateien fehlgeschlagen</string>
+    <string name="drive_status_active_empty">Aktiv – noch kein Upload abgeschlossen</string>
+    <string name="drive_status_uploads">Uploads</string>
+    <string name="drive_status_setup">Einrichten</string>
+    <string name="drive_retry_queued">Upload dieser Datei eingeplant</string>
+    <string name="drive_retry_enqueue_failed">Upload konnte nicht eingeplant werden</string>
+    <string name="drive_retry_action">Erneut versuchen</string>
+    <string name="drive_upload_now_action">Jetzt hochladen</string>
+    <string name="drive_resume_action">Fortsetzen</string>
     <string name="meter_auto_connect">Automatisch verbinden</string>
     <string name="meter_auto_connect_hint">Beim Öffnen der App selbsttätig mit dem Messgerät verbinden. Startet keine Aufzeichnung.</string>
 </resources>
