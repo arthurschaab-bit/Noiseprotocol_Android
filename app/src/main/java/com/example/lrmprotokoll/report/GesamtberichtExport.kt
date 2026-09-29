@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.report
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.report.pdf.BerichtLayout
 import com.example.lrmprotokoll.report.pdf.BerichtSeiten
 import com.example.lrmprotokoll.report.pdf.Seitenlauf
@@ -177,7 +178,7 @@ open class GesamtberichtExport(
             } else {
                 gesamt.events.forEach { event ->
                     val pegel = event.calibratedDbA ?: event.dbValue
-                    val beschriftung = event.label ?: event.detectedLabel ?: "Ereignis"
+                    val beschriftung = event.label ?: erkanntesLabel(event.detectedLabel) ?: "Ereignis"
                     zeile("${formatierer.format(Date(event.timestamp))} – $beschriftung (${formatiereDb(pegel)} dB)")
                 }
             }

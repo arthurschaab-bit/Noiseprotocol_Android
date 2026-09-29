@@ -49,7 +49,10 @@ data class SessionFilterState(
         val lowerLabel = labelQuery.trim().lowercase()
         if (lowerLabel.isNotBlank()) {
             val treffer = record.label?.lowercase()?.contains(lowerLabel) == true ||
-                record.detectedLabel?.lowercase()?.contains(lowerLabel) == true
+                record.detectedLabel?.lowercase()?.contains(lowerLabel) == true ||
+                // Seit dem sprachunabhaengigen Marker steht in detectedLabel kein lesbarer Text
+                // mehr; "nicht erkannt" als Suchbegriff soll trotzdem weiter finden.
+                nichtErkanntPasstZurSuche(record.detectedLabel, lowerLabel)
             if (!treffer) return false
         }
         return true

@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.ui.theme.statusContainer
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -538,20 +539,24 @@ private fun ModernSessionCard(
                         else -> stringResource(R.string.protocol_badge_complete)
                     }
                 val statusColors = MaterialTheme.colorScheme.statusColors
-                val badgeTextColor =
+                val badgeStatusColor =
                     when {
                         isLive -> statusColors.connected
                         integritaetsbefund?.stufe == Messintegritaet.VOLLSTAENDIG -> statusColors.connected
                         integritaetsbefund?.stufe == Messintegritaet.EINGESCHRAENKT -> statusColors.warning
                         integritaetsbefund?.stufe == Messintegritaet.LUECKENHAFT -> statusColors.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        else -> null
                     }
+                // Flaeche aus der reinen Statusfarbe, Schrift aus onStatusContainer: im Hellmodus
+                // reisst die Statusfarbe auf ihrer eigenen Toenung den WCAG-AA-Kontrast (Tokens.kt).
                 val badgeBg =
-                    if (isLive || integritaetsbefund != null) {
-                        MaterialTheme.colorScheme.statusContainer(badgeTextColor)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
+                    badgeStatusColor
+                        ?.let { MaterialTheme.colorScheme.statusContainer(it) }
+                        ?: MaterialTheme.colorScheme.surfaceVariant
+                val badgeTextColor =
+                    badgeStatusColor
+                        ?.let { MaterialTheme.colorScheme.onStatusContainer(it) }
+                        ?: MaterialTheme.colorScheme.onSurfaceVariant
 
                 Box(
                     modifier =
