@@ -104,4 +104,50 @@ class SystemHealthCheckerTest {
         assertEquals(HealthStatus.OK, deaktiviert.status)
         assertEquals("Deaktiviert", deaktiviert.description)
     }
+
+    /**
+     * F-03, Audit-Punkt 3: Die Selbstpruefung bot die Aktion "Verbinden" bis zum 29.09.2026 nur
+     * bei [ConnectionState.DISCONNECTED] an. FAILED ist der einzige Messgeraet-Zustand, den sie
+     * als [HealthStatus.ERROR] meldet - und genau dort stand der Eintrag ohne jeden Ausweg da.
+     * DEGRADED (WARNING) ebenso.
+     *
+     * Der Test prueft beide Richtungen: die drei Zustaende, die eine Aktion brauchen, und
+     * stellvertretend zwei, die keine bekommen duerfen - sonst wuerde ein "Verbinden" auch an
+     * einer laufenden, gesunden Verbindung kleben.
+     */
+    @Test
+    fun getrennteGestoerteUndFehlgeschlageneVerbindungBietenAlleDenWegZumMessgeraet() {
+        fun eintrag(zustand: ConnectionState): HealthCheckItem {
+            val params =
+                SystemHealthParams(
+                    hasAudioPermission = true,
+                    hasNotificationPermission = true,
+                    hasBluetoothPermission = true,
+                    isBatteryOptimizationIgnored = true,
+                    canScheduleExactAlarms = true,
+                    isBluetoothAdapterEnabled = true,
+                    isMeterPinned = true,
+                    meterConnectionState = zustand,
+                    isAlertingConfigured = true,
+                    isDriveSyncConfigured = true,
+                    isDiagnoseLoggingActive = false,
+                    isMonitoringActive = true,
+                )
+            return bewerteSystemZustand(params).items.first { it.id == "meter_status" }
+        }
+
+        for (zustand in listOf(ConnectionState.DISCONNECTED, ConnectionState.DEGRADED, ConnectionState.FAILED)) {
+            val item = eintrag(zustand)
+            assertEquals("$zustand muss eine Aktion anbieten", "Verbinden", item.actionLabel)
+            assertEquals(HealthActionType.CONNECT_METER, item.actionType)
+        }
+
+        assertEquals(HealthStatus.ERROR, eintrag(ConnectionState.FAILED).status)
+        assertEquals(HealthStatus.WARNING, eintrag(ConnectionState.DEGRADED).status)
+
+        for (zustand in listOf(ConnectionState.STREAMING, ConnectionState.CONNECTING)) {
+            assertEquals("$zustand darf keine Aktion anbieten", null, eintrag(zustand).actionLabel)
+            assertEquals(null, eintrag(zustand).actionType)
+        }
+    }
 }

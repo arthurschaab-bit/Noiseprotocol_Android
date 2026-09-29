@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.ui.theme.statusColors
+import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusContainer
 import androidx.core.content.ContextCompat
 
@@ -139,7 +140,12 @@ fun OemDeviceHelperCard(
                     Text(
                         text = if (hasIssues) "Prüfung nötig" else "Optimal konfiguriert",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (hasIssues) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.statusColors.connected,
+                        color =
+                            if (hasIssues) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onStatusContainer(MaterialTheme.colorScheme.statusColors.connected)
+                            },
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )

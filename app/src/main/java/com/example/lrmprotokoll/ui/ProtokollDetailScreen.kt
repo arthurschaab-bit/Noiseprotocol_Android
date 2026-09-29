@@ -37,10 +37,11 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.Messintegritaet
-import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_LABEL
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.report.MessreiheExport
 import com.example.lrmprotokoll.report.leqBezeichnung
@@ -540,7 +541,7 @@ fun ProtokollDetailScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = record.label ?: record.detectedLabel ?: "Lärmereignis",
+                                        text = record.label ?: erkanntesLabel(record.detectedLabel) ?: "Lärmereignis",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                     )
@@ -581,7 +582,7 @@ fun ProtokollDetailScreen(
                                                     }
                                                 if (file.exists() && file.isFile) {
                                                     container.database.noiseDao().update(
-                                                        record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL),
+                                                        record.copy(detectedLabel = detected ?: NICHT_ERKANNT_MARKER),
                                                     )
                                                 }
                                             } finally {
@@ -590,7 +591,8 @@ fun ProtokollDetailScreen(
                                         }
                                     },
                                     enabled = !wirdKlassifiziert,
-                                    modifier = Modifier.size(40.dp),
+                                    // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.
+                                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
                                 ) {
                                     if (wirdKlassifiziert) {
                                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

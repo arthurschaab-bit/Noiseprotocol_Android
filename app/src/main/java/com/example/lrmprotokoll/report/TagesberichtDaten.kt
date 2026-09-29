@@ -1,6 +1,8 @@
 package com.example.lrmprotokoll.report
 
 import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
+import com.example.lrmprotokoll.messreihe.istNichtErkannt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,7 +74,11 @@ fun ermittleTagesbericht(records: List<NoiseRecord>, geraeteName: String? = null
             pegel = pegelText,
             inRuhezeit = record.isQuietHour,
             label = record.label,
-            kiLabel = record.detectedLabel,
+            // Der Marker ist kein Anzeigetext. Erkannt -> Label, nicht erkannt -> fester
+            // deutscher Text (der Tagesbericht ist ein deutsches Dokument), sonst nichts.
+            kiLabel =
+                erkanntesLabel(record.detectedLabel)
+                    ?: if (istNichtErkannt(record.detectedLabel)) "Nicht erkannt" else null,
             amplitude = record.amplitude.toInt(),
         )
     }

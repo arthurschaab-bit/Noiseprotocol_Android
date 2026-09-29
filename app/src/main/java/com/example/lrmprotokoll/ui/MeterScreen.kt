@@ -95,6 +95,8 @@ const val METER_DISCONNECT_CONFIRM_DIALOG_TAG = "meter_disconnect_confirm_dialog
 @Composable
 fun MeterScreen(
     onBack: () -> Unit,
+    /** F-31: Snackbar-Kanal des Scaffolds; `null` bedeutet, dass der Screen ohne Rueckmeldung auskommt. */
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }

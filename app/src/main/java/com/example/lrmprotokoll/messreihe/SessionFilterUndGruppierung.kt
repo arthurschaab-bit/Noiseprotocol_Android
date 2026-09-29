@@ -17,6 +17,13 @@ import java.util.Locale
  * anderen Kriterien pruefen, ob MINDESTENS EIN Ereignis der Session dazu passt, weil sie
  * Eigenschaften einzelner Ereignisse sind ([NoiseRecord.favorite], [NoiseRecord.isQuietHour], ...),
  * keine Session-Eigenschaften.
+ *
+ * S-5 (F-18, F-32) vom 29.09.2026: [onlyWithEvents] ist dazugekommen. Das Kriterium existierte
+ * vorher als eigener Compose-Zustand hinter einem zweiten Filter-Knopf in der TopAppBar des
+ * Protokollreiters; als Teil des Modells hat es einen Chip im Panel und ist hier JVM-testbar.
+ * Der ganze Zustand wird seitdem in [com.example.lrmprotokoll.data.SettingsManager] gesichert
+ * (Schluessel `session_filter_*`) - vorher war er nach jedem Verlassen des Reiters weg, waehrend
+ * der Filter der Startseite seinen behielt.
  */
 data class SessionFilterState(
     val minDb: Float = 0.0f,
@@ -25,6 +32,7 @@ data class SessionFilterState(
     val onlyCalibrated: Boolean = false,
     val onlyFavorites: Boolean = false,
     val onlyQuietHours: Boolean = false,
+    val onlyWithEvents: Boolean = false,
     val labelQuery: String = "",
 ) {
     val istAktiv: Boolean
@@ -34,6 +42,7 @@ data class SessionFilterState(
             onlyCalibrated ||
             onlyFavorites ||
             onlyQuietHours ||
+            onlyWithEvents ||
             labelQuery.isNotBlank()
 
     /** Ob ueberhaupt eines der EREIGNIS-bezogenen Kriterien aktiv ist (alles ausser [onlyMeter]). */
@@ -49,7 +58,10 @@ data class SessionFilterState(
         val lowerLabel = labelQuery.trim().lowercase()
         if (lowerLabel.isNotBlank()) {
             val treffer = record.label?.lowercase()?.contains(lowerLabel) == true ||
-                record.detectedLabel?.lowercase()?.contains(lowerLabel) == true
+                record.detectedLabel?.lowercase()?.contains(lowerLabel) == true ||
+                // Seit dem sprachunabhaengigen Marker steht in detectedLabel kein lesbarer Text
+                // mehr; "nicht erkannt" als Suchbegriff soll trotzdem weiter finden.
+                nichtErkanntPasstZurSuche(record.detectedLabel, lowerLabel)
             if (!treffer) return false
         }
         return true
@@ -71,6 +83,11 @@ fun sessionPasstFilter(
 ): Boolean {
     if (!filter.istAktiv) return true
     if (filter.onlyMeter && session.deviceAddress.isBlank()) return false
+    // S-5/F-32: "nur mit Ereignissen" war bis hierher ein eigener Knopf in der TopAppBar mit
+    // eigenem Compose-Zustand. Als Kriterium des Filtermodells gehoert die Pruefung hierher -
+    // sie zaehlt nur, sie prueft keine Ereigniseigenschaft, steht also neben onlyMeter und nicht
+    // in ereignisPasst().
+    if (filter.onlyWithEvents && ereignisse.isEmpty()) return false
     if (!filter.brauchtEreignispruefung()) return true
     return ereignisse.any { filter.ereignisPasst(it) }
 }

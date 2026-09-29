@@ -7,6 +7,7 @@ import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.meter.InstantSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -172,7 +173,7 @@ class DriveSyncCoordinator(
             ProtokollEreignis(
                 at = Instant.ofEpochMilli(it.timestamp),
                 pegelDb = it.calibratedDbA ?: it.dbValue,
-                klassifikation = it.detectedLabel ?: it.label,
+                klassifikation = erkanntesLabel(it.detectedLabel) ?: it.label,
                 notes = it.notes,
                 weighting = it.meterWeighting,
             )
@@ -250,7 +251,7 @@ class DriveSyncCoordinator(
                 ProtokollEreignis(
                     at = Instant.ofEpochMilli(it.timestamp),
                     pegelDb = it.calibratedDbA ?: it.dbValue,
-                    klassifikation = it.detectedLabel ?: it.label,
+                    klassifikation = erkanntesLabel(it.detectedLabel) ?: it.label,
                     notes = it.notes,
                     weighting = it.meterWeighting
                 )
@@ -492,7 +493,7 @@ class DriveSyncCoordinator(
                         ProtokollEreignis(
                             at = Instant.ofEpochMilli(it.timestamp),
                             pegelDb = it.calibratedDbA ?: it.dbValue,
-                            klassifikation = it.detectedLabel ?: it.label,
+                            klassifikation = erkanntesLabel(it.detectedLabel) ?: it.label,
                             notes = it.notes,
                             weighting = it.meterWeighting,
                         )

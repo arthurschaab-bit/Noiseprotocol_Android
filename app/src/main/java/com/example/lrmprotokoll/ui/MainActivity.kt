@@ -64,6 +64,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
@@ -261,7 +262,11 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 arguments = listOf(navArgument("path") { defaultValue = "" }),
             ) { backStackEntry ->
                 val path = backStackEntry.arguments?.getString("path") ?: ""
-                AudioPlayerScreen(filePath = path, onBack = { navController.popBackStack() })
+                AudioPlayerScreen(
+                    filePath = path,
+                    onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                )
             }
             composable(
                 "settings?tab={tab}",
@@ -283,6 +288,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             composable("meter") {
                 MeterScreen(
                     onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             composable("protokoll") {
@@ -315,6 +321,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             composable("ki-erklaerung") {
                 KiErklaerungScreen(
                     onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
 
@@ -328,6 +335,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             composable("drive-uploads") {
                 DriveUploadScreen(
                     onBack = { navController.popBackStack() },
+                    onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
 
@@ -1404,7 +1412,8 @@ fun NoiseProtocolApp(
                                             }
                                         },
                                         enabled = !istBatchAktiv && !wirdKlassifiziert,
-                                        modifier = Modifier.size(36.dp),
+                                        // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.
+                                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
                                     ) {
                                         if (wirdKlassifiziert) {
                                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -1415,7 +1424,11 @@ fun NoiseProtocolApp(
                                 }
                                 IconButton(
                                     onClick = { reportTargetRecords = dailyRecords },
-                                    modifier = Modifier.size(36.dp).testTag("btn_day_report_$date"),
+                                    // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.
+                                    modifier =
+                                        Modifier
+                                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                            .testTag("btn_day_report_$date"),
                                 ) {
                                     Icon(AppIcons.BarChart, contentDescription = stringResource(R.string.protocol_daily_report_title))
                                 }
@@ -1492,7 +1505,7 @@ fun NoiseProtocolApp(
                                         val file = File(record.filePath)
                                         if (file.exists() && file.isFile) {
                                             val detected = classifier.value.classify(file)
-                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL))
+                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_MARKER))
                                         }
                                     }
                                 },

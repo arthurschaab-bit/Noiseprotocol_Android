@@ -2304,7 +2304,7 @@ fun SettingsScreen(
                     onToggle = { expUeberApp = !expUeberApp },
                     zeigen = selectedTab == SettingsTab.START,
                 ) {
-                    UeberDieAppInhalt(versionKennung, istReleaseBuild)
+                    UeberDieAppInhalt(versionKennung, istReleaseBuild, onShowSnackbar)
                 }
             }
 
@@ -2322,6 +2322,7 @@ fun SettingsScreen(
 private fun UeberDieAppInhalt(
     versionKennung: String,
     istReleaseBuild: Boolean,
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     Row(
@@ -2345,7 +2346,8 @@ private fun UeberDieAppInhalt(
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Versionskennung", versionKennung))
                 val kopiertText = context.getString(R.string.settings_about_copied)
-                Toast.makeText(context, kopiertText, Toast.LENGTH_SHORT).show()
+                onShowSnackbar?.invoke(kopiertText)
+                    ?: Toast.makeText(context, kopiertText, Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.testTag(VERSIONSKENNUNG_KOPIEREN_TAG),
         ) {
@@ -2408,6 +2410,7 @@ private fun SettingsSectionCard(
 
 const val BILDSCHIRM_ENDE_TAG = "settings_bildschirm_ende"
 const val VERSIONSKENNUNG_TEXT_TAG = "settings_versionskennung_text"
+
 const val VERSIONSKENNUNG_KOPIEREN_TAG = "settings_versionskennung_kopieren"
 const val VERSIONSKENNUNG_DEV_HINWEIS_TAG = "settings_versionskennung_dev_hinweis"
 

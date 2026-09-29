@@ -6,6 +6,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,7 +91,7 @@ class NoiseRecordGroupingTest {
         val mitKiLabel = sampleRecord(2, 2L, detectedLabel = "Hund")
         val mitManuellemLabel = sampleRecord(3, 3L, label = "Baustelle")
         val ohneAudio = sampleRecord(4, 4L, filePath = "")
-        val ohneTreffer = sampleRecord(5, 5L, detectedLabel = NICHT_ERKANNT_LABEL)
+        val ohneTreffer = sampleRecord(5, 5L, detectedLabel = NICHT_ERKANNT_MARKER)
 
         val ergebnis = unklassifizierteAufnahmen(listOf(ok, mitKiLabel, mitManuellemLabel, ohneAudio, ohneTreffer))
 
@@ -109,7 +110,7 @@ class NoiseRecordGroupingTest {
         assertEquals(KlassifizierungsStatus.DEAKTIVIERT, klassifizierungsStatus(offen, "OFF"))
         assertEquals(
             KlassifizierungsStatus.NICHT_ERKANNT,
-            klassifizierungsStatus(offen.copy(detectedLabel = NICHT_ERKANNT_LABEL), "BATCH"),
+            klassifizierungsStatus(offen.copy(detectedLabel = NICHT_ERKANNT_MARKER), "BATCH"),
         )
         assertEquals(
             KlassifizierungsStatus.NICHT_ERKANNT,
@@ -120,5 +121,52 @@ class NoiseRecordGroupingTest {
             klassifizierungsStatus(offen.copy(detectedLabel = "Bohren"), "OFF"),
         )
         assertEquals(null, klassifizierungsStatus(offen.copy(filePath = ""), "BATCH"))
+    }
+
+    /**
+     * [erkanntesLabel] ist die Gegenprobe zu [klassifizierungsStatus] fuer alle Stellen, die nur
+     * ein verwertbares Label wollen (Bereinigung, Berichte, Drive-Sync, Ereignistitel). Ohne sie
+     * bedeutet `detectedLabel != null` seit F-17 nicht mehr "erkannt".
+     */
+    @Test
+    fun erkanntesLabelLiefertNurEchteTreffer() {
+        assertEquals("Bohren", erkanntesLabel("Bohren"))
+        assertEquals(null, erkanntesLabel(null))
+        assertEquals(null, erkanntesLabel(""))
+        assertEquals(null, erkanntesLabel("   "))
+        assertEquals(null, erkanntesLabel(NICHT_ERKANNT_MARKER))
+        assertEquals(null, erkanntesLabel("Not recognized"))
+    }
+
+    /**
+     * Der gespeicherte Wert ist seit dem 29.09.2026 sprachunabhaengig. Die beiden alten
+     * Oberflaechenzeichenketten bleiben in der Menge, weil Bestandsdatensaetze sie tragen und
+     * **nicht** migriert werden. Faellt dieser Test, wurde eine davon entfernt — dann rutschen
+     * genau diese Altdatensaetze still in den Zweig "erkannt".
+     */
+    @Test
+    fun derMarkerIstSprachunabhaengigUndAltwerteBleibenGueltig() {
+        assertEquals("__nicht_erkannt__", NICHT_ERKANNT_MARKER)
+        assertEquals(setOf(NICHT_ERKANNT_MARKER, "Nicht erkannt", "Not recognized"), NICHT_ERKANNT_LABELS)
+        assertTrue(istNichtErkannt(NICHT_ERKANNT_MARKER))
+        assertTrue(istNichtErkannt("Nicht erkannt"))
+        assertTrue(istNichtErkannt("Not recognized"))
+        assertFalse(istNichtErkannt("Bohren"))
+        assertFalse(istNichtErkannt(null))
+    }
+
+    /**
+     * Der Marker ist nicht lesbar; ohne diese Bruecke faende die Textsuche nach "nicht erkannt"
+     * seit der Umstellung nichts mehr.
+     */
+    @Test
+    fun dieSucheFindetNichtErkannteAufnahmenWeiterhin() {
+        assertTrue(nichtErkanntPasstZurSuche(NICHT_ERKANNT_MARKER, "nicht erkannt"))
+        assertTrue(nichtErkanntPasstZurSuche(NICHT_ERKANNT_MARKER, "erkannt"))
+        assertTrue(nichtErkanntPasstZurSuche(NICHT_ERKANNT_MARKER, "recognized"))
+        assertTrue(nichtErkanntPasstZurSuche("Nicht erkannt", "nicht"))
+        assertFalse(nichtErkanntPasstZurSuche(NICHT_ERKANNT_MARKER, "bohren"))
+        assertFalse(nichtErkanntPasstZurSuche("Bohren", "bohren"))
+        assertFalse(nichtErkanntPasstZurSuche(NICHT_ERKANNT_MARKER, "   "))
     }
 }

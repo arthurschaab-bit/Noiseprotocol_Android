@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -25,12 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.ui.theme.statusContainer
 
@@ -89,13 +92,18 @@ fun MicrophoneStatusBadge(
             else -> colors.warning to "WAV: INAKTIV"
         }
     val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
+    val textColor = MaterialTheme.colorScheme.onStatusContainer(statusColor)
 
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = containerColor,
-        modifier = modifier.clickable {
-            if (runtimeAudioActive) showStopConfirm = true else starteAudioMitBerechtigung()
-        }
+        // F-21: siehe BluetoothStatusBadge - dieses Badge schaltet die WAV-Aufzeichnung und ist
+        // damit ebenfalls primaere Bedienung, nicht bloss Anzeige.
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .clickable(role = Role.Button) {
+                if (runtimeAudioActive) showStopConfirm = true else starteAudioMitBerechtigung()
+            }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -104,7 +112,7 @@ fun MicrophoneStatusBadge(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
-                color = statusColor,
+                color = textColor,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

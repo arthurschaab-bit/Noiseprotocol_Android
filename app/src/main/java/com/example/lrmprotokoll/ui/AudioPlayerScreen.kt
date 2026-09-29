@@ -30,6 +30,8 @@ fun AudioPlayerScreen(
     onBack: () -> Unit,
     /** Test-Hook: wird unmittelbar nach MediaPlayer.release() beim Verlassen der Composition aufgerufen. */
     onPlayerReleasedForTest: (() -> Unit)? = null,
+    /** F-31: Snackbar-Kanal des Scaffolds; `null` bedeutet, dass der Screen ohne Rueckmeldung auskommt. */
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val file = File(filePath)
     val amplitudes = remember(filePath) { loadAmplitudes(file) }

@@ -9,6 +9,7 @@ import android.graphics.Path
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.report.pdf.BerichtLayout
 import com.example.lrmprotokoll.report.pdf.BerichtSeiten
 import com.example.lrmprotokoll.report.pdf.Seitenlauf
@@ -120,7 +121,7 @@ open class PeriodenBerichtExport(
             } else {
                 bericht.events.forEach { event ->
                     val pegel = event.calibratedDbA ?: event.dbValue
-                    val beschriftung = event.label ?: event.detectedLabel ?: "Ereignis"
+                    val beschriftung = event.label ?: erkanntesLabel(event.detectedLabel) ?: "Ereignis"
                     zeile("${formatierer.format(Date(event.timestamp))} – $beschriftung (${formatiereDb(pegel)} dB)")
                 }
             }

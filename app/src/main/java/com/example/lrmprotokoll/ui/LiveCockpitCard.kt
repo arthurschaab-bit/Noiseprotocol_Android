@@ -41,8 +41,11 @@ import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
-import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.messreihe.formatiereBytes
+import com.example.lrmprotokoll.messreihe.freierSpeicherBytes
+import com.example.lrmprotokoll.messreihe.sollVorSpeicherplatzWarnen
+import com.example.lrmprotokoll.meter.ConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -53,15 +56,35 @@ import java.util.Locale
 const val START_MEASUREMENT_BUTTON_TAG = "start_measurement_button"
 const val END_MEASUREMENT_BUTTON_TAG = "end_measurement_button"
 const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
+
+/** F-22: Die Trigger-Quelle als Chip statt als Statuslabel. */
+const val COCKPIT_TRIGGER_CHIP_TAG = "cockpit_trigger_chip"
 const val VIDEO_BEWEIS_BUTTON_TAG = "video_beweis_button"
 const val END_MEASUREMENT_CONFIRM_DIALOG_TAG = "end_measurement_confirm_dialog"
-const val DISABLE_WAV_CONFIRM_DIALOG_TAG = "disable_wav_confirm_dialog"
 const val DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG = "disconnect_bluetooth_confirm_dialog"
 
 /** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
  * Rasterung fuer [berechneDbFensterAb] - beide an einer Stelle, damit sie nicht auseinanderlaufen. */
 private const val LIVE_FENSTER_MS = 4 * 3600 * 1000L
 private const val LIVE_FENSTER_RASTER_MS = 5 * 60 * 1000L
+
+/**
+ * Mindestbreite der Titelspalte in der Cockpit-Kopfzeile (F-34).
+ *
+ * Ohne sie kann die Spalte in der [FlowRow] auf null schrumpfen — genau der am Emulator
+ * gemessene Zustand vor diesem Fix. 160 dp traegt "Live-Cockpit" in `titleLarge` bis etwa
+ * Schriftfaktor 1,3 einzeilig; darueber bricht die Zeile um, statt den Titel verschwinden zu
+ * lassen.
+ */
+private val COCKPIT_TITEL_MINDESTBREITE = 160.dp
+
+/**
+ * Obergrenze fuer die Badge-Gruppe rechts in der Cockpit-Kopfzeile (F-34).
+ *
+ * Die Badges wachsen mit der Schriftgroesse. Ohne Obergrenze nehmen sie dem Titel den Platz,
+ * bevor die [FlowRow] umbrechen kann.
+ */
+private val COCKPIT_BADGES_HOECHSTBREITE = 220.dp
 
 /**
  * Untere Zeitgrenze fuer die DB-Abfrage des Live-Cockpits (PROMPT_M9A.md Aufgabe 1): dieselbe
@@ -91,6 +114,7 @@ internal fun berechneDbFensterAb(
  * Modernes Cockpit für den Startscreen (Idle & Live-Messungs-Zustand)
  * exakt nach dem neuen Designer-Layout (Screens 1 & 2).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LiveCockpitCard(
     modifier: Modifier = Modifier,
@@ -98,7 +122,8 @@ fun LiveCockpitCard(
     onNavigateToDiagnose: (() -> Unit)? = null,
     /** M11 Etappe B: Videobeweis - nur bei laufender Aufzeichnung sichtbar. */
     onNavigateToVideo: (() -> Unit)? = null,
-    onShowSnackbar: (String) -> Unit = {}
+    /** F-31/F-33: `null` bedeutet, dass kein Scaffold-Kanal anliegt — dann faellt die Meldung auf einen Toast zurueck. */
+    onShowSnackbar: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -122,7 +147,6 @@ fun LiveCockpitCard(
 
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
     var showEndMeasurementConfirm by remember { mutableStateOf(false) }
-    var showDisableWavConfirm by remember { mutableStateOf(false) }
     var showDisconnectBluetoothConfirm by remember { mutableStateOf(false) }
 
     // Notification-Aktion "Stoppen" kann selbst keinen Dialog zeigen (siehe PendingUiAction) -
@@ -144,7 +168,9 @@ fun LiveCockpitCard(
             }
             context.startForegroundService(intent)
         } else {
-            Toast.makeText(context, "Mikrofon-Berechtigung erforderlich", Toast.LENGTH_SHORT).show()
+            // F-33: bevorzugt der Snackbar-Kanal, Toast nur wenn keiner anliegt.
+            val fehlend = "Mikrofon-Berechtigung erforderlich"
+            onShowSnackbar?.invoke(fehlend) ?: Toast.makeText(context, fehlend, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -233,12 +259,24 @@ fun LiveCockpitCard(
         val schwelle = if (istRuhe) settings.quietHoursThreshold else settings.dbThreshold
         var showTriggerMenu by remember { mutableStateOf(false) }
 
-        Row(
+        // F-34: Die Kopfzeile war eine Row mit SpaceBetween, in der die Titelspalte
+        // `weight(1f, fill = false)` trug. Das teilt ihr nur zu, was die Badges uebriglassen —
+        // und das war am Emulator gemessen *null* (breite=0px maxBreite=0px), schon bei
+        // Schriftfaktor 1,0 auf schmalem Geraet. Der Titel wurde also nicht gekuerzt, sondern
+        // gar nicht dargestellt. FlowRow bricht die Badges stattdessen in eine zweite Zeile um,
+        // sobald sie neben dem Titel nicht mehr passen; die Mindestbreite unten stellt sicher,
+        // dass der Titel diesen Umbruch ueberhaupt ausloesen kann.
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f, fill = false)) {
+            Column(
+                modifier =
+                    Modifier
+                        .widthIn(min = COCKPIT_TITEL_MINDESTBREITE)
+                        .align(Alignment.CenterVertically)
+            ) {
                 Text(
                     text = stringResource(R.string.cockpit_title),
                     style = MaterialTheme.typography.titleLarge,
@@ -256,18 +294,34 @@ fun LiveCockpitCard(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // F-34: Obergrenze, damit die mitwachsenden Badges dem Titel nicht die gesamte
+                // Zeile nehmen koennen. Reicht der Rest nicht, bricht die FlowRow oben um.
+                modifier =
+                    Modifier
+                        .widthIn(max = COCKPIT_BADGES_HOECHSTBREITE)
+                        .align(Alignment.CenterVertically)
             ) {
                 Box {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.clickable { showTriggerMenu = true }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
+                    // F-22: Vorher ein Surface mit Text und kleinem Pfeil - es sah aus wie ein
+                    // Statuslabel, ist aber die maechtigste Einstellung des Screens. AssistChip
+                    // ist die Material-Affordanz dafuer und bringt Role.Button von sich aus mit;
+                    // die Mindesthoehe hebt die Trefferflaeche auf 48 dp (F-21).
+                    AssistChip(
+                        onClick = { showTriggerMenu = true },
+                        modifier =
+                            Modifier
+                                .sizeIn(minHeight = 48.dp)
+                                .testTag(COCKPIT_TRIGGER_CHIP_TAG),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        label = {
                             Text(
                                 text = if (!settings.recordWavAudio) {
                                     "Kein Audio (DSGVO)"
@@ -287,14 +341,8 @@ fun LiveCockpitCard(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
-                    }
+                    )
                     DropdownMenu(
                         expanded = showTriggerMenu,
                         onDismissRequest = { showTriggerMenu = false }
@@ -324,18 +372,6 @@ fun LiveCockpitCard(
                                     settings.audioTriggerQuelle = "MIKROFON"
                                 } else {
                                     showDisconnectBluetoothConfirm = true
-                                }
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (settings.recordWavAudio) "WAV-Aufnahme: Aktiv" else "WAV-Aufnahme: Aus (DSGVO)") },
-                            onClick = {
-                                showTriggerMenu = false
-                                if (settings.recordWavAudio) {
-                                    showDisableWavConfirm = true
-                                } else {
-                                    settings.recordWavAudio = true
                                 }
                             }
                         )
@@ -724,6 +760,12 @@ fun LiveCockpitCard(
             Button(
                 onClick = {
                     if (hasAudioPermission) {
+                        // F-10: Eine Messung konnte bisher still an vollem Speicher scheitern.
+                        // Gewarnt wird, nicht blockiert - siehe sollVorSpeicherplatzWarnen().
+                        if (sollVorSpeicherplatzWarnen(freierSpeicherBytes(context))) {
+                            val frei = freierSpeicherBytes(context)?.let { formatiereBytes(it) } ?: "?"
+                            onShowSnackbar?.invoke(context.getString(R.string.cockpit_speicher_knapp, frei))
+                        }
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
                             putExtra(EXTRA_START_AUDIO_MONITORING, true)
                         }
@@ -783,31 +825,6 @@ fun LiveCockpitCard(
         )
     }
 
-    if (showDisableWavConfirm) {
-        AlertDialog(
-            modifier = Modifier.testTag(DISABLE_WAV_CONFIRM_DIALOG_TAG),
-            onDismissRequest = { showDisableWavConfirm = false },
-            title = { Text("WAV-Aufzeichnung deaktivieren?") },
-            text = {
-                Text(
-                    "Neue Lärmereignisse werden dann ohne WAV-Beweisdatei gespeichert. " +
-                        "Pegelprotokoll und PCE-323-Messung können weiterlaufen."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        settings.recordWavAudio = false
-                        showDisableWavConfirm = false
-                    }
-                ) { Text("WAV deaktivieren") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisableWavConfirm = false }) { Text("Abbrechen") }
-            },
-        )
-    }
-
     if (showDisconnectBluetoothConfirm) {
         AlertDialog(
             modifier = Modifier.testTag(DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG),
@@ -855,7 +872,10 @@ fun LiveCockpitCard(
                         notes = if (note.isNotBlank()) note else null
                     )
                     db.noiseDao().insert(record)
-                    onShowSnackbar("Ereignis '$category' gespeichert")
+                    // Bewusst ohne Toast-Rueckfallebene: diese Stelle laeuft in einer Coroutine,
+                    // und Toast.makeText braucht einen vorbereiteten Looper. Sie hatte auch nie
+                    // einen Toast - F-33 ersetzt vorhandene Toasts, es ergaenzt keine neuen.
+                    onShowSnackbar?.invoke("Ereignis '$category' gespeichert")
                 }
             }
         )
