@@ -546,4 +546,8 @@
     <string name="drive_retry_action">Erneut versuchen</string>
     <string name="drive_upload_now_action">Jetzt hochladen</string>
     <string name="drive_resume_action">Fortsetzen</string>
+    <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
+    <string name="settings_record_wav_disable_title">WAV-Aufzeichnung deaktivieren?</string>
+    <string name="settings_record_wav_disable_text">Neue Lärmereignisse werden dann ohne WAV-Beweisdatei gespeichert. Pegelprotokoll und PCE-323-Messung können weiterlaufen.</string>
+    <string name="settings_record_wav_disable_confirm">WAV deaktivieren</string>
 </resources>

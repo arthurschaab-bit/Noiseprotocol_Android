@@ -19,12 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.meter.ConnectionState
@@ -83,8 +85,19 @@ fun BluetoothStatusBadge(
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = containerColor,
+        // F-21: Das Badge ist die primaere Bedienung fuer die Messgeraet-Verbindung, bestand
+        // aber nur aus labelSmall-Text mit 5 dp Polsterung. minimumInteractiveComponentSize()
+        // hebt die Trefferflaeche auf 48 dp, ohne die sichtbare Flaeche zu veraendern.
         modifier = modifier
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .minimumInteractiveComponentSize()
+                        .clickable(role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

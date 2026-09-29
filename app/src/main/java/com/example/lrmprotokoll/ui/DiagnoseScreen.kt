@@ -497,7 +497,9 @@ fun DiagnoseScreen(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("Diagnose-ID", letzteDiagnoseId))
-                                        Toast.makeText(context, "Diagnose-ID in Zwischenablage kopiert", Toast.LENGTH_SHORT).show()
+                                        val kopiert = "Diagnose-ID in Zwischenablage kopiert"
+                                        onShowSnackbar?.invoke(kopiert)
+                                            ?: Toast.makeText(context, kopiert, Toast.LENGTH_SHORT).show()
                                     },
                                     // Seit der Versionskennung (docs/PROMPT_VERSIONSKENNUNG.md
                                     // Abschnitt 4.5) gibt es zwei "Kopieren"-Knoepfe in dieser
@@ -523,6 +525,7 @@ fun DiagnoseScreen(
                                 ),
                             textTag = DIAGNOSE_VERSIONSKENNUNG_TEXT_TAG,
                             kopierenTag = DIAGNOSE_VERSIONSKENNUNG_KOPIEREN_TAG,
+                            onShowSnackbar = onShowSnackbar,
                         )
                     }
                 }
@@ -670,7 +673,9 @@ fun DiagnoseScreen(
                             )
                             letzteDiagnoseId = id.shortCode
                             container.settingsManager.letzteDiagnoseId = id.shortCode
-                            Toast.makeText(context, "Test-Event gesendet ($id)", Toast.LENGTH_SHORT).show()
+                            val gesendet = "Test-Event gesendet ($id)"
+                            onShowSnackbar?.invoke(gesendet)
+                                ?: Toast.makeText(context, gesendet, Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -881,6 +886,7 @@ private fun VersionskennungZeile(
     kennung: String,
     textTag: String,
     kopierenTag: String,
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val kopierteNachricht = stringResource(R.string.diagnose_version_copied)
@@ -897,7 +903,8 @@ private fun VersionskennungZeile(
             onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Versionskennung", kennung))
-                Toast.makeText(context, kopierteNachricht, Toast.LENGTH_SHORT).show()
+                onShowSnackbar?.invoke(kopierteNachricht)
+                    ?: Toast.makeText(context, kopierteNachricht, Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.testTag(kopierenTag),
         ) {

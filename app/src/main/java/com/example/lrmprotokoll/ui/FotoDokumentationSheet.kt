@@ -33,16 +33,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.FotoKategorie
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Aufforderung zur Fotodokumentation nach dem Start eines Messvorgangs (M11 Etappe A).
@@ -207,6 +209,19 @@ fun FotoDokumentationSheet(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                }
+                // F-23: Der Knopf war bei erreichtem Maximum kommentarlos gesperrt; die einzige
+                // Information war der Zaehler "(3/3)". Ohne Begruendung wirkt das wie ein Fehler.
+                if (anzahl >= maximum) {
+                    Text(
+                        text = stringResource(R.string.foto_doku_maximum_erreicht),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier
+                                .padding(start = 4.dp, bottom = 4.dp)
+                                .testTag("foto_maximum_hinweis_${kategorie.name}"),
+                    )
                 }
             }
 

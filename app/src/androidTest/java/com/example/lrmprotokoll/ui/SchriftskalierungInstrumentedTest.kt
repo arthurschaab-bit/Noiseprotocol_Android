@@ -56,14 +56,20 @@ import org.junit.runner.RunWith
  * Richtige - ob das Bedienelement erreichbar und bedienbar bleibt -, nur nicht mehr unter einer
  * Bedingung, die es in der App gar nicht gibt.
  *
- * **Bewusst abgestufte Schaerfe.** Bei Standardschrift wird *kein Ueberlauf* verlangt: Das muss
- * heute gelten und ist damit eine echte Regressionsbremse. Bei 130 % und 200 % wird nur
- * verlangt, dass die Bedienelemente vorhanden, erreichbar und klickbar bleiben - also kein
- * Layout-Zusammenbruch. Ob dort zusaetzlich Text abgeschnitten wird, ist der Befund F-34 des Audits
- * (Kopfzeile des Cockpits). Das hier bereits als Erwartung festzuschreiben wuerde entweder den Fehler als
- * gewolltes Verhalten zementieren oder die CI rot faerben, bevor er behoben ist. **Sobald F-34
- * umgesetzt ist, gehoeren die Ueberlauf-Pruefungen auf alle drei Stufen ausgeweitet** - dafuer
- * steht [textLayout] bereits bereit.
+ * **Abgestufte Schaerfe, seit Phase 5 an drei Stellen nachgeschaerft.** Bei Standardschrift wird
+ * *kein Ueberlauf* verlangt - fuer den Startknopf und, seit F-34 umgesetzt ist, auch fuer den
+ * Cockpit-Titel. Bei 130 % und 200 % wird verlangt, dass die Bedienelemente vorhanden,
+ * erreichbar und klickbar bleiben und dass der Titel *dargestellt* wird (nicht nur existiert).
+ *
+ * Bis Phase 5 stand an genau diesen drei Stellen nur `assertExists()`, mit der Begruendung, eine
+ * harte Zusicherung wuerde den offenen Befund F-34 entweder als gewolltes Verhalten zementieren
+ * oder die CI dauerhaft rot faerben. F-34 ist behoben (FlowRow-Kopfzeile mit Mindestbreite fuer
+ * den Titel), also gilt jetzt die Zusicherung. Fuellt jemand die Kopfzeile kuenftig so, dass der
+ * Titel wieder verdraengt wird, faellt dieser Test - das war der Zweck der Vorbereitung.
+ *
+ * Ob bei 130 % und 200 % zusaetzlich *Text* abgeschnitten wird, bleibt bewusst ungeprueft: dort
+ * ist ein Umbruch in die zweite Zeile das gewollte Verhalten, und eine Ueberlaufpruefung wuerde
+ * ihn als Fehler melden.
  */
 @RunWith(AndroidJUnit4::class)
 class SchriftskalierungInstrumentedTest {
@@ -145,26 +151,22 @@ class SchriftskalierungInstrumentedTest {
             textLayout(composeRule.onNodeWithText(startBeschriftung).performScrollTo()),
         )
 
-        // Der Cockpit-TITEL bekommt hier KEINE Zusicherung, und das ist ein Befund, keine
-        // Nachlaessigkeit. Dritter Emulator-Lauf (36164004983), Standardschrift:
+        // F-34 ist umgesetzt (Phase 5), deshalb steht hier jetzt die harte Zusicherung, die der
+        // Auftrag verlangt. Vorher mass der dritte Emulator-Lauf (36164004983) bei
+        // Standardschrift:
         //
         //   Cockpit-Titel: breite=0px hoehe=28px zeilen=1 ueberlaufBreite=false
         //                  ueberlaufHoehe=true maxBreite=0px maxHoehe=2147483647px
         //
-        // maxBreite=0: Die Titelspalte bekommt ueberhaupt keine Breite zugeteilt - schon bei
-        // Schriftfaktor 1.0. Das ist derselbe Mechanismus wie bei Befund F-34
-        // (LiveCockpitCard.kt:223: Row mit SpaceBetween, Titelspalte `weight(1f, fill = false)`
-        // und `maxLines = 1`, daneben die mitwachsenden Status-Badges): die Spalte bekommt nur,
-        // was die Badges uebriglassen. Auf dem schmalen Geraetebild der CI - die
-        // Startknopf-Messung weist nur 240 px Inhaltsbreite aus - bleibt davon nichts uebrig.
-        //
-        // F-34 ist damit breiter als zunaechst vermutet: nicht nur ein Problem grosser
-        // Schrift, sondern generell eines knapper Breite. Solange der Befund offen ist, waere
-        // jede Zusicherung auf dem Titel eine dauerhaft rote CI fuer einen bekannten,
-        // unbehobenen Fehler. Geprueft wird deshalb nur, dass der Knoten ueberhaupt existiert.
-        // **Sobald F-34 umgesetzt ist, gehoert hier pruefeNichtAbgeschnitten("Cockpit-Titel", ...)
-        // hin** - die Messfunktion steht bereit.
-        composeRule.onNodeWithText(titel).assertExists()
+        // maxBreite=0: Die Titelspalte bekam ueberhaupt keine Breite zugeteilt - schon bei
+        // Schriftfaktor 1.0, weil die Row mit SpaceBetween ihr ueber `weight(1f, fill = false)`
+        // nur zuteilte, was die mitwachsenden Badges uebrigliessen. Die Kopfzeile ist jetzt eine
+        // FlowRow mit Mindestbreite fuer den Titel und Obergrenze fuer die Badges; reicht der
+        // Platz nicht, bricht die Zeile um, statt den Titel verschwinden zu lassen.
+        pruefeNichtAbgeschnitten(
+            "Cockpit-Titel",
+            textLayout(composeRule.onNodeWithText(titel).performScrollTo()),
+        )
     }
 
     @Test
@@ -190,22 +192,15 @@ class SchriftskalierungInstrumentedTest {
             .assertIsDisplayed()
             .assertHasClickAction()
 
-        // BEFUND F-34, am Emulator bestaetigt (Lauf 36161839317): Bei 130 % und 200 % ist der
-        // Cockpit-Titel zwar noch im Semantikbaum, aber nicht mehr dargestellt
-        // (assertIsDisplayed schlaegt fehl). Ursache ist die Kopfzeile in LiveCockpitCard.kt:223
-        // - eine Row mit SpaceBetween, in der die Titelspalte `weight(1f, fill = false)` und
-        // `maxLines = 1` hat, waehrend die Status-Badges daneben mitwachsen. Die Titelspalte wird
-        // dabei auf praktisch null Breite zusammengedrueckt.
-        //
-        // Das ist genau der Befund F-34 des Audits, jetzt nicht mehr nur vermutet
-        // sondern gemessen. Hier wird deshalb bewusst NUR die Existenz geprueft: eine harte
-        // Sichtbarkeitszusicherung wuerde die CI rot faerben, bevor F-34 behoben ist - und das
-        // Klassen-KDoc verlangt auf diesen Stufen ohnehin nur die Bedienbarkeit der
-        // BEDIENELEMENTE; der Titel ist keines. **Sobald F-34 umgesetzt ist, gehoert hier
-        // assertIsDisplayed() hin.**
+        // F-34 ist umgesetzt (Phase 5). Vorher war der Cockpit-Titel bei 130 % und 200 % zwar
+        // noch im Semantikbaum, aber nicht mehr dargestellt - am Emulator bestaetigt (Lauf
+        // 36161839317). Ursache war die Kopfzeile als Row mit SpaceBetween, in der die
+        // Titelspalte `weight(1f, fill = false)` trug und von den mitwachsenden Badges auf
+        // praktisch null Breite gedrueckt wurde. Jetzt gilt die harte Zusicherung.
         composeRule
             .onNodeWithText(composeRule.activity.getString(R.string.cockpit_title))
-            .assertExists()
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     /**

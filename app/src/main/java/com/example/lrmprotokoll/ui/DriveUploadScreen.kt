@@ -65,6 +65,8 @@ const val DRIVE_UPLOAD_LISTE_TAG = "drive_upload_liste"
 @Composable
 fun DriveUploadScreen(
     onBack: () -> Unit,
+    /** F-31: Snackbar-Kanal des Scaffolds; `null` bedeutet, dass der Screen ohne Rueckmeldung auskommt. */
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
