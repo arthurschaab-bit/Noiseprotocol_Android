@@ -7,14 +7,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.height
-import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
@@ -32,9 +30,14 @@ import org.junit.runner.RunWith
  * unberuehrt - eine zu kleine, aber korrekt reagierende Flaeche faellt ihnen nicht auf. Deshalb
  * diese eigene Messung.
  *
- * **Warum `getUnclippedBoundsInRoot`:** `minimumInteractiveComponentSize()` vergroessert die
- * Trefferflaeche, nicht die gezeichnete Flaeche. Die geclippten Grenzen wuerden weiterhin die
- * kleinere sichtbare Groesse melden und die Messung damit am Ziel vorbeifuehren.
+ * **Warum `touchBoundsInRoot` und nicht die Layout-Grenzen.** Die erste Fassung dieses Tests
+ * mass `getUnclippedBoundsInRoot()` und war am Emulator rot: `Bluetooth-Badge: breite=141.45.dp
+ * hoehe=21.09.dp`. Das war kein Fehler der Aenderung, sondern dieser Messung.
+ * `minimumInteractiveComponentSize()` vergroessert die **Trefferflaeche**, ausdruecklich ohne die
+ * Layout-Groesse anzufassen — genau das verlangt der Audit ("ohne die visuelle Groesse zu
+ * aendern"). Die Layout-Grenzen melden deshalb weiterhin die kleine sichtbare Groesse, auch wenn
+ * der Finger laengst 48 dp trifft. `SemanticsNode.touchBoundsInRoot` ist die Flaeche, um die es
+ * geht.
  *
  * **Warum nur die Badges und nicht die fuenf IconButtons:** die liegen in Listen und Sheets, die
  * erst nach Datenbank- und Berechtigungszustand entstehen. Sie bekamen in derselben Aenderung
@@ -55,12 +58,18 @@ class TouchZieleInstrumentedTest {
         knoten: SemanticsNodeInteraction,
     ) {
         knoten.assertHasClickAction()
-        val grenzen = knoten.getUnclippedBoundsInRoot()
+        val semantik: SemanticsNode = knoten.fetchSemanticsNode()
+        val treffer = semantik.touchBoundsInRoot
+        val sichtbar = semantik.boundsInRoot
+        val breite = with(composeRule.density) { treffer.width.toDp() }
+        val hoehe = with(composeRule.density) { treffer.height.toDp() }
         val meldung =
-            "$bezeichnung: breite=${grenzen.width} hoehe=${grenzen.height} " +
+            "$bezeichnung: trefferBreite=$breite trefferHoehe=$hoehe " +
+                "sichtbarBreite=${with(composeRule.density) { sichtbar.width.toDp() }} " +
+                "sichtbarHoehe=${with(composeRule.density) { sichtbar.height.toDp() }} " +
                 "(verlangt mindestens $mindestTouchZiel in beiden Richtungen)"
         println(meldung)
-        assertTrue(meldung, grenzen.width >= mindestTouchZiel && grenzen.height >= mindestTouchZiel)
+        assertTrue(meldung, breite >= mindestTouchZiel && hoehe >= mindestTouchZiel)
     }
 
     @Test

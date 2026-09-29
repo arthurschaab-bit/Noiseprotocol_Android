@@ -41,8 +41,11 @@ import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
-import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.messreihe.formatiereBytes
+import com.example.lrmprotokoll.messreihe.freierSpeicherBytes
+import com.example.lrmprotokoll.messreihe.sollVorSpeicherplatzWarnen
+import com.example.lrmprotokoll.meter.ConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -738,6 +741,12 @@ fun LiveCockpitCard(
             Button(
                 onClick = {
                     if (hasAudioPermission) {
+                        // F-10: Eine Messung konnte bisher still an vollem Speicher scheitern.
+                        // Gewarnt wird, nicht blockiert - siehe sollVorSpeicherplatzWarnen().
+                        if (sollVorSpeicherplatzWarnen(freierSpeicherBytes(context))) {
+                            val frei = freierSpeicherBytes(context)?.let { formatiereBytes(it) } ?: "?"
+                            onShowSnackbar?.invoke(context.getString(R.string.cockpit_speicher_knapp, frei))
+                        }
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
                             putExtra(EXTRA_START_AUDIO_MONITORING, true)
                         }

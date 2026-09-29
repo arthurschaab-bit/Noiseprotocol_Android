@@ -214,7 +214,6 @@ fun SettingsScreen(
     // kalibrierten PCE-323-Wert nichts Vergleichbares.
     var meterDbThreshold by remember { mutableFloatStateOf(settings.meterDbThreshold) }
     var recordWavAudio by remember { mutableStateOf(settings.recordWavAudio) }
-    var zeigeWavDeaktivierenHinweis by remember { mutableStateOf(false) }
     var audioTriggerQuelle by remember { mutableStateOf(settings.audioTriggerQuelle) }
     var preRoll by remember { mutableFloatStateOf(settings.preRollSeconds.toFloat()) }
     var duration by remember { mutableFloatStateOf(settings.recordDurationSeconds.toFloat()) }
@@ -420,30 +419,6 @@ fun SettingsScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // F-22: umgezogen aus dem Cockpit-Trigger-Menue, das als doppelter Einstieg entfallen ist.
-    if (zeigeWavDeaktivierenHinweis) {
-        AlertDialog(
-            modifier = Modifier.testTag(DISABLE_WAV_CONFIRM_DIALOG_TAG),
-            onDismissRequest = { zeigeWavDeaktivierenHinweis = false },
-            title = { Text(stringResource(R.string.settings_record_wav_disable_title)) },
-            text = { Text(stringResource(R.string.settings_record_wav_disable_text)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        recordWavAudio = false
-                        settings.recordWavAudio = false
-                        zeigeWavDeaktivierenHinweis = false
-                    },
-                ) { Text(stringResource(R.string.settings_record_wav_disable_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { zeigeWavDeaktivierenHinweis = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            },
-        )
     }
 
     if (showWohnraumDialog) {
@@ -732,17 +707,8 @@ fun SettingsScreen(
                     Switch(
                         checked = recordWavAudio,
                         onCheckedChange = {
-                            // F-22: Das Abschalten war bisher nur ueber das Cockpit-Menue
-                            // bestaetigungspflichtig. Dieses Menue ist entfallen (doppelter
-                            // Einstieg), der Hinweis darf dabei aber nicht verlorengehen - er
-                            // betrifft, ob neue Laermereignisse ueberhaupt eine Beweisdatei
-                            // bekommen. Einschalten bleibt ohne Rueckfrage.
-                            if (it) {
-                                recordWavAudio = true
-                                settings.recordWavAudio = true
-                            } else {
-                                zeigeWavDeaktivierenHinweis = true
-                            }
+                            recordWavAudio = it
+                            settings.recordWavAudio = it
                         },
                         modifier = Modifier.testTag("switch_record_wav_audio"),
                     )
@@ -2444,9 +2410,6 @@ private fun SettingsSectionCard(
 
 const val BILDSCHIRM_ENDE_TAG = "settings_bildschirm_ende"
 const val VERSIONSKENNUNG_TEXT_TAG = "settings_versionskennung_text"
-
-/** F-22: Der Bestaetigungsdialog zum Abschalten der WAV-Aufzeichnung, umgezogen aus dem Cockpit. */
-const val DISABLE_WAV_CONFIRM_DIALOG_TAG = "disable_wav_confirm_dialog"
 
 const val VERSIONSKENNUNG_KOPIEREN_TAG = "settings_versionskennung_kopieren"
 const val VERSIONSKENNUNG_DEV_HINWEIS_TAG = "settings_versionskennung_dev_hinweis"

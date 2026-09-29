@@ -545,7 +545,5 @@
     <string name="drive_upload_now_action">Upload now</string>
     <string name="drive_resume_action">Resume</string>
     <string name="foto_doku_maximum_erreicht">Maximum reached – adjustable in settings</string>
-    <string name="settings_record_wav_disable_title">Disable WAV recording?</string>
-    <string name="settings_record_wav_disable_text">New noise events will then be stored without a WAV evidence file. Level logging and PCE-323 measurement can continue.</string>
-    <string name="settings_record_wav_disable_confirm">Disable WAV</string>
+    <string name="cockpit_speicher_knapp">Only %1$s left – the measurement may stop early. You can free up space in the settings.</string>
 </resources>
