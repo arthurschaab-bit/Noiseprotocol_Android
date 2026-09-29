@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -78,6 +79,22 @@ class ConnectionSupervisor(
     private val maxAttempts: Int = 8,
     private val minStableSession: Duration = Duration.ofSeconds(5),
     /**
+     * Abstand zwischen zwei Anlaeufen, nachdem [maxAttempts] erschoepft waren und
+     * [ConnectionState.FAILED] gemeldet wurde (F-03).
+     *
+     * Bis zum 26.09.2026 endete die Ueberwachungsschleife an dieser Stelle endgueltig - eine
+     * einmal fehlgeschlagene Verbindung blieb tot, bis der Nutzer selbst eingriff. Owner-
+     * Entscheidung 26.09.2026: periodisch weiterversuchen, mit langem Abstand.
+     *
+     * 15 Minuten, weil der Wert gegen den Akku abgewogen werden muss: die App protokolliert
+     * ueber ganze Tage, und jeder Anlauf durchlaeuft wieder die volle Backoff-Folge von acht
+     * Versuchen (rund zwei Minuten Funkbetrieb), bevor erneut FAILED gemeldet wird. Bei 15
+     * Minuten sind das rund 96 Anlaeufe je Tag; bei 5 Minuten waeren es 288 - fuer ein Geraet,
+     * das vielleicht gar nicht in Reichweite ist. Den nutzersichtbaren Fall deckt ohnehin
+     * [erneutVersuchen] sofort ab.
+     */
+    private val failedRetryInterval: Duration = Duration.ofMinutes(15),
+    /**
      * Stream-Plausibilisierung als Spoofing-Erkennung (Plan Abschnitt 6): `null` (Default)
      * schaltet die Pruefung ab - ohne eine geraetespezifische Erwartung (nur AppContainer kennt
      * [com.example.lrmprotokoll.meter.ble.Pce323Profile.EXPECTED_FRAME_PERIOD_MS], diese Klasse
@@ -134,6 +151,34 @@ class ConnectionSupervisor(
 
     private var job: Job? = null
     private var currentDevice: BoundDevice? = null
+
+    /**
+     * Zaehlt die Bitten um einen sofortigen neuen Anlauf (F-03). Die Warteschleife merkt sich
+     * den Stand, bevor sie FAILED setzt, und laeuft los, sobald er sich aendert.
+     *
+     * **Ein Zaehler, kein [kotlinx.coroutines.flow.SharedFlow]** (Review-Befund 27.09.2026):
+     * ein SharedFlow mit `replay = 0` verwirft eine Emission, solange kein Sammler
+     * registriert ist - `extraBufferCapacity` puffert nur fuer vorhandene, langsame Sammler.
+     * Zwischen `setOverride(FAILED)` und dem Sammler in der Warteschleife liegt aber genau so
+     * ein Fenster: ein `onResume()` in diesem Moment haette `tryEmit` mit Erfolg quittiert
+     * bekommen, der Anstoss waere trotzdem verfallen und der Nutzer haette bis zu
+     * [failedRetryInterval] gewartet. Ein [MutableStateFlow] hat immer einen aktuellen Wert,
+     * den ein spaeter hinzukommender Sammler sieht - das Fenster gibt es damit nicht mehr.
+     *
+     * Der Stand wird vor dem Setzen von FAILED gelesen, nicht danach: nur so zaehlt
+     * ausschliesslich, was waehrend dieser Wartezeit angefordert wurde. Mehrfaches Bitten vor
+     * dem naechsten Anlauf ist dasselbe wie einmal - mehr als einen Anlauf gleichzeitig gibt
+     * es nicht.
+     */
+    private val anlaufAnforderungen = MutableStateFlow(0L)
+
+    /** Siehe [anlaufAnforderungen]. Darf aus jedem Thread aufgerufen werden. */
+    fun erneutVersuchen() {
+        // Nur im Wartezustand zaehlen. Sonst wuerde ein Anstoss von vor einer Stunde die
+        // naechste Wartezeit ueberspringen - er soll keinen Anlauf von heute vorziehen.
+        if (_state.value != ConnectionState.FAILED) return
+        anlaufAnforderungen.update { it + 1 }
+    }
 
     /**
      * (Re-)Startet die Ueberwachung fuer [device]. Ein Aufruf fuer das bereits aktiv
@@ -214,10 +259,32 @@ class ConnectionSupervisor(
                         consecutiveFailures++
                         if (consecutiveFailures >= maxAttempts) {
                             diagnosticLogger?.protokolliere(
-                                "Verbindung endgueltig fehlgeschlagen nach $consecutiveFailures Versuchen"
+                                "Verbindung fehlgeschlagen nach $consecutiveFailures Versuchen - warte auf neuen Anlauf",
                             )
+                            // Stand vor dem Setzen von FAILED lesen: ab FAILED darf
+                            // [erneutVersuchen] zaehlen, und genau diese Erhoehungen sollen die
+                            // Wartezeit beenden - fruehere nicht. Siehe [anlaufAnforderungen].
+                            val standVorDemWarten = anlaufAnforderungen.value
                             setOverride(ConnectionState.FAILED)
-                            return@coroutineScope
+                            // F-03: Frueher endete die Schleife hier mit return@coroutineScope und
+                            // die Verbindung blieb tot, bis der Nutzer eingriff. Jetzt bleibt sie in
+                            // FAILED stehen und nimmt einen neuen Anlauf, sobald entweder
+                            // [failedRetryInterval] verstrichen ist oder jemand [erneutVersuchen]
+                            // ruft - was immer zuerst kommt.
+                            val anforderung =
+                                withTimeoutOrNull(failedRetryInterval.toMillis()) {
+                                    anlaufAnforderungen.first { it != standVorDemWarten }
+                                }
+                            val angestossen = anforderung != null
+                            diagnosticLogger?.protokolliere(
+                                if (angestossen) {
+                                    "Neuer Anlauf auf Anforderung"
+                                } else {
+                                    "Neuer Anlauf nach ${failedRetryInterval.toMinutes()} min"
+                                },
+                            )
+                            consecutiveFailures = 0
+                            isFirstAttempt = true // kein Backoff vor dem ersten Versuch des neuen Anlaufs
                         }
                     }
                 }

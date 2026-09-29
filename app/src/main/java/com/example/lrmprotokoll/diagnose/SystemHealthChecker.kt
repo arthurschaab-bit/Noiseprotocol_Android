@@ -8,6 +8,14 @@ enum class HealthStatus {
     ERROR
 }
 
+/**
+ * Die Messgeraet-Zustaende, in denen die Selbstpruefung einen Weg zum Messgeraet anbietet (F-03):
+ * getrennt, gestoert und fehlgeschlagen. Bis zum 29.09.2026 stand hier nur DISCONNECTED -
+ * ausgerechnet FAILED, der einzige als ERROR gemeldete Zustand, blieb ohne Aktion.
+ */
+private val METER_ZUSTAENDE_MIT_AKTION =
+    setOf(ConnectionState.DISCONNECTED, ConnectionState.DEGRADED, ConnectionState.FAILED)
+
 enum class HealthActionType {
     REQUEST_AUDIO_PERMISSION,
     REQUEST_BLUETOOTH_PERMISSION,
@@ -133,13 +141,18 @@ fun bewerteSystemZustand(params: SystemHealthParams): SystemHealthOverview {
             ConnectionState.DISCONNECTED -> if (params.isMonitoringActive) HealthStatus.WARNING else HealthStatus.OK
             ConnectionState.IDLE -> HealthStatus.OK
         }
+        // F-03 (Audit-Punkt 3): Bis zum 29.09.2026 bot nur DISCONNECTED eine Aktion an.
+        // Ausgerechnet FAILED - der einzige Zustand, den die Selbstpruefung als ERROR meldet -
+        // stand ohne jeden Ausweg da, und DEGRADED als WARNING ebenso. Genau in diesen beiden
+        // Zustaenden braucht der Nutzer den Weg zum Messgeraet am dringendsten.
+        val brauchtAktion = params.meterConnectionState in METER_ZUSTAENDE_MIT_AKTION
         items += HealthCheckItem(
             id = "meter_status",
             title = "Schallpegelmesser PCE-323",
             description = meterDesc,
             status = meterStatus,
-            actionLabel = if (params.meterConnectionState == ConnectionState.DISCONNECTED) "Verbinden" else null,
-            actionType = if (params.meterConnectionState == ConnectionState.DISCONNECTED) HealthActionType.CONNECT_METER else null
+            actionLabel = if (brauchtAktion) "Verbinden" else null,
+            actionType = if (brauchtAktion) HealthActionType.CONNECT_METER else null
         )
     }
 
