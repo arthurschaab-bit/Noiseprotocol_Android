@@ -49,4 +49,29 @@ class AutoRetentionFilterTest {
 
         assertEquals(listOf(altUnwichtig), kandidaten)
     }
+
+    /**
+     * Regression zu F-17 (PR #226): dort bekam eine Aufnahme, bei der die KI **nichts** erkannt
+     * hat, statt `null` den Sentinel [NICHT_ERKANNT_LABEL] eingetragen. Die Schutzregel hier
+     * pruefte aber nur `detectedLabel != null` — damit waere genau diese Aufnahme dauerhaft vor
+     * der automatischen Bereinigung geschuetzt gewesen, obwohl sie den geringsten Beweiswert hat.
+     *
+     * Gegen den Stand vor diesem Fix ist der Test rot: `ermittleAutoRetentionKandidaten` lieferte
+     * eine leere Liste.
+     */
+    @Test
+    fun nichtErkannteAufnahmeIstKeineKiErkennungUndDarfBereinigtWerden() {
+        val cutoff = 1_700_000_000_000L - (30L * 24 * 3600 * 1000)
+        val nichtErkannt = sampleRecord(1, timestamp = cutoff - 1000, detectedLabel = NICHT_ERKANNT_LABEL)
+        val nichtErkanntEnglisch = sampleRecord(2, timestamp = cutoff - 1000, detectedLabel = "Not recognized")
+        val echtErkannt = sampleRecord(3, timestamp = cutoff - 1000, detectedLabel = "Hämmern")
+
+        val kandidaten =
+            ermittleAutoRetentionKandidaten(
+                records = listOf(nichtErkannt, nichtErkanntEnglisch, echtErkannt),
+                cutoffTimestamp = cutoff,
+            )
+
+        assertEquals(listOf(nichtErkannt, nichtErkanntEnglisch), kandidaten)
+    }
 }

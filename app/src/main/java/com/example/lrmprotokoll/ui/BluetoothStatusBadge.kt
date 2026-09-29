@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.label
+import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.ui.theme.statusContainer
 
@@ -62,6 +63,7 @@ fun BluetoothStatusBadge(
             -> colors.idle
         }
     val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
+    val textColor = MaterialTheme.colorScheme.onStatusContainer(statusColor)
 
     val isAnimating = state == ConnectionState.SCANNING ||
         state == ConnectionState.CONNECTING ||
@@ -117,7 +119,7 @@ fun BluetoothStatusBadge(
             Text(
                 text = displayText,
                 style = MaterialTheme.typography.labelSmall,
-                color = statusColor,
+                color = textColor,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

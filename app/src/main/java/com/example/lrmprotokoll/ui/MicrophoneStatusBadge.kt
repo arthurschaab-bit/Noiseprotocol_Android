@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.ui.theme.statusContainer
 
@@ -89,6 +90,7 @@ fun MicrophoneStatusBadge(
             else -> colors.warning to "WAV: INAKTIV"
         }
     val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
+    val textColor = MaterialTheme.colorScheme.onStatusContainer(statusColor)
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -104,7 +106,7 @@ fun MicrophoneStatusBadge(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
-                color = statusColor,
+                color = textColor,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

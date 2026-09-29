@@ -121,4 +121,30 @@ class NoiseRecordGroupingTest {
         )
         assertEquals(null, klassifizierungsStatus(offen.copy(filePath = ""), "BATCH"))
     }
+
+    /**
+     * [erkanntesLabel] ist die Gegenprobe zu [klassifizierungsStatus] fuer alle Stellen, die nur
+     * ein verwertbares Label wollen (Bereinigung, Berichte, Drive-Sync, Ereignistitel). Ohne sie
+     * bedeutet `detectedLabel != null` seit F-17 nicht mehr "erkannt".
+     */
+    @Test
+    fun erkanntesLabelLiefertNurEchteTreffer() {
+        assertEquals("Bohren", erkanntesLabel("Bohren"))
+        assertEquals(null, erkanntesLabel(null))
+        assertEquals(null, erkanntesLabel(""))
+        assertEquals(null, erkanntesLabel("   "))
+        assertEquals(null, erkanntesLabel(NICHT_ERKANNT_LABEL))
+        assertEquals(null, erkanntesLabel("Not recognized"))
+    }
+
+    /**
+     * Der gespeicherte Sentinel ist woertlich die deutsche Oberflaechenzeichenkette. Faellt dieser
+     * Test, wurde `R.string.status_not_recognized` umformuliert, ohne [NICHT_ERKANNT_LABELS]
+     * nachzuziehen — dann laufen Altdatensaetze still in den Zweig "erkannt".
+     */
+    @Test
+    fun dieBekanntenSchreibweisenDesSentinelsSindVollstaendig() {
+        assertEquals(setOf("Nicht erkannt", "Not recognized"), NICHT_ERKANNT_LABELS)
+        assertTrue(NICHT_ERKANNT_LABEL in NICHT_ERKANNT_LABELS)
+    }
 }

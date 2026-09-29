@@ -41,6 +41,7 @@ import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_LABEL
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
 import com.example.lrmprotokoll.report.MessreiheExport
 import com.example.lrmprotokoll.report.leqBezeichnung
@@ -540,7 +541,7 @@ fun ProtokollDetailScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = record.label ?: record.detectedLabel ?: "Lärmereignis",
+                                        text = record.label ?: erkanntesLabel(record.detectedLabel) ?: "Lärmereignis",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                     )
