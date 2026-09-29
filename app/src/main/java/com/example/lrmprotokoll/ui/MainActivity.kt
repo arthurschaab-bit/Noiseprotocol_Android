@@ -65,6 +65,8 @@ import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
+import com.example.lrmprotokoll.meter.BadgeTippAktion
+import com.example.lrmprotokoll.meter.badgeTippAktion
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
@@ -748,7 +750,24 @@ fun NoiseProtocolApp(
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
-                        onClick = { showPairingDialog = true },
+                        // F-03, Audit-Punkt 2 (Owner-Entscheidung 29.09.2026): Im Zustand
+                        // "Fehlgeschlagen" mit gepinntem Geraet holt derselbe Tipp den naechsten
+                        // Anlauf sofort, statt den Kopplungsdialog mit 10-Sekunden-Scan zu
+                        // oeffnen. Die Abgrenzung steckt in badgeTippAktion() und ist dort ohne
+                        // Compose geprueft.
+                        onClick = {
+                            when (badgeTippAktion(verbindungszustand, settingsManager.meterDeviceAddress != null)) {
+                                BadgeTippAktion.ERNEUT_VERBINDEN -> {
+                                    container.connectionSupervisor.erneutVersuchen()
+                                    onShowSnackbar(
+                                        context.getString(R.string.meter_erneut_verbinden_angestossen),
+                                        null,
+                                        null,
+                                    )
+                                }
+                                BadgeTippAktion.KOPPLUNGSDIALOG -> showPairingDialog = true
+                            }
+                        },
                         modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
 

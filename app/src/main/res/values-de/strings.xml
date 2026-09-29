@@ -549,4 +549,5 @@
     <string name="drive_resume_action">Fortsetzen</string>
     <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
+    <string name="meter_erneut_verbinden_angestossen">Neuer Verbindungsversuch gestartet</string>
 </resources>
