@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.example.lrmprotokoll.LaermprotokollApp
 import java.util.concurrent.TimeUnit
 
@@ -15,6 +16,8 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 
 private const val WORK_NAME = "drive_sync"
+private const val RETRY_TYP = "retry_typ"
+private const val RETRY_KENNUNG = "retry_kennung"
 
 /**
  * Der periodische Sync-Auftrag (Plan Abschnitt 8.4.5). Reine WorkManager-Glue - die
@@ -38,7 +41,15 @@ class DriveSyncWorker @JvmOverloads constructor(
         val container = (applicationContext as LaermprotokollApp).container
         val coordinator = coordinatorOverride ?: container.driveSyncCoordinator
         container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync-Zyklus gestartet")
-        return when (val ergebnis = coordinator.syncEinenZyklus()) {
+        val retryTyp = inputData.getString(RETRY_TYP)
+        val ergebnis = if (retryTyp == null) {
+            coordinator.syncEinenZyklus()
+        } else {
+            val typ = runCatching { UploadDateiTyp.valueOf(retryTyp) }.getOrNull() ?: return Result.failure()
+            val kennung = inputData.getString(RETRY_KENNUNG) ?: return Result.failure()
+            coordinator.wiederholeDatei(UploadDateiZiel(typ, kennung))
+        }
+        return when (ergebnis) {
             is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> {
                 container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync erfolgreich: ${ergebnis.zeilen} Zeilen")
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
@@ -80,13 +91,33 @@ class DriveSyncWorker @JvmOverloads constructor(
                     details = mapOf("grund" to ergebnis.grund, "httpCode" to (ergebnis.httpCode ?: -1))
                 )
                 DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
-                Result.retry()
+                if (ergebnis.wiederholbar) Result.retry() else Result.failure()
             }
         }
     }
 }
 
 object DriveSyncPlanung {
+
+    /** Wartet auf das erlaubte Netz und synchronisiert nur die ausgewaehlte Datei. */
+    fun starteDateiErneut(context: Context, ziel: UploadDateiZiel): Boolean {
+        val app = context.applicationContext as? LaermprotokollApp ?: return false
+        val settings = app.container.settingsManager
+        if (!settings.driveSyncEnabled || settings.driveFolderId == null || settings.driveOrdnerBlockiert) return false
+        val netz = if (settings.driveWlanOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
+        val anfrage = OneTimeWorkRequestBuilder<DriveSyncWorker>()
+            .setInputData(workDataOf(RETRY_TYP to ziel.typ.name, RETRY_KENNUNG to ziel.kennung))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(netz).build())
+            .build()
+        return runCatching {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "${WORK_NAME}_retry_${ziel.typ.name}_${ziel.kennung}",
+                ExistingWorkPolicy.KEEP,
+                anfrage,
+            )
+            true
+        }.getOrDefault(false)
+    }
 
     fun plane(context: Context) {
         val einschraenkungen = Constraints.Builder()

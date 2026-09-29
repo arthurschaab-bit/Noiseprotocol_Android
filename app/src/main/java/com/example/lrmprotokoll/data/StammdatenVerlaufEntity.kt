@@ -42,6 +42,8 @@ data class StammdatenVerlaufEntity(
     val wetter: String,
     val datenqualitaetHinweis: String,
     val giltFuerTagStart: Long? = null,
+    /** Reguläre Bestätigung am Messbeginn; historische Nachträge behalten null. */
+    val messvorgangId: Long? = null,
 )
 
 @Dao
@@ -61,4 +63,7 @@ interface StammdatenVerlaufDao {
      * selbst keinen Aufrufer mehr (Review-Befund PR #144) und wurde entfernt. */
     @Query("SELECT * FROM stammdaten_verlauf WHERE giltFuerTagStart = :von OR (giltFuerTagStart IS NULL AND erstelltAm >= :von AND erstelltAm < :bis) ORDER BY erstelltAm DESC")
     suspend fun fuerTag(von: Long, bis: Long): List<StammdatenVerlaufEntity>
+
+    @Query("SELECT * FROM stammdaten_verlauf WHERE messvorgangId = :messvorgangId ORDER BY erstelltAm DESC")
+    suspend fun fuerMessvorgang(messvorgangId: Long): List<StammdatenVerlaufEntity>
 }

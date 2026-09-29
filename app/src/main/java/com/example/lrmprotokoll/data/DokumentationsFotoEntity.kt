@@ -37,8 +37,9 @@ enum class FotoKategorie(val anzeigename: String) {
  *
  * [sessionId] ist non-null: Seit M11/E1 eroeffnet auch ein reiner Mikrofonlauf eine
  * [SessionEntity] (siehe [com.example.lrmprotokoll.messreihe.MeasurementRecorder.starteMikrofonMessung]),
- * jeder Messvorgang hat also genau einen Anker. Ein zweiter, konkurrierender Anker haette jede
- * spaetere Auswertung doppelt behandeln muessen.
+ * jeder Messvorgang hat also mindestens einen Anker. Nach einem Quellenwechsel verknuepft
+ * [SessionEntity.messvorgangId] die Mikrofon- und Messgeraet-Session ohne die Herkunft des Fotos
+ * zu verlieren.
  *
  * [pruefsumme] ist der SHA-256 der Bilddatei zum Aufnahmezeitpunkt - der einzige Weg, spaeter zu
  * zeigen, dass ein Foto seit der Aufnahme nicht ausgetauscht wurde. Fuer ein Beweismittel ist
@@ -82,6 +83,9 @@ interface DokumentationsFotoDao {
 
     @Query("SELECT * FROM dokumentationsfotos WHERE sessionId = :sessionId ORDER BY aufgenommenAm")
     suspend fun fuerSession(sessionId: Long): List<DokumentationsFotoEntity>
+
+    @Query("SELECT dokumentationsfotos.* FROM dokumentationsfotos INNER JOIN sessions ON sessions.id = dokumentationsfotos.sessionId WHERE sessions.messvorgangId = :messvorgangId ORDER BY dokumentationsfotos.aufgenommenAm")
+    suspend fun fuerMessvorgang(messvorgangId: Long): List<DokumentationsFotoEntity>
 
     @Query("SELECT * FROM dokumentationsfotos WHERE sessionId = :sessionId ORDER BY aufgenommenAm")
     fun fuerSessionFlow(sessionId: Long): Flow<List<DokumentationsFotoEntity>>

@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,7 +73,8 @@ fun MeterPairingDialog(
     pairedAddress: String?,
     pairedName: String?,
     onDeviceSelected: (BleDevice) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onManage: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -277,6 +279,13 @@ fun MeterPairingDialog(
                             }
                         }
                     }
+                }
+            }
+        },
+        dismissButton = {
+            onManage?.let { manage ->
+                TextButton(onClick = manage, modifier = Modifier.testTag("btn_manage_meter")) {
+                    Text(stringResource(R.string.meter_manage_action))
                 }
             }
         },

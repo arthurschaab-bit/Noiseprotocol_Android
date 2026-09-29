@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 
 /**
  * Semantische Statusfarben für die Lärmprotokoll-App (Messwerkzeug-Design).
@@ -46,3 +47,7 @@ val ColorScheme.statusColors: AppStatusColors
     @Composable
     @ReadOnlyComposable
     get() = if (this.background == BackgroundDark) DarkStatusColors else LightStatusColors
+
+/** Ein dezenter, deckender Statushintergrund auf der Oberflaeche des aktiven Schemas. */
+fun ColorScheme.statusContainer(status: Color): Color =
+    status.copy(alpha = 0.14f).compositeOver(surface)

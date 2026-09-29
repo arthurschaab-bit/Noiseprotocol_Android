@@ -8,6 +8,7 @@ import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.meter.InstantSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import java.time.Duration
 import java.time.Instant
@@ -79,7 +80,7 @@ class DriveSyncCoordinator(
         data object KeineAenderung : SyncErgebnis
         data class Erfolgreich(val zeilen: Int) : SyncErgebnis
         data class OrdnerNichtGefunden(val httpCode: Int?) : SyncErgebnis
-        data class Fehlgeschlagen(val grund: String, val httpCode: Int?) : SyncErgebnis
+        data class Fehlgeschlagen(val grund: String, val httpCode: Int?, val wiederholbar: Boolean = true) : SyncErgebnis
     }
 
     /**
@@ -107,6 +108,100 @@ class DriveSyncCoordinator(
         } finally {
             zyklusMutex.unlock()
         }
+    }
+
+    /** Wiederholt genau den gewaehlten Upload unter derselben Sperre wie ein voller Sync-Zyklus. */
+    suspend fun wiederholeDatei(ziel: UploadDateiZiel): SyncErgebnis {
+        zyklusMutex.lock()
+        try {
+            if (!settings.driveSyncEnabled) return SyncErgebnis.SyncAusgeschaltet
+            if (settings.driveOrdnerBlockiert) return SyncErgebnis.OrdnerBlockiert
+            val ordnerId = settings.driveFolderId ?: return SyncErgebnis.KeinOrdnerEingerichtet
+            val ergebnis = when (ziel.typ) {
+                UploadDateiTyp.TAGESDATEI -> wiederholeTagesdatei(ziel.kennung, ordnerId)
+                UploadDateiTyp.FOTO -> {
+                    val id = ziel.kennung.toLongOrNull()
+                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Foto-ID", null, wiederholbar = false)
+                    if (!settings.fotoDokuDriveUpload) return SyncErgebnis.SyncAusgeschaltet
+                    val foto = dokumentationsFotoDao?.byId(id)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Foto nicht mehr vorhanden", null, wiederholbar = false)
+                    if (foto.driveFileId != null) return SyncErgebnis.KeineAenderung
+                    if (!java.io.File(foto.dateiPfad).exists()) {
+                        return SyncErgebnis.Fehlgeschlagen("Fotodatei fehlt lokal", null, wiederholbar = false)
+                    }
+                    if (ladeFotosHoch(ordnerId, id)) SyncErgebnis.Erfolgreich(1)
+                    else SyncErgebnis.Fehlgeschlagen("Foto konnte nicht hochgeladen werden", null)
+                }
+                UploadDateiTyp.VIDEO -> {
+                    val id = ziel.kennung.toLongOrNull()
+                        ?: return SyncErgebnis.Fehlgeschlagen("Ungültige Video-ID", null, wiederholbar = false)
+                    if (!settings.videoDriveUpload) return SyncErgebnis.SyncAusgeschaltet
+                    val video = beweisVideoDao?.byId(id)
+                        ?: return SyncErgebnis.Fehlgeschlagen("Video nicht mehr vorhanden", null, wiederholbar = false)
+                    if (video.driveFileId != null) return SyncErgebnis.KeineAenderung
+                    if (!video.tonGemuxt || !java.io.File(video.dateiPfad).exists()) {
+                        return SyncErgebnis.Fehlgeschlagen("Fertige Videodatei fehlt lokal", null, wiederholbar = false)
+                    }
+                    if (ladeVideosHoch(ordnerId, id)) SyncErgebnis.Erfolgreich(1)
+                    else SyncErgebnis.Fehlgeschlagen("Video konnte nicht hochgeladen werden", null)
+                }
+            }
+            if (ergebnis is SyncErgebnis.Erfolgreich) {
+                settings.driveSyncFehlschlaegeInFolge = 0
+                settings.driveSyncLastSuccessAt = now.now().toEpochMilli()
+                settings.driveSyncLastMessage = "Ausgewählte Datei erfolgreich hochgeladen"
+            }
+            return ergebnis
+        } catch (abbruch: CancellationException) {
+            throw abbruch
+        } catch (fehler: Exception) {
+            return SyncErgebnis.Fehlgeschlagen(fehler.message ?: "Datei-Upload fehlgeschlagen", null)
+        } finally {
+            zyklusMutex.unlock()
+        }
+    }
+
+    private suspend fun wiederholeTagesdatei(datum: String, ordnerId: String): SyncErgebnis {
+        val tag = runCatching { LocalDate.parse(datum) }.getOrElse {
+            return SyncErgebnis.Fehlgeschlagen("Ungültiges Tagesdatum", null, wiederholbar = false)
+        }
+        val von = tag.atStartOfDay(zone).toInstant()
+        val bis = minOf(tag.plusDays(1).atStartOfDay(zone).toInstant(), now.now())
+        if (bis <= von) return SyncErgebnis.Fehlgeschlagen("Keine Messwerte für diesen Tag vorhanden", null, wiederholbar = false)
+        val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), bis.toEpochMilli()).map {
+            ProtokollEreignis(
+                at = Instant.ofEpochMilli(it.timestamp),
+                pegelDb = it.calibratedDbA ?: it.dbValue,
+                klassifikation = it.detectedLabel ?: it.label,
+                notes = it.notes,
+                weighting = it.meterWeighting,
+            )
+        }
+        val abschnitte = aggregiereInAbschnitten(
+            von, bis, ereignisse, Duration.ofSeconds(settings.driveAggregationSekunden.toLong()),
+        )
+        if (!abschnitte.hatteRohwerte || abschnitte.zeilen.isEmpty()) {
+            return SyncErgebnis.Fehlgeschlagen("Rohdaten für diesen Tag fehlen", null, wiederholbar = false)
+        }
+        val registry = dailyFileDao.byDate(datum)
+        val zielordner = ordnerbaum.ordnerFuer(ordnerId, datum, DriveKategorie.SCHALLMESSUNG).getOrThrow()
+        val dateiName = "laermprotokoll_$datum.csv"
+        val inhalt = DriveCsv.schreibe(abschnitte.zeilen, zone).toByteArray(Charsets.UTF_8)
+        return schreibeDatei(registry?.fileId, dateiName, zielordner, inhalt).fold(
+            onSuccess = { fileId ->
+                dailyFileDao.upsert(
+                    DriveDailyFileEntity(
+                        date = datum,
+                        fileId = fileId,
+                        lastSyncedAt = now.now().toEpochMilli(),
+                        lastRowCount = abschnitte.zeilen.size,
+                        state = DriveSyncState.SYNCED,
+                    ),
+                )
+                SyncErgebnis.Erfolgreich(abschnitte.zeilen.size)
+            },
+            onFailure = { fehler -> behandleFehlschlag(datum, registry, now.now(), fehler) },
+        )
     }
 
     private suspend fun fuehreSyncZyklusAus(): SyncErgebnis {
@@ -583,11 +678,18 @@ class DriveSyncCoordinator(
      * nichts. Eine gesetzte [DokumentationsFotoEntity.driveFileId] ist zugleich die
      * Idempotenz-Sicherung: Ein Foto wird nie zweimal hochgeladen.
      */
-    private suspend fun ladeFotosHoch(ordnerId: String) {
-        if (!settings.fotoDokuDriveUpload) return
-        val dao = dokumentationsFotoDao ?: return
+    private suspend fun ladeFotosHoch(ordnerId: String, nurFotoId: Long? = null): Boolean {
+        if (!settings.fotoDokuDriveUpload) return false
+        val dao = dokumentationsFotoDao ?: return false
 
-        val offene = runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        val offene = if (nurFotoId == null) {
+            runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        } else {
+            val foto = dao.byId(nurFotoId) ?: return false
+            if (foto.driveFileId != null) return true
+            listOf(foto)
+        }
+        var erfolgreich = true
         if (offene.isNotEmpty()) {
             diagnosticsReporter?.breadcrumb(
                 "DriveSync",
@@ -596,7 +698,10 @@ class DriveSyncCoordinator(
         }
         for (foto in offene) {
             val datei = java.io.File(foto.dateiPfad)
-            if (!datei.exists()) continue
+            if (!datei.exists()) {
+                erfolgreich = false
+                continue
+            }
 
             val name = datei.name
             // Tagesordner nach dem AUFNAHMEdatum des Fotos, nicht nach dem Upload-Zeitpunkt.
@@ -604,26 +709,40 @@ class DriveSyncCoordinator(
                 ordnerId,
                 DriveAblage.tagesordner(foto.aufgenommenAm, zone),
                 DriveKategorie.FOTOS,
-            ).getOrElse { continue }
-
-            // Waisen-Absicherung wie bei CSV und WAV: Ein vorheriger, halb fehlgeschlagener
-            // Versuch koennte die Datei bereits angelegt haben.
-            val vorhanden = driveApi.dateiSuchen(name, ziel).getOrNull()
-            if (vorhanden != null) {
-                runCatching { dao.setzeDriveFileId(foto.id, vorhanden.id) }
+            ).getOrElse {
+                erfolgreich = false
                 continue
             }
 
-            val inhalt = runCatching { datei.readBytes() }.getOrNull() ?: continue
+            // Waisen-Absicherung wie bei CSV und WAV: Ein vorheriger, halb fehlgeschlagener
+            // Versuch koennte die Datei bereits angelegt haben.
+            val vorhanden = driveApi.dateiSuchen(name, ziel).getOrElse {
+                erfolgreich = false
+                continue
+            }
+            if (vorhanden != null) {
+                runCatching { dao.setzeDriveFileId(foto.id, vorhanden.id) }
+                    .onFailure { erfolgreich = false }
+                continue
+            }
+
+            val inhalt = runCatching { datei.readBytes() }.getOrNull()
+            if (inhalt == null) {
+                erfolgreich = false
+                continue
+            }
             driveApi.dateiAnlegen(name, ziel, inhalt, "image/jpeg", gzip = false)
                 .onSuccess { fileId ->
                     runCatching { dao.setzeDriveFileId(foto.id, fileId) }
+                        .onFailure { erfolgreich = false }
                     diagnosticsReporter?.breadcrumb("DriveSync", "Foto erfolgreich hochgeladen: $name")
                 }
                 .onFailure { fehler ->
+                    erfolgreich = false
                     diagnosticsReporter?.breadcrumb("DriveSync", "Foto-Upload fehlgeschlagen ($name): ${fehler.message}")
                 }
         }
+        return erfolgreich
     }
 
     /**
@@ -642,25 +761,43 @@ class DriveSyncCoordinator(
      * 3. **Nur fertig gemuxte Videos**, siehe [com.example.lrmprotokoll.data.BeweisVideoDao.nichtHochgeladene]:
      *    Sonst landete die stumme Zwischenfassung in Drive.
      */
-    private suspend fun ladeVideosHoch(ordnerId: String) {
-        if (!settings.videoDriveUpload) return
-        val dao = beweisVideoDao ?: return
+    private suspend fun ladeVideosHoch(ordnerId: String, nurVideoId: Long? = null): Boolean {
+        if (!settings.videoDriveUpload) return false
+        val dao = beweisVideoDao ?: return false
 
-        val offene = runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        val offene = if (nurVideoId == null) {
+            runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+        } else {
+            val video = dao.byId(nurVideoId) ?: return false
+            if (video.driveFileId != null) return true
+            if (!video.tonGemuxt) return false
+            listOf(video)
+        }
+        var erfolgreich = true
         for (video in offene) {
             val datei = java.io.File(video.dateiPfad)
-            if (!datei.exists()) continue
+            if (!datei.exists()) {
+                erfolgreich = false
+                continue
+            }
 
             val ziel = ordnerbaum.ordnerFuer(
                 ordnerId,
                 DriveAblage.tagesordner(video.gestartetAm, zone),
                 DriveKategorie.VIDEOS,
-            ).getOrElse { continue }
+            ).getOrElse {
+                erfolgreich = false
+                continue
+            }
 
             // Waisen-Absicherung wie bei CSV, WAV und Fotos.
-            val vorhanden = driveApi.dateiSuchen(datei.name, ziel).getOrNull()
+            val vorhanden = driveApi.dateiSuchen(datei.name, ziel).getOrElse {
+                erfolgreich = false
+                continue
+            }
             if (vorhanden != null) {
                 runCatching { dao.setzeDriveFileId(video.id, vorhanden.id) }
+                    .onFailure { erfolgreich = false }
                 continue
             }
 
@@ -690,8 +827,12 @@ class DriveSyncCoordinator(
                     // spaeteren Lauf dazu verleiten, eine abgeschlossene Sitzung abzufragen.
                     dao.setzeUploadFortschritt(video.id, null, datei.length())
                 }
+                    .onFailure { erfolgreich = false }
+            }.onFailure {
+                erfolgreich = false
             }
         }
+        return erfolgreich
     }
 
     /**
