@@ -119,6 +119,7 @@
     <string name="meter_action_disconnect">Disconnect</string>
     <string name="meter_action_connect">Connect</string>
     <string name="meter_action_unpair">Unpair</string>
+    <string name="meter_disconnect_automatik_hinweis">Disconnected. \"Connect automatically\" is on – the app will reconnect the next time you open it.</string>
     <string name="meter_action_scan">Scan for nearby devices</string>
     <string name="meter_scanning_title">Scanning for PCE-323 BLE…</string>
     <string name="meter_found_devices_title">Found Devices</string>

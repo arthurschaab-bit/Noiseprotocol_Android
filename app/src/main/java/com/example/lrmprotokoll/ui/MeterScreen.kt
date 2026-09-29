@@ -414,12 +414,38 @@ fun MeterScreen(
                         ) {
                             Text(stringResource(R.string.meter_action_connect))
                         }
+                        // F-20b/Owner-Entscheidung 29.09.2026: Der Automatik-Schalter darueber
+                        // bleibt ausdruecklich "nur beim App-Start" - er trennt nicht, wenn man
+                        // ihn ausschaltet. Wer die laufende Verbindung jetzt beenden wollte,
+                        // hatte bisher nur "Entkoppeln" und verlor damit die Kopplung. Dieser
+                        // Knopf trennt, ohne sie zu verlieren.
                         OutlinedButton(
-                            onClick = { showDisconnectConfirm = true },
-                            modifier = Modifier.testTag("btn_meter_unpair")
+                            onClick = {
+                                supervisor.stop()
+                                // Ohne diesen Hinweis wirkt der Knopf defekt: steht die
+                                // Automatik auf "an", verbindet MainActivity.onResume beim
+                                // naechsten Vordergrund wieder.
+                                if (autoConnect) {
+                                    onShowSnackbar?.invoke(
+                                        context.getString(R.string.meter_disconnect_automatik_hinweis),
+                                    )
+                                }
+                            },
+                            enabled = connectionState != ConnectionState.IDLE,
+                            modifier = Modifier.testTag("btn_meter_disconnect"),
                         ) {
-                            Text(stringResource(R.string.meter_action_unpair))
+                            Text(stringResource(R.string.meter_action_disconnect))
                         }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    // Vom Textknopf statt Umriss: mit drei Aktionen nebeneinander passte die
+                    // Zeile nicht mehr, und "Entkoppeln" ist die seltene, verlustbehaftete -
+                    // sie soll optisch nicht mit "Verbinden"/"Trennen" konkurrieren.
+                    TextButton(
+                        onClick = { showDisconnectConfirm = true },
+                        modifier = Modifier.testTag("btn_meter_unpair"),
+                    ) {
+                        Text(stringResource(R.string.meter_action_unpair))
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
