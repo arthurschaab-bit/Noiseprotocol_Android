@@ -3,7 +3,7 @@ package com.example.lrmprotokoll.audio
 import com.example.lrmprotokoll.data.KlassifikationsRohdatenDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
-import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_LABEL
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
 import java.io.File
 
 /**
@@ -45,7 +45,7 @@ suspend fun klassifiziereUndSpeichere(
             // Rohdatensaetze fuer dieselbe recordId hinterlassen.
             rohdatenDao.loescheFuerRecord(record.id)
             rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
-            val erkannt = ergebnis.label ?: NICHT_ERKANNT_LABEL
+            val erkannt = ergebnis.label ?: NICHT_ERKANNT_MARKER
             dao.update(record.copy(detectedLabel = erkannt))
             anzahl++
         } finally {

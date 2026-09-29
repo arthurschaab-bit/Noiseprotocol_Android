@@ -36,7 +36,9 @@ fun filtereNoiseRecords(
         // Text-Suche über Label, DetectedLabel und Notizen
         val textMatch = if (lowerQuery.isBlank()) true else {
             val labelMatch = record.label?.lowercase()?.contains(lowerQuery) == true
-            val detectedMatch = record.detectedLabel?.lowercase()?.contains(lowerQuery) == true
+            val detectedMatch =
+                record.detectedLabel?.lowercase()?.contains(lowerQuery) == true ||
+                    nichtErkanntPasstZurSuche(record.detectedLabel, lowerQuery)
             val notesMatch = record.notes?.lowercase()?.contains(lowerQuery) == true
             labelMatch || detectedMatch || notesMatch
         }

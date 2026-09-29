@@ -12,7 +12,7 @@ import com.example.lrmprotokoll.data.NoiseRecord
  *   [gelernteMuster] vorkommt.
  *
  * Seit F-17 (PR #226) traegt eine Aufnahme, bei der die KI **nichts** erkannt hat, den Sentinel
- * [NICHT_ERKANNT_LABEL] statt `null`. Mit einer reinen `!= null`-Pruefung waere sie damit dauerhaft
+ * [NICHT_ERKANNT_MARKER] statt `null`. Mit einer reinen `!= null`-Pruefung waere sie damit dauerhaft
  * vor der Bereinigung geschuetzt — ausgerechnet die Aufnahmen mit dem geringsten Beweiswert
  * haetten sich unloeschbar gesammelt. Deshalb entscheidet hier [erkanntesLabel], nicht `!= null`.
  */

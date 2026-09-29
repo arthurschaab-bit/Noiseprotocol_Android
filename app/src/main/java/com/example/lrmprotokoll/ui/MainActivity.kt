@@ -64,6 +64,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
@@ -1476,7 +1477,7 @@ fun NoiseProtocolApp(
                                         val file = File(record.filePath)
                                         if (file.exists() && file.isFile) {
                                             val detected = classifier.value.classify(file)
-                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_LABEL))
+                                            dao.update(record.copy(detectedLabel = detected ?: NICHT_ERKANNT_MARKER))
                                         }
                                     }
                                 },

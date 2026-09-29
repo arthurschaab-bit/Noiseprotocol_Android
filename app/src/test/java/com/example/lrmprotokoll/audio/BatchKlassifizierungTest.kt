@@ -5,7 +5,7 @@ import com.example.lrmprotokoll.data.KlassifikationsRohdatenDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
-import java.io.File
+import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 /**
  * Testluecken-Auftrag Stufe 6 / MainActivity-Refactor: [klassifiziereUndSpeichere] war vorher
@@ -146,7 +147,7 @@ class BatchKlassifizierungTest {
         val anzahl = klassifiziereUndSpeichere(listOf(record), classifier, dao, rohdatenDao)
 
         assertEquals(1, anzahl)
-        assertEquals("Nicht erkannt", dao.aktualisiert.single().detectedLabel)
+        assertEquals(NICHT_ERKANNT_MARKER, dao.aktualisiert.single().detectedLabel)
         assertEquals(
             "Auch ohne ableitbares Label sind die Rohscores wertvoll fuer eine spaetere " +
                 "Neubewertung mit anderen Schwellen",
@@ -239,7 +240,7 @@ class BatchKlassifizierungTest {
         assertEquals(2, anzahl)
         assertEquals(listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3), fortschritt)
         assertEquals(listOf(1L, 2L), dao.aktualisiert.map { it.id })
-        assertEquals(listOf("Bohren", "Nicht erkannt"), dao.aktualisiert.map { it.detectedLabel })
+        assertEquals(listOf("Bohren", NICHT_ERKANNT_MARKER), dao.aktualisiert.map { it.detectedLabel })
         assertEquals(
             "Fuer beide vorhandenen Dateien (erkannt+unerkannt) muessen Rohdaten entstehen, " +
                 "nur die fehlende Datei wird uebersprungen",
