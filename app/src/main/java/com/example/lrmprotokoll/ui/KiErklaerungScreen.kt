@@ -130,6 +130,8 @@ const val KI_ERKLAERUNG_LAZY_COLUMN_TAG = "ki_erklaerung_lazy_column"
 @Composable
 fun KiErklaerungScreen(
     onBack: () -> Unit,
+    /** F-31: Snackbar-Kanal des Scaffolds; `null` bedeutet, dass der Screen ohne Rueckmeldung auskommt. */
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {

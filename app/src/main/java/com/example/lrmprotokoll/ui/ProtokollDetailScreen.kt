@@ -591,7 +591,8 @@ fun ProtokollDetailScreen(
                                         }
                                     },
                                     enabled = !wirdKlassifiziert,
-                                    modifier = Modifier.size(40.dp),
+                                    // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.
+                                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
                                 ) {
                                     if (wirdKlassifiziert) {
                                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

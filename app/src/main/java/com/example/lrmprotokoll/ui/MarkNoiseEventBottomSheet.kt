@@ -108,7 +108,8 @@ fun MarkNoiseEventBottomSheet(
 
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(36.dp)
+                    // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
