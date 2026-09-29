@@ -112,6 +112,41 @@ class SessionFilterUndGruppierungTest {
 
     // ----------------------------------------------------------------- gruppiereSessionsNachTag
 
+    // ------------------------------------------------------ S-5/F-32: "nur mit Ereignissen"
+
+    /**
+     * Das Kriterium war bis zum 29.09.2026 kein Teil des Filtermodells, sondern ein eigener
+     * Compose-Zustand hinter einem zweiten Knopf in der TopAppBar. Hier steht, was es tut: es
+     * zaehlt nur, es prueft keine Eigenschaft eines Ereignisses. Eine Session ohne Ereignisse
+     * faellt heraus, eine mit beliebigen Ereignissen bleibt drin.
+     */
+    @Test
+    fun onlyWithEventsWirftNurSessionsOhneJedesEreignisHeraus() {
+        val session = sampleSession(1)
+        val filter = SessionFilterState(onlyWithEvents = true)
+
+        assertTrue(filter.istAktiv)
+        assertFalse(sessionPasstFilter(session, emptyList(), filter))
+        assertTrue(sessionPasstFilter(session, listOf(sampleRecord(1)), filter))
+    }
+
+    /**
+     * Die Gegenprobe zur Verwechslung, die am naechsten liegt: "nur mit Ereignissen" darf nicht
+     * als Ereigniskriterium durchschlagen. Eine Session mit Ereignissen, von denen keines den
+     * Pegelbereich trifft, faellt an *diesem* Kriterium heraus - nicht an onlyWithEvents.
+     */
+    @Test
+    fun onlyWithEventsKombiniertMitEinemEreigniskriterium() {
+        val session = sampleSession(1)
+        val leise = sampleRecord(1, dbValue = 40.0)
+        val laut = sampleRecord(2, dbValue = 80.0)
+        val filter = SessionFilterState(onlyWithEvents = true, minDb = 70.0f)
+
+        assertFalse(sessionPasstFilter(session, emptyList(), filter))
+        assertFalse(sessionPasstFilter(session, listOf(leise), filter))
+        assertTrue(sessionPasstFilter(session, listOf(leise, laut), filter))
+    }
+
     @Test
     fun gruppiertSessionsNachKalendertag() {
         val tag1 = sampleSession(1, startedAt = 1_700_000_000_000L)
