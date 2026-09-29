@@ -415,6 +415,7 @@
     <string name="filter_quiet_hours">Quiet hours</string>
     <string name="filter_only_meter">PCE-323 only</string>
     <string name="filter_only_calibrated">Calibrated only</string>
+    <string name="filter_only_with_events">With events only</string>
     <string name="level_prefix">Level</string>
     <string name="learned_patterns_count">Learned noise patterns (%1$d)</string>
     <string name="ai_classified_count">%1$d recording(s) classified by AI</string>

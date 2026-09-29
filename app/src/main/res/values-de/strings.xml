@@ -417,6 +417,7 @@
     <string name="filter_quiet_hours">Ruhezeiten</string>
     <string name="filter_only_meter">Nur PCE-323</string>
     <string name="filter_only_calibrated">Nur Kalibriert</string>
+    <string name="filter_only_with_events">Nur mit Ereignissen</string>
     <string name="level_prefix">Pegel</string>
     <string name="learned_patterns_count">Gelernte Geräusch-Muster (%1$d)</string>
     <string name="ai_classified_count">%1$d Aufnahme(n) durch KI klassifiziert</string>

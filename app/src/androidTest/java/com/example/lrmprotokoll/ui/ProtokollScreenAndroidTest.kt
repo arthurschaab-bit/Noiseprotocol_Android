@@ -308,6 +308,14 @@ class ProtokollScreenAndroidTest {
         composeRule.onNodeWithTag("protokoll_tagesheader_${formatter.format(java.util.Date(gestern))}").assertIsDisplayed()
     }
 
+    /**
+     * S-5/F-32 (29.09.2026): Bis hierher klickte dieser Test `btn_filter_events` - den einfachen
+     * Umschalter "nur mit Ereignissen". Genau dieser Test war im Quelltext von `ProtokollScreen`
+     * als Begruendung dafuer genannt, dass der erweiterte Filter einen *zweiten* Knopf daneben
+     * bekam, statt beides zusammenzufuehren. Der Audit verlangt ausdruecklich, den Test
+     * anzupassen statt die Oberflaeche um ihn herumzubauen; das ist hier geschehen: es gibt einen
+     * Einstieg, und das alte Kriterium ist ein Chip im Panel.
+     */
     @Test
     fun protokollScreen_filterButton_klickbar() {
         composeRule.setContent {
@@ -320,11 +328,16 @@ class ProtokollScreenAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // Filter-Button ist in TopAppBar vorhanden und klickbar
-        composeRule.onNodeWithTag("btn_filter_events").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("btn_filter_events").assertDoesNotExist()
+
+        // Der verbliebene Einstieg oeffnet das Panel und schliesst es wieder.
+        composeRule.onNodeWithTag("btn_session_filter_panel").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
-        // Zweiter Klick toggelt zurück
-        composeRule.onNodeWithTag("btn_filter_events").performClick()
+        composeRule.onNodeWithTag("panel_session_filter").assertIsDisplayed()
+        composeRule.onNodeWithTag("chip_session_filter_only_with_events").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("btn_session_filter_panel").performClick()
         composeRule.waitForIdle()
     }
 }

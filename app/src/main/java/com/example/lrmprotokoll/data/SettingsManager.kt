@@ -693,6 +693,44 @@ class SettingsManager(
         get() = prefs.getBoolean("filter_only_quiet_hours", false)
         set(value) = prefs.edit().putBoolean("filter_only_quiet_hours", value).apply()
 
+    // ---------------------------------------------------------------- S-5: Filter des Protokollreiters (F-18)
+    // Der Protokollreiter filtert SESSIONS, die Startseite EINZELAUFNAHMEN - zwei Sichten, zwei
+    // Zustaende. Bis hierher war nur der Startseiten-Filter persistent, der des Protokolls hing
+    // an einem remember() und war nach jedem Verlassen des Reiters weg (F-18). Eigene Schluessel
+    // statt gemeinsamer: ein Pegelbereich, der auf Einzelereignisse passt, ist auf Sessions eine
+    // andere Aussage - ein gemeinsamer Wert wuerde beim Wechsel des Reiters still mitfiltern.
+    var sessionFilterDbMin: Float
+        get() = prefs.getFloat("session_filter_db_min", 0.0f)
+        set(value) = prefs.edit().putFloat("session_filter_db_min", value).apply()
+
+    var sessionFilterDbMax: Float
+        get() = prefs.getFloat("session_filter_db_max", 120.0f)
+        set(value) = prefs.edit().putFloat("session_filter_db_max", value).apply()
+
+    var sessionFilterLabelQuery: String
+        get() = prefs.getString("session_filter_label_query", "") ?: ""
+        set(value) = prefs.edit().putString("session_filter_label_query", value).apply()
+
+    var sessionFilterOnlyMeter: Boolean
+        get() = prefs.getBoolean("session_filter_only_meter", false)
+        set(value) = prefs.edit().putBoolean("session_filter_only_meter", value).apply()
+
+    var sessionFilterOnlyCalibrated: Boolean
+        get() = prefs.getBoolean("session_filter_only_calibrated", false)
+        set(value) = prefs.edit().putBoolean("session_filter_only_calibrated", value).apply()
+
+    var sessionFilterOnlyFavorites: Boolean
+        get() = prefs.getBoolean("session_filter_only_favorites", false)
+        set(value) = prefs.edit().putBoolean("session_filter_only_favorites", value).apply()
+
+    var sessionFilterOnlyQuietHours: Boolean
+        get() = prefs.getBoolean("session_filter_only_quiet_hours", false)
+        set(value) = prefs.edit().putBoolean("session_filter_only_quiet_hours", value).apply()
+
+    var sessionFilterOnlyWithEvents: Boolean
+        get() = prefs.getBoolean("session_filter_only_with_events", false)
+        set(value) = prefs.edit().putBoolean("session_filter_only_with_events", value).apply()
+
     // ---------------------------------------------------------------- F5: Auto-Retention / Speicherbereinigung (M10)
     var autoRetentionEnabled: Boolean
         get() = prefs.getBoolean("auto_retention_enabled", false)
