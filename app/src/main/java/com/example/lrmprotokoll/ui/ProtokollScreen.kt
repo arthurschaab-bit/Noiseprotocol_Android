@@ -75,13 +75,45 @@ fun ProtokollScreen(
     val messungLaeuft by AudioRecordingService.laeuft.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var filterOnlyWithEvents by remember { mutableStateOf(false) }
     var zeigeMenue by remember { mutableStateOf(false) }
 
     // Owner-Feature-Auftrag 12.09.2026: nach Tagen gruppieren, nach denselben Kriterien wie die
     // Startseite filterbar (SessionFilterState, auf Sessions statt Einzelereignisse angewendet).
-    var sessionFilter by remember { mutableStateOf(SessionFilterState()) }
+    //
+    // S-5/F-18: Der Zustand haengt nicht mehr an einem blossen remember(). Er wird - wie der
+    // Filter der Startseite seit F2 - beim Betreten aus den Einstellungen gelesen und bei jeder
+    // Aenderung zurueckgeschrieben. Vorher war jede Filtereinstellung weg, sobald der Reiter
+    // verlassen wurde, waehrend die Startseite ihre behielt; genau diese Ungleichheit ist F-18.
+    val settingsManager = remember { container.settingsManager }
+    var sessionFilter by remember {
+        mutableStateOf(
+            SessionFilterState(
+                minDb = settingsManager.sessionFilterDbMin,
+                maxDb = settingsManager.sessionFilterDbMax,
+                onlyMeter = settingsManager.sessionFilterOnlyMeter,
+                onlyCalibrated = settingsManager.sessionFilterOnlyCalibrated,
+                onlyFavorites = settingsManager.sessionFilterOnlyFavorites,
+                onlyQuietHours = settingsManager.sessionFilterOnlyQuietHours,
+                onlyWithEvents = settingsManager.sessionFilterOnlyWithEvents,
+                labelQuery = settingsManager.sessionFilterLabelQuery,
+            ),
+        )
+    }
     var showSessionFilterPanel by remember { mutableStateOf(false) }
+
+    // Einziger Schreibweg fuer den Filter - analog zu `updateFilter` in MainActivity, damit keine
+    // Stelle den Zustand aendern kann, ohne ihn auch zu sichern.
+    fun aktualisiereSessionFilter(neu: SessionFilterState) {
+        sessionFilter = neu
+        settingsManager.sessionFilterDbMin = neu.minDb
+        settingsManager.sessionFilterDbMax = neu.maxDb
+        settingsManager.sessionFilterOnlyMeter = neu.onlyMeter
+        settingsManager.sessionFilterOnlyCalibrated = neu.onlyCalibrated
+        settingsManager.sessionFilterOnlyFavorites = neu.onlyFavorites
+        settingsManager.sessionFilterOnlyQuietHours = neu.onlyQuietHours
+        settingsManager.sessionFilterOnlyWithEvents = neu.onlyWithEvents
+        settingsManager.sessionFilterLabelQuery = neu.labelQuery
+    }
     var sessionEvents by remember { mutableStateOf<Map<Long, List<NoiseRecord>>>(emptyMap()) }
     val eingeklappteTage = remember { mutableStateListOf<String>() }
 
@@ -101,7 +133,7 @@ fun ProtokollScreen(
     }
 
     val filteredSessions =
-        remember(sessions, searchQuery, filterOnlyWithEvents, sessionFilter, sessionEvents) {
+        remember(sessions, searchQuery, sessionFilter, sessionEvents) {
             sessions.filter { s ->
                 val matchQuery =
                     searchQuery.isBlank() ||
@@ -110,11 +142,8 @@ fun ProtokollScreen(
                 if (!matchQuery) return@filter false
 
                 val ereignisse = sessionEvents[s.id] ?: emptyList()
-                // Bugfix nebenbei entdeckt: filterOnlyWithEvents stand schon im remember()-Schluessel,
-                // wurde im Filter selbst aber nie ausgewertet - der Button im TopAppBar tat bislang
-                // nichts.
-                if (filterOnlyWithEvents && ereignisse.isEmpty()) return@filter false
-
+                // "nur mit Ereignissen" ist seit S-5 ein Kriterium des Filtermodells und wird
+                // deshalb in sessionPasstFilter() geprueft - dort ist es JVM-testbar.
                 sessionPasstFilter(s, ereignisse, sessionFilter)
             }
         }
@@ -136,27 +165,19 @@ fun ProtokollScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { filterOnlyWithEvents = !filterOnlyWithEvents },
-                        modifier = Modifier.testTag("btn_filter_events"),
-                    ) {
-                        Icon(
-                            imageVector = AppIcons.FilterList,
-                            contentDescription = "Filter",
-                            tint = if (filterOnlyWithEvents) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // Owner-Feature-Auftrag 12.09.2026: erweiterter Filter (dB-Bereich, Favoriten,
-                    // Ruhezeiten, Messgeraet/Mikrofon, kalibriert, Geraeuschtyp) - eigener Button,
-                    // um den bestehenden einfachen "nur mit Ereignissen"-Umschalter oben nicht zu
-                    // veraendern (Instrumented-Test klickt genau den).
+                    // S-5/F-32: Bis hierher standen hier zwei Filter-Icons nebeneinander - ein
+                    // Umschalter "nur mit Ereignissen" und daneben der Schraubenschluessel fuer
+                    // das erweiterte Panel. Der zweite existierte laut Kommentar nur, um den
+                    // ersten nicht anzufassen, weil ein Instrumented-Test genau ihn klickte. Das
+                    // ist jetzt ein Einstieg: das Kriterium "nur mit Ereignissen" ist ein Chip im
+                    // Panel geworden, der Test klickt den verbliebenen Knopf.
                     IconButton(
                         onClick = { showSessionFilterPanel = !showSessionFilterPanel },
-                        modifier = Modifier.testTag("btn_session_filter_panel"),
+                        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("btn_session_filter_panel"),
                     ) {
                         BadgedBox(badge = { if (sessionFilter.istAktiv) Badge() }) {
                             Icon(
-                                imageVector = Icons.Default.Build,
+                                imageVector = AppIcons.FilterList,
                                 contentDescription = stringResource(R.string.filter_title),
                                 tint = if (sessionFilter.istAktiv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -233,7 +254,7 @@ fun ProtokollScreen(
                     RangeSlider(
                         value = sessionFilter.minDb..sessionFilter.maxDb,
                         onValueChange = { range ->
-                            sessionFilter = sessionFilter.copy(minDb = range.start, maxDb = range.endInclusive)
+                            aktualisiereSessionFilter(sessionFilter.copy(minDb = range.start, maxDb = range.endInclusive))
                         },
                         valueRange = 0f..120f,
                         modifier = Modifier.padding(horizontal = 4.dp).testTag("slider_session_filter_db"),
@@ -242,7 +263,7 @@ fun ProtokollScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = sessionFilter.labelQuery,
-                        onValueChange = { sessionFilter = sessionFilter.copy(labelQuery = it) },
+                        onValueChange = { aktualisiereSessionFilter(sessionFilter.copy(labelQuery = it)) },
                         label = { Text("Geräuschtyp") },
                         placeholder = { Text("z. B. Bohren") },
                         singleLine = true,
@@ -255,34 +276,40 @@ fun ProtokollScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         FilterChip(
+                            selected = sessionFilter.onlyWithEvents,
+                            onClick = { aktualisiereSessionFilter(sessionFilter.copy(onlyWithEvents = !sessionFilter.onlyWithEvents)) },
+                            label = { Text(stringResource(R.string.filter_only_with_events)) },
+                            modifier = Modifier.testTag("chip_session_filter_only_with_events"),
+                        )
+                        FilterChip(
                             selected = sessionFilter.onlyFavorites,
-                            onClick = { sessionFilter = sessionFilter.copy(onlyFavorites = !sessionFilter.onlyFavorites) },
+                            onClick = { aktualisiereSessionFilter(sessionFilter.copy(onlyFavorites = !sessionFilter.onlyFavorites)) },
                             label = { Text(stringResource(R.string.filter_favorites)) },
                             leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             modifier = Modifier.testTag("chip_session_filter_favorites"),
                         )
                         FilterChip(
                             selected = sessionFilter.onlyQuietHours,
-                            onClick = { sessionFilter = sessionFilter.copy(onlyQuietHours = !sessionFilter.onlyQuietHours) },
+                            onClick = { aktualisiereSessionFilter(sessionFilter.copy(onlyQuietHours = !sessionFilter.onlyQuietHours)) },
                             label = { Text(stringResource(R.string.filter_quiet_hours)) },
                             modifier = Modifier.testTag("chip_session_filter_quiet_hours"),
                         )
                         FilterChip(
                             selected = sessionFilter.onlyMeter,
-                            onClick = { sessionFilter = sessionFilter.copy(onlyMeter = !sessionFilter.onlyMeter) },
+                            onClick = { aktualisiereSessionFilter(sessionFilter.copy(onlyMeter = !sessionFilter.onlyMeter)) },
                             label = { Text(stringResource(R.string.filter_only_meter)) },
                             modifier = Modifier.testTag("chip_session_filter_only_meter"),
                         )
                         FilterChip(
                             selected = sessionFilter.onlyCalibrated,
-                            onClick = { sessionFilter = sessionFilter.copy(onlyCalibrated = !sessionFilter.onlyCalibrated) },
+                            onClick = { aktualisiereSessionFilter(sessionFilter.copy(onlyCalibrated = !sessionFilter.onlyCalibrated)) },
                             label = { Text(stringResource(R.string.filter_only_calibrated)) },
                             modifier = Modifier.testTag("chip_session_filter_only_calibrated"),
                         )
                         if (sessionFilter.istAktiv) {
                             FilterChip(
                                 selected = true,
-                                onClick = { sessionFilter = SessionFilterState() },
+                                onClick = { aktualisiereSessionFilter(SessionFilterState()) },
                                 label = { Text(stringResource(R.string.filter_active_reset)) },
                                 leadingIcon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 modifier = Modifier.testTag("chip_session_filter_reset"),
