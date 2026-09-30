@@ -336,6 +336,17 @@ class SettingsManager(
         get() = prefs.getBoolean("drive_upload_wav", true)
         set(value) = prefs.edit().putBoolean("drive_upload_wav", value).apply()
 
+    /**
+     * F-37: Fuer welche Session der Hinweis "laeuft unkalibriert" schon gezeigt wurde.
+     *
+     * Nicht `remember`: der Nutzer soll ihn einmal je Messungsstart sehen, nicht jedes Mal, wenn
+     * er waehrend derselben Messung auf das Cockpit zurueckkehrt (Owner-Entscheidung 30.09.2026).
+     * `remember` ueberlebt einen Tabwechsel nicht, eine Einstellung schon.
+     */
+    var unkalibriertHinweisSessionId: Long
+        get() = prefs.getLong("unkalibriert_hinweis_session", -1L)
+        set(value) = prefs.edit().putLong("unkalibriert_hinweis_session", value).apply()
+
     var driveSyncLastSuccessAt: Long
         get() = prefs.getLong("drive_sync_last_success_at", 0L)
         set(value) = prefs.edit().putLong("drive_sync_last_success_at", value).apply()

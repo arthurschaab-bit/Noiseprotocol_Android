@@ -16,7 +16,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SettingsManagerVideoTest {
-
     private fun settings() = SettingsManager(ApplicationProvider.getApplicationContext())
 
     @Test

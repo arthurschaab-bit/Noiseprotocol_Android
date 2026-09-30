@@ -19,8 +19,11 @@ class SettingsManagerMetadataPromptTest {
     @Before
     @After
     fun entferneTestwert() {
-        context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE).edit()
-            .remove("stammdaten_abfrage_letzter_tag").commit()
+        context
+            .getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
+            .edit()
+            .remove("stammdaten_abfrage_letzter_tag")
+            .commit()
     }
 
     @Test

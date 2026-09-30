@@ -28,12 +28,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SettingsManagerSecureTest {
+    private fun klartextPrefs(context: Context) = context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
 
-    private fun klartextPrefs(context: Context) =
-        context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
-
-    private fun testSecurePrefs(context: Context, name: String) =
-        context.getSharedPreferences(name, Context.MODE_PRIVATE)
+    private fun testSecurePrefs(
+        context: Context,
+        name: String,
+    ) = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     @Test
     fun echterKeystoreIstUnterRobolectricNichtVerfuegbarFallbackFunktioniertTrotzdem() {

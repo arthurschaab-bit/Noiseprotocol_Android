@@ -148,6 +148,7 @@ fun LiveCockpitCard(
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
     var showEndMeasurementConfirm by remember { mutableStateOf(false) }
     var showDisconnectBluetoothConfirm by remember { mutableStateOf(false) }
+    var zeigeUnkalibriertDialog by remember { mutableStateOf(false) }
 
     // Notification-Aktion "Stoppen" kann selbst keinen Dialog zeigen (siehe PendingUiAction) -
     // sie signalisiert hierueber, dass derselbe Bestaetigungsdialog wie beim In-App-Button
@@ -224,6 +225,31 @@ fun LiveCockpitCard(
     // Mikrofonwert ueberhaupt ein FALLBACK - bei einem reinen Mikrofonlauf ist er schon immer die
     // normale, einzige Quelle und bleibt unveraendert ohne diese Kennzeichnung.
     val istMeterFallback = dienstAktiv && !istMikrofonMessung && !isCalibrated
+
+    // F-37 (Owner-Meldung 30.09.2026): Wer die Messung startet, WAEHREND das Messgeraet getrennt
+    // ist, bekam bisher gar nichts zu sehen - die Session traegt dann eine leere deviceAddress,
+    // gilt also als reiner Mikrofonlauf, und istMeterFallback ist per Definition aus. Eine
+    // unkalibrierte Messung sah damit genauso aus wie eine kalibrierte: dieselbe Zahl, dieselbe
+    // Einheit "dB", kein Zusatz.
+    //
+    // Der Unterschied, den der Code bisher nicht kannte: "ich habe gar kein Geraet" gegen "ich
+    // habe eins, es ist nur nicht dran". Die Antwort steht nicht in der Session, sondern in der
+    // Kopplung.
+    val geraetGepinnt = settings.meterDeviceAddress != null
+    val unkalibriertTrotzGeraet = dienstAktiv && istMikrofonMessung && geraetGepinnt
+
+    // Einmal je Messungsstart, nicht bei jeder Rueckkehr aufs Cockpit (Owner-Entscheidung
+    // 30.09.2026). Ausgeloest wird an der Session-ID, nicht am Dienstzustand: beim Umschalten von
+    // dienstAktiv existiert die Session noch nicht, istMikrofonMessung faellt dann auf die
+    // VORIGE Session zurueck und koennte faelschlich "hatte ein Geraet" melden.
+    val offeneSessionId = offeneSession?.id
+    LaunchedEffect(offeneSessionId, unkalibriertTrotzGeraet) {
+        val id = offeneSessionId
+        if (unkalibriertTrotzGeraet && id != null && settings.unkalibriertHinweisSessionId != id) {
+            settings.unkalibriertHinweisSessionId = id
+            zeigeUnkalibriertDialog = true
+        }
+    }
     // S-3/F-02: der kalibrierte Pegel haengt an der Verbindung, nicht am Dienst. Vor diesem
     // Fix zeigte das Cockpit ohne laufende Messung "--.-", obwohl das Messgeraet Werte lieferte -
     // damit war die Trennung von Verbindung und Aufzeichnung am Geraet nicht nachweisbar
@@ -238,7 +264,7 @@ fun LiveCockpitCard(
     val liveLevel = pegelAnzeige.wert
     val weightingText = when {
         pegelAnzeige.kalibriert -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
-        istMeterFallback -> stringResource(R.string.cockpit_meter_fallback_unit)
+        istMeterFallback || unkalibriertTrotzGeraet -> stringResource(R.string.cockpit_meter_fallback_unit)
         else -> "dB"
     }
 
@@ -536,6 +562,16 @@ fun LiveCockpitCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            if (unkalibriertTrotzGeraet) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.cockpit_unkalibriert_hinweis),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("cockpit_unkalibriert_hinweis"),
+                )
+            }
+
             if (istMeterFallback) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -821,6 +857,28 @@ fun LiveCockpitCard(
             },
             dismissButton = {
                 TextButton(onClick = { showEndMeasurementConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
+    if (zeigeUnkalibriertDialog) {
+        AlertDialog(
+            modifier = Modifier.testTag("dialog_unkalibriert"),
+            onDismissRequest = { zeigeUnkalibriertDialog = false },
+            title = { Text(stringResource(R.string.cockpit_unkalibriert_dialog_titel)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.cockpit_unkalibriert_dialog_text,
+                        settings.meterDeviceName?.takeIf { it.isNotBlank() } ?: "Das Messgerät",
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { zeigeUnkalibriertDialog = false },
+                    modifier = Modifier.testTag("btn_unkalibriert_verstanden"),
+                ) { Text(stringResource(R.string.cockpit_unkalibriert_dialog_ok)) }
             },
         )
     }

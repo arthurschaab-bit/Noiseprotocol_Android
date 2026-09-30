@@ -553,4 +553,8 @@
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
     <string name="meter_auto_connect">Automatisch verbinden</string>
     <string name="meter_auto_connect_hint">Beim Öffnen der App selbsttätig mit dem Messgerät verbinden. Startet keine Aufzeichnung.</string>
+    <string name="cockpit_unkalibriert_hinweis">Messgerät nicht verbunden – Rückfall auf MIC</string>
+    <string name="cockpit_unkalibriert_dialog_titel">Messung läuft unkalibriert</string>
+    <string name="cockpit_unkalibriert_dialog_text">%1$s ist gekoppelt, aber nicht verbunden. Es werden nur unkalibrierte Mikrofonwerte aufgezeichnet – für einen Bericht sind sie angreifbar.</string>
+    <string name="cockpit_unkalibriert_dialog_ok">Verstanden</string>
 </resources>
