@@ -654,6 +654,17 @@
     <string name="drive_sync_now_action">Jetzt synchronisieren</string>
     <string name="drive_disconnect_action">Trennen</string>
     <string name="drive_connect_action">Mit Google Drive verbinden</string>
+    <string name="foto_doku_title">Fotodokumentation</string>
+    <string name="foto_doku_desc">Die Messung läuft bereits. Ein Foto vom Messaufbau belegt später, wie und wo gemessen wurde.</string>
+    <string name="foto_doku_note_label">Notiz zum nächsten Foto (optional)</string>
+    <string name="foto_doku_note_placeholder">z. B. Messgerät 1,5 m über Boden</string>
+    <string name="foto_doku_category_count">%1$s (%2$d/%3$d)</string>
+    <string name="foto_doku_recommended">empfohlen</string>
+    <string name="foto_doku_continue_without_photo">Ohne Foto fortfahren</string>
+    <string name="foto_doku_done">Fertig</string>
+    <string name="foto_doku_confirm_dialog_title">Wirklich ohne Foto fortfahren?</string>
+    <string name="foto_doku_confirm_dialog_desc">Ohne ein Foto vom Messaufbau lässt sich später nicht mehr belegen, wie und wo gemessen wurde.</string>
+    <string name="foto_doku_back">Zurück</string>
     <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
 </resources>

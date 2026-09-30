@@ -652,6 +652,17 @@
     <string name="drive_sync_now_action">Sync now</string>
     <string name="drive_disconnect_action">Disconnect</string>
     <string name="drive_connect_action">Connect with Google Drive</string>
+    <string name="foto_doku_title">Photo documentation</string>
+    <string name="foto_doku_desc">The measurement is already running. A photo of the measurement setup proves later how and where the measurement took place.</string>
+    <string name="foto_doku_note_label">Note for next photo (optional)</string>
+    <string name="foto_doku_note_placeholder">e.g. meter 1.5 m above ground</string>
+    <string name="foto_doku_category_count">%1$s (%2$d/%3$d)</string>
+    <string name="foto_doku_recommended">recommended</string>
+    <string name="foto_doku_continue_without_photo">Continue without photo</string>
+    <string name="foto_doku_done">Done</string>
+    <string name="foto_doku_confirm_dialog_title">Continue without photo?</string>
+    <string name="foto_doku_confirm_dialog_desc">Without a photo of the setup, it cannot be proven later how and where the measurement took place.</string>
+    <string name="foto_doku_back">Back</string>
     <string name="foto_doku_maximum_erreicht">Maximum reached – adjustable in settings</string>
     <string name="cockpit_speicher_knapp">Only %1$s left – the measurement may stop early. You can free up space in the settings.</string>
 </resources>

@@ -95,10 +95,11 @@ class MainActivityNavigationAndroidTest {
         }
         val navController = TestNavHostController(composeRule.activity)
         setNavigationContent(navController)
+        val ohneFotoText = composeRule.activity.getString(R.string.foto_doku_continue_without_photo)
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Ohne Foto fortfahren").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(ohneFotoText).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Ohne Foto fortfahren").performClick()
+        composeRule.onNodeWithText(ohneFotoText).performClick()
         composeRule.waitUntil(10_000) {
             runBlocking { app.container.database.sessionDao().byId(sessionId)?.photoPromptCompleted == true }
         }
@@ -108,7 +109,7 @@ class MainActivityNavigationAndroidTest {
             composeRule.onNodeWithTag("nav_item_main").performClick()
             composeRule.waitForIdle()
             assertEquals(startEntry, navController.currentBackStackEntry!!.id)
-            composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+            composeRule.onNodeWithText(ohneFotoText).assertDoesNotExist()
             assertEquals(sessionId, runBlocking { app.container.database.sessionDao().offeneSession()!!.id })
         }
         runBlocking {
@@ -127,7 +128,7 @@ class MainActivityNavigationAndroidTest {
             )
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+        composeRule.onNodeWithText(ohneFotoText).assertDoesNotExist()
     }
 
     @Test
@@ -260,11 +261,12 @@ class MainActivityNavigationAndroidTest {
             id
         }
         setNavigationContent()
+        val ohneFotoText = composeRule.activity.getString(R.string.foto_doku_continue_without_photo)
         repeat(3) {
             composeRule.onNodeWithTag("nav_item_protokoll").performClick()
             composeRule.onNodeWithTag("nav_item_main").performClick()
             composeRule.waitForIdle()
-            composeRule.onNodeWithText("Ohne Foto fortfahren").assertDoesNotExist()
+            composeRule.onNodeWithText(ohneFotoText).assertDoesNotExist()
         }
         assertEquals(1, runBlocking { app.container.database.dokumentationsFotoDao().fuerSession(sessionId).size })
         assertEquals(sessionId, runBlocking { app.container.database.sessionDao().offeneSession()!!.id })

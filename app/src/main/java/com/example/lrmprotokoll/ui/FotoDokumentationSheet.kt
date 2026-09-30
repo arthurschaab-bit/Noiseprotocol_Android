@@ -146,10 +146,10 @@ fun FotoDokumentationSheet(
 
     ModalBottomSheet(onDismissRequest = { zeigeBestaetigung = true }, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-            Text("Fotodokumentation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.foto_doku_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Die Messung läuft bereits. Ein Foto vom Messaufbau belegt später, wie und wo gemessen wurde.",
+                stringResource(R.string.foto_doku_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -158,8 +158,8 @@ fun FotoDokumentationSheet(
             OutlinedTextField(
                 value = notiz,
                 onValueChange = { notiz = it },
-                label = { Text("Notiz zum nächsten Foto (optional)") },
-                placeholder = { Text("z. B. Messgerät 1,5 m über Boden") },
+                label = { Text(stringResource(R.string.foto_doku_note_label)) },
+                placeholder = { Text(stringResource(R.string.foto_doku_note_placeholder)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("input_foto_notiz"),
             )
@@ -200,11 +200,11 @@ fun FotoDokumentationSheet(
                         },
                         modifier = Modifier.weight(1f).testTag("foto_aufnahme_${kategorie.name}"),
                     ) {
-                        Text("${kategorie.anzeigename} ($anzahl/$maximum)")
+                        Text(stringResource(R.string.foto_doku_category_count, kategorie.anzeigename, anzahl, maximum))
                     }
                     if (pflicht && anzahl == 0) {
                         Text(
-                            "empfohlen",
+                            stringResource(R.string.foto_doku_recommended),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -230,7 +230,7 @@ fun FotoDokumentationSheet(
                 onClick = { ohneRestFortfahren() },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (gezaehlt.value.values.sum() == 0) "Ohne Foto fortfahren" else "Fertig")
+                Text(if (gezaehlt.value.values.sum() == 0) stringResource(R.string.foto_doku_continue_without_photo) else stringResource(R.string.foto_doku_done))
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -245,16 +245,16 @@ fun FotoDokumentationSheet(
                 zeigeBestaetigung = false
                 scope.launch { sheetState.show() }
             },
-            title = { Text("Wirklich ohne Foto fortfahren?") },
+            title = { Text(stringResource(R.string.foto_doku_confirm_dialog_title)) },
             text = {
-                Text("Ohne ein Foto vom Messaufbau lässt sich später nicht mehr belegen, wie und wo gemessen wurde.")
+                Text(stringResource(R.string.foto_doku_confirm_dialog_desc))
             },
             confirmButton = {
                 TextButton(onClick = {
                     zeigeBestaetigung = false
                     ohneRestFortfahren()
                 }) {
-                    Text("Ohne Foto fortfahren")
+                    Text(stringResource(R.string.foto_doku_continue_without_photo))
                 }
             },
             dismissButton = {
@@ -262,7 +262,7 @@ fun FotoDokumentationSheet(
                     zeigeBestaetigung = false
                     scope.launch { sheetState.show() }
                 }) {
-                    Text("Zurück")
+                    Text(stringResource(R.string.foto_doku_back))
                 }
             },
         )
