@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
 import org.junit.Assert.assertTrue
@@ -48,9 +49,9 @@ class DriveStatusCardInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Google Drive Sync").assertIsDisplayed()
-        composeRule.onNodeWithText("Nicht verbunden").assertIsDisplayed()
-        composeRule.onNodeWithText("Mit Google Drive verbinden").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_sync_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_status_pill_disconnected)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_connect_action)).assertIsDisplayed()
 
         composeRule.onNodeWithTag(DRIVE_CONNECT_BUTTON_TAG).performClick()
         assertTrue(connectClicked)
@@ -92,10 +93,10 @@ class DriveStatusCardInstrumentedTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Arthur Tester (tester@gmail.com)").assertIsDisplayed()
-        composeRule.onNodeWithText("Aktiv").assertIsDisplayed()
-        composeRule.onNodeWithText("Status: 120 Zeilen erfolgreich hochgeladen").assertIsDisplayed()
-        composeRule.onNodeWithText("Jetzt synchronisieren").assertIsDisplayed()
-        composeRule.onNodeWithText("Trennen").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_status_pill_active)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_status_prefix, "120 Zeilen erfolgreich hochgeladen")).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_sync_now_action)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_disconnect_action)).assertIsDisplayed()
 
         composeRule.onNodeWithTag(DRIVE_SYNC_NOW_BUTTON_TAG).performClick()
         assertTrue(syncNowClicked)
@@ -128,8 +129,8 @@ class DriveStatusCardInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Gestört").assertIsDisplayed()
-        composeRule.onNodeWithText("Status: Fehler: Ordner nicht gefunden").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_status_pill_error)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_status_prefix, "Fehler: Ordner nicht gefunden")).assertIsDisplayed()
     }
 
     @Test
@@ -156,7 +157,7 @@ class DriveStatusCardInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Wird hochgeladen…").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_uploading_progress)).assertIsDisplayed()
     }
 
     /**
@@ -189,7 +190,11 @@ class DriveStatusCardInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Letzte Datenbank-Sicherung: Noch keine Sicherung hochgeladen").assertIsDisplayed()
+        val expectedSicherung = composeRule.activity.getString(
+            R.string.drive_last_db_backup,
+            composeRule.activity.getString(R.string.drive_no_backup_yet)
+        )
+        composeRule.onNodeWithText(expectedSicherung).assertIsDisplayed()
     }
 
     @Test
@@ -217,6 +222,7 @@ class DriveStatusCardInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText("Letzte Datenbank-Sicherung", substring = true).assertCountEquals(0)
+        val backupPrefix = composeRule.activity.getString(R.string.drive_last_db_backup, "").split(":")[0]
+        composeRule.onAllNodesWithText(backupPrefix, substring = true).assertCountEquals(0)
     }
 }
