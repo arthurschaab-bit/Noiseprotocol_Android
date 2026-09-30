@@ -65,6 +65,8 @@ import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
+import com.example.lrmprotokoll.meter.BadgeTippAktion
+import com.example.lrmprotokoll.meter.badgeTippAktion
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
@@ -748,13 +750,34 @@ fun NoiseProtocolApp(
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
-                        onClick = { showPairingDialog = true },
+                        // F-03, Audit-Punkt 2 (Owner-Entscheidung 29.09.2026): Im Zustand
+                        // "Fehlgeschlagen" mit gepinntem Geraet holt derselbe Tipp den naechsten
+                        // Anlauf sofort, statt den Kopplungsdialog mit 10-Sekunden-Scan zu
+                        // oeffnen. Die Abgrenzung steckt in badgeTippAktion() und ist dort ohne
+                        // Compose geprueft.
+                        onClick = {
+                            when (badgeTippAktion(verbindungszustand, settingsManager.meterDeviceAddress != null)) {
+                                BadgeTippAktion.ERNEUT_VERBINDEN -> {
+                                    container.connectionSupervisor.erneutVersuchen()
+                                    onShowSnackbar(
+                                        context.getString(R.string.meter_erneut_verbinden_angestossen),
+                                        null,
+                                        null,
+                                    )
+                                }
+                                BadgeTippAktion.KOPPLUNGSDIALOG -> showPairingDialog = true
+                            }
+                        },
                         // F-36, Owner-Entscheidung 30.09.2026 (Variante d): hier nur Farbe und
-                        // Punkt. In 84 dp bleiben 50 px fuer die Schrift, gebraucht werden
+                        // Punkt. In 84 dp blieben 50 px fuer die Schrift, gebraucht wurden
                         // 94-148 px - der Text war in allen zehn Zustaenden abgeschnitten. Der
                         // volle Zustand steht in der contentDescription und sichtbar auf dem
-                        // Messgeraet-Screen. Die vier anderen Aufrufstellen behalten den Text:
-                        // sie haben keine Breitenbegrenzung, und fuer sie liegt keine Messung vor.
+                        // Messgeraet-Screen.
+                        //
+                        // Beide Aenderungen zusammengefuehrt (Merge 30.09.2026): F-03 bestimmt,
+                        // WAS der Tipp tut, F-36 WAS zu sehen ist. Sie schliessen einander nicht
+                        // aus - die widthIn-Begrenzung entfaellt mit F-36, weil ohne Text nichts
+                        // mehr abgeschnitten werden kann.
                         zeigeText = false,
                         modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
