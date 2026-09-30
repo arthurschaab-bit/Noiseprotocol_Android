@@ -556,6 +556,7 @@
     <string name="cockpit_unkalibriert_dialog_titel">Measurement is running uncalibrated</string>
     <string name="cockpit_unkalibriert_dialog_text">%1$s is paired but not connected. Only uncalibrated microphone values are being recorded – they are contestable in a report.</string>
     <string name="cockpit_unkalibriert_dialog_ok">Understood</string>
+    <string name="meter_erneut_verbinden_angestossen">New connection attempt started</string>
     <string name="bericht_zeitraum_label">Period</string>
     <string name="bericht_zeitraum_aendern">Change</string>
     <string name="bericht_preset_7">7 days</string>
