@@ -700,4 +700,7 @@
     <string name="report_area_selection_placeholder">Gebiet auswählen</string>
     <string name="report_area_selection_supporting_default">Die Auswahl bestätigt keine behördliche Einstufung. Ungeprüfte Gebietstypen sind nicht auswählbar.</string>
     <string name="report_area_unverified_suffix"> (Zuordnung ungeprüft)</string>
+    <string name="oem_action_allow_notifications">Benachrichtigungen erlauben</string>
+    <string name="oem_action_disable_battery_optimization">Akku-Optimierung aufheben</string>
+    <string name="oem_action_allow_exact_alarms">Exakte Alarme freischalten</string>
 </resources>

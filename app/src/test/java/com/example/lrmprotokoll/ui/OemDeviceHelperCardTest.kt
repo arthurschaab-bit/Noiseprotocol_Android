@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -74,8 +75,8 @@ class OemDeviceHelperCardTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Optimal konfiguriert").assertIsDisplayed()
-        composeRule.onNodeWithText("Akku-Optimierung aufheben").assertIsNotDisplayed()
-        composeRule.onNodeWithText("Benachrichtigungen erlauben").assertIsNotDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_disable_battery_optimization)).assertIsNotDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_allow_notifications)).assertIsNotDisplayed()
     }
 
     @Test
@@ -89,7 +90,7 @@ class OemDeviceHelperCardTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Prüfung nötig").assertIsDisplayed()
-        composeRule.onNodeWithText("Akku-Optimierung aufheben").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_disable_battery_optimization)).assertIsDisplayed().performClick()
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, gestarteteIntent.action)
@@ -105,7 +106,7 @@ class OemDeviceHelperCardTest {
         composeRule.setContent { OemDeviceHelperCard() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Benachrichtigungen erlauben").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_allow_notifications)).assertIsDisplayed().performClick()
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, gestarteteIntent.action)
@@ -121,7 +122,7 @@ class OemDeviceHelperCardTest {
         composeRule.setContent { OemDeviceHelperCard() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Exakte Alarme freischalten").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_allow_exact_alarms)).assertIsDisplayed().performClick()
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, gestarteteIntent.action)

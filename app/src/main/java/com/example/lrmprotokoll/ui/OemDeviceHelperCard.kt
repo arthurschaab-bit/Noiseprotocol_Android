@@ -22,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.ui.theme.statusColors
 import com.example.lrmprotokoll.ui.theme.onStatusContainer
 import com.example.lrmprotokoll.ui.theme.statusContainer
@@ -217,7 +219,7 @@ fun OemDeviceHelperCard(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             .testTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG)
                     ) {
-                        Text("Benachrichtigungen erlauben")
+                        Text(stringResource(R.string.oem_action_allow_notifications))
                     }
                 }
 
@@ -232,7 +234,7 @@ fun OemDeviceHelperCard(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             .testTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG)
                     ) {
-                        Text("Akku-Optimierung aufheben")
+                        Text(stringResource(R.string.oem_action_disable_battery_optimization))
                     }
                 }
 
@@ -247,7 +249,7 @@ fun OemDeviceHelperCard(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             .testTag(OEM_EXACT_ALARM_BUTTON_TAG)
                     ) {
-                        Text("Exakte Alarme freischalten")
+                        Text(stringResource(R.string.oem_action_allow_exact_alarms))
                     }
                 }
 
