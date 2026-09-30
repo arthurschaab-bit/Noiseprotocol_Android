@@ -665,4 +665,14 @@
     <string name="foto_doku_back">Back</string>
     <string name="foto_doku_maximum_erreicht">Maximum reached – adjustable in settings</string>
     <string name="cockpit_speicher_knapp">Only %1$s left – the measurement may stop early. You can free up space in the settings.</string>
+    <string name="meter_pair_dialog_title">Pair PCE-323</string>
+    <string name="meter_rescan_desc">Scan again</string>
+    <string name="meter_bluetooth_permission_desc">Bluetooth permission is required to find the PCE-323.</string>
+    <string name="meter_scan_searching_nearby">Searching for nearby Bluetooth devices…</string>
+    <string name="meter_scan_no_devices_found">No Bluetooth device found. Make sure the PCE-323 is powered on and Bluetooth is active.</string>
+    <string name="meter_device_unknown">(Unknown)</string>
+    <string name="meter_status_paired">Paired</string>
+    <string name="meter_dialog_same_name_title">New device with known name?</string>
+    <string name="meter_dialog_same_name_desc">This device has the same name as your previous one (%1$s), but has the new address %2$s (previously: %3$s).\n\nIf you are connecting a new PCE-323, confirm the pairing. In an unfamiliar environment, this could be a different device.</string>
+    <string name="meter_pair_anyway">Pair anyway</string>
 </resources>

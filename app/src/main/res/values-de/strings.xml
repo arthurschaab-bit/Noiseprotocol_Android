@@ -667,4 +667,14 @@
     <string name="foto_doku_back">Zurück</string>
     <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
+    <string name="meter_pair_dialog_title">PCE-323 koppeln</string>
+    <string name="meter_rescan_desc">Erneut scannen</string>
+    <string name="meter_bluetooth_permission_desc">Um das PCE-323 zu finden, wird die Bluetooth-Berechtigung benötigt.</string>
+    <string name="meter_scan_searching_nearby">Suche nach Bluetooth-Geräten in der Nähe…</string>
+    <string name="meter_scan_no_devices_found">Kein Bluetooth-Gerät gefunden. Stelle sicher, dass das PCE-323 eingeschaltet und Bluetooth aktiv ist.</string>
+    <string name="meter_device_unknown">(Unbekannt)</string>
+    <string name="meter_status_paired">Gekoppelt</string>
+    <string name="meter_dialog_same_name_title">Neues Gerät mit bekanntem Namen?</string>
+    <string name="meter_dialog_same_name_desc">Dieses Gerät heißt wie dein bisheriges (%1$s), hat aber die neue Adresse %2$s (bisher: %3$s).\n\nWenn du ein neues PCE-323 verbindest, bestätige die Kopplung. In fremder Umgebung könnte es sich um ein anderes Gerät handeln.</string>
+    <string name="meter_pair_anyway">Trotzdem koppeln</string>
 </resources>

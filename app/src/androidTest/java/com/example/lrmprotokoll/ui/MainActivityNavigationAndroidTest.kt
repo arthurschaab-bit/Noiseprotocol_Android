@@ -324,10 +324,12 @@ class MainActivityNavigationAndroidTest {
     @Test
     fun topAppBarBluetoothBadgeOeffnetPairingDialogUndBrichtAb() {
         setNavigationContent()
+        val pairTitle = composeRule.activity.getString(R.string.meter_pair_dialog_title)
+        val closeText = composeRule.activity.getString(R.string.action_close)
         composeRule.onNodeWithTag("badge_bluetooth_status").assertIsDisplayed().performClick()
-        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
-        composeRule.onNodeWithText("Schließen").assertIsDisplayed().performClick()
-        composeRule.onNodeWithText("PCE-323 koppeln").assertDoesNotExist()
+        composeRule.onNodeWithText(pairTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(closeText).assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(pairTitle).assertDoesNotExist()
     }
 
     @Test

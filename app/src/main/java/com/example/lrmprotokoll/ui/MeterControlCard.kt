@@ -166,7 +166,7 @@ fun MeterPairingDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("PCE-323 koppeln")
+                Text(stringResource(R.string.meter_pair_dialog_title))
                 if (isScanning) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
@@ -176,7 +176,7 @@ fun MeterPairingDialog(
                             else permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                         }
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Erneut scannen")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.meter_rescan_desc))
                     }
                 }
             }
@@ -190,14 +190,14 @@ fun MeterPairingDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "Bluetooth-Berechtigung erforderlich",
+                                text = stringResource(R.string.permission_bluetooth_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Um das PCE-323 zu finden, wird die Bluetooth-Berechtigung benötigt.",
+                                text = stringResource(R.string.meter_bluetooth_permission_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -208,7 +208,7 @@ fun MeterPairingDialog(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
-                                Text("Berechtigung erteilen")
+                                Text(stringResource(R.string.permission_grant_button))
                             }
                         }
                     }
@@ -221,13 +221,13 @@ fun MeterPairingDialog(
 
                 if (sortierteGeraete.isEmpty() && isScanning) {
                     Text(
-                        "Suche nach Bluetooth-Geräten in der Nähe…",
+                        stringResource(R.string.meter_scan_searching_nearby),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else if (sortierteGeraete.isEmpty() && !isScanning) {
                     Text(
-                        "Kein Bluetooth-Gerät gefunden. Stelle sicher, dass das PCE-323 eingeschaltet und Bluetooth aktiv ist.",
+                        stringResource(R.string.meter_scan_no_devices_found),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -257,13 +257,13 @@ fun MeterPairingDialog(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = device.name ?: "(Unbekannt)",
+                                            text = device.name ?: stringResource(R.string.meter_device_unknown),
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                         )
                                         if (isCurrent) {
                                             Text(
-                                                text = "Gekoppelt",
+                                                text = stringResource(R.string.meter_status_paired),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold
@@ -291,7 +291,7 @@ fun MeterPairingDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Schließen")
+                Text(stringResource(R.string.action_close))
             }
         }
     )
@@ -300,13 +300,15 @@ fun MeterPairingDialog(
         AlertDialog(
             onDismissRequest = { verdaechtigesGeraet = null },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Neues Gerät mit bekanntem Namen?") },
+            title = { Text(stringResource(R.string.meter_dialog_same_name_title)) },
             text = {
                 Text(
-                    "Dieses Gerät heißt wie dein bisheriges (${device.name}), hat aber die neue " +
-                        "Adresse ${device.address} (bisher: $pairedAddress).\n\n" +
-                        "Wenn du ein neues PCE-323 verbindest, bestätige die Kopplung. " +
-                        "In fremder Umgebung könnte es sich um ein anderes Gerät handeln.",
+                    stringResource(
+                        R.string.meter_dialog_same_name_desc,
+                        device.name ?: stringResource(R.string.meter_device_unknown),
+                        device.address,
+                        pairedAddress ?: "",
+                    )
                 )
             },
             confirmButton = {
@@ -317,12 +319,12 @@ fun MeterPairingDialog(
                         onDeviceSelected(d)
                     },
                 ) {
-                    Text("Trotzdem koppeln")
+                    Text(stringResource(R.string.meter_pair_anyway))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { verdaechtigesGeraet = null }) {
-                    Text("Abbrechen")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )

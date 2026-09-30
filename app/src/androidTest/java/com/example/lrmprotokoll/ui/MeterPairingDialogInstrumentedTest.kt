@@ -6,6 +6,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
+import com.example.lrmprotokoll.R
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -51,12 +52,14 @@ class MeterPairingDialogInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("PCE-323 koppeln").assertIsDisplayed()
+        val titleText = composeRule.activity.getString(R.string.meter_pair_dialog_title)
+        val emptyText = composeRule.activity.getString(R.string.meter_scan_no_devices_found)
+        composeRule.onNodeWithText(titleText).assertIsDisplayed()
         // Auf dem CI-Emulator ohne echtes PCE-323 findet der Scan nichts - nach Ablauf des
         // 10s-Scanfensters (SCAN_DURATION_MS) muss der Leerzustand erscheinen, kein Crash.
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             composeRule.onAllNodesWithText(
-                "Kein Bluetooth-Gerät gefunden",
+                emptyText,
                 substring = true,
             ).fetchSemanticsNodes().isNotEmpty()
         }
@@ -75,7 +78,8 @@ class MeterPairingDialogInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Schließen").assertIsDisplayed().performClick()
+        val closeText = composeRule.activity.getString(R.string.action_close)
+        composeRule.onNodeWithText(closeText).assertIsDisplayed().performClick()
 
         assertTrue(dismissed)
     }
@@ -94,9 +98,10 @@ class MeterPairingDialogInstrumentedTest {
 
         // Waehrend des automatisch gestarteten Erst-Scans zeigt der Titel einen
         // Fortschrittsindikator statt des Refresh-Buttons.
+        val rescanDesc = composeRule.activity.getString(R.string.meter_rescan_desc)
         composeRule.waitUntil(timeoutMillis = 15_000L) {
-            composeRule.onAllNodesWithContentDescription("Erneut scannen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithContentDescription(rescanDesc).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithContentDescription("Erneut scannen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(rescanDesc).assertIsDisplayed().performClick()
     }
 }
