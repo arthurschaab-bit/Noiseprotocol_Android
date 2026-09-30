@@ -81,7 +81,7 @@ class BerichtErstellenSheetInstrumentedTest {
         // Ohne Auswahl darf Uebernehmen den Dialog nicht schliessen, sondern muss den Hinweis zeigen.
         composeRule.onNodeWithTag("btn_bericht_datumsbereich_uebernehmen").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Bitte Start- und Enddatum wählen.").assertIsDisplayed()
+        composeRule.onNodeWithText(app.getString(R.string.bericht_select_start_end_date)).assertIsDisplayed()
         composeRule.onNodeWithTag("btn_bericht_datumsbereich_abbrechen").assertIsDisplayed()
 
         // Abbrechen schliesst den Dialog, das Sheet dahinter bleibt offen.
