@@ -579,4 +579,5 @@
     <string name="bericht_wird_erstellt">Bericht wird erstellt …</string>
     <string name="bericht_zeitraum_unvollstaendig">Bitte Start- und Enddatum wählen.</string>
     <string name="bericht_highend_luecke">Der High-End-Bericht deckt den ganzen Zeitraum ab – abgewählte Tage mittendrin sind darin enthalten.</string>
+    <string name="bericht_hindernis_stammdaten_keine">Keine Stammdaten erfasst</string>
 </resources>

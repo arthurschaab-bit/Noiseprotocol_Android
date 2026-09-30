@@ -29,6 +29,8 @@ data class Messtag(
     val rohwerte: Int,
     val integritaet: Integritaetsbefund,
     val fehlendeStammdatenFelder: List<String>,
+    /** `false`, wenn fuer diesen Tag ueberhaupt keine Stammdatenzeile erfasst wurde. */
+    val stammdatenVorhanden: Boolean,
 ) {
     /**
      * Ein Tag mit verdichteten Rohdaten ist nicht mehr berichtsfaehig - die Vorpruefung lehnt ihn
@@ -153,6 +155,7 @@ suspend fun ladeMesstage(
                             ueberlappungMs(it.startedAt, it.endedAt ?: jetzt, von, bis)
                         }
 
+                    val stammdatenZeile = stammdaten.await().firstOrNull()
                     Messtag(
                         datum = datum,
                         von = von,
@@ -169,7 +172,8 @@ suspend fun ladeMesstage(
                                 unbestaetigteWerte = unbestaetigt.await(),
                                 config = config,
                             ),
-                        fehlendeStammdatenFelder = fehlendeStammdatenFelder(stammdaten.await().firstOrNull()),
+                        fehlendeStammdatenFelder = fehlendeStammdatenFelder(stammdatenZeile),
+                        stammdatenVorhanden = stammdatenZeile != null,
                     )
                 }
             }.awaitAll()

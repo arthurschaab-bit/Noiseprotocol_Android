@@ -577,4 +577,5 @@
     <string name="bericht_wird_erstellt">Creating report …</string>
     <string name="bericht_zeitraum_unvollstaendig">Please choose a start and end date.</string>
     <string name="bericht_highend_luecke">The high-end report covers the whole period – deselected days in between are included.</string>
+    <string name="bericht_hindernis_stammdaten_keine">No master data recorded</string>
 </resources>

@@ -524,7 +524,9 @@ private fun Hindernisse(tag: Messtag) {
                 add(stringResource(R.string.bericht_hindernis_verfuegbarkeit, tag.integritaet.verfuegbarkeitProzent.toInt()))
             }
             if (tag.integritaet.unbestaetigteWerte > 0) add(stringResource(R.string.bericht_hindernis_bewertung))
-            if (tag.fehlendeStammdatenFelder.isNotEmpty()) {
+            if (!tag.stammdatenVorhanden) {
+                add(stringResource(R.string.bericht_hindernis_stammdaten_keine))
+            } else if (tag.fehlendeStammdatenFelder.isNotEmpty()) {
                 add(
                     stringResource(
                         R.string.bericht_hindernis_stammdaten,
