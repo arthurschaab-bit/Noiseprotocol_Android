@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.drive.DriveDatei
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -80,8 +81,8 @@ class DriveFolderPickerDialogInstrumentedTest {
 
         // Der Sub-Dialog liegt ueber dem Haupt-Dialog - auf einem echten Geraet muessen beide
         // Buttons wirklich sichtbar sein (siehe Regressionsfall im Datumsbereich-Dialog).
-        composeRule.onNodeWithText("Neuen Ordner erstellen").assertIsDisplayed()
-        composeRule.onNodeWithText("Erstellen & Auswählen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_create_folder_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_create_and_select)).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
         assertEquals("Lärmprotokoll", createdName)

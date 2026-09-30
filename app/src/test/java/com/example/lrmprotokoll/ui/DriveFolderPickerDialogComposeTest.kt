@@ -1,11 +1,14 @@
 package com.example.lrmprotokoll.ui
 
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.drive.DriveDatei
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,6 +24,9 @@ class DriveFolderPickerDialogComposeTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    private val context: Context
+        get() = ApplicationProvider.getApplicationContext()
 
     @Test
     fun dialogZeigtOrdnerlisteUndErlaubtAuswahl() {
@@ -80,8 +86,8 @@ class DriveFolderPickerDialogComposeTest {
         composeRule.waitForIdle()
 
         // Sub-Dialog sichtbar
-        composeRule.onNodeWithText("Neuen Ordner erstellen").assertIsDisplayed()
-        composeRule.onNodeWithText("Erstellen & Auswählen").performClick()
+        composeRule.onNodeWithText(context.getString(R.string.drive_create_folder_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.drive_create_and_select)).performClick()
         composeRule.waitForIdle()
 
         assertEquals("Lärmprotokoll", createdName)

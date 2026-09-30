@@ -598,6 +598,26 @@
     <string name="drive_retry_action">Try again</string>
     <string name="drive_upload_now_action">Upload now</string>
     <string name="drive_resume_action">Resume</string>
+    <string name="drive_create_folder_title">Create new folder</string>
+    <string name="drive_create_folder_message">Enter the name for the new Google Drive folder:</string>
+    <string name="drive_folder_name_label">Folder name</string>
+    <string name="drive_create_folder_error">Could not create folder: %1$s</string>
+    <string name="drive_create_and_select">Create &amp; Select</string>
+    <string name="drive_dialog_cancel">Cancel</string>
+    <string name="drive_rename_folder_title">Rename folder</string>
+    <string name="drive_rename_folder_message">New name for “%1$s”:</string>
+    <string name="drive_rename_folder_label">New name</string>
+    <string name="drive_rename_folder_error">Renaming failed: %1$s</string>
+    <string name="drive_rename_action">Rename</string>
+    <string name="drive_folder_dialog_title">Google Drive folder</string>
+    <string name="drive_refresh_folders_cd">Refresh</string>
+    <string name="drive_folder_dialog_desc">Choose a destination folder for measurement data and WAV recordings or manage existing folders.</string>
+    <string name="drive_loading_folders">Loading Google Drive folders…</string>
+    <string name="drive_no_folders_title">No folders available yet</string>
+    <string name="drive_no_folders_desc">Create a new folder for your measurements now.</string>
+    <string name="drive_new_folder_button">New folder</string>
+    <string name="drive_close_button">Close</string>
+    <string name="drive_load_folders_error">Error loading folders</string>
     <string name="foto_doku_maximum_erreicht">Maximum reached – adjustable in settings</string>
     <string name="cockpit_speicher_knapp">Only %1$s left – the measurement may stop early. You can free up space in the settings.</string>
 </resources>

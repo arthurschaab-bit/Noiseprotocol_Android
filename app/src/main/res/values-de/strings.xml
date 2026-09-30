@@ -600,6 +600,26 @@
     <string name="drive_retry_action">Erneut versuchen</string>
     <string name="drive_upload_now_action">Jetzt hochladen</string>
     <string name="drive_resume_action">Fortsetzen</string>
+    <string name="drive_create_folder_title">Neuen Ordner erstellen</string>
+    <string name="drive_create_folder_message">Gib den Namen für den neuen Google Drive Ordner ein:</string>
+    <string name="drive_folder_name_label">Ordnername</string>
+    <string name="drive_create_folder_error">Ordner konnte nicht erstellt werden: %1$s</string>
+    <string name="drive_create_and_select">Erstellen &amp; Auswählen</string>
+    <string name="drive_dialog_cancel">Abbrechen</string>
+    <string name="drive_rename_folder_title">Ordner umbenennen</string>
+    <string name="drive_rename_folder_message">Neuer Name für „%1$s“:</string>
+    <string name="drive_rename_folder_label">Neuer Name</string>
+    <string name="drive_rename_folder_error">Umbenennen fehlgeschlagen: %1$s</string>
+    <string name="drive_rename_action">Umbenennen</string>
+    <string name="drive_folder_dialog_title">Google Drive Ordner</string>
+    <string name="drive_refresh_folders_cd">Aktualisieren</string>
+    <string name="drive_folder_dialog_desc">Wähle einen Zielordner für Messdaten und WAV-Aufnahmen oder verwalte bestehende Ordner.</string>
+    <string name="drive_loading_folders">Lade Google Drive Ordner…</string>
+    <string name="drive_no_folders_title">Noch keine Ordner vorhanden</string>
+    <string name="drive_no_folders_desc">Erstelle jetzt einen neuen Ordner für deine Messungen.</string>
+    <string name="drive_new_folder_button">Neuer Ordner</string>
+    <string name="drive_close_button">Schließen</string>
+    <string name="drive_load_folders_error">Fehler beim Laden der Ordner</string>
     <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
 </resources>
