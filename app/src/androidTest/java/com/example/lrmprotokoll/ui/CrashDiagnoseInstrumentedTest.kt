@@ -10,6 +10,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.SystemProcessExitSource
@@ -74,12 +75,12 @@ class CrashDiagnoseInstrumentedTest {
 
     @Test
     fun runtimeExceptionHinterlaesstEinAbsturzBundle() {
-        pruefeAbsturz("RuntimeException auslösen", "RuntimeException")
+        pruefeAbsturz(app.getString(R.string.diagnose_crash_runtime_exception), "RuntimeException")
     }
 
     @Test
     fun outOfMemoryErrorHinterlaesstEinAbsturzBundle() {
-        pruefeAbsturz("OutOfMemoryError provozieren", "OutOfMemoryError")
+        pruefeAbsturz(app.getString(R.string.diagnose_crash_oom), "OutOfMemoryError")
     }
 
     @Test
@@ -101,7 +102,7 @@ class CrashDiagnoseInstrumentedTest {
         // Deshalb hier explizit erzwungen, statt laenger auf ein Ereignis zu warten, das ohne
         // dieses Flag nie eintritt.
         device.executeShellCommand("settings put global hide_error_dialogs 1")
-        ausloesen("Main-Thread blockieren (ANR)")
+        ausloesen(app.getString(R.string.diagnose_crash_anr))
         // Erst ein weiteres Eingabeereignis macht den blockierten Main-Thread zum Input-ANR.
         device.pressBack()
         wartenBis("Neuer REASON_ANR fuer den Diagnose-Prozess fehlt") {
@@ -142,7 +143,7 @@ class CrashDiagnoseInstrumentedTest {
                 ?.toSet()
                 .orEmpty()
 
-        ausloesen("Main-Thread blockieren (ANR)")
+        ausloesen(app.getString(R.string.diagnose_crash_anr))
 
         var gefunden: String? = null
         val deadline = SystemClock.elapsedRealtime() + 90_000

@@ -327,6 +327,18 @@
     <string name="diagnose_logging_title">Diagnostic Logging Active</string>
     <string name="diagnose_remote_title">Remote Error Reporting (Sentry)</string>
     <string name="diagnose_reset_button">Reset Diagnostic Data</string>
+    <string name="diagnose_trigger_test_event">Trigger test diagnostic event</string>
+    <string name="diagnose_crash_section_label">Test crash (M12 step 1)</string>
+    <string name="diagnose_crash_runtime_exception">Trigger RuntimeException</string>
+    <string name="diagnose_crash_oom">Provoke OutOfMemoryError</string>
+    <string name="diagnose_crash_anr">Block main thread (ANR)</string>
+    <string name="diagnose_sync_history_row">%1$s · %2$s · %3$d rows</string>
+    <string name="diagnose_id_copied">Diagnosis ID copied to clipboard</string>
+    <string name="diagnose_test_event_sent">Test event sent (%1$s)</string>
+    <string name="diagnose_share_bundle_chooser">Share support bundle…</string>
+    <string name="diagnose_system_dialog_unavailable">The settings for “%1$s” cannot be opened on this device.</string>
+    <string name="diagnose_export_failed">Export failed: %1$s</string>
+    <string name="diagnose_upload_failed">Failed: %1$s</string>
 
     <!-- Trash Screen -->
     <string name="trash_empty_button">Empty Trash</string>
