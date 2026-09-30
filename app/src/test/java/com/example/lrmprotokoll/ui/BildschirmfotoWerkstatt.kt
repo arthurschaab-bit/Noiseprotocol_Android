@@ -178,6 +178,62 @@ class BildschirmfotoWerkstatt {
         app.resetContainer()
     }
 
+    /**
+     * Der Bericht-Reiter nach S-4. Braucht Messwerte, sonst zeigt er nur "In diesem Zeitraum wurde
+     * nicht gemessen" - und genau die Messtagsliste ist der Punkt dieses Umbaus.
+     */
+    @Test
+    @Config(qualifiers = BILDSCHIRM_ECHT)
+    fun berichtReiterMitMesstagen() {
+        val heute = java.time.LocalDate.of(2026, 9, 29)
+        val zone = java.time.ZoneId.systemDefault()
+        listOf(heute, heute.minusDays(1), heute.minusDays(4)).forEach { tag ->
+            kotlinx.coroutines.runBlocking {
+                val id =
+                    app.container.database.sessionDao().insert(
+                        com.example.lrmprotokoll.data.SessionEntity(
+                            startedAt =
+                                tag
+                                    .atTime(10, 0)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli(),
+                            endedAt =
+                                tag
+                                    .atTime(12, 30)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli(),
+                            deviceAddress = "AA:BB",
+                            deviceName = "PCE-323",
+                            weighting = "A",
+                            timeWeighting = "FAST",
+                        ),
+                    )
+                app.container.database.measurementDao().insertAll(
+                    (0 until 40).map { i ->
+                        com.example.lrmprotokoll.data.MeasurementEntity(
+                            sessionId = id,
+                            timestamp =
+                                tag
+                                    .atTime(10, 0)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli() + i * 60_000L,
+                            levelDb = 50.0 + i % 7,
+                            weighting = "A",
+                            timeWeighting = "FAST",
+                            flags = 0,
+                        )
+                    },
+                )
+            }
+        }
+        nimmAuf("bericht_reiter_messtage", R.string.bericht_ausgabe_gesamt_titel) {
+            BerichtScreen(onBack = {}, onOpenSettings = {}, heute = heute)
+        }
+    }
+
     private fun zeigeEinstellungenMitAufgeklappterMessgeraetSektion() {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {

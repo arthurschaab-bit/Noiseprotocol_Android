@@ -82,6 +82,10 @@ interface SessionDao {
      * "laeuft noch", also ebenfalls ueberlappend. */
     @Query("SELECT * FROM sessions WHERE startedAt < :bis AND (endedAt IS NULL OR endedAt >= :von) ORDER BY startedAt")
     suspend fun zwischen(von: Long, bis: Long): List<SessionEntity>
+
+    /** Fuer die Schnellwahl "Alles" im Bericht-Reiter (S-4); `null`, solange nie gemessen wurde. */
+    @Query("SELECT MIN(startedAt) FROM sessions")
+    suspend fun fruehesterStart(): Long?
 }
 
 @Dao
