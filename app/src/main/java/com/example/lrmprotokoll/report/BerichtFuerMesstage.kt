@@ -40,10 +40,11 @@ suspend fun ermittlePeriodenBerichtFuerTage(
     val bis = sortiert.last().bis
 
     val gewaehlteSessionIds = sortiert.flatMap { it.sessionIds }.toSet()
-    val sessions = db
-        .sessionDao()
-        .zwischen(von, bis)
-        .filter { it.id in gewaehlteSessionIds }
+    val sessions =
+        db
+            .sessionDao()
+            .zwischen(von, bis)
+            .filter { it.id in gewaehlteSessionIds }
 
     val messwerte = ladeJeTag(sortiert) { tag -> db.measurementDao().zwischen(tag.von, tag.bis) }
     val events = ladeJeTag(sortiert) { tag -> db.noiseDao().zwischenZeitpunkt(tag.von, tag.bis) }
@@ -70,24 +71,26 @@ suspend fun ermittleGesamtberichtFuerTage(
     require(tage.isNotEmpty()) { "Es wurde kein Messtag gewählt." }
     val sortiert = tage.sortedBy { it.von }
     val gesamt = ermittlePeriodenBerichtFuerTage(db, sortiert)
-    val tagesberichte = coroutineScope {
-        sortiert
-            .map { tag ->
-                async {
-                    val tagesBericht = ermittlePeriodenBericht(db, tag.von, tag.bis)
-                    GesamtberichtTag(
-                        von = tag.von,
-                        bis = tag.bis,
-                        bericht = tagesBericht,
-                        datenverfuegbarkeitProzent = berechneDatenverfuegbarkeitProzent(
-                            tag.von,
-                            tag.bis,
-                            tagesBericht.ausfallbaender,
-                        ),
-                    )
-                }
-            }.awaitAll()
-    }
+    val tagesberichte =
+        coroutineScope {
+            sortiert
+                .map { tag ->
+                    async {
+                        val tagesBericht = ermittlePeriodenBericht(db, tag.von, tag.bis)
+                        GesamtberichtTag(
+                            von = tag.von,
+                            bis = tag.bis,
+                            bericht = tagesBericht,
+                            datenverfuegbarkeitProzent =
+                                berechneDatenverfuegbarkeitProzent(
+                                    tag.von,
+                                    tag.bis,
+                                    tagesBericht.ausfallbaender,
+                                ),
+                        )
+                    }
+                }.awaitAll()
+        }
     return Gesamtbericht(gesamt = gesamt, tage = tagesberichte)
 }
 
@@ -106,13 +109,14 @@ private suspend fun ausfallbaenderFuerTage(
     sessions: List<SessionEntity>,
     tage: List<Messtag>,
 ): List<Ausfallband> {
-    val jeSession = coroutineScope {
-        sessions
-            .map { session ->
-                async { leiteAusfallbaenderAb(db.connectionEventDao().fuerSession(session.id), session.endedAt) }
-            }.awaitAll()
-            .flatten()
-    }
+    val jeSession =
+        coroutineScope {
+            sessions
+                .map { session ->
+                    async { leiteAusfallbaenderAb(db.connectionEventDao().fuerSession(session.id), session.endedAt) }
+                }.awaitAll()
+                .flatten()
+        }
     return jeSession
         .flatMap { band ->
             tage.mapNotNull { tag ->

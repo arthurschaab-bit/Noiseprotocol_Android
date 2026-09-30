@@ -1,10 +1,10 @@
 package com.example.lrmprotokoll.report
 
 import com.example.lrmprotokoll.data.SessionEntity
-import java.time.LocalDate
-import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * S-4: die Messtage der Uebersicht werden aus den Sessions abgeleitet, nicht durch einen Durchlauf
@@ -43,10 +43,11 @@ class MesstagUebersichtTest {
 
     @Test
     fun nurTageMitSessionsZaehlen() {
-        val sessions = listOf(
-            session(1, "2026-09-28T09:00", "2026-09-28T11:00"),
-            session(2, "2026-09-25T14:00", "2026-09-25T15:30"),
-        )
+        val sessions =
+            listOf(
+                session(1, "2026-09-28T09:00", "2026-09-28T11:00"),
+                session(2, "2026-09-25T14:00", "2026-09-25T15:30"),
+            )
 
         val tage = messtageAusSessions(sessions, zeitraum("2026-09-01", "2026-09-30"), zone, millis("2026-09-30T12:00"))
 
@@ -88,10 +89,11 @@ class MesstagUebersichtTest {
 
     @Test
     fun tageAusserhalbDesZeitraumsBleibenDraussen() {
-        val sessions = listOf(
-            session(1, "2026-09-27T22:30", "2026-09-28T06:15"),
-            session(2, "2026-09-30T10:00", "2026-09-30T11:00"),
-        )
+        val sessions =
+            listOf(
+                session(1, "2026-09-27T22:30", "2026-09-28T06:15"),
+                session(2, "2026-09-30T10:00", "2026-09-30T11:00"),
+            )
 
         val tage = messtageAusSessions(sessions, zeitraum("2026-09-28", "2026-09-29"), zone, millis("2026-09-30T12:00"))
 

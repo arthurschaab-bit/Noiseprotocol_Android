@@ -71,21 +71,35 @@ class ExportFehlerbehandlungComposeTest {
      * Seit S-4 arbeitet der Bericht-Reiter auf einer Auswahl von Messtagen: ohne Messwerte gibt es
      * nichts zu waehlen und die Ausgaben sind gesperrt. Diese Helferin legt genau einen Messtag an.
      */
-    private fun legeMesstagAn(app: LaermprotokollApp, tag: LocalDate) {
+    private fun legeMesstagAn(
+        app: LaermprotokollApp,
+        tag: LocalDate,
+    ) {
         val zone = ZoneId.systemDefault()
-        val beginn = tag.atTime(10, 0).atZone(zone).toInstant().toEpochMilli()
-        val ende = tag.atTime(11, 0).atZone(zone).toInstant().toEpochMilli()
+        val beginn =
+            tag
+                .atTime(10, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
+        val ende =
+            tag
+                .atTime(11, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
         runBlocking(Dispatchers.IO) {
-            val id = app.container.database.sessionDao().insert(
-                SessionEntity(
-                    startedAt = beginn,
-                    endedAt = ende,
-                    deviceAddress = "AA:BB",
-                    deviceName = "PCE-323",
-                    weighting = "A",
-                    timeWeighting = "FAST",
-                ),
-            )
+            val id =
+                app.container.database.sessionDao().insert(
+                    SessionEntity(
+                        startedAt = beginn,
+                        endedAt = ende,
+                        deviceAddress = "AA:BB",
+                        deviceName = "PCE-323",
+                        weighting = "A",
+                        timeWeighting = "FAST",
+                    ),
+                )
             app.container.database.measurementDao().insertAll(
                 listOf(
                     MeasurementEntity(

@@ -38,15 +38,15 @@ import com.example.lrmprotokoll.report.ermittleGesamtberichtFuerTage
 import com.example.lrmprotokoll.report.ermittlePeriodenBerichtFuerTage
 import com.example.lrmprotokoll.report.ladeMesstage
 import com.example.lrmprotokoll.ui.theme.statusColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** Vorbelegung des Zeitraums (Owner-Entscheidung 30.09.2026): die letzten 30 Tage. */
 private const val STANDARD_ZEITRAUM_TAGE = 30L
@@ -103,28 +103,30 @@ fun BerichtScreen(
     // uebernommen, damit der dortige Schnellzugriff erhalten bleibt.
     var letzteMessungZeitraum by remember { mutableStateOf<BerichtZeitraum?>(null) }
     LaunchedEffect(Unit) {
-        letzteMessungZeitraum = withContext(Dispatchers.IO) {
-            val session = runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
-            val zone = ZoneId.systemDefault()
-            session?.endedAt?.let { ende ->
-                runCatching {
-                    BerichtZeitraum(
-                        Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
-                        Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
-                    )
-                }.getOrNull()
+        letzteMessungZeitraum =
+            withContext(Dispatchers.IO) {
+                val session = runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
+                val zone = ZoneId.systemDefault()
+                session?.endedAt?.let { ende ->
+                    runCatching {
+                        BerichtZeitraum(
+                            Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
+                            Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
+                        )
+                    }.getOrNull()
+                }
             }
-        }
     }
 
     // Ein neuer Zeitraum hakt alle Messtage an; nicht berichtsfaehige bleiben aus und gesperrt
     // (Owner-Entscheidung 30.09.2026).
     LaunchedEffect(zeitraum) {
         laedt = true
-        val geladen = withContext(Dispatchers.IO) {
-            val config = runCatching { db.reportConfigDao().get() }.getOrNull() ?: ReportConfigEntity()
-            runCatching { ladeMesstage(db, zeitraum, config) }.getOrDefault(emptyList())
-        }
+        val geladen =
+            withContext(Dispatchers.IO) {
+                val config = runCatching { db.reportConfigDao().get() }.getOrNull() ?: ReportConfigEntity()
+                runCatching { ladeMesstage(db, zeitraum, config) }.getOrDefault(emptyList())
+            }
         messtage = geladen
         abgewaehlt = geladen.filterNot { it.berichtsfaehig }.map { it.datum }.toSet()
         laedt = false
@@ -160,22 +162,25 @@ fun BerichtScreen(
         val tage = gewaehlteTage
         wirdErstellt = true
         scope.launch {
-            val ergebnis = runCatching {
-                if (alsGesamtbericht) {
-                    val datei = withContext(Dispatchers.IO) {
-                        val bericht = ermittleGesamtberichtFuerTage(db, tage)
-                        val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
-                        gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
+            val ergebnis =
+                runCatching {
+                    if (alsGesamtbericht) {
+                        val datei =
+                            withContext(Dispatchers.IO) {
+                                val bericht = ermittleGesamtberichtFuerTage(db, tage)
+                                val stammdaten = GesamtberichtStammdaten.ausVerlauf(db.stammdatenVerlaufDao())
+                                gesamtberichtExport.exportierePdf(bericht, stammdaten, "Lärmprotokoll – Gesamtbericht")
+                            }
+                        gesamtberichtExport.teilen(datei)
+                    } else {
+                        val datei =
+                            withContext(Dispatchers.IO) {
+                                val bericht = ermittlePeriodenBerichtFuerTage(db, tage)
+                                periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
+                            }
+                        periodenExport.teilen(datei)
                     }
-                    gesamtberichtExport.teilen(datei)
-                } else {
-                    val datei = withContext(Dispatchers.IO) {
-                        val bericht = ermittlePeriodenBerichtFuerTage(db, tage)
-                        periodenExport.exportierePdf(bericht, "Lärmprotokoll – Zeitraumbericht")
-                    }
-                    periodenExport.teilen(datei)
                 }
-            }
             wirdErstellt = false
             ergebnis.onFailure {
                 meldeFehler(it, if (alsGesamtbericht) "exportGesamtbericht" else "exportZeitraumbericht")
@@ -194,11 +199,13 @@ fun BerichtScreen(
      * BerichtErstellenSheetTest beim Umbau nachgewiesen.
      */
     fun oeffneHighEnd() {
-        val luecke = gewaehlteTage.isNotEmpty() && messtage.any { tag ->
-            tag.datum in abgewaehlt &&
-                tag.datum.isAfter(gewaehlteTage.last().datum) &&
-                tag.datum.isBefore(gewaehlteTage.first().datum)
-        }
+        val luecke =
+            gewaehlteTage.isNotEmpty() &&
+                messtage.any { tag ->
+                    tag.datum in abgewaehlt &&
+                        tag.datum.isAfter(gewaehlteTage.last().datum) &&
+                        tag.datum.isBefore(gewaehlteTage.first().datum)
+                }
         if (luecke) onShowSnackbar?.invoke(context.getString(R.string.bericht_highend_luecke))
         zeigeHighEndSheet = true
     }
@@ -247,12 +254,14 @@ fun BerichtScreen(
                 onWaehle = ::setzeZeitraum,
                 onAlles = {
                     scope.launch {
-                        val frueheste = withContext(Dispatchers.IO) {
-                            runCatching { db.sessionDao().fruehesterStart() }.getOrNull()
-                        }
-                        val ersterTag = frueheste
-                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
-                            ?: heute
+                        val frueheste =
+                            withContext(Dispatchers.IO) {
+                                runCatching { db.sessionDao().fruehesterStart() }.getOrNull()
+                            }
+                        val ersterTag =
+                            frueheste
+                                ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
+                                ?: heute
                         setzeZeitraum(BerichtZeitraum(minOf(ersterTag, heute), heute))
                     }
                 },
@@ -269,11 +278,12 @@ fun BerichtScreen(
                     val alleGewaehlt = gewaehlteTage.size == waehlbareTage.size
                     TextButton(
                         onClick = {
-                            abgewaehlt = if (alleGewaehlt) {
-                                messtage.map { it.datum }.toSet()
-                            } else {
-                                messtage.filterNot { it.berichtsfaehig }.map { it.datum }.toSet()
-                            }
+                            abgewaehlt =
+                                if (alleGewaehlt) {
+                                    messtage.map { it.datum }.toSet()
+                                } else {
+                                    messtage.filterNot { it.berichtsfaehig }.map { it.datum }.toSet()
+                                }
                         },
                         modifier = Modifier.testTag("btn_bericht_alle_umschalten"),
                     ) {
@@ -302,11 +312,12 @@ fun BerichtScreen(
                                     tag = tag,
                                     gewaehlt = tag.datum !in abgewaehlt,
                                     onUmschalten = {
-                                        abgewaehlt = if (tag.datum in abgewaehlt) {
-                                            abgewaehlt - tag.datum
-                                        } else {
-                                            abgewaehlt + tag.datum
-                                        }
+                                        abgewaehlt =
+                                            if (tag.datum in abgewaehlt) {
+                                                abgewaehlt - tag.datum
+                                            } else {
+                                                abgewaehlt + tag.datum
+                                            }
                                     },
                                 )
                             }
@@ -350,9 +361,10 @@ fun BerichtScreen(
         BerichtErstellenSheet(
             onFertig = { zeigeHighEndSheet = false },
             runner = highEndRunner ?: { parameter -> ChaquopyReportRunner(context).erzeugeBericht(parameter) },
-            initialRange = auswahl
-                .takeIf { it.isNotEmpty() }
-                ?.let { BerichtZeitraum(it.last().datum, it.first().datum) },
+            initialRange =
+                auswahl
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { BerichtZeitraum(it.last().datum, it.first().datum) },
             recentRange = letzteMessungZeitraum,
         )
     }
@@ -396,15 +408,16 @@ private fun Schnellwahl(
     onWaehle: (BerichtZeitraum) -> Unit,
     onAlles: () -> Unit,
 ) {
-    val presets = listOf(
-        Triple(R.string.bericht_preset_7, "btn_bericht_preset_7", BerichtZeitraum(heute.minusDays(6), heute)),
-        Triple(R.string.bericht_preset_30, "btn_bericht_preset_30", BerichtZeitraum(heute.minusDays(29), heute)),
-        Triple(
-            R.string.bericht_preset_monat,
-            "btn_bericht_preset_monat",
-            BerichtZeitraum(heute.withDayOfMonth(1), heute),
-        ),
-    )
+    val presets =
+        listOf(
+            Triple(R.string.bericht_preset_7, "btn_bericht_preset_7", BerichtZeitraum(heute.minusDays(6), heute)),
+            Triple(R.string.bericht_preset_30, "btn_bericht_preset_30", BerichtZeitraum(heute.minusDays(29), heute)),
+            Triple(
+                R.string.bericht_preset_monat,
+                "btn_bericht_preset_monat",
+                BerichtZeitraum(heute.withDayOfMonth(1), heute),
+            ),
+        )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
         presets.forEach { (textRes, tag, bereich) ->
             FilterChip(
@@ -430,18 +443,20 @@ private fun Messtagszeile(
     onUmschalten: () -> Unit,
 ) {
     val farben = MaterialTheme.colorScheme.statusColors
-    val punkt: Color = when (tag.integritaet.stufe) {
-        Messintegritaet.VOLLSTAENDIG -> farben.connected
-        Messintegritaet.EINGESCHRAENKT -> farben.warning
-        Messintegritaet.LUECKENHAFT -> farben.error
-    }
+    val punkt: Color =
+        when (tag.integritaet.stufe) {
+            Messintegritaet.VOLLSTAENDIG -> farben.connected
+            Messintegritaet.EINGESCHRAENKT -> farben.warning
+            Messintegritaet.LUECKENHAFT -> farben.error
+        }
     val stunden = tag.messdauerMs / 3_600_000
     val minuten = (tag.messdauerMs % 3_600_000) / 60_000
-    val messreihen = if (tag.sessionIds.size == 1) {
-        stringResource(R.string.bericht_tag_eine_messreihe)
-    } else {
-        stringResource(R.string.bericht_tag_messreihen, tag.sessionIds.size)
-    }
+    val messreihen =
+        if (tag.sessionIds.size == 1) {
+            stringResource(R.string.bericht_tag_eine_messreihe)
+        } else {
+            stringResource(R.string.bericht_tag_messreihen, tag.sessionIds.size)
+        }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp).testTag("messtag_${tag.datum}"),
@@ -470,10 +485,11 @@ private fun Messtagszeile(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(punkt),
+                                modifier =
+                                    Modifier
+                                        .size(7.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(punkt),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(tag.integritaet.stufe.anzeigetext(), style = MaterialTheme.typography.labelSmall)
@@ -498,24 +514,25 @@ private fun Messtagszeile(
 
 @Composable
 private fun Hindernisse(tag: Messtag) {
-    val zeilen = buildList {
-        if (tag.integritaet.rohdatenVerdichtet) add(stringResource(R.string.bericht_hindernis_verdichtet))
-        if (!tag.integritaet.rohdatenVerdichtet && tag.rohwerte == 0) {
-            add(stringResource(R.string.bericht_hindernis_ohne_rohwerte))
+    val zeilen =
+        buildList {
+            if (tag.integritaet.rohdatenVerdichtet) add(stringResource(R.string.bericht_hindernis_verdichtet))
+            if (!tag.integritaet.rohdatenVerdichtet && tag.rohwerte == 0) {
+                add(stringResource(R.string.bericht_hindernis_ohne_rohwerte))
+            }
+            if (tag.integritaet.stufe != Messintegritaet.VOLLSTAENDIG && !tag.integritaet.rohdatenVerdichtet) {
+                add(stringResource(R.string.bericht_hindernis_verfuegbarkeit, tag.integritaet.verfuegbarkeitProzent.toInt()))
+            }
+            if (tag.integritaet.unbestaetigteWerte > 0) add(stringResource(R.string.bericht_hindernis_bewertung))
+            if (tag.fehlendeStammdatenFelder.isNotEmpty()) {
+                add(
+                    stringResource(
+                        R.string.bericht_hindernis_stammdaten,
+                        tag.fehlendeStammdatenFelder.take(3).joinToString(", "),
+                    ),
+                )
+            }
         }
-        if (tag.integritaet.stufe != Messintegritaet.VOLLSTAENDIG && !tag.integritaet.rohdatenVerdichtet) {
-            add(stringResource(R.string.bericht_hindernis_verfuegbarkeit, tag.integritaet.verfuegbarkeitProzent.toInt()))
-        }
-        if (tag.integritaet.unbestaetigteWerte > 0) add(stringResource(R.string.bericht_hindernis_bewertung))
-        if (tag.fehlendeStammdatenFelder.isNotEmpty()) {
-            add(
-                stringResource(
-                    R.string.bericht_hindernis_stammdaten,
-                    tag.fehlendeStammdatenFelder.take(3).joinToString(", "),
-                ),
-            )
-        }
-    }
     zeilen.forEach {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     }
@@ -609,10 +626,19 @@ private fun ZeitraumDialog(
     onUnvollstaendig: () -> Unit,
     onUebernehmen: (BerichtZeitraum) -> Unit,
 ) {
-    val picker = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = vorauswahl.ersterTag.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
-        initialSelectedEndDateMillis = vorauswahl.letzterTag.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
-    )
+    val picker =
+        rememberDateRangePickerState(
+            initialSelectedStartDateMillis =
+                vorauswahl.ersterTag
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli(),
+            initialSelectedEndDateMillis =
+                vorauswahl.letzterTag
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli(),
+        )
     Dialog(onDismissRequest = onAbbrechen, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {

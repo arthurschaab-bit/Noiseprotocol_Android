@@ -7,11 +7,11 @@ import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.Integritaetsbefund
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.leiteAusfallbaenderAb
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Ein Messtag, wie ihn der Bericht-Reiter auflistet (S-4).
@@ -100,52 +100,58 @@ suspend fun ladeMesstage(
     zone: ZoneId = ZoneId.systemDefault(),
     jetzt: Long = System.currentTimeMillis(),
 ): List<Messtag> {
-    val (zeitraumVon, zeitraumBis) = messtagGrenzen(zeitraum.ersterTag, zone).first to
-        messtagGrenzen(zeitraum.letzterTag, zone).second
+    val (zeitraumVon, zeitraumBis) =
+        messtagGrenzen(zeitraum.ersterTag, zone).first to
+            messtagGrenzen(zeitraum.letzterTag, zone).second
     val sessions = db.sessionDao().zwischen(zeitraumVon, zeitraumBis)
     val tage = messtageAusSessions(sessions, zeitraum, zone, jetzt)
     if (tage.isEmpty()) return emptyList()
 
-    val ausfallbaenderJeSession = coroutineScope {
-        sessions
-            .map { session ->
-                async {
-                    session.id to leiteAusfallbaenderAb(
-                        db.connectionEventDao().fuerSession(session.id),
-                        session.endedAt,
-                    )
-                }
-            }.awaitAll()
-            .toMap()
-    }
+    val ausfallbaenderJeSession =
+        coroutineScope {
+            sessions
+                .map { session ->
+                    async {
+                        session.id to
+                            leiteAusfallbaenderAb(
+                                db.connectionEventDao().fuerSession(session.id),
+                                session.endedAt,
+                            )
+                    }
+                }.awaitAll()
+                .toMap()
+        }
 
     return coroutineScope {
         tage
             .map { datum ->
                 async {
                     val (von, bis) = messtagGrenzen(datum, zone)
-                    val tagesSessions = sessions.filter { session ->
-                        ueberlappungMs(session.startedAt, session.endedAt ?: jetzt, von, bis) > 0
-                    }
+                    val tagesSessions =
+                        sessions.filter { session ->
+                            ueberlappungMs(session.startedAt, session.endedAt ?: jetzt, von, bis) > 0
+                        }
                     val rohwerte = async { db.measurementDao().anzahlZwischen(von, bis) }
                     val verdichtet = async { db.minuteAggregateDao().anzahlZwischen(von, bis) }
                     val unbestaetigt = async { db.measurementDao().anzahlUnbestaetigtZwischen(von, bis) }
                     val stammdaten = async { db.stammdatenVerlaufDao().fuerTag(von, bis) }
 
-                    val baender = tagesSessions
-                        .flatMap { ausfallbaenderJeSession[it.id].orEmpty() }
-                        .mapNotNull { band ->
-                            val geschnittenesVon = maxOf(band.von, von)
-                            val geschnittenesBis = minOf(band.bis ?: bis, bis)
-                            if (geschnittenesBis > geschnittenesVon) {
-                                Ausfallband(geschnittenesVon, geschnittenesBis)
-                            } else {
-                                null
+                    val baender =
+                        tagesSessions
+                            .flatMap { ausfallbaenderJeSession[it.id].orEmpty() }
+                            .mapNotNull { band ->
+                                val geschnittenesVon = maxOf(band.von, von)
+                                val geschnittenesBis = minOf(band.bis ?: bis, bis)
+                                if (geschnittenesBis > geschnittenesVon) {
+                                    Ausfallband(geschnittenesVon, geschnittenesBis)
+                                } else {
+                                    null
+                                }
                             }
+                    val messdauer =
+                        tagesSessions.sumOf {
+                            ueberlappungMs(it.startedAt, it.endedAt ?: jetzt, von, bis)
                         }
-                    val messdauer = tagesSessions.sumOf {
-                        ueberlappungMs(it.startedAt, it.endedAt ?: jetzt, von, bis)
-                    }
 
                     Messtag(
                         datum = datum,
@@ -154,14 +160,15 @@ suspend fun ladeMesstage(
                         sessionIds = tagesSessions.map { it.id },
                         messdauerMs = messdauer,
                         rohwerte = rohwerte.await(),
-                        integritaet = bewerteMessintegritaet(
-                            von = von,
-                            bis = bis,
-                            ausfallbaender = baender,
-                            verdichteteMinuten = verdichtet.await(),
-                            unbestaetigteWerte = unbestaetigt.await(),
-                            config = config,
-                        ),
+                        integritaet =
+                            bewerteMessintegritaet(
+                                von = von,
+                                bis = bis,
+                                ausfallbaender = baender,
+                                verdichteteMinuten = verdichtet.await(),
+                                unbestaetigteWerte = unbestaetigt.await(),
+                                config = config,
+                            ),
                         fehlendeStammdatenFelder = fehlendeStammdatenFelder(stammdaten.await().firstOrNull()),
                     )
                 }
