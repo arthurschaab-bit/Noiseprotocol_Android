@@ -749,7 +749,14 @@ fun NoiseProtocolApp(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
                         onClick = { showPairingDialog = true },
-                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status"),
+                        // F-36, Owner-Entscheidung 30.09.2026 (Variante d): hier nur Farbe und
+                        // Punkt. In 84 dp bleiben 50 px fuer die Schrift, gebraucht werden
+                        // 94-148 px - der Text war in allen zehn Zustaenden abgeschnitten. Der
+                        // volle Zustand steht in der contentDescription und sichtbar auf dem
+                        // Messgeraet-Screen. Die vier anderen Aufrufstellen behalten den Text:
+                        // sie haben keine Breitenbegrenzung, und fuer sie liegt keine Messung vor.
+                        zeigeText = false,
+                        modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
 
                     Box {
