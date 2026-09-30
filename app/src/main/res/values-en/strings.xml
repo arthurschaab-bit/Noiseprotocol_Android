@@ -567,7 +567,6 @@
     <string name="bericht_hindernis_stammdaten">Missing master data: %1$s</string>
     <string name="bericht_hindernis_verfuegbarkeit">Only %1$d %% availability</string>
     <string name="bericht_hindernis_bewertung">A/time weighting not confirmed</string>
-    <string name="bericht_ausgabe_ueberschrift">Create report</string>
     <string name="bericht_ausgabe_uebersicht_titel">Overview (quick)</string>
     <string name="bericht_ausgabe_uebersicht_text">Key figures, level history, outages and events.</string>
     <string name="bericht_ausgabe_gesamt_titel">Full report</string>

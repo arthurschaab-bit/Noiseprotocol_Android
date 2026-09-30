@@ -569,7 +569,6 @@
     <string name="bericht_hindernis_stammdaten">Stammdaten fehlen: %1$s</string>
     <string name="bericht_hindernis_verfuegbarkeit">Nur %1$d %% Verfügbarkeit</string>
     <string name="bericht_hindernis_bewertung">A-/Zeitbewertung nicht bestätigt</string>
-    <string name="bericht_ausgabe_ueberschrift">Bericht erstellen</string>
     <string name="bericht_ausgabe_uebersicht_titel">Übersicht (schnell)</string>
     <string name="bericht_ausgabe_uebersicht_text">Kennwerte, Pegelverlauf, Ausfälle und Ereignisse.</string>
     <string name="bericht_ausgabe_gesamt_titel">Gesamtbericht</string>
