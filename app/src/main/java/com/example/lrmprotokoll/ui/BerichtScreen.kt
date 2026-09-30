@@ -99,24 +99,16 @@ fun BerichtScreen(
     var wirdErstellt by remember { mutableStateOf(false) }
     var zeigeMenue by remember { mutableStateOf(false) }
 
-    // Vorbelegung "letzte Messung" im High-End-Sheet - unveraendert aus dem alten Bildschirm
-    // uebernommen, damit der dortige Schnellzugriff erhalten bleibt.
+    /**
+     * Die Vorbelegung des High-End-Sheets wird **beim Oeffnen** aufgeloest, nicht vorab.
+     *
+     * [BerichtErstellenSheet] liest `initialRange` genau einmal (`remember { mutableStateOf(...) }`).
+     * Wuerde sie asynchron nachgeladen, waere das Sheet bei schnellem Tippen dauerhaft leer - ein
+     * Rennen, das der alte Bildschirm durch dieselbe Reihenfolge vermieden hat.
+     */
+    var highEndZeitraum by remember { mutableStateOf<BerichtZeitraum?>(null) }
     var letzteMessungZeitraum by remember { mutableStateOf<BerichtZeitraum?>(null) }
-    LaunchedEffect(Unit) {
-        letzteMessungZeitraum =
-            withContext(Dispatchers.IO) {
-                val session = runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
-                val zone = ZoneId.systemDefault()
-                session?.endedAt?.let { ende ->
-                    runCatching {
-                        BerichtZeitraum(
-                            Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
-                            Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
-                        )
-                    }.getOrNull()
-                }
-            }
-    }
+    var highEndWirdVorbereitet by remember { mutableStateOf(false) }
 
     // Ein neuer Zeitraum hakt alle Messtage an; nicht berichtsfaehige bleiben aus und gesperrt
     // (Owner-Entscheidung 30.09.2026).
@@ -188,26 +180,48 @@ fun BerichtScreen(
         }
     }
 
-    /**
-     * Der High-End-Bericht arbeitet ueber einen zusammenhaengenden Zeitraum - er kann eine Luecke
-     * mitten in der Auswahl nicht abbilden. Wer eine hat, erfaehrt das, statt dass das PDF still
-     * mehr enthaelt als gewaehlt.
-     *
-     * **Ohne Auswahl trotzdem erreichbar**, anders als die beiden anderen Ausgaben: das Sheet
-     * bringt einen eigenen Datumswaehler und eine eigene Vorpruefung mit. Waere der Einstieg an
-     * die Auswahl gebunden, kaeme man bei leerem Zeitraum gar nicht mehr hinein - genau das hat
-     * BerichtErstellenSheetTest beim Umbau nachgewiesen.
-     */
     fun oeffneHighEnd() {
+        if (highEndWirdVorbereitet) return
+        val auswahl = gewaehlteTage
         val luecke =
-            gewaehlteTage.isNotEmpty() &&
+            auswahl.isNotEmpty() &&
                 messtage.any { tag ->
                     tag.datum in abgewaehlt &&
-                        tag.datum.isAfter(gewaehlteTage.last().datum) &&
-                        tag.datum.isBefore(gewaehlteTage.first().datum)
+                        tag.datum.isAfter(auswahl.last().datum) &&
+                        tag.datum.isBefore(auswahl.first().datum)
                 }
         if (luecke) onShowSnackbar?.invoke(context.getString(R.string.bericht_highend_luecke))
-        zeigeHighEndSheet = true
+        highEndWirdVorbereitet = true
+        scope.launch {
+            val zone = ZoneId.systemDefault()
+            val letzte =
+                withContext(Dispatchers.IO) {
+                    val session = runCatching { db.sessionDao().letzteBeendete() }.getOrNull()
+                    session?.endedAt?.let { ende ->
+                        runCatching {
+                            BerichtZeitraum(
+                                Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate(),
+                                Instant.ofEpochMilli(ende).atZone(zone).toLocalDate(),
+                            )
+                        }.getOrNull()
+                    }
+                }
+            val gespeichert =
+                container.settingsManager.letzterHighEndBerichtszeitraum()?.let { (von, bis) ->
+                    runCatching { BerichtZeitraum(LocalDate.ofEpochDay(von), LocalDate.ofEpochDay(bis)) }.getOrNull()
+                }
+            // Reihenfolge wie vor S-4, nur mit der Tagesauswahl davor: was hier gewaehlt ist,
+            // schlaegt die Vorbelegungen; sonst greift die Kette aus F-28 weiter.
+            letzteMessungZeitraum = letzte
+            highEndZeitraum = auswahl
+                .takeIf { it.isNotEmpty() }
+                ?.let { BerichtZeitraum(it.last().datum, it.first().datum) }
+                ?: initialHighEndRange
+                ?: gespeichert
+                ?: letzte
+            highEndWirdVorbereitet = false
+            zeigeHighEndSheet = true
+        }
     }
 
     Scaffold(
@@ -357,14 +371,10 @@ fun BerichtScreen(
     }
 
     if (zeigeHighEndSheet) {
-        val auswahl = gewaehlteTage
         BerichtErstellenSheet(
             onFertig = { zeigeHighEndSheet = false },
             runner = highEndRunner ?: { parameter -> ChaquopyReportRunner(context).erzeugeBericht(parameter) },
-            initialRange =
-                auswahl
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { BerichtZeitraum(it.last().datum, it.first().datum) },
+            initialRange = highEndZeitraum,
             recentRange = letzteMessungZeitraum,
         )
     }
