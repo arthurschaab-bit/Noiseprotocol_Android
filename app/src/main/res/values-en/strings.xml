@@ -675,4 +675,16 @@
     <string name="meter_dialog_same_name_title">New device with known name?</string>
     <string name="meter_dialog_same_name_desc">This device has the same name as your previous one (%1$s), but has the new address %2$s (previously: %3$s).\n\nIf you are connecting a new PCE-323, confirm the pairing. In an unfamiliar environment, this could be a different device.</string>
     <string name="meter_pair_anyway">Pair anyway</string>
+    <string name="protocol_evidence_videos_count">Evidence videos (%1$d)</string>
+    <string name="protocol_photos_count">Photos (%1$d)</string>
+    <string name="protocol_from_gallery">From gallery</string>
+    <string name="protocol_no_photos_yet">No photos for this session yet.</string>
+    <string name="protocol_gallery_category_title">Select category</string>
+    <string name="protocol_gallery_category_question">%1$d photo(s) from gallery – assign to which category?</string>
+    <string name="protocol_video_status_mux_failed">without audio (merge failed)</string>
+    <string name="protocol_video_status_muxing">Adding audio …</string>
+    <string name="protocol_video_status_with_audio">with audio</string>
+    <string name="protocol_video_status_no_mic">without audio (mic was not running)</string>
+    <string name="protocol_video_playback_error">Video not available or no playback app found</string>
+    <string name="protocol_default_noise_label">Noise event</string>
 </resources>

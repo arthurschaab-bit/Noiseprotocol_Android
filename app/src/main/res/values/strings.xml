@@ -677,4 +677,16 @@
     <string name="meter_dialog_same_name_title">Neues Gerät mit bekanntem Namen?</string>
     <string name="meter_dialog_same_name_desc">Dieses Gerät heißt wie dein bisheriges (%1$s), hat aber die neue Adresse %2$s (bisher: %3$s).\n\nWenn du ein neues PCE-323 verbindest, bestätige die Kopplung. In fremder Umgebung könnte es sich um ein anderes Gerät handeln.</string>
     <string name="meter_pair_anyway">Trotzdem koppeln</string>
+    <string name="protocol_evidence_videos_count">Beweisvideos (%1$d)</string>
+    <string name="protocol_photos_count">Fotos (%1$d)</string>
+    <string name="protocol_from_gallery">Aus Galerie</string>
+    <string name="protocol_no_photos_yet">Noch keine Fotos für diese Session.</string>
+    <string name="protocol_gallery_category_title">Kategorie wählen</string>
+    <string name="protocol_gallery_category_question">%1$d Foto(s) aus der Galerie – welcher Kategorie zuordnen?</string>
+    <string name="protocol_video_status_mux_failed">ohne Ton (Zusammenführen fehlgeschlagen)</string>
+    <string name="protocol_video_status_muxing">Ton wird hinzugefügt …</string>
+    <string name="protocol_video_status_with_audio">mit Ton</string>
+    <string name="protocol_video_status_no_mic">ohne Ton (Mikrofon lief nicht)</string>
+    <string name="protocol_video_playback_error">Video nicht verfügbar oder keine App zum Abspielen gefunden</string>
+    <string name="protocol_default_noise_label">Lärmereignis</string>
 </resources>

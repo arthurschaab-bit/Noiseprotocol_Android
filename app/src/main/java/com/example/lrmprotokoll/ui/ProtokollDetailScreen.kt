@@ -541,7 +541,7 @@ fun ProtokollDetailScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = record.label ?: erkanntesLabel(record.detectedLabel) ?: "Lärmereignis",
+                                        text = record.label ?: erkanntesLabel(record.detectedLabel) ?: stringResource(R.string.protocol_default_noise_label),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                     )
@@ -616,7 +616,7 @@ fun ProtokollDetailScreen(
                     NoiseCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Beweisvideos (${beweisvideos.size})",
+                                text = stringResource(R.string.protocol_evidence_videos_count, beweisvideos.size),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -625,10 +625,10 @@ fun ProtokollDetailScreen(
                                 val datei = java.io.File(video.dateiPfad)
                                 val zustand =
                                     when {
-                                        video.muxFehlgeschlagen -> "ohne Ton (Zusammenführen fehlgeschlagen)"
-                                        !video.tonGemuxt -> "Ton wird hinzugefügt …"
-                                        video.hatTonspur -> "mit Ton"
-                                        else -> "ohne Ton (Mikrofon lief nicht)"
+                                        video.muxFehlgeschlagen -> stringResource(R.string.protocol_video_status_mux_failed)
+                                        !video.tonGemuxt -> stringResource(R.string.protocol_video_status_muxing)
+                                        video.hatTonspur -> stringResource(R.string.protocol_video_status_with_audio)
+                                        else -> stringResource(R.string.protocol_video_status_no_mic)
                                     }
                                 val abspielbar = (video.tonGemuxt || video.muxFehlgeschlagen) && datei.exists()
                                 Row(
@@ -639,7 +639,7 @@ fun ProtokollDetailScreen(
                                                 if (!com.example.lrmprotokoll.report.BerichtDatei
                                                         .oeffne(context, datei)
                                                 ) {
-                                                    onShowSnackbar?.invoke("Video nicht verfügbar oder keine App zum Abspielen gefunden")
+                                                    onShowSnackbar?.invoke(context.getString(R.string.protocol_video_playback_error))
                                                 }
                                             }.padding(vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -677,7 +677,7 @@ fun ProtokollDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Fotos (${fotos.size})",
+                                text = stringResource(R.string.protocol_photos_count, fotos.size),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -693,13 +693,13 @@ fun ProtokollDetailScreen(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Aus Galerie")
+                                Text(stringResource(R.string.protocol_from_gallery))
                             }
                         }
                         if (fotos.isEmpty()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Noch keine Fotos für diese Session.",
+                                text = stringResource(R.string.protocol_no_photos_yet),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -890,10 +890,10 @@ fun ProtokollDetailScreen(
                 zeigeGalerieKategorieDialog = false
                 ausgewaehlteGalerieUris = emptyList()
             },
-            title = { Text("Kategorie wählen") },
+            title = { Text(stringResource(R.string.protocol_gallery_category_title)) },
             text = {
                 Column {
-                    Text("${ausgewaehlteGalerieUris.size} Foto(s) aus der Galerie - welcher Kategorie zuordnen?")
+                    Text(stringResource(R.string.protocol_gallery_category_question, ausgewaehlteGalerieUris.size))
                     Spacer(modifier = Modifier.height(12.dp))
                     FotoKategorie.entries.forEach { kategorie ->
                         Row(
@@ -916,7 +916,7 @@ fun ProtokollDetailScreen(
                     zeigeGalerieKategorieDialog = false
                     ausgewaehlteGalerieUris = emptyList()
                 }) {
-                    Text("Abbrechen")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
