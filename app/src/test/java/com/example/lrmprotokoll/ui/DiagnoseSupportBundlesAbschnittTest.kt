@@ -146,9 +146,10 @@ class DiagnoseSupportBundlesAbschnittTest {
         composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(knopf))
         composeRule.onNodeWithText(knopf).performClick()
 
+        val praefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_upload_failed).substringBefore("%1\$s")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.waitForIdle()
-            meldungen.any { it.startsWith("Fehlgeschlagen") }
+            meldungen.any { it.startsWith(praefix) }
         }
         warteBisKnopfWiederBereit(knopf)
         assertTrue(
@@ -178,9 +179,10 @@ class DiagnoseSupportBundlesAbschnittTest {
             composeRule.scrolleZuSobaldGeladen(DIAGNOSE_LAZY_COLUMN_TAG, hasText(knopf))
             composeRule.onNodeWithText(knopf).performClick()
 
+            val praefix = composeRule.activity.getString(com.example.lrmprotokoll.R.string.diagnose_export_failed).substringBefore("%1\$s")
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 composeRule.waitForIdle()
-                meldungen.any { it.startsWith("Export fehlgeschlagen") }
+                meldungen.any { it.startsWith(praefix) }
             }
             warteBisKnopfWiederBereit(knopf)
             assertTrue(
