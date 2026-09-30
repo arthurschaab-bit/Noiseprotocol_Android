@@ -694,4 +694,8 @@
     <string name="video_camera_preparing">Preparing camera …</string>
     <string name="video_stop_recording">Stop recording</string>
     <string name="video_max_duration_reached">Maximum duration reached – recording stopped</string>
+    <string name="report_area_selection_label">Area classification</string>
+    <string name="report_area_selection_placeholder">Select area</string>
+    <string name="report_area_selection_supporting_default">Selection does not confirm official classification. Unverified area types cannot be selected.</string>
+    <string name="report_area_unverified_suffix"> (assignment unverified)</string>
 </resources>

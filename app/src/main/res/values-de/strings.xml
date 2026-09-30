@@ -696,4 +696,8 @@
     <string name="video_camera_preparing">Kamera wird vorbereitet …</string>
     <string name="video_stop_recording">Aufnahme beenden</string>
     <string name="video_max_duration_reached">Maximaldauer erreicht – Aufnahme beendet</string>
+    <string name="report_area_selection_label">Gebietseinstufung</string>
+    <string name="report_area_selection_placeholder">Gebiet auswählen</string>
+    <string name="report_area_selection_supporting_default">Die Auswahl bestätigt keine behördliche Einstufung. Ungeprüfte Gebietstypen sind nicht auswählbar.</string>
+    <string name="report_area_unverified_suffix"> (Zuordnung ungeprüft)</string>
 </resources>
