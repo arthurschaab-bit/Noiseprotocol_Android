@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -47,6 +48,34 @@ import kotlin.system.measureTimeMillis
 class BerichtErstellenSheetTest {
 
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    /**
+     * Schliesst ein offen gebliebenes ModalBottomSheet, bevor der naechste Test laeuft.
+     *
+     * Muss in @After stehen, nicht am Ende der Testruempfe (so kam es aus PR #241): eine Zeile am
+     * Rumpfende laeuft nicht mehr, wenn eine Zusicherung darueber wirft - also genau dann nicht,
+     * wenn ein Sheet offen bleibt. @After laeuft auch nach einem Fehlschlag.
+     *
+     * Bewusst unscharf formuliert und fehlertolerant:
+     * - `onAllNodesWithText` statt `onNodeWithText`, damit ein bereits geschlossenes Sheet kein
+     *   "no node found" wirft und so den echten Fehlschlag des Tests ueberdeckt.
+     * - `assertIsEnabled`-Pruefung, weil der Knopf `enabled = !erzeugt` ist
+     *   (BerichtErstellenSheet.kt:332): nach einem erfolgreich erzeugten Bericht ist er
+     *   abgeschaltet und ein Klick bliebe wirkungslos.
+     *
+     * Der Knopf traegt kein testTag, deshalb die Textsuche. Wer F-20 (Lokalisierung) auf
+     * BerichtErstellenSheet.kt anwendet, muss diese Stelle mitziehen - sonst greift das Aufraeumen
+     * stillschweigend nicht mehr.
+     */
+    @After
+    fun offenesSheetSchliessen() {
+        val knoepfe = composeRule.onAllNodesWithText("Schließen").fetchSemanticsNodes(false)
+        if (knoepfe.isEmpty()) return
+        runCatching {
+            composeRule.onNodeWithText("Schließen").performClick()
+            composeRule.waitForIdle()
+        }
+    }
 
     @Before
     @After
@@ -250,8 +279,6 @@ class BerichtErstellenSheetTest {
         composeRule
             .onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
     }
 
     @Test fun gebietseinstufungLaesstSichImBerichtsSheetSpeichern() {
@@ -286,8 +313,6 @@ class BerichtErstellenSheetTest {
                     ?.gebietseinstufung
             },
         )
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
     }
 
     @Test fun siebenTagePresetWirdFuerDenNaechstenBerichtGemerkt() {
@@ -304,8 +329,6 @@ class BerichtErstellenSheetTest {
         val gespeichert = app.container.settingsManager.letzterHighEndBerichtszeitraum()
         assertEquals(6L, gespeichert!!.second - gespeichert.first)
         assertEquals(LocalDate.now().toEpochDay(), gespeichert.second)
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
     }
 
     /**
@@ -376,7 +399,5 @@ class BerichtErstellenSheetTest {
                 .recentBreadcrumbs()
                 .last { it.message == "High-End-Bericht nicht gestartet" }
         assertTrue(blocker.data["voraussetzungen"].toString().contains("ZEITRAUM"))
-        composeRule.onNodeWithText("Schließen").performClick()
-        composeRule.waitForIdle()
     }
 }
