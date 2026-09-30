@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -76,6 +77,7 @@ class BerichtErstellenSheetTest {
      * docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md Abschnitt 4.5 beschrieben.
      */
     private fun oeffneSheetUndWarteAufStartknopf() {
+        composeRule.waitForIdle()
         val beginn = System.currentTimeMillis()
         var pruefungen = 0
         try {
@@ -237,6 +239,7 @@ class BerichtErstellenSheetTest {
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
         composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.waitForIdle()
             composeRule
                 .onAllNodesWithTag("bericht_erstellen_fehler")
                 .fetchSemanticsNodes()
@@ -247,6 +250,8 @@ class BerichtErstellenSheetTest {
         composeRule
             .onNodeWithTag("bericht_erstellen_fehler")
             .assertTextEquals("Die Rohdaten-Datei fehlt. Bitte erneut exportieren.")
+        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.waitForIdle()
     }
 
     @Test fun gebietseinstufungLaesstSichImBerichtsSheetSpeichern() {
@@ -281,6 +286,8 @@ class BerichtErstellenSheetTest {
                     ?.gebietseinstufung
             },
         )
+        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.waitForIdle()
     }
 
     @Test fun siebenTagePresetWirdFuerDenNaechstenBerichtGemerkt() {
@@ -297,6 +304,8 @@ class BerichtErstellenSheetTest {
         val gespeichert = app.container.settingsManager.letzterHighEndBerichtszeitraum()
         assertEquals(6L, gespeichert!!.second - gespeichert.first)
         assertEquals(LocalDate.now().toEpochDay(), gespeichert.second)
+        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.waitForIdle()
     }
 
     /**
@@ -367,5 +376,7 @@ class BerichtErstellenSheetTest {
                 .recentBreadcrumbs()
                 .last { it.message == "High-End-Bericht nicht gestartet" }
         assertTrue(blocker.data["voraussetzungen"].toString().contains("ZEITRAUM"))
+        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.waitForIdle()
     }
 }

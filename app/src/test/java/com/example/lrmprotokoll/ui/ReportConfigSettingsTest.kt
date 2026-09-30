@@ -103,15 +103,15 @@ class ReportConfigSettingsTest {
     @Test
     fun ungepruefteGebieteKoennenNichtAusgewaehltWerden() {
         composeRule.setContent { ReportAreaSelection(value = "WA", enabled = true, onSelect = { error("Keine Auswahl erwartet") }) }
-        try {
-            composeRule.mainClock.autoAdvance = false
-            composeRule.onNodeWithTag("input_report_gebietseinstufung").performClick()
-            composeRule.mainClock.advanceTimeBy(500)
-            composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
-            composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
-        } finally {
-            composeRule.mainClock.autoAdvance = true
+        composeRule.onNodeWithTag("input_report_gebietseinstufung")
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        composeRule.waitUntil(timeoutMillis = 10_000L) {
+            composeRule.onAllNodesWithTag("report_area_WB")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
         }
+        composeRule.onNodeWithTag("report_area_WB").assertIsNotEnabled()
+        composeRule.onNodeWithTag("report_area_MU").assertIsNotEnabled()
     }
 
     @Test
