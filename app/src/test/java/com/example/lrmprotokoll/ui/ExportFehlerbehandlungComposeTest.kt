@@ -37,6 +37,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -45,7 +47,7 @@ import java.util.concurrent.atomic.AtomicReference
  * ProtokollDetailScreen PDF/CSV, MainActivity Tagesbericht ZIP/Text).
  *
  * Verifiziert:
- * - Dialog schließt im Fehlerfall
+ * - Der Bildschirm bleibt nach dem Fehlschlag bedienbar (seit S-4 gibt es keinen Dialog mehr)
  * - Diagnoseereignis (REPORT_CREATE_FAILED bzw. EXPORT_FAILED) wird erfasst
  * - Nutzer erhält Fehlerrückmeldung über Snackbar
  */
@@ -65,10 +67,58 @@ class ExportFehlerbehandlungComposeTest {
         }
     }
 
+    /**
+     * Seit S-4 arbeitet der Bericht-Reiter auf einer Auswahl von Messtagen: ohne Messwerte gibt es
+     * nichts zu waehlen und die Ausgaben sind gesperrt. Diese Helferin legt genau einen Messtag an.
+     */
+    private fun legeMesstagAn(
+        app: LaermprotokollApp,
+        tag: LocalDate,
+    ) {
+        val zone = ZoneId.systemDefault()
+        val beginn =
+            tag
+                .atTime(10, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
+        val ende =
+            tag
+                .atTime(11, 0)
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
+        runBlocking(Dispatchers.IO) {
+            val id =
+                app.container.database.sessionDao().insert(
+                    SessionEntity(
+                        startedAt = beginn,
+                        endedAt = ende,
+                        deviceAddress = "AA:BB",
+                        deviceName = "PCE-323",
+                        weighting = "A",
+                        timeWeighting = "FAST",
+                    ),
+                )
+            app.container.database.measurementDao().insertAll(
+                listOf(
+                    MeasurementEntity(
+                        sessionId = id,
+                        timestamp = beginn + 60_000,
+                        levelDb = 55.0,
+                        weighting = "A",
+                        timeWeighting = "FAST",
+                        flags = 0,
+                    ),
+                ),
+            )
+        }
+    }
+
     // --- Exportweg 1: BerichtScreen (Zeitraumbericht / Gesamtbericht) ---
 
     @Test
-    fun periodenBerichtFehlerSchliesstDialogMeldetDiagnoseUndZeigtSnackbar() {
+    fun periodenBerichtFehlerMeldetDiagnoseUndZeigtSnackbar() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val diagnosticsReporter = app.container.diagnosticsReporter
         val snackbarMeldung = AtomicReference<String?>(null)
@@ -81,23 +131,32 @@ class ExportFehlerbehandlungComposeTest {
                 ): File = throw IOException("Platte voll")
             }
 
+        val heute = LocalDate.of(2026, 9, 29)
+        legeMesstagAn(app, heute)
+
         composeRule.setContent {
             BerichtScreen(
                 onBack = {},
                 onOpenSettings = {},
                 onShowSnackbar = { snackbarMeldung.set(it) },
                 periodenBerichtExport = throwingExport,
+                heute = heute,
             )
         }
 
-        composeRule.onNodeWithTag("btn_period_report").performClick()
-        composeRule.onNodeWithTag("btn_period_preset_7d").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("messtag_$heute").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("btn_bericht_uebersicht").performClick()
 
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             snackbarMeldung.get() != null
         }
 
-        composeRule.onNodeWithTag("btn_period_preset_7d").assertDoesNotExist()
+        // Der Screen bleibt bedienbar - kein haengender Ladezustand nach dem Fehlschlag.
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("btn_bericht_uebersicht").fetchSemanticsNodes().isNotEmpty()
+        }
         assertEquals(
             composeRule.activity.getString(R.string.export_failed_message),
             snackbarMeldung.get(),
@@ -108,7 +167,7 @@ class ExportFehlerbehandlungComposeTest {
     }
 
     @Test
-    fun gesamtberichtFehlerSchliesstDialogMeldetDiagnoseUndZeigtSnackbar() {
+    fun gesamtberichtFehlerMeldetDiagnoseUndZeigtSnackbar() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val diagnosticsReporter = app.container.diagnosticsReporter
         val snackbarMeldung = AtomicReference<String?>(null)
@@ -122,24 +181,31 @@ class ExportFehlerbehandlungComposeTest {
                 ): File = throw IOException("Schreibfehler")
             }
 
+        val heute = LocalDate.of(2026, 9, 29)
+        legeMesstagAn(app, heute)
+
         composeRule.setContent {
             BerichtScreen(
                 onBack = {},
                 onOpenSettings = {},
                 onShowSnackbar = { snackbarMeldung.set(it) },
                 gesamtberichtExportInstance = throwingExport,
+                heute = heute,
             )
         }
 
-        composeRule.onNodeWithTag("btn_period_report").performClick()
-        composeRule.onNodeWithTag("switch_gesamtbericht").performClick()
-        composeRule.onNodeWithTag("btn_period_preset_7d").performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("messtag_$heute").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("btn_bericht_gesamtbericht").performClick()
 
         composeRule.waitUntil(timeoutMillis = 15_000L) {
             snackbarMeldung.get() != null
         }
 
-        composeRule.onNodeWithTag("btn_period_preset_7d").assertDoesNotExist()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("btn_bericht_gesamtbericht").fetchSemanticsNodes().isNotEmpty()
+        }
         assertEquals(
             composeRule.activity.getString(R.string.export_failed_message),
             snackbarMeldung.get(),

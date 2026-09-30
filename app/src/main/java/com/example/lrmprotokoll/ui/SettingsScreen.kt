@@ -714,6 +714,29 @@ fun SettingsScreen(
                     )
                 }
 
+                // Owner-Entscheidung 29.09.2026. Bis PR #229 warnte das Cockpit-Menue beim
+                // Abschalten ("Neue Laermereignisse werden dann ohne WAV-Beweisdatei
+                // gespeichert"). F-22 hat diesen doppelten Einstieg entfernt - der Schalter hier
+                // hatte nie eine Warnung, also war sie danach nirgends mehr in der App. Fuer eine
+                // Einstellung, die darueber entscheidet, ob ein Laermereignis ueberhaupt eine
+                // Beweisdatei bekommt, ist das zu wenig.
+                //
+                // Bewusst ein Hinweis unter dem Schalter statt eines Bestaetigungsdialogs
+                // (Owner-Wahl): Der Dialog haette den Vertrag gebrochen, den
+                // SettingsScreenInstrumentedTest festhaelt - ein Klick schaltet sofort -, und er
+                // waere nur im Moment des Abschaltens sichtbar. Der Hinweis steht dauerhaft,
+                // solange der Zustand gilt, und beantwortet damit auch die Frage "warum hat meine
+                // letzte Messung keine Audiodatei?" Wochen spaeter noch.
+                if (!recordWavAudio) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_record_wav_warnung),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("hinweis_record_wav_aus"),
+                    )
+                }
+
                 // Die Trigger-Quelle hing frueher in "if (recordWavAudio)" und war damit ohne
                 // WAV-Aufnahme gar nicht einstellbar - obwohl auch ein reines Pegel-Ereignis
                 // eine Quelle braucht und MeterTriggerSource weiterhin danach entscheidet.
