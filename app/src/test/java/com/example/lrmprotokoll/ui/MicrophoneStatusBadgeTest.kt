@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import org.junit.After
 import org.junit.Rule
@@ -36,10 +37,10 @@ class MicrophoneStatusBadgeTest {
             // echten AudioRecord-Zustand verwenden.
             MicrophoneStatusBadge(audioMonitoringActive = true, recordWavAudio = true)
         }
-        composeRule.onNodeWithText("WAV: INAKTIV").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_inactive)).assertIsDisplayed()
 
         composeRule.runOnIdle { AudioRecordingService.testSetzeAudioAufnahmeAktiv(true) }
-        composeRule.onNodeWithText("WAV: AKTIV").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_active)).assertIsDisplayed()
     }
 
     @Test
@@ -49,8 +50,8 @@ class MicrophoneStatusBadgeTest {
             MicrophoneStatusBadge(audioMonitoringActive = true, recordWavAudio = true)
         }
 
-        composeRule.onNodeWithText("WAV: AKTIV").performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_active)).performClick()
         composeRule.onNodeWithTag(WAV_STOP_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("WAV-Aufzeichnung beenden?").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_stop_confirm_title)).assertIsDisplayed()
     }
 }
