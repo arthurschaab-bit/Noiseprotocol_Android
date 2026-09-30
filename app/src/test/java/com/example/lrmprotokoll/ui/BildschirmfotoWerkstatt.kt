@@ -189,21 +189,37 @@ class BildschirmfotoWerkstatt {
         val zone = java.time.ZoneId.systemDefault()
         listOf(heute, heute.minusDays(1), heute.minusDays(4)).forEach { tag ->
             kotlinx.coroutines.runBlocking {
-                val id = app.container.database.sessionDao().insert(
-                    com.example.lrmprotokoll.data.SessionEntity(
-                        startedAt = tag.atTime(10, 0).atZone(zone).toInstant().toEpochMilli(),
-                        endedAt = tag.atTime(12, 30).atZone(zone).toInstant().toEpochMilli(),
-                        deviceAddress = "AA:BB",
-                        deviceName = "PCE-323",
-                        weighting = "A",
-                        timeWeighting = "FAST",
-                    ),
-                )
+                val id =
+                    app.container.database.sessionDao().insert(
+                        com.example.lrmprotokoll.data.SessionEntity(
+                            startedAt =
+                                tag
+                                    .atTime(10, 0)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli(),
+                            endedAt =
+                                tag
+                                    .atTime(12, 30)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli(),
+                            deviceAddress = "AA:BB",
+                            deviceName = "PCE-323",
+                            weighting = "A",
+                            timeWeighting = "FAST",
+                        ),
+                    )
                 app.container.database.measurementDao().insertAll(
                     (0 until 40).map { i ->
                         com.example.lrmprotokoll.data.MeasurementEntity(
                             sessionId = id,
-                            timestamp = tag.atTime(10, 0).atZone(zone).toInstant().toEpochMilli() + i * 60_000L,
+                            timestamp =
+                                tag
+                                    .atTime(10, 0)
+                                    .atZone(zone)
+                                    .toInstant()
+                                    .toEpochMilli() + i * 60_000L,
                             levelDb = 50.0 + i % 7,
                             weighting = "A",
                             timeWeighting = "FAST",

@@ -16,8 +16,6 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.SessionEntity
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -28,6 +26,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * S-4: der Bericht-Reiter zeigt die Messtage und laesst einzelne abwaehlen.
@@ -56,7 +56,11 @@ class BerichtScreenS4Test {
     private fun millis(
         tag: LocalDate,
         stunde: Int,
-    ) = tag.atTime(stunde, 0).atZone(zone).toInstant().toEpochMilli()
+    ) = tag
+        .atTime(stunde, 0)
+        .atZone(zone)
+        .toInstant()
+        .toEpochMilli()
 
     /** Ein Messtag mit einem Messwert; [verdichtet] macht ihn nicht berichtsfaehig. */
     private fun legeMesstagAn(
@@ -64,16 +68,17 @@ class BerichtScreenS4Test {
         verdichtet: Boolean = false,
     ) = runBlocking(Dispatchers.IO) {
         val db = app.container.database
-        val id = db.sessionDao().insert(
-            SessionEntity(
-                startedAt = millis(tag, 10),
-                endedAt = millis(tag, 11),
-                deviceAddress = "AA:BB",
-                deviceName = "PCE-323",
-                weighting = "A",
-                timeWeighting = "FAST",
-            ),
-        )
+        val id =
+            db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = millis(tag, 10),
+                    endedAt = millis(tag, 11),
+                    deviceAddress = "AA:BB",
+                    deviceName = "PCE-323",
+                    weighting = "A",
+                    timeWeighting = "FAST",
+                ),
+            )
         db.measurementDao().insertAll(
             listOf(
                 MeasurementEntity(
@@ -199,9 +204,13 @@ class BerichtScreenS4Test {
         warteAuf(heute.minusDays(20))
 
         composeRule.onNodeWithTag("btn_bericht_preset_7").performClick()
+        // Beide Bedingungen, nicht nur das Verschwinden: waehrend des Neuladens ist die Liste
+        // ohnehin leer - ein Warten allein darauf laeuft in den Ladezustand hinein.
         composeRule.waitUntil(timeoutMillis = 15_000L) {
-            composeRule.onAllNodesWithTag("messtag_${heute.minusDays(20)}").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag("messtag_${heute.minusDays(20)}").fetchSemanticsNodes().isEmpty() &&
+                composeRule.onAllNodesWithTag("messtag_$heute").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("messtag_$heute").assertIsDisplayed()
     }
 }
