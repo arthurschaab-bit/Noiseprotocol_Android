@@ -687,4 +687,11 @@
     <string name="protocol_video_status_no_mic">without audio (mic was not running)</string>
     <string name="protocol_video_playback_error">Video not available or no playback app found</string>
     <string name="protocol_default_noise_label">Noise event</string>
+    <string name="video_screen_title">Video evidence</string>
+    <string name="video_camera_permission_required">Camera permission required</string>
+    <string name="video_no_mic_warning">The microphone is not running – this video will be recorded without audio.</string>
+    <string name="video_remaining_time">%1$s remaining</string>
+    <string name="video_camera_preparing">Preparing camera …</string>
+    <string name="video_stop_recording">Stop recording</string>
+    <string name="video_max_duration_reached">Maximum duration reached – recording stopped</string>
 </resources>

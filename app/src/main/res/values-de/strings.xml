@@ -689,4 +689,11 @@
     <string name="protocol_video_status_no_mic">ohne Ton (Mikrofon lief nicht)</string>
     <string name="protocol_video_playback_error">Video nicht verfügbar oder keine App zum Abspielen gefunden</string>
     <string name="protocol_default_noise_label">Lärmereignis</string>
+    <string name="video_screen_title">Videobeweis</string>
+    <string name="video_camera_permission_required">Kamera-Berechtigung erforderlich</string>
+    <string name="video_no_mic_warning">Das Mikrofon läuft nicht – dieses Video wird ohne Ton aufgezeichnet.</string>
+    <string name="video_remaining_time">noch %1$s</string>
+    <string name="video_camera_preparing">Kamera wird vorbereitet …</string>
+    <string name="video_stop_recording">Aufnahme beenden</string>
+    <string name="video_max_duration_reached">Maximaldauer erreicht – Aufnahme beendet</string>
 </resources>

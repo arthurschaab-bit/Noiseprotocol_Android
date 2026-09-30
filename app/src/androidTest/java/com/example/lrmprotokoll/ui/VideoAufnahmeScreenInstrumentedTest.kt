@@ -6,6 +6,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.BerechtigungsTestHelfer
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -62,8 +63,11 @@ class VideoAufnahmeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Videobeweis").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        val titleText = composeRule.activity.getString(R.string.video_screen_title)
+        val backDesc = composeRule.activity.getString(R.string.action_back)
+
+        composeRule.onNodeWithText(titleText).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(backDesc).assertIsDisplayed().performClick()
 
         assertTrue(
             "Ohne laufende Aufnahme muss onBack sofort ausgeloest werden",
@@ -80,15 +84,13 @@ class VideoAufnahmeScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(
-            "Das Mikrofon läuft nicht – dieses Video wird ohne Ton aufgezeichnet.",
-        ).assertIsDisplayed()
+        val warningText = composeRule.activity.getString(R.string.video_no_mic_warning)
+
+        composeRule.onNodeWithText(warningText).assertIsDisplayed()
 
         AudioRecordingService.testSetzeLaufendesFormat(AudioRecordingService.Aufnahmeformat(abtastrate = 44_100, kanaele = 1))
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithText(
-            "Das Mikrofon läuft nicht – dieses Video wird ohne Ton aufgezeichnet.",
-        ).assertCountEquals(0)
+        composeRule.onAllNodesWithText(warningText).assertCountEquals(0)
     }
 }
