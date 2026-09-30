@@ -147,9 +147,9 @@ class MainActivityNavigationAndroidTest {
         }
         setNavigationContent()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Überspringen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(app.getString(R.string.report_metadata_skip)).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Überspringen").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).performClick()
         composeRule.waitUntil(10_000) {
             runBlocking { app.container.database.sessionDao().byId(sessionId)?.metadataPromptCompleted == true }
         }
@@ -171,7 +171,7 @@ class MainActivityNavigationAndroidTest {
         composeRule.onNodeWithTag("nav_item_protokoll").performClick()
         composeRule.onNodeWithTag("nav_item_main").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Überspringen").assertDoesNotExist()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).assertDoesNotExist()
     }
 
     @Test
@@ -223,9 +223,9 @@ class MainActivityNavigationAndroidTest {
 
         setNavigationContent()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Überspringen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(app.getString(R.string.report_metadata_skip)).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Überspringen").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).performClick()
         composeRule.waitUntil(10_000) {
             app.container.settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, tagDreiVon)
         }
