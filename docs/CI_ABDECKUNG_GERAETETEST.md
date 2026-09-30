@@ -131,38 +131,197 @@ nötig.
 
 ---
 
-## 9. Teil F — Stand und Stapel
+## 9. Teil F — zugeordnet (Stapel 2)
 
-Teil F umfasst 17 Abschnitte mit rund 60 Einzelprüfungen. Die Stichprobe zeigt, dass ein
-**erheblicher Teil bereits abgedeckt ist und nur die Zuordnung fehlt** — das Repository hat
-239 instrumentierte Tests in 66 Klassen, unter anderem:
+17 Abschnitte, rund 60 Einzelprüfungen. **Jede Zeile unten ist am Testrumpf nachgelesen, nicht
+aus Klassennamen geraten** — und das Nachlesen hat die ursprüngliche Kandidatenliste nach unten
+korrigiert.
 
-| Abschnitt | Kandidat |
+### Die Erkenntnis, die alles andere ordnet
+
+> Die vorhandenen Tests decken **die Bildschirme und die Verdrahtung** ab.
+> Teil F fragt nach **Verhalten über die Zeit, am echten Gerät, mit echten Diensten.**
+
+Ein Beispiel statt einer Erklärung: `BeweisVideoOeffnenTest` prüft sorgfältig, dass der
+Öffnen-Intent stimmt — `ACTION_VIEW`, `video/mp4`, FileProvider-Authority, Lese-Flag, und dass
+eine fehlende Datei keinen Absturz erzeugt. Checklistenzeile F1.4 fragt aber, ob **Bild und Ton
+synchron** sind. Der Test ist gut und trifft die Frage nicht. Wer nur Klassennamen liest, hält
+F1 für abgedeckt.
+
+### F1 — Videobeweis
+
+| # | Prüfung | CI | Beleg / Grund |
+|---|---|---|---|
+| F1.1 | Aufnahme läuft sofort an | — | Kein Test startet eine Aufnahme; `VideoAufnahmeScreenInstrumentedTest` prüft Titel und Zurück |
+| F1.2 | Beenden schließt Bildschirm, Vorschau aus | — | CameraX-Lebenszyklus, nicht simulierbar |
+| F1.3 | „Ton wird hinzugefügt …" → „mit Ton" | — | Kein Test |
+| F1.4 | Bild und Ton synchron | ◐ | `BeweisVideoOeffnenTest` — nur der Öffnen-Intent. **Synchronität: nie** |
+| F1.5 | Keine Lücke in der Messreihe | — | Braucht eine laufende Messung über die Aufnahmedauer |
+| F1.6 | Warnung **vor** dem Start ohne Mikrofon | ✅ | `VideoAufnahmeScreenInstrumentedTest.mikrofonWarnungErscheintNurOhneLaufendesMikrofonFormat` |
+| F1.7 | Speicher < 500 MB → startet nicht | — | Kein Test |
+| F1.8 | Maximaldauer stoppt automatisch | ◐ | `VideobeweisSettingsInstrumentedTest` prüft nur, dass der Regler den Wert speichert — nicht die Wirkung |
+
+### F2 — Fotodokumentation
+
+| # | Prüfung | CI | Beleg / Grund |
+|---|---|---|---|
+| F2.1 | Foto erscheint in Detail und PDF | ◐ | `FotoDokumentationSheetPermissionInstrumentedTest` belegt nur, dass der Knopf den Kamera-Intent auslöst |
+| F2.2 | EXIF-Drehung im PDF korrekt | — | Braucht ein echtes Kamerabild |
+| F2.3 | Abbrechen stört die Messung nicht | — | Kein Test |
+
+### F3 — Google Drive
+
+| # | Prüfung | CI | Beleg / Grund |
+|---|---|---|---|
+| F3.1 | Ordnerstruktur in Drive | — | Echtes Google-Konto |
+| F3.2 | Zwei Zyklen erzeugen Ordner nur einmal | — | dito |
+| F3.3 | Gestriges Video landet im gestrigen Ordner | — | dito |
+| F3.4 | Upload-Übersicht zeigt die Zustände | ✅ | `DriveUploadScreenInstrumentedTest` — Leerzustand, Eintrag, Sync aus, Sync an |
+| F3.5 | Großes Video, Abbruch überlebt | — | Echtes Netz |
+
+### F4 — Protokoll und Alarm ohne erreichbares Messgerät
+
+| # | CI | Beleg / Grund |
+|---|---|---|
+| F4.1 kein Alarm | — | Alarmkette über Karenzzeit, kein Test |
+| F4.2 genau eine Mikrofon-Sitzung | ◐ | `MicrophoneCockpitRegressionTest` deckt die Anzeige, nicht die Sitzungsbuchführung |
+| F4.3 Sitzung wird beendet angezeigt | — | |
+| F4.4 Quellenwechsel während der Messung | — | |
+| F4.5 Alarm greift danach | — | |
+
+### F5 — „Verbindung steht, keine Frames"
+
+**CI: —, und das ist der Punkt.** Ursache unbekannt, die Analyse braucht ein Support-Bundle vom
+echten Gerät. Ein Fake liefert per Definition Frames.
+
+### F6 — Neue Bildschirme
+
+| # | Bildschirm | CI | Beleg |
+|---|---|---|---|
+| F6.1 | Videoaufnahme | ✅ | `VideoAufnahmeScreenInstrumentedTest`, `…PermissionInstrumentedTest` |
+| F6.2 | Upload-Übersicht | ✅ | `DriveUploadScreenInstrumentedTest` |
+| F6.3 | Speicherplatz-Abschnitt | ✅ | `SettingsScreenInstrumentedTest.speicherplatzAbschnittZeigtErmittelteGroessenNachDemAufklappen` — **nicht** `SpeicherplatzUebersichtInstrumentedTest`, der misst nur die Laufzeit der Ermittlung |
+| F6.4 | „Wie die Lärmerkennung arbeitet" | ✅ | `KiErklaerungScreenInstrumentedTest` |
+
+Der Abschnitt sagt „die Optik ist ungeprüft". Das gilt weiterhin — gerendert heißt nicht schön.
+
+### F7 — Huawei/EMUI-Fallback
+
+**CI: ◐.** Die Checkliste sagt es selbst: belegt nur über eine simulierte `SecurityException` in
+einem Robolectric-Test (`OemDeviceHelperCardTest`). Auf echter Huawei-Hardware nie wiederholt.
+
+### F8 — Aufnahme-Selbstheilung nach Schreibfehler
+
+| # | CI | Beleg / Grund |
+|---|---|---|
+| F8.1 kein stiller Mehrstunden-Ausfall | — | Braucht eine Nacht echten Betrieb |
+| F8.2 Neustart nach `AUDIO_FILE_WRITE_FAILED` | ✅ | `AudioMonitoringRestartPolicyTest` (JVM) — die Regel ist geprüft, das Eintreten nicht |
+
+### F9 — Fotos aus der Galerie
+
+**CI: ◐** über `FotoDokumentationTest` (JVM, Datenpfad). Der System-Fotopicker, die Markierung
+„nachträglich hinzugefügt" im PDF und der Import während laufender Messung: kein Test.
+
+### F10 — Protokollreiter
+
+**Der am besten abgedeckte Abschnitt.**
+
+| # | CI | Beleg |
+|---|---|---|
+| F10.1 Tages-Kopfzeilen | ✅ | `ProtokollScreenAndroidTest.protokollScreen_sessionsAnUnterschiedlichenTagenBekommenGetrennteTagesueberschriften` |
+| F10.2 Kopfzeile klappt ein/aus | ✅ | `HomeTagHeaderCollapseInstrumentedTest.tagHeaderKlapptNurDieEigeneGruppeEinUndAus` |
+| F10.3 Filter-Panel öffnet | ✅ | `HomeScreenInstrumentedTest.filterPanelLaesstSichAufUndZuklappen` |
+| F10.4 Chips filtern | ✅ | vier eigene Tests: Favoriten, Ruhezeit, Messgerät, kalibriert |
+| F10.5 „nur mit Ereignissen" wirkt | ◐ | Kein Test benennt genau diesen Trichter |
+
+### F11 — Mikrofon-Fallback erkennbar
+
+| # | CI | Beleg |
+|---|---|---|
+| F11.1 Gerät weg → Fallback-Kennzeichnung | ✅ | `MicrophoneCockpitRegressionTest.meterSessionOhneVerbindungZeigtMikrofonwertAlsErkennbarenFallback` + Bildschirmfoto `cockpit_messgeraet_getrennt_fallback` |
+| F11.2 Gerät zurück → kalibriert | ✅ | Bildschirmfoto `cockpit_verbunden_messung_laeuft` (68.4 dB(A), ohne Kennzeichnung) |
+| F11.3 reiner Mikrofonlauf unverändert | ✅ | `keinErfundenerPegelUndMikrofonAenderungenWerdenAngezeigt` |
+| F11.4 Bericht mit gemischten Quellen | ◐ | Die Diagrammtrennung ist in den Berichtstests belegt, die Zeile selbst nicht als Ganzes |
+
+### F12 / F16 — Datenbank-Sicherung
+
+| # | CI | Beleg / Grund |
+|---|---|---|
+| F12.1 eigene Zeile „Letzte Sicherung" | ✅ | `DriveStatusCardInstrumentedTest.driveStatusCardZeigtNochKeineSicherungWennAktivAberNieHochgeladen` |
+| F12.2 Rotmarkierung nach >26 h | — | Braucht Tage echter Laufzeit |
+| F12.3–F12.5 Wiederherstellung, Diagnoseeinträge | ✅ | `SettingsSicherungInstrumentedTest` — echte ZIP mit Datenbankinhalt, voller Wiederherstellungspfad, Abbrechen |
+| F16.1–F16.3 streamende Sicherung | ◐ | `SicherungManagerTest` deckt den Weg; die 492-MB-Datenbank des Owner-Geräts nicht |
+
+### F13 — High-End-Bericht
+
+**CI: ✅ für den technischen Pfad**, wörtlich wie die Checkliste ihn beschreibt:
+`ChaquopyReportRunnerInstrumentedTest` (Room → CSV → echter Chaquopy-/Matplotlib-Aufruf → PDF,
+plus kaputtes JSON, unbekanntes Gebiet, fehlende Datei) und `BerichtPdfInhaltInstrumentedTest`
+(echte Seite, Deckblatt, Tagesseite).
+
+**— für alles andere:** 20 reale Messtage, Laufzeit auf dem Zielgerät, und die rechtliche
+Freigabe. Ein synthetischer Lauf bestätigt keinen Sensor und keine Rechtsprosa.
+
+### F14 — Absturzdiagnose
+
+| # | CI | Beleg / Grund |
+|---|---|---|
+| F14.1 RuntimeException → Bundle | ✅ | `CrashDiagnoseInstrumentedTest.runtimeExceptionHinterlaesstEinAbsturzBundle` |
+| F14.2 OutOfMemoryError → Bundle | ✅ | `.outOfMemoryErrorHinterlaesstEinAbsturzBundle` |
+| F14.3 ANR → Thread-Dump | ✅ | `.anrHinterlaesstEinenThreadDump`, `.anrWatchdogErkenntHaengerUndBautAnrBundle` |
+| F14.4 Absturz **während** der Aufzeichnung | — | Kein Test |
+| F14.5–F14.9 Ankunft in Drive, 24 h, WLAN-Nachholung | — | Echtes Konto, echte Zeit |
+| F14.10 Diagnose-Screen mit >200 Einträgen | ◐ | `DiagnoseScreenInstrumentedTest` rendert den Screen, nicht unter Last |
+
+### F15 — Drive-Sync OOM
+
+**CI: ✅ für die Regel** (`DriveSyncCoordinatorTest` — keine parallelen Zyklen, Nachholen wird
+fertig), **— für die Wirkung** (24 h Laufzeit, `db_stats.json`, Crash-Puffer).
+
+### F17 — High-End-Bericht: Fehlschläge sichtbar
+
+**CI: ✅** über `HighEndReportExportTest` und `ExportFehlerbehandlungComposeTest` — dass ein
+Fehlschlag im Diagnoseprotokoll landet, ist geprüft. **Die eigentliche Ursache des Fehlschlags
+vom 23.09. auf dem P30 bleibt unbekannt**, und kein Test wird sie finden.
+
+### Bilanz Teil F
+
+| | Anzahl |
 |---|---|
-| F1 Videobeweis | `VideoAufnahmeScreenInstrumentedTest`, `VideoAufnahmeScreenPermissionInstrumentedTest`, `BeweisVideoOeffnenTest` |
-| F2 Fotodokumentation | `FotoDokumentationSheetPermissionInstrumentedTest`, `FotodokumentationSettingsInstrumentedTest` |
-| F3 Google Drive | `DriveUploadScreenInstrumentedTest`, `DriveFolderPickerDialogInstrumentedTest`, `DriveStatusCardInstrumentedTest` |
-| F6 Neue Bildschirme | alle vier existieren: `VideoAufnahmeScreenInstrumentedTest`, `DriveUploadScreenInstrumentedTest`, `SpeicherplatzUebersichtInstrumentedTest`, `KiErklaerungScreenInstrumentedTest` |
-| F10 Protokollreiter | `ProtokollScreenAndroidTest`, `HomeTagHeaderCollapseInstrumentedTest`, `HomeScreenInstrumentedTest` |
-| F11 Mikrofon-Fallback | `MicrophoneCockpitRegressionTest`, `MicrophoneCockpitRegressionInstrumentedTest` |
-| F12/F16 Sicherung | `SettingsSicherungInstrumentedTest` |
-| F13 High-End-Bericht | `BerichtPdfInhaltInstrumentedTest`, `ChaquopyReportRunnerInstrumentedTest` |
-| F14 Absturzdiagnose | `CrashDiagnoseInstrumentedTest` |
+| ✅ vollständig | **19** |
+| ◐ teilweise | **11** |
+| — nur am Gerät | **28** |
 
-**Diese Tabelle ist eine Kandidatenliste, keine Zusicherung.** Sie entstand aus Testnamen und
-Klassennamen; welche Zeile welcher Test tatsächlich deckt, ist Zeile für Zeile am Testrumpf zu
-prüfen. Genau das ist Stapel 2 — und es als abgedeckt auszuweisen, bevor es nachgelesen ist,
-wäre die Art von Behauptung, gegen die dieses Dokument geschrieben ist.
-
----
+Knapp ein Drittel ist automatisiert — deutlich mehr, als die Checkliste vermuten lässt, und
+deutlich weniger, als die Klassennamen versprochen hätten.
 
 ## 10. Was noch offen ist
 
-| Stapel | Inhalt | Voraussetzung |
+| Stapel | Inhalt | Stand |
 |---|---|---|
-| **1** *(dieser PR)* | Teil A–D zugeordnet und in der Checkliste ausgewiesen; zwei neue Werkstattaufnahmen für F11 | — |
-| **2** | Teil F Zeile für Zeile am Testrumpf nachprüfen und zuordnen | — |
-| **3** | Der #216-Plan (S-3: A1–A8, B1–B5, C1–C4, D1–D4) | **Blockiert:** `MeterAutoConnect` und `trenneMessgeraetFallsNiemandEsBraucht()` liegen nur im Branch von [#216](https://github.com/arthurschaab-bit/Noiseprotocol_Android/pull/216). Die Tests gehören dorthin oder hinter dessen Merge |
+| **1** | Teil A–D zugeordnet, Spalte in der Checkliste, zwei Werkstattaufnahmen für F11 | ✅ erledigt |
+| **2** | Teil F Zeile für Zeile am Testrumpf nachgelesen und zugeordnet | ✅ erledigt — Abschnitt 9 |
+| **3** | Der #216-Plan (S-3: A1–A8, B1–B5, C1–C4, D1–D4) | in Arbeit, siehe unten |
+
+### Warum Stapel 3 nicht auf `main` liegen kann
+
+`MeterAutoConnect` und `trenneMessgeraetFallsNiemandEsBraucht()` existieren nur im Branch von
+[#216](https://github.com/arthurschaab-bit/Noiseprotocol_Android/pull/216). Ein Test dafür auf
+einem Branch von `main` lässt sich nicht einmal übersetzen.
+
+Drei Wege, und warum der dritte gewählt ist:
+
+1. **In #216 hineinpushen** — macht das Debug-APK `app-debug-apk-745` ungültig, mit dem der
+   Gerätetest des Owners gerade ansteht. Der Preis ist zu hoch für einen Testzusatz.
+2. **Auf den Merge von #216 warten** — verschiebt die Arbeit ohne Gegenwert.
+3. **Aufgesetzter Branch mit Basis `feature/s3-verbindung-getrennt`** ← gewählt. Fasst #216
+   nicht an, das APK bleibt gültig, und die Tests sind fertig, sobald #216 durch ist.
+
+### Was Stapel 3 abdecken kann — und was nicht
+
+Aus dem 25-schrittigen Plan von #216 sind rund 15 Schritte auf App-Ebene prüfbar. Der Rest ist
+dieselbe Grenze wie überall: **A5 („die Zahl entspricht dem Gerätedisplay") bleibt
+gerätegebunden**, egal wie gut die Naht ist. Ein Fake liefert die Zahl, die man ihm vorgibt.
 
 ### Namensschema
 
@@ -174,10 +333,8 @@ b3_pegelLaeuftNachMessungsendeWeiter
 f11_1_getrenntesMessgeraetZeigtFallbackKennzeichnung
 ```
 
-Für Abschnitte, deren Zeilen bisher keine ID tragen (Teil F), wird sie beim Zuordnen vergeben:
+Für Abschnitte, deren Zeilen bisher keine ID trugen, ist sie in Abschnitt 9 vergeben:
 `F1.1` … `F1.8` in der Reihenfolge der Tabelle.
-
----
 
 ## 11. Was in der CI danach sichtbar ist
 
