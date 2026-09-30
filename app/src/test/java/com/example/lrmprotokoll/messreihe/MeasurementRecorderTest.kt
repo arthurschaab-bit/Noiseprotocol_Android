@@ -71,6 +71,8 @@ class MeasurementRecorderTest {
         override suspend fun zwischen(von: Long, bis: Long) = zeilen.values.filter {
             it.startedAt < bis && (it.endedAt == null || it.endedAt >= von)
         }
+
+        override suspend fun fruehesterStart(): Long? = zeilen.values.minOfOrNull { it.startedAt }
     }
 
     private class FakeMeasurementDao : MeasurementDao {
