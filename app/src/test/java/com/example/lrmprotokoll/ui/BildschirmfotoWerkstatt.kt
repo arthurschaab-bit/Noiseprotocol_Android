@@ -1,5 +1,8 @@
 package com.example.lrmprotokoll.ui
 
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
@@ -15,9 +18,19 @@ import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
+import com.example.lrmprotokoll.data.SessionEntity
+import com.example.lrmprotokoll.meter.BoundDevice
+import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FakeMeterTransport
+import com.example.lrmprotokoll.meter.MeasurementRange
+import com.example.lrmprotokoll.meter.TimeWeighting
+import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -72,6 +85,19 @@ class BildschirmfotoWerkstatt {
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val app get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+    /**
+     * Derselbe Reflection-Zugriff wie in [MicrophoneCockpitRegressionTest]: der Mikrofonpegel
+     * entsteht erst in der laufenden Aufzeichnung, und eine eigene Testnaht dafuer waere eine
+     * Produktivcode-Aenderung (AGENTS.md 8a).
+     */
+    @Suppress("UNCHECKED_CAST")
+    private val mikrofonPegel: MutableStateFlow<Double?>
+        get() =
+            AudioRecordingService::class.java.getDeclaredField("_currentMicDb").let {
+                it.isAccessible = true
+                it.get(null) as MutableStateFlow<Double?>
+            }
 
     @Test
     fun einstellungenStartRegister() {
@@ -156,17 +182,22 @@ class BildschirmfotoWerkstatt {
     }
 
     /**
-     * Zeigt das Cockpit ohne laufende Messung. **Nicht** im verbundenen Zustand, obwohl genau der
-     * für Gerätetest A5 zu PR #216 gebraucht würde - das geht hier nicht, und der Grund ist
-     * gemessen: mit einem [FakeMeterTransport] erreicht der Transport zwar STREAMING, der
-     * [com.example.lrmprotokoll.meter.ConnectionSupervisor] bleibt aber auf DISCONNECTED stehen.
-     * Er veröffentlicht `supervisorOverride ?: fromTransport`, und der Override, den seine
-     * Versuchsschleife in dieser Umgebung setzt, maskiert den weitergereichten Zustand dauerhaft.
-     * `clearOverride()` und `setOverride()` sind privat, eine Nahtstelle dafür gibt es nicht.
+     * Zeigt das Cockpit ohne laufende Messung, **ohne** verbundenes Messgeraet.
      *
-     * Gemessener Verlauf über 3 s: `supervisor=DISCONNECTED transport=STREAMING`, 30 von 30
-     * Stichproben. Eine Testnahtstelle am Supervisor wäre eine Produktivcode-Änderung und damit
-     * eine Owner-Entscheidung (AGENTS.md §8a), kein Alleingang dieser Werkstatt.
+     * **Korrektur 30.09.2026.** Hier stand, der verbundene Zustand (Geraetetest A5 zu PR #216)
+     * sei nicht aufnehmbar, weil der `ConnectionSupervisor` den Transportzustand dauerhaft
+     * maskiere und es dafuer "keine Nahtstelle" gebe. Die Messung (30 von 30 Stichproben
+     * `supervisor=DISCONNECTED transport=STREAMING`) stimmte, die Erklaerung war falsch.
+     *
+     * Die Ursache: `BluetoothAdapterStateObserver` startet mit dem echten Adapterzustand, und
+     * der ist unter Robolectric aus. Der Supervisor setzt daraufhin in seiner ersten
+     * Schleifeniteration `setOverride(DISCONNECTED)` und parkt in `adapterEnabled.first { it }`
+     * (`ConnectionSupervisor.kt:217-221`). Es fehlte also kein Naht am Supervisor - es fehlte
+     * Bluetooth. [schalteBluetoothEin] genuegt, und
+     * [cockpitVerbundenMitLaufenderMessung] nimmt den verbundenen Zustand seitdem auf.
+     *
+     * Diese Aufnahme bleibt trotzdem bestehen: sie zeigt den Zustand ohne Messung, den
+     * [cockpitVerbundenMitLaufenderMessung] gerade nicht zeigt.
      */
     @Test
     fun cockpitOhneMessung() {
@@ -175,6 +206,110 @@ class BildschirmfotoWerkstatt {
         app.container.settingsManager.meterDeviceName = "PCE-323"
         AudioRecordingService.testSetzeLaeuft(false)
         nimmAuf("cockpit_ohne_messung", R.string.cockpit_ready_to_measure) { LiveCockpitCard() }
+        app.resetContainer()
+    }
+
+    /**
+     * Gerätetest-Schritt **F11.2**: Messung läuft, PCE-323 verbunden - der kalibrierte Wert samt
+     * Bewertung steht da, ohne Fallback-Kennzeichnung. Der Normalbetrieb, und bis hierher nie
+     * fotografiert.
+     *
+     * Dass das geht, war die Korrektur an [cockpitOhneMessung]: der
+     * [com.example.lrmprotokoll.meter.ConnectionSupervisor] maskiert nichts dauerhaft, er
+     * veröffentlicht `supervisorOverride ?: fromTransport`. Es fehlte schlicht der Aufruf von
+     * `start()`. Das Muster stammt aus `MeterScreenAndroidTest.liveStreamingZeigtPegelUndParameterkarte`
+     * und enthält dessen CI-Fund: **`simulateStall(true)` VOR `connect()`**, sonst überschreibt
+     * der erste synthetische Frame der Emit-Schleife den hier eingespeisten Wert.
+     */
+    @Test
+    fun cockpitVerbundenMitLaufenderMessung() {
+        val geraet = BoundDevice("AA:BB:CC:DD:EE:FF", "PCE-323")
+        val fake = FakeMeterTransport()
+        app.setCustomContainer(AppContainer(app, fake))
+        erteileBluetoothBerechtigungen()
+        schalteBluetoothEin()
+        app.container.settingsManager.meterDeviceAddress = geraet.address
+        app.container.settingsManager.meterDeviceName = geraet.name
+        runBlocking {
+            app.container.database.sessionDao().insert(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis(),
+                    endedAt = null,
+                    deviceAddress = geraet.address,
+                    deviceName = geraet.name,
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+            )
+            // simulateStall(true) haelt die Emit-Schleife an, ohne den Zustand zu aendern: so
+            // ueberschreibt kein synthetischer Frame (55 +/- 3 dB, ohne Bewertung) den hier
+            // eingespeisten Wert. Derselbe CI-Fund wie in
+            // MeterScreenAndroidTest.liveStreamingZeigtPegelUndParameterkarte.
+            fake.simulateStall(true)
+        }
+        app.container.connectionSupervisor.start(geraet)
+        runBlocking {
+            // STREAMING setzt der Transport in einer Coroutine auf eigenem Scope
+            // (FakeMeterTransport.kt:158-160); ohne dieses Warten wuerde der Screen im
+            // Fallback-Zustand fotografiert und traege faelschlich "verbunden" im Dateinamen.
+            withTimeout(10_000) {
+                app.container.connectionSupervisor.state
+                    .first { it == ConnectionState.STREAMING }
+            }
+            fake.emitFrame(
+                level = 68.4,
+                weighting = Weighting.A,
+                timeWeighting = TimeWeighting.FAST,
+                range = MeasurementRange.RANGE_30_130,
+                modeAssumptionConfirmed = true,
+            )
+        }
+        AudioRecordingService.testSetzeLaeuft(true)
+
+        nimmAuf("cockpit_verbunden_messung_laeuft", R.string.cockpit_measuring_running) { LiveCockpitCard() }
+
+        AudioRecordingService.testSetzeLaeuft(false)
+        app.container.connectionSupervisor.stop()
+        leereDatenbank()
+        app.resetContainer()
+    }
+
+    /**
+     * Gerätetest-Schritt **F11.1**: dieselbe Messung, aber das PCE-323 ist ausgeschaltet oder
+     * außer Reichweite. Der Mikrofonwert bleibt sichtbar, die Einheit wechselt auf den
+     * Fallback-Text, und der rote Hinweis erscheint.
+     *
+     * Die Zusicherung dahinter hält
+     * `MicrophoneCockpitRegressionTest.meterSessionOhneVerbindungZeigtMikrofonwertAlsErkennbarenFallback`
+     * fest; dieses Bild belegt zusätzlich, dass die Kennzeichnung im gerenderten Layout auch
+     * tatsächlich **zu sehen** ist und nicht hinter dem Rand liegt.
+     */
+    @Test
+    fun cockpitMessgeraetSessionOhneVerbindung() {
+        val fake = FakeMeterTransport()
+        app.setCustomContainer(AppContainer(app, fake))
+        app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
+        app.container.settingsManager.meterDeviceName = "PCE-323"
+        runBlocking {
+            app.container.database.sessionDao().insert(
+                SessionEntity(
+                    startedAt = System.currentTimeMillis(),
+                    endedAt = null,
+                    deviceAddress = "AA:BB:CC:DD:EE:FF",
+                    deviceName = "PCE-323",
+                    weighting = null,
+                    timeWeighting = null,
+                ),
+            )
+        }
+        AudioRecordingService.testSetzeLaeuft(true)
+        mikrofonPegel.value = 48.2
+
+        nimmAuf("cockpit_messgeraet_getrennt_fallback", R.string.cockpit_measuring_running) { LiveCockpitCard() }
+
+        AudioRecordingService.testSetzeLaeuft(false)
+        mikrofonPegel.value = null
+        leereDatenbank()
         app.resetContainer()
     }
 
@@ -250,6 +385,42 @@ class BildschirmfotoWerkstatt {
     /** Erteilt genau die Berechtigungen, die [BluetoothPermissions] für diese Android-Version prüft. */
     private fun erteileBluetoothBerechtigungen() {
         shadowOf(app).grantPermissions(*BluetoothPermissions.requiredPermissions())
+    }
+
+    /**
+     * Schaltet den Bluetooth-Adapter ein - **die Voraussetzung dafuer, dass der
+     * [com.example.lrmprotokoll.meter.ConnectionSupervisor] ueberhaupt verbindet.**
+     *
+     * Das war die eigentliche Ursache hinter der Messung, die im KDoc von [cockpitOhneMessung]
+     * als "der Override maskiert dauerhaft" beschrieben war: `BluetoothAdapterStateObserver`
+     * startet mit dem echten Adapterzustand, und der ist unter Robolectric aus. Der Supervisor
+     * setzt daraufhin in seiner ersten Schleifeniteration `setOverride(DISCONNECTED)` und parkt
+     * in `adapterEnabled.first { it }` (`ConnectionSupervisor.kt:217-221`). Der Transport
+     * erreicht STREAMING, der Supervisor bleibt auf DISCONNECTED - genau die 30 von 30
+     * Stichproben. Es fehlte keine Naht, es fehlte Bluetooth.
+     *
+     * Beide Wege werden bedient, weil der Beobachter beide nutzt: der Schattenadapter fuer den
+     * Anfangswert, der Broadcast fuer die laufende Aktualisierung.
+     */
+    private fun schalteBluetoothEin() {
+        app.getSystemService(BluetoothManager::class.java)?.adapter?.let { shadowOf(it).setEnabled(true) }
+        app.sendBroadcast(
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    /**
+     * [androidx.room.RoomDatabase.clearAllTables] ist ein blockierender Aufruf und wirft auf dem
+     * Main-Thread - und genau dort laeuft ein Robolectric-Test. Ein eigener Thread ist die
+     * kleinste Loesung; die Alternative waere, die Tabellen einzeln ueber suspend-DAOs zu leeren.
+     */
+    private fun leereDatenbank() {
+        val db = app.container.database
+        val raeumer = Thread { db.clearAllTables() }
+        raeumer.start()
+        raeumer.join()
     }
 
     private fun beruhige() {
