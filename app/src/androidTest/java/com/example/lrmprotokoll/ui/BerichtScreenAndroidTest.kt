@@ -29,12 +29,11 @@ import java.time.ZoneId
  *
  * Verifiziert auf dem Android-Emulator (API 34 ATD):
  * 1. Navigation: Back-Button.
- * 2. Zeitraumbericht-Dialog: Öffnen, Presets, Abbrechen.
+ * 2. Zeitraum, Schnellwahl und die drei benannten Ausgaben (seit S-4); Vollbild-Datumswähler.
  * 3. Drei-Punkt-Menü: öffnet die Bericht-Einstellungsseite.
  */
 @RunWith(AndroidJUnit4::class)
 class BerichtScreenAndroidTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -114,8 +113,14 @@ class BerichtScreenAndroidTest {
         assertTrue("onBack muss nach Klick auf btn_bericht_back aufgerufen werden", backed)
     }
 
+    /**
+     * Seit S-4 gibt es den Zeitraum-Dialog mit Presets und verstecktem Gesamtbericht-Schalter
+     * nicht mehr. An seine Stelle treten der Zeitraum oben, die Schnellwahl-Chips und drei
+     * BENANNTE Ausgaben. Der Test prueft dieselbe Absicht wie vorher - die Einstiege sind da und
+     * heissen, was sie tun - nur an der neuen Oberflaeche.
+     */
     @Test
-    fun berichtScreen_zeitraumberichtDialog_oeffnetUndSchliesstPerAbbrechen() {
+    fun berichtScreen_zeitraumUndDreiBenannteAusgabenSindErreichbar() {
         composeRule.setContent {
             LaermprotokollTheme {
                 BerichtScreen(onBack = {}, onOpenSettings = {})
@@ -123,25 +128,47 @@ class BerichtScreenAndroidTest {
         }
         composeRule.waitForIdle()
 
-        // Klick auf den Berichts-Button
-        composeRule.onNodeWithTag("btn_period_report").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("bericht_zeitraum_text").assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_zeitraum_aendern").assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_preset_7").assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_preset_30").assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_preset_monat").assertIsDisplayed()
+
+        composeRule
+            .onNodeWithText(composeRule.activity.getString(R.string.bericht_ausgabe_uebersicht_titel))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(composeRule.activity.getString(R.string.bericht_ausgabe_gesamt_titel))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(composeRule.activity.getString(R.string.bericht_ausgabe_highend_titel))
+            .assertIsDisplayed()
+    }
+
+    /**
+     * Der Vollbild-Datumswaehler - die Bauart, die der Owner am 15.09.2026 am Geraet als einzig
+     * bedienbare bestaetigt hat. Nur am Emulator pruefbar: ein Dialog liegt in einem eigenen
+     * Fenster und taucht in Robolectrics decorView nicht auf.
+     */
+    @Test
+    fun berichtScreen_datumswaehlerOeffnetUndSchliesstPerAbbrechen() {
+        composeRule.setContent {
+            LaermprotokollTheme {
+                BerichtScreen(onBack = {}, onOpenSettings = {})
+            }
+        }
         composeRule.waitForIdle()
 
-        // Dialog-Titel & Presets müssen sichtbar sein
-        val dialogTitle = composeRule.activity.getString(R.string.period_report_dialog_title)
-        composeRule.onNodeWithText(dialogTitle).assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_zeitraum_aendern").assertIsDisplayed().performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.onAllNodesWithTag("btn_bericht_zeitraum_uebernehmen").fetchSemanticsNodes().isNotEmpty()
+        }
 
-        composeRule.onNodeWithTag("btn_period_preset_7d").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_period_preset_30d").assertIsDisplayed()
-        composeRule.onNodeWithTag("btn_period_preset_month").assertIsDisplayed()
-
-        // Klick auf "Abbrechen"
-        composeRule.onNodeWithTag("btn_period_dialog_cancel").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("btn_bericht_zeitraum_uebernehmen").assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_bericht_zeitraum_abbrechen").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
-        // Dialog muss geschlossen sein
-        composeRule.onNodeWithTag("btn_period_dialog_cancel").assertDoesNotExist()
-        composeRule.onNodeWithText(dialogTitle).assertDoesNotExist()
+        composeRule.onNodeWithTag("btn_bericht_zeitraum_uebernehmen").assertDoesNotExist()
     }
 
     @Test

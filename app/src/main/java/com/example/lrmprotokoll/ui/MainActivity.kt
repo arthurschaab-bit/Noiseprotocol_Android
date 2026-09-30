@@ -768,7 +768,18 @@ fun NoiseProtocolApp(
                                 BadgeTippAktion.KOPPLUNGSDIALOG -> showPairingDialog = true
                             }
                         },
-                        modifier = Modifier.widthIn(max = 84.dp).padding(end = 4.dp).testTag("badge_bluetooth_status"),
+                        // F-36, Owner-Entscheidung 30.09.2026 (Variante d): hier nur Farbe und
+                        // Punkt. In 84 dp blieben 50 px fuer die Schrift, gebraucht wurden
+                        // 94-148 px - der Text war in allen zehn Zustaenden abgeschnitten. Der
+                        // volle Zustand steht in der contentDescription und sichtbar auf dem
+                        // Messgeraet-Screen.
+                        //
+                        // Beide Aenderungen zusammengefuehrt (Merge 30.09.2026): F-03 bestimmt,
+                        // WAS der Tipp tut, F-36 WAS zu sehen ist. Sie schliessen einander nicht
+                        // aus - die widthIn-Begrenzung entfaellt mit F-36, weil ohne Text nichts
+                        // mehr abgeschnitten werden kann.
+                        zeigeText = false,
+                        modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
 
                     Box {
