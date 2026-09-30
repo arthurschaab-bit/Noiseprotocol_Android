@@ -3006,6 +3006,70 @@ Anzeige aber nicht, sondern umgeht sie nur für den Test.
 erwartete Textausgabe, nicht die Farbe). Kein bestehender Test sichert heute eine Farbe zu, ein
 Umbau bricht also nichts.
 
+---
+
+<a id="f-37"></a>
+
+#### F-37 · Eine Messung ohne Messgeräteverbindung sah aus wie eine kalibrierte · **P1** · **erledigt (PR #216)**
+
+*Nachgetragen am 30.09.2026 aus einer Owner-Meldung: „wenn keine Verbindung besteht und die
+Messung gestartet [wird], kommt kein Hinweis". Im selben PR behoben, in dem der Befund
+aufschlug — hier festgehalten, weil er eine Klasse von Fehlern beschreibt, die das Audit sonst
+nicht erfasst hat.*
+
+**UX:** Wer die Messung startet, während das gekoppelte PCE-323 gerade **nicht** verbunden ist,
+bekam eine unkalibrierte Mikrofonmessung — dargestellt wie jede andere Messung: dieselbe große
+Zahl, dieselbe Einheit „dB", kein Zusatz, keine Rückfrage. Das ist der Fall aus
+[Kapitel 1](#1-executive-summary) „falsche Aussagen": das Dokument, das am Ende als Nachweis
+dienen soll, sagt nicht, dass seine Zahlen aus dem Telefonmikrofon stammen.
+
+Das ist **nicht** identisch mit dem Fallback, den [F-02](#f-02) betrifft. Der hier gemeinte Weg
+beginnt ohne Verbindung und fällt deshalb gar nicht erst zurück.
+
+*Betroffener Use Case:* jede Messung, die startet, bevor die Verbindung steht — also unter
+anderem jeder Start direkt nach dem Öffnen der App, solange der Verbindungsaufbau läuft.
+*Häufigkeit:* so oft, wie der Nutzer schneller ist als die Verbindung.
+
+**Technik — warum es nicht auffiel:** Eine so gestartete Session trägt eine **leere**
+`deviceAddress` (`messreihe/MeasurementRecorder.kt:219`, `starteMikrofonMessung`). Sie gilt
+damit als reiner Mikrofonlauf, und für reine Mikrofonläufe ist die Fallback-Kennzeichnung
+ausdrücklich aus (`ui/LiveCockpitCard.kt:227`, `istMeterFallback`; Bugfix 12.09.2026, damit ein
+Mikrofon-Nutzer nicht dauernd „Fallback" liest). Der Code unterschied also nicht zwischen
+*„kein Gerät vorhanden"* und *„Gerät vorhanden, nur nicht verbunden"*. Die Antwort darauf steht
+nicht in der Session, sondern in der Kopplung: `settings.meterDeviceAddress`.
+
+**Behoben in PR #216** (`ui/LiveCockpitCard.kt`, `data/SettingsManager.kt`), zwei
+Owner-Entscheidungen vom 30.09.2026:
+
+1. **Dauerhafte Kennzeichnung** unter der Zahl: „Messgerät nicht verbunden – Rückfall auf MIC"
+   (Wortlaut vom Owner, `cockpit_unkalibriert_hinweis`), und die Einheit lautet
+   „dB (Mikrofon-Fallback)" statt schlicht „dB".
+2. **Ein Pop-up je Messungsstart** zum Wegklicken. Es blockiert nichts — eine Mikrofonmessung
+   bleibt erlaubt.
+
+Ohne gekoppeltes Gerät passiert weiterhin nichts davon; dann ist die Mikrofonmessung der
+Normalfall und kein Befund.
+
+**Abweichung vom Audit, offengelegt:** [Kapitel 12](#12-dialog-inventory) rät an dieser Stelle
+zu „keine Modals". Der Owner hat das Pop-up ausdrücklich verlangt, und sein Argument trägt: der
+vom Audit stattdessen vorgeschlagene Hinweis **vor** dem Start erwischt genau diesen Fall nicht,
+weil die Verbindung zum Startzeitpunkt noch aufgebaut werden könnte.
+
+**Merker in den Einstellungen, nicht in `remember`:** Der Hinweis soll einmal je Messungsstart
+kommen, nicht bei jeder Rückkehr aufs Cockpit — ein Tabwechsel würde `remember` verwerfen.
+Ausgelöst wird an der Session-ID, nicht am Dienstzustand: beim Umschalten von `dienstAktiv`
+existiert die Session noch nicht, und die Mikrofon-Erkennung fiele auf die **vorige** Session
+zurück.
+
+**Tests:** `test/.../ui/UnkalibrierteMessungHinweisTest.kt` (3 Tests: Kennzeichnung erscheint,
+Pop-up erscheint einmal, ohne gekoppeltes Gerät erscheint nichts). Gegenprobe: mit
+`unkalibriertTrotzGeraet = false` sind zwei der drei rot.
+
+**Was dieser Befund für das Audit bedeutet:** Er ist in Phase 1 („falsche Aussagen stoppen")
+zu Hause, wurde aber erst durch einen Gerätetest in Phase 6 gefunden. Die Audit-Analyse hat ihn
+nicht erfasst, weil sie `istMeterFallback` als korrekt gelesen hat — was es für den Fall, für
+den es geschrieben wurde, auch ist. Die Lücke lag in einem Fall, den es nie betrachtet hat.
+
 ## 30. Quick Wins
 
 Aufnahmekriterien: erkennbarer UX-Nutzen · geringes Risiko · überschaubarer Aufwand · klar
@@ -3338,7 +3402,7 @@ strukturelle Umbauten zuletzt und einzeln, weil sie Gerätetests brauchen.
 
 | | |
 |---|---|
-| **Findings** | [F-01](#f-01) (Teil 1+2: `rememberSaveable`), [F-06](#f-06), [F-27](#f-27) |
+| **Findings** | [F-01](#f-01) (Teil 1+2: `rememberSaveable`), [F-06](#f-06), [F-27](#f-27), ~~**[F-37](#f-37)**~~ (nachgetragen 30.09.2026, **erledigt** in PR #216 — gefunden erst im Gerätetest zu Phase 6) |
 | **Komponenten** | `GesamtberichtStammdatenSheet`, `FotoDokumentationSheet`, `MarkNoiseEventBottomSheet`, `MainActivity` (Sheet-States), `LiveCockpitCard`, `BerichtScreen`, `ProtokollDetailScreen` |
 | **Erwarteter UX-Effekt** | keine verlorenen Eingaben mehr; keine erfundene Messdauer; kein hängender Export-Dialog |
 | **Risiko** | niedrig – rein additiv, keine Schemaänderung, keine Service-Änderung |
