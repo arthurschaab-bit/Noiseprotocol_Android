@@ -130,6 +130,10 @@ fun MeterScreen(
     var scanFehler by remember { mutableStateOf<String?>(null) }
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
     var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
+    // Geraetetest 30.09.2026: Der Owner sah hier in der Liste einen Bose-Lautsprecher. Ein Tipp
+    // genuegte bisher, um irgendein BLE-Geraet als Messgeraet zu pinnen - die App verband sofort
+    // und protokollierte danach fuenfzehnmal "Kein Frame innerhalb von 5000ms".
+    var zuKoppelndesGeraet by remember { mutableStateOf<BleDevice?>(null) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var autoConnect by remember { mutableStateOf(settings.meterAutoConnect) }
 
@@ -196,6 +200,45 @@ fun MeterScreen(
         pairedAddress = device.address
         pairedName = device.name ?: device.address
         ensureConnected()
+    }
+
+    // Bewusst ein ZWEITER, schwaecherer Dialog neben dem Spoofing-Dialog darunter, nicht
+    // derselbe: M6-Checkliste Teil 2, Punkt 2 verlangt, dass der Verdachtsfall
+    // VERDAECHTIG_GLEICHER_NAME in der UI sichtbar bleibt. Haette ich beide zusammengelegt,
+    // waere die Warnung in einer Routinebestaetigung untergegangen. Dieser Dialog hier ist
+    // keine Sicherheitsmassnahme - das Bedrohungsmodell aus Plan Abschnitt 6 ist Spoofing, und
+    // ein versehentlich getippter Lautsprecher ist kein Angriff, sondern ein Bedienfehler, den
+    // die App bisher widerspruchslos uebernommen hat.
+    if (zuKoppelndesGeraet != null) {
+        val device = zuKoppelndesGeraet!!
+        AlertDialog(
+            onDismissRequest = { zuKoppelndesGeraet = null },
+            title = { Text(stringResource(R.string.meter_pair_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.meter_pair_confirm_text,
+                        device.name ?: stringResource(R.string.meter_device_without_name),
+                        device.address,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pinne(device)
+                        zuKoppelndesGeraet = null
+                    },
+                    modifier = Modifier.testTag("dialog_pair_confirm"),
+                ) { Text(stringResource(R.string.meter_pair_confirm_action)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { zuKoppelndesGeraet = null },
+                    modifier = Modifier.testTag("dialog_pair_dismiss"),
+                ) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
     }
 
     if (verdaechtigesGeraet != null) {
@@ -546,7 +589,7 @@ fun MeterScreen(
                 Card(
                     onClick = {
                         if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) verdaechtigesGeraet = device
-                        else pinne(device)
+                        else zuKoppelndesGeraet = device
                     },
                     modifier = Modifier
                         .fillMaxWidth()

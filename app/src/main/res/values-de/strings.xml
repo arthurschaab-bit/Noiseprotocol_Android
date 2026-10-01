@@ -590,4 +590,8 @@
     <string name="bericht_zeitraum_unvollstaendig">Bitte Start- und Enddatum wählen.</string>
     <string name="bericht_highend_luecke">Der High-End-Bericht deckt den ganzen Zeitraum ab – abgewählte Tage mittendrin sind darin enthalten.</string>
     <string name="bericht_hindernis_stammdaten_keine">Keine Stammdaten erfasst</string>
+    <string name="meter_pair_confirm_title">Als Messgerät koppeln?</string>
+    <string name="meter_pair_confirm_text">Die App bindet sich fest an %1$s (%2$s) und verbindet sich ab jetzt ausschließlich mit dieser Adresse.\n\nDie Liste zeigt alle Bluetooth-Geräte in Reichweite, nicht nur Messgeräte. Ein Gerät, das kein Schallpegelmesser ist, liefert keine Messwerte — die Verbindung bricht dann nach wenigen Sekunden ab.</string>
+    <string name="meter_pair_confirm_action">Koppeln</string>
+    <string name="meter_device_without_name">(ohne Namen)</string>
 </resources>
