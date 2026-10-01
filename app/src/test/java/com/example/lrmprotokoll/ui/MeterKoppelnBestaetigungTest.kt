@@ -48,7 +48,6 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MeterKoppelnBestaetigungTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -89,6 +88,12 @@ class MeterKoppelnBestaetigungTest {
             "Ein Tipp darf noch nichts gepinnt haben",
             app.container.settingsManager.meterDeviceAddress,
         )
+        // Review-Befund 01.10.2026: pinne() schreibt BEIDE Felder, also beide pruefen - sonst
+        // bliebe ein halb geschriebener Zustand unentdeckt.
+        assertNull(
+            "Auch der Name darf noch nicht gesetzt sein",
+            app.container.settingsManager.meterDeviceName,
+        )
     }
 
     /** Die Bestaetigung pinnt - sonst waere der Dialog eine Sackgasse. */
@@ -102,6 +107,8 @@ class MeterKoppelnBestaetigungTest {
         composeRule.waitForIdle()
 
         assertEquals(FREMDES_GERAET.address, app.container.settingsManager.meterDeviceAddress)
+        // pinne() setzt den Namen auf `device.name ?: device.address`; hier ist er gesetzt.
+        assertEquals(FREMDES_GERAET.name, app.container.settingsManager.meterDeviceName)
     }
 
     /** Abbrechen laesst alles, wie es war - auch den Dialog nicht stehen. */
@@ -115,6 +122,7 @@ class MeterKoppelnBestaetigungTest {
         composeRule.waitForIdle()
 
         assertNull(app.container.settingsManager.meterDeviceAddress)
+        assertNull(app.container.settingsManager.meterDeviceName)
         assertEquals(
             0,
             composeRule.onAllNodesWithTag("dialog_pair_confirm").fetchSemanticsNodes().size,

@@ -589,7 +589,7 @@
     <string name="bericht_highend_luecke">The high-end report covers the whole period – deselected days in between are included.</string>
     <string name="bericht_hindernis_stammdaten_keine">No master data recorded</string>
     <string name="meter_pair_confirm_title">Pair as sound level meter?</string>
-    <string name="meter_pair_confirm_text">The app binds to %1$s (%2$s) and will connect to this address only from now on.\n\nThe list shows every Bluetooth device in range, not just meters. A device that is not a sound level meter delivers no readings — the connection will drop after a few seconds.</string>
+    <string name="meter_pair_confirm_text">The app binds to %1$s (%2$s) and will connect to this address only from now on.\n\nThe list shows every Bluetooth device in range, not just meters. A device that is not a sound level meter delivers no readings. The app then keeps retrying for about three minutes, reports “Failed” and starts a fresh attempt every 15 minutes.</string>
     <string name="meter_pair_confirm_action">Pair</string>
     <string name="meter_device_without_name">(unnamed)</string>
 </resources>
