@@ -2,12 +2,14 @@ package com.example.lrmprotokoll.meter
 
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -25,6 +27,14 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MeterAutoConnectTest {
+    /**
+     * Review-Befund 01.10.2026: das @After unten leert meterDeviceAddress, aber nicht
+     * meterDeviceName. Fuer den Auto-Connect-Pfad ist das harmlos - ohne Adresse startet
+     * keine Verbindung -, vollstaendige Einstellungs-Isolation ist es nicht.
+     */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
+
     private val job = Job()
     private lateinit var settings: SettingsManager
     private lateinit var supervisor: ConnectionSupervisor

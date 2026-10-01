@@ -625,9 +625,10 @@ Beide Male hängt es in der **ersten Komposition**, im impliziten `waitForIdle` 
 vor der ersten Zusicherung und vor jedem Klick.
 
 Die Schleife in `runUntilIdle` wechselt zwischen „Looper leerlaufen lassen" und „Compose fragen".
-Dass Aufnahme 1 im Looper-Teil steht und die Diagnoseliste der Ausnahme leer bleibt, deutet auf
-die Espresso-Seite: der Main-Looper wird nicht leer, nicht Composes eigene ausstehende Arbeit.
-Belegt ist das nicht.
+Eine frühere Fassung dieses Abschnitts schloss daraus auf die Espresso-Seite — der Main-Looper
+werde nicht leer, nicht Composes eigene ausstehende Arbeit. Das ist durch die erste
+Wächter-Diagnose weiter unten **überholt**: `isIdleNow` stellt über `advanceTimeByFrame` selbst die
+Uhr weiter, die Schleife erzeugt also die Arbeit mit, auf die sie wartet.
 
 #### Eine Richtigstellung in eigener Sache
 
@@ -688,6 +689,65 @@ sichern den Vorwert und stellen ihn wieder her — dort ist nichts zu tun.
 
 **Was damit NICHT belegt ist:** dass diese Verunreinigung der Auslöser ist. Die Zählung nach dem
 Fix zeigt es. Vor dem Fix: 4 rote von 13 lokalen Vollläufen, 3 von 11 auf der CI.
+
+#### Die erste Diagnose des Zeitwächters (01.10.2026) — der Takt wird weitergestellt
+
+Der Wächter hat auf einem lokalen Vollauf ausgelöst, bei einem einzelnen Fehlschlag in
+`ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden`. Der entscheidende
+Stack, gekürzt:
+
+```
+"SDK 34 Main Thread" RUNNABLE
+  AbstractMainTestClock.advanceDispatcher        (AbstractMainTestClock.jvm.kt:67)
+  AbstractMainTestClock.advanceTimeByFrame       (AbstractMainTestClock.jvm.kt:38)
+  ComposeIdlingResource.isIdleNow                (ComposeIdlingResource.android.kt:74)
+  RobolectricIdlingStrategy.runUntilIdle         (:48)
+  AndroidComposeUiTestEnvironment.waitForIdle    (:340)
+  AndroidTestOwner.getRoots                      (ComposeUiTest.android.kt:533)
+  TestContext.getAllSemanticsNodes               (TestOwner.kt:86)
+  SemanticsNodeInteractionCollection.fetchSemanticsNodes (:256)
+  ReportConfigSettingsTest…$lambda$2             (ReportConfigSettingsTest.kt:121)
+  AndroidComposeUiTestImpl.waitUntil             (ComposeUiTest.android.kt:424)
+  ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden (:119)
+```
+
+**Zwei Dinge, die vorher nicht erklärbar waren, stehen damit fest.**
+
+**Erstens: `isIdleNow` prüft nicht nur, es stellt die Testuhr weiter.** Jeder Aufruf geht über
+`advanceTimeByFrame`. Fordert irgendetwas in der Komposition fortlaufend Frames an, erzeugt jeder
+dieser Aufrufe neue Arbeit, und Leerlauf tritt nie ein. Die „Millionen von attempts" in der
+Ausnahme sind also Millionen weitergestellter Frames, kein reines Pollen. Damit ist der Mechanismus
+„etwas fordert dauernd Frames an" von innen belegt — nicht mehr nur die Fehlerklasse aus Abschnitt
+5 Punkt 2, sondern diese Schleife.
+
+**Zweitens: warum 60 Sekunden, obwohl der Test 10 anfordert.** `waitUntil(timeoutMillis = 10_000)`
+in Zeile 119 — der Fehlschlag kommt aber nach 60 s. Grund: das **Prädikat** des `waitUntil` ruft in
+Zeile 121 `fetchSemanticsNodes()`, und das löst über `getRoots()` ein *verschachteltes*
+`waitForIdle` aus. Dieses innere Warten steht unter Espressos Master-Idling-Policy (60 s), nicht
+unter dem Budget des `waitUntil`. Das äußere Timeout kommt deshalb nie zum Tragen. Jedes
+`waitUntil`, dessen Bedingung Semantikknoten holt, erbt damit die 60 s — unabhängig davon, was im
+Aufruf steht.
+
+**Was in diesem Fall die Frames anfordert.** Der Test öffnet unmittelbar davor ein
+`ExposedDropdownMenuBox` (`ReportAreaSelection`). Genau dieser Zusammenhang steht seit dem
+25.09.2026 in Abschnitt 4.2 und als Prüfpunkt 1 in Abschnitt 5: Material-3-Popups können unter
+`GraphicsMode.NATIVE` kontinuierlich Frames anfordern. Der Kommentar im Test selbst hält fest, dass
+PR #241 von `performClick` auf `performSemanticsAction` ausgewichen ist, weil „die manuelle Testuhr
+mit `advanceTimeBy(500)` rund um `ExposedDropdownMenuBox` in `AppNotIdleException` lief". Die
+Fehlerklasse war also bekannt und wurde symptomatisch behandelt.
+
+**Was damit NICHT belegt ist.** Dass die übrigen fünf betroffenen Klassen dieselbe Ursache haben.
+Die Vermutung ist naheliegend und passt zu Abschnitt 4.3 (`HomeNavigationComposeTest` scheiterte am
+Überlaufmenü, also ebenfalls an einem Popup) sowie dazu, dass `MeterScreen` Dialoge und
+`MarkNoiseEventBottomSheetTest` ein BottomSheet rendert — alles Popups. Belegt ist sie für keine
+dieser Klassen; dafür braucht es je eine eigene Wächter-Diagnose. Der Wächter liefert sie jetzt
+automatisch.
+
+**Der naheliegende nächste Schritt, bewusst nicht in diesem PR.** Prüfpunkt 1 nennt die Richtung
+schon: nach dem Öffnen eines Popups kein pauschales Warten, sondern Zusicherungen direkt an Knoten
+binden oder die Uhr gezielt stellen. Das umzubauen betrifft die Wartestrategie von sechs
+Testklassen und ist eine eigene Entscheidung — dieser Abschnitt hält den Befund fest, der sie
+tragfähig macht.
 
 #### Der Zeitwächter — und warum JUnits eigene Regel dafür nicht geht
 

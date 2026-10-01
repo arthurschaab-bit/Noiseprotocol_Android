@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.testhilfen
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -17,6 +18,17 @@ import java.io.PrintStream
 class ZeitwaechterRegelTest {
     private val beschreibung: Description =
         Description.createTestDescription("EineKlasse", "einTest")
+
+    /**
+     * Review-Befund 01.10.2026: ohne dies konnte eine Datei aus einem FRUEHEREN Lauf den
+     * Dateinachweis unten falsch gruen machen - die Regel haengt an, sie ueberschreibt nicht, und
+     * eine alte Datei enthaelt denselben Testnamen. Der Nachweis haette dann auch bestanden, wenn
+     * der Schreibweg kaputt ist.
+     */
+    @Before
+    fun alteDiagnoseEntfernen() {
+        File(DIAGNOSEDATEI).delete()
+    }
 
     @Test
     fun einSchnellerTestLoestKeineDiagnoseAus() {
@@ -40,7 +52,7 @@ class ZeitwaechterRegelTest {
 
         // Der zweite Ausgabeweg ist der wichtigere: er ueberlebt eine von Test.timeout
         // abgeschnittene Aufgabe, in der kein XML-Bericht mehr entsteht.
-        val datei = File("build/zeitwaechter-diagnose.txt")
+        val datei = File(DIAGNOSEDATEI)
         assertTrue("Diagnosedatei fehlt unter ${datei.absolutePath}", datei.isFile)
         assertTrue("Diagnosedatei ohne Testnamen", datei.readText().contains("EineKlasse.einTest"))
     }
@@ -60,6 +72,11 @@ class ZeitwaechterRegelTest {
 
         assertTrue("Die Regel darf den Fehler nicht verschlucken", geworfen is IllegalStateException)
         assertTrue(geworfen!!.message!!.contains("der eigentliche Fehler"))
+    }
+
+    private companion object {
+        /** Derselbe Pfad, den [ZeitwaechterRegel] schreibt - relativ zum Modulverzeichnis. */
+        const val DIAGNOSEDATEI = "build/zeitwaechter-diagnose.txt"
     }
 
     private fun fuehreAus(
