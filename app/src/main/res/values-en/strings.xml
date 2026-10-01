@@ -105,6 +105,7 @@
     <string name="cockpit_laeq_label">LAeq (Avg)</string>
     <string name="cockpit_lmax_label">LMax (Peak)</string>
     <string name="cockpit_meter_fallback_unit">dB (microphone fallback)</string>
+    <string name="cockpit_live_level_not_recorded">Live level · not being recorded</string>
     <string name="cockpit_meter_fallback_hint">Connection to the meter lost – showing uncalibrated microphone readings until the connection is restored.</string>
     <string name="cockpit_quick_event">Quick Event (Manual)</string>
     <string name="cockpit_tap_start_monitoring">Tap to start threshold monitoring</string>
@@ -118,6 +119,7 @@
     <string name="meter_action_disconnect">Disconnect</string>
     <string name="meter_action_connect">Connect</string>
     <string name="meter_action_unpair">Unpair</string>
+    <string name="meter_disconnect_automatik_hinweis">Disconnected. \"Connect automatically\" is on – the app will reconnect the next time you open it.</string>
     <string name="meter_action_scan">Scan for nearby devices</string>
     <string name="meter_scanning_title">Scanning for PCE-323 BLE…</string>
     <string name="meter_found_devices_title">Found Devices</string>
@@ -548,6 +550,12 @@
     <string name="drive_resume_action">Resume</string>
     <string name="foto_doku_maximum_erreicht">Maximum reached – adjustable in settings</string>
     <string name="cockpit_speicher_knapp">Only %1$s left – the measurement may stop early. You can free up space in the settings.</string>
+    <string name="meter_auto_connect">Connect automatically</string>
+    <string name="meter_auto_connect_hint">Connect to the meter when the app opens. Does not start a recording.</string>
+    <string name="cockpit_unkalibriert_hinweis">Meter not connected – falling back to MIC</string>
+    <string name="cockpit_unkalibriert_dialog_titel">Measurement is running uncalibrated</string>
+    <string name="cockpit_unkalibriert_dialog_text">%1$s is paired but not connected. Only uncalibrated microphone values are being recorded – they are contestable in a report.</string>
+    <string name="cockpit_unkalibriert_dialog_ok">Understood</string>
     <string name="meter_erneut_verbinden_angestossen">New connection attempt started</string>
     <string name="bericht_zeitraum_label">Period</string>
     <string name="bericht_zeitraum_aendern">Change</string>

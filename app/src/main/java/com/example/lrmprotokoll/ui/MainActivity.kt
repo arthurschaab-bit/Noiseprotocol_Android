@@ -94,6 +94,22 @@ import java.util.*
 // unproblematisch; setContent()/enableEdgeToEdge() bleiben unveraendert nutzbar, da
 // AppCompatActivity ueber FragmentActivity weiterhin eine ComponentActivity ist.
 class MainActivity : AppCompatActivity() {
+    /**
+     * S-3/F-02: baut die Verbindung zum gepinnten Messgeraet auf, sobald die App im Vordergrund
+     * ist - ohne Vordergrunddienst und ohne eine Aufzeichnung zu starten.
+     *
+     * Bewusst hier in der Activity und nicht in einem Composable: die Verbindung gehoert zur App,
+     * nicht zu einem Screen. Ein `DisposableEffect` in der Navigation wuerde bei jedem
+     * Screenwechsel ab- und wieder aufgebaut.
+     *
+     * Deckt zugleich F-03 ab: wartet die Ueberwachung nach erschoepften Versuchen in FAILED,
+     * holt dieser Aufruf den naechsten Anlauf sofort, statt die Wartezeit abzusitzen.
+     */
+    override fun onResume() {
+        super.onResume()
+        (application as LaermprotokollApp).container.meterAutoConnect.verbindeWennGewuenscht()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as LaermprotokollApp).container
         val language = container.settingsManager.appLanguage
@@ -1682,8 +1698,12 @@ fun NoiseProtocolApp(
                 settingsManager.meterDeviceAddress = device.address
                 settingsManager.meterDeviceName = device.name
                 showPairingDialog = false
-                val intent = Intent(context, AudioRecordingService::class.java)
-                context.startForegroundService(intent)
+                // S-3/F-02: Koppeln ist kein Messbeginn. Vorher startete diese Stelle den
+                // Vordergrunddienst - ohne EXTRA_START_AUDIO_MONITORING zwar ohne Audioaufnahme,
+                // aber mit _laeuft = true und Notification, also sichtbar als "MESSUNG LAEUFT".
+                // Der Weg ueber den Statusbadge ist fuer viele der einzige zum Koppeln
+                // (Owner-Geraetetest 27.09.2026), und genau dort blieb F-02 damit wirkungslos.
+                container.meterAutoConnect.verbindeJetzt()
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false },

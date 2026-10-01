@@ -257,10 +257,40 @@ class AudioRecordingService : LifecycleService() {
         }
     }
 
+    /**
+     * S-3/F-02: Die Verbindung zum Messgeraet gehoert nicht mehr zur Messung. Sie wird von
+     * [com.example.lrmprotokoll.meter.MeterAutoConnect] unabhaengig vom Dienst aufgebaut und
+     * lebt weiter, wenn die Messung endet.
+     *
+     * Ein Dienstende darf sie deshalb nur abraeumen, wenn sie sonst niemand haben will. Sonst
+     * waere "Messung beenden" wieder gleichbedeutend mit "Verbindung trennen" - genau der
+     * Zustand, den F-02 beseitigt.
+     */
+    private fun trenneMessgeraetFallsNiemandEsBraucht() {
+        val bleibtBestehen = settingsManager.meterAutoConnect && settingsManager.meterDeviceAddress != null
+        // Der Breadcrumb ist der Nachweis fuer Gerätetest B3: ob das Messungsende die Verbindung
+        // stehen laesst, ist am Badge nicht ablesbar (IDLE und DISCONNECTED haben dieselbe Farbe).
+        // isInitialized wie in uncaughtException: onDestroy kann auch nach einem Abbruch in
+        // onCreate laufen, bevor der Reporter gesetzt war.
+        if (::diagnosticsReporter.isInitialized) {
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                if (bleibtBestehen) {
+                    "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)"
+                } else {
+                    "Messgeraet-Verbindung wird getrennt (niemand braucht sie)"
+                },
+                data = mapOf("meterState" to connectionSupervisor.state.value.name, "automatik" to settingsManager.meterAutoConnect),
+            )
+        }
+        if (bleibtBestehen) return
+        connectionSupervisor.stop()
+    }
+
     private fun ensureMeterMonitoringStarted() {
         if (settingsManager.audioTriggerQuelle == "MIKROFON") {
             Log.d("AudioRecordingService", "Trigger-Quelle ist rein Mikrofon - Meter-Monitoring wird übersprungen")
-            connectionSupervisor.stop()
+            trenneMessgeraetFallsNiemandEsBraucht()
             return
         }
         val address = settingsManager.meterDeviceAddress ?: return
@@ -1428,7 +1458,7 @@ class AudioRecordingService : LifecycleService() {
         _laufendesFormat.value = null
         _laeuft.value = false
         NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
-        connectionSupervisor.stop()
+        trenneMessgeraetFallsNiemandEsBraucht()
         alarmCoordinator.stop()
         levelSampleCollector.stop()
         measurementRecorder.stop()

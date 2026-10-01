@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -35,6 +36,7 @@ import org.robolectric.annotation.GraphicsMode
  * als der Viewport hoch ist - ohne echte Bluetooth-Geraete im Scan-Ergebnis noetig zu haben.
  */
 import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 
 @RunWith(RobolectricTestRunner::class)
@@ -87,5 +89,42 @@ class MeterScreenComposeTest {
         composeRule.onNodeWithText("PCE trennen").performClick()
 
         assertNull(app.container.settingsManager.meterDeviceAddress)
+    }
+
+    /**
+     * Owner-Entscheidung 29.09.2026 (Punkt 3b): Der Automatik-Schalter bleibt ausdruecklich
+     * "nur beim App-Start" - ihn auszuschalten trennt nichts. Damit gab es keinen Weg, eine
+     * laufende Verbindung zu beenden, ausser "Entkoppeln" - und das loescht die Kopplung.
+     *
+     * Dieser Test haelt fest, dass beide Knoepfe existieren und verschiedene Dinge tun: "Trennen"
+     * fasst die Kopplung nicht an, "Entkoppeln" schon (siehe Test darueber).
+     */
+    @Test
+    fun trennenKnopfLiegtNebenEntkoppelnUndFasstDieKopplungNichtAn() {
+        app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
+
+        composeRule.setContent { MeterScreen(onBack = {}) }
+
+        composeRule.onNodeWithTag("btn_meter_disconnect").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_meter_unpair").performScrollTo().assertIsDisplayed()
+
+        assertEquals(
+            "Allein das Anzeigen des Trennen-Knopfes darf die Kopplung nicht veraendern",
+            "AA:BB:CC:DD:EE:FF",
+            app.container.settingsManager.meterDeviceAddress,
+        )
+    }
+
+    /**
+     * Ein Knopf, der nichts zu trennen hat, darf nicht bedienbar aussehen: ohne laufende
+     * Ueberwachung steht der ConnectionSupervisor auf [com.example.lrmprotokoll.meter.ConnectionState.IDLE].
+     */
+    @Test
+    fun trennenKnopfIstAusgegrautWennNichtsZuTrennenIst() {
+        app.container.settingsManager.meterDeviceAddress = "AA:BB:CC:DD:EE:FF"
+
+        composeRule.setContent { MeterScreen(onBack = {}) }
+
+        composeRule.onNodeWithTag("btn_meter_disconnect").performScrollTo().assertIsNotEnabled()
     }
 }

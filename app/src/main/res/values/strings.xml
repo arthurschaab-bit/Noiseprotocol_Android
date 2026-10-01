@@ -107,6 +107,7 @@
     <!-- Owner-Feedback 12.09.2026: Anzeige waehrend eines PCE-323-Verbindungsausfalls in einer
          Messgeraet-Session - der Mikrofonwert bleibt sichtbar, aber erkennbar als Fallback. -->
     <string name="cockpit_meter_fallback_unit">dB (Mikrofon-Fallback)</string>
+    <string name="cockpit_live_level_not_recorded">Live-Pegel · wird nicht aufgezeichnet</string>
     <string name="cockpit_meter_fallback_hint">Verbindung zum Messgerät unterbrochen – Anzeige wechselt auf unkalibriertes Mikrofon, bis die Verbindung wiederhergestellt ist.</string>
     <string name="cockpit_quick_event">Schnell-Ereignis (Manuell)</string>
     <string name="cockpit_tap_start_monitoring">Tippen, um Schwellenwert-Überwachung zu starten</string>
@@ -120,6 +121,7 @@
     <string name="meter_action_disconnect">Verbindung trennen</string>
     <string name="meter_action_connect">Verbinden</string>
     <string name="meter_action_unpair">Entkoppeln</string>
+    <string name="meter_disconnect_automatik_hinweis">Getrennt. „Automatisch verbinden" ist an – beim nächsten Öffnen der App wird wieder verbunden.</string>
     <string name="meter_action_scan">Geräte in Reichweite suchen</string>
     <string name="meter_scanning_title">Suche nach PCE-323 BLE…</string>
     <string name="meter_found_devices_title">Gefundene Geräte</string>
@@ -550,6 +552,12 @@
     <string name="drive_resume_action">Fortsetzen</string>
     <string name="foto_doku_maximum_erreicht">Maximum erreicht – in den Einstellungen änderbar</string>
     <string name="cockpit_speicher_knapp">Nur noch %1$s frei – die Messung kann vorzeitig abbrechen. In den Einstellungen lässt sich Speicher freigeben.</string>
+    <string name="meter_auto_connect">Automatisch verbinden</string>
+    <string name="meter_auto_connect_hint">Beim Öffnen der App selbsttätig mit dem Messgerät verbinden. Startet keine Aufzeichnung.</string>
+    <string name="cockpit_unkalibriert_hinweis">Messgerät nicht verbunden – Rückfall auf MIC</string>
+    <string name="cockpit_unkalibriert_dialog_titel">Messung läuft unkalibriert</string>
+    <string name="cockpit_unkalibriert_dialog_text">%1$s ist gekoppelt, aber nicht verbunden. Es werden nur unkalibrierte Mikrofonwerte aufgezeichnet – für einen Bericht sind sie angreifbar.</string>
+    <string name="cockpit_unkalibriert_dialog_ok">Verstanden</string>
     <string name="meter_erneut_verbinden_angestossen">Neuer Verbindungsversuch gestartet</string>
     <string name="bericht_zeitraum_label">Zeitraum</string>
     <string name="bericht_zeitraum_aendern">Ändern</string>
