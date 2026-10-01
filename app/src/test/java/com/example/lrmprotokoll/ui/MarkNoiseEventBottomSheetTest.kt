@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -19,6 +20,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MarkNoiseEventBottomSheetTest {
+
+    /** Macht den unbegrenzten Leerlauf-Haenger sichtbar statt ihn stumm brennen zu lassen. */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()

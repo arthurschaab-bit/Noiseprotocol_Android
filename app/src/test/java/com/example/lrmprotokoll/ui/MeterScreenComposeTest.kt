@@ -11,6 +11,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.meter.FakeMeterTransport
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -43,6 +45,14 @@ import org.junit.Assert.assertNull
 @Config(sdk = [34], qualifiers = "w320dp-h240dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MeterScreenComposeTest {
+
+    /** Macht den unbegrenzten Leerlauf-Haenger sichtbar statt ihn stumm brennen zu lassen. */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
+
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()

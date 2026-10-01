@@ -26,6 +26,7 @@ import com.example.lrmprotokoll.meter.MeasurementRange
 import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -82,6 +83,10 @@ import java.io.File
 @Config(sdk = [34], qualifiers = BildschirmfotoWerkstatt.BILDSCHIRM_LANG)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class BildschirmfotoWerkstatt {
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
+
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val app get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>()

@@ -5,10 +5,12 @@ import android.app.Application
 import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,6 +28,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class DienstvoraussetzungenTest {
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
+
     private lateinit var app: LaermprotokollApp
 
     @Before

@@ -129,6 +129,13 @@ jobs:
           path: app/build/reports/ktlint/
           retention-days: 7
 
+      # zeitwaechter-diagnose.txt braucht eine eigene Zeile, weil die Datei direkt unter
+      # app/build/ liegt und von app/build/test-results/ NICHT erfasst wird - derselbe Grund
+      # wie bei flake_a_messwerte.tsv. Sie entsteht nur, wenn ZeitwaechterRegel ausgeloest hat,
+      # und ist dann der einzige Weg an die Diagnose: schneidet die 20-Minuten-Schranke
+      # testDebugUnitTest ab, gibt es keinen XML-Bericht, und System.err der Testworker faengt
+      # Gradle ab. Fehlt die Datei (gruener Lauf), warnt upload-artifact nur - der Schritt
+      # faellt erst, wenn KEINER der Pfade existiert.
       - name: Upload test reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -139,6 +146,7 @@ jobs:
             app/build/test-results/
             logs/python-tests.xml
             app/build/flake_a_messwerte.tsv
+            app/build/zeitwaechter-diagnose.txt
           retention-days: 7
 
       - name: Upload Bildschirmfotos

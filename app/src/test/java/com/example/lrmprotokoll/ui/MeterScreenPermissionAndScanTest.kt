@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.meter.FakeMeterTransport
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -33,6 +34,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MeterScreenPermissionAndScanTest {
+
+    /** Macht den unbegrenzten Leerlauf-Haenger sichtbar statt ihn stumm brennen zu lassen. */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()

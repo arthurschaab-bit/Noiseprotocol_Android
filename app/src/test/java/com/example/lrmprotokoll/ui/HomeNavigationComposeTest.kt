@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -34,6 +35,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class HomeNavigationComposeTest {
+
+    /** Macht den unbegrenzten Leerlauf-Haenger sichtbar statt ihn stumm brennen zu lassen. */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()

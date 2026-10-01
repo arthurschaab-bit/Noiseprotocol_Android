@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.ReportConfigEntity
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -31,6 +32,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReportConfigSettingsTest {
+
+    /** Macht den unbegrenzten Leerlauf-Haenger sichtbar statt ihn stumm brennen zu lassen. */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()

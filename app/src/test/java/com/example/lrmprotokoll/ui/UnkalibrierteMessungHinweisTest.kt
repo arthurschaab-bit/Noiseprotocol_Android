@@ -18,6 +18,7 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.meter.FakeMeterTransport
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -44,6 +45,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "de-rDE-w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class UnkalibrierteMessungHinweisTest {
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
+
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
