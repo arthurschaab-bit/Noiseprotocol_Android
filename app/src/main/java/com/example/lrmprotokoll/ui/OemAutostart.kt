@@ -1,5 +1,8 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.annotation.StringRes
+import com.example.lrmprotokoll.R
+
 /**
  * Zusätzliche, herstellereigene Autostart-/"Geschützte Apps"-Einstellung außerhalb des
  * Standard-Android-Akkuoptimierungssystems (PROMPT_M8.md Aufgabe 2). Ohne diese Freischaltung
@@ -13,7 +16,13 @@ package com.example.lrmprotokoll.ui
  * [OemDeviceHelperCard]).
  */
 data class OemAutostartHinweis(
-    val hinweistext: String,
+    /**
+     * F-20: Die Beschriftung ist eine Ressourcen-ID, kein fertiger Text. Diese Funktion bleibt
+     * damit reine Ableitungslogik ohne Android-Abhaengigkeit - eine Ressourcen-ID ist zur
+     * Aufrufzeit nur ein Int -, und [OemDeviceHelperCard] loest sie dort auf, wo ein
+     * Composition-Kontext da ist.
+     */
+    @StringRes val hinweistextRes: Int,
     val intentPackage: String,
     val intentActivity: String,
 )
@@ -51,23 +60,23 @@ fun leiteOemAutostartHinweisAb(hersteller: String): OemAutostartHinweis? {
         h.contains("Xiaomi", ignoreCase = true) ||
             h.contains("Redmi", ignoreCase = true) ||
             h.contains("POCO", ignoreCase = true) ->
-            OemAutostartHinweis("Xiaomi / HyperOS Autostart prüfen", XIAOMI_PACKAGE, XIAOMI_ACTIVITY)
+            OemAutostartHinweis(R.string.oem_autostart_xiaomi, XIAOMI_PACKAGE, XIAOMI_ACTIVITY)
 
         h.contains("Huawei", ignoreCase = true) ->
-            OemAutostartHinweis("Huawei / EMUI Geschützte Apps prüfen", HUAWEI_PACKAGE, HUAWEI_ACTIVITY)
+            OemAutostartHinweis(R.string.oem_autostart_huawei, HUAWEI_PACKAGE, HUAWEI_ACTIVITY)
 
         h.contains("Oppo", ignoreCase = true) ->
-            OemAutostartHinweis("Oppo / ColorOS Autostart prüfen", OPPO_PACKAGE, OPPO_ACTIVITY)
+            OemAutostartHinweis(R.string.oem_autostart_oppo, OPPO_PACKAGE, OPPO_ACTIVITY)
 
         h.contains("Vivo", ignoreCase = true) ->
-            OemAutostartHinweis("Vivo Autostart prüfen", VIVO_PACKAGE, VIVO_ACTIVITY)
+            OemAutostartHinweis(R.string.oem_autostart_vivo, VIVO_PACKAGE, VIVO_ACTIVITY)
 
         h.contains("OnePlus", ignoreCase = true) ->
-            OemAutostartHinweis("OnePlus / OxygenOS Autostart prüfen", ONEPLUS_PACKAGE, ONEPLUS_ACTIVITY)
+            OemAutostartHinweis(R.string.oem_autostart_oneplus, ONEPLUS_PACKAGE, ONEPLUS_ACTIVITY)
 
         h.contains("Samsung", ignoreCase = true) ->
             OemAutostartHinweis(
-                "Samsung Geräte-Wartung: „Nicht überwachte Apps“ prüfen (nicht auf jeder One-UI-Version vorhanden)",
+                R.string.oem_autostart_samsung,
                 SAMSUNG_PACKAGE,
                 SAMSUNG_ACTIVITY,
             )
