@@ -8,11 +8,13 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.annotation.StringRes
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -64,7 +66,7 @@ class OemDeviceHelperCardTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(OEM_HELPER_CARD_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("Geräte- & Alarm-Diagnose").assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.oem_card_title)).assertIsDisplayed()
     }
 
     @Test
@@ -74,7 +76,7 @@ class OemDeviceHelperCardTest {
         composeRule.setContent { OemDeviceHelperCard() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Optimal konfiguriert").assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.oem_badge_optimal)).assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_disable_battery_optimization)).assertIsNotDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_allow_notifications)).assertIsNotDisplayed()
     }
@@ -89,7 +91,7 @@ class OemDeviceHelperCardTest {
         composeRule.setContent { OemDeviceHelperCard() }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Prüfung nötig").assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.oem_badge_check_needed)).assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.oem_action_disable_battery_optimization)).assertIsDisplayed().performClick()
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
@@ -160,11 +162,42 @@ class OemDeviceHelperCardTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Prüfung nötig").assertIsDisplayed()
-        composeRule.onNodeWithText("Huawei / EMUI Geschützte Apps prüfen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(text(R.string.oem_badge_check_needed)).assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.oem_autostart_huawei)).assertIsDisplayed().performClick()
 
         val gestarteteIntent = shadowOf(composeRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, gestarteteIntent.action)
         assertEquals("package:${context.packageName}", gestarteteIntent.data.toString())
     }
+
+    /**
+     * F-20: der eigentliche Nachweis, dass diese Karte vollstaendig lokalisiert ist. Vor diesem
+     * PR waren nur die drei Knopfbeschriftungen Ressourcen - in englischer Sprache stand ein
+     * englischer Knopf unter einem deutschen Kartentitel. Dieser Test faellt mit dem alten Stand,
+     * weil der harte Titel "Geräte- & Alarm-Diagnose" unabhaengig von der Sprache erscheint.
+     *
+     * Die Sprachkennung in [Config.qualifiers] ist dasselbe Muster wie in
+     * [CockpitKopfzeileTest], nur mit en statt de.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "en-rUS-w411dp-h891dp")
+    fun inEnglischerSpracheStehtKeinDeutscherTextMehrInDerKarte() {
+        konfiguriereAlsOptimal()
+
+        composeRule.setContent { OemDeviceHelperCard() }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Device & alarm diagnostics").assertIsDisplayed()
+        composeRule.onNodeWithText("Optimally configured").assertIsDisplayed()
+        // Gegenprobe in dieselbe Richtung: der deutsche Titel darf hier gar nicht auftauchen.
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Geräte- & Alarm-Diagnose").fetchSemanticsNodes().size,
+        )
+    }
+
+    /** Kuerzel fuer den lokalisierten Text - die Tests pruefen Verhalten, nicht Wortlaut. */
+    private fun text(
+        @StringRes id: Int,
+    ): String = composeRule.activity.getString(id)
 }

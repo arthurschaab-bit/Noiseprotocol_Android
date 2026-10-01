@@ -128,7 +128,7 @@ fun OemDeviceHelperCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Geräte- & Alarm-Diagnose",
+                        text = stringResource(R.string.oem_card_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -140,7 +140,10 @@ fun OemDeviceHelperCard(
                         MaterialTheme.colorScheme.statusContainer(MaterialTheme.colorScheme.statusColors.connected)
                 ) {
                     Text(
-                        text = if (hasIssues) "Prüfung nötig" else "Optimal konfiguriert",
+                        text =
+                            stringResource(
+                                if (hasIssues) R.string.oem_badge_check_needed else R.string.oem_badge_optimal,
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color =
                             if (hasIssues) {
@@ -156,7 +159,13 @@ fun OemDeviceHelperCard(
 
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Modell: $manufacturer $model (Android ${Build.VERSION.RELEASE})",
+                text =
+                    stringResource(
+                        R.string.oem_detail_model,
+                        manufacturer,
+                        model,
+                        Build.VERSION.RELEASE,
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -164,7 +173,13 @@ fun OemDeviceHelperCard(
             // Hardware Vibration Information
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
-                    text = "• Hardware-Vibration: " + (if (hasVibrator) "Vorhanden" else "Nicht vorhanden (Akustischer Alarmton wird forciert)"),
+                    text =
+                        stringResource(
+                            R.string.oem_detail_vibration,
+                            stringResource(
+                                if (hasVibrator) R.string.oem_vibration_present else R.string.oem_vibration_absent,
+                            ),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (!hasVibrator) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -173,7 +188,13 @@ fun OemDeviceHelperCard(
             // Notification Permission
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
-                    text = "• Benachrichtigungen: " + (if (hasNotificationPermission) "Erlaubt" else "Blockiert"),
+                    text =
+                        stringResource(
+                            R.string.oem_detail_notifications,
+                            stringResource(
+                                if (hasNotificationPermission) R.string.oem_state_allowed else R.string.oem_notifications_blocked,
+                            ),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (!hasNotificationPermission) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -182,7 +203,13 @@ fun OemDeviceHelperCard(
             // Exact Alarms
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
-                    text = "• Exakte Alarme: " + (if (canExactAlarm) "Erlaubt" else "Eingeschränkt"),
+                    text =
+                        stringResource(
+                            R.string.oem_detail_exact_alarms,
+                            stringResource(
+                                if (canExactAlarm) R.string.oem_state_allowed else R.string.oem_exact_alarms_restricted,
+                            ),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (!canExactAlarm) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -191,7 +218,13 @@ fun OemDeviceHelperCard(
             // Battery Optimization
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                 Text(
-                    text = "• Akku-Optimierung: " + (if (!isBatteryOptimized) "Ausgenommen (Keine Einschränkungen)" else "Eingeschränkt (kann Alarme verzögern)"),
+                    text =
+                        stringResource(
+                            R.string.oem_detail_battery,
+                            stringResource(
+                                if (isBatteryOptimized) R.string.oem_battery_restricted else R.string.oem_battery_exempt,
+                            ),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isBatteryOptimized) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -202,7 +235,7 @@ fun OemDeviceHelperCard(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Empfohlene Aktionen für zuverlässige Alarme:",
+                    text = stringResource(R.string.oem_recommended_actions),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -277,7 +310,7 @@ fun OemDeviceHelperCard(
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
-                        Text(oemHinweis.hinweistext)
+                        Text(stringResource(oemHinweis.hinweistextRes))
                     }
                 }
             }

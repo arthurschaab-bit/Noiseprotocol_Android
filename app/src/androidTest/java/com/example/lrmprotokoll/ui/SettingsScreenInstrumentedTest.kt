@@ -891,7 +891,8 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Optimal konfiguriert").assertIsDisplayed()
+        val optimalBadge = composeRule.activity.getString(com.example.lrmprotokoll.R.string.oem_badge_optimal)
+        composeRule.onNodeWithText(optimalBadge).assertIsDisplayed()
         composeRule.onNodeWithTag(OEM_BATTERY_OPTIMIZATION_BUTTON_TAG).assertDoesNotExist()
         composeRule.onNodeWithTag(OEM_NOTIFICATION_SETTINGS_BUTTON_TAG).assertDoesNotExist()
     }

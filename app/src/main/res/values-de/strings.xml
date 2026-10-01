@@ -706,6 +706,31 @@
     <string name="oem_action_allow_notifications">Benachrichtigungen erlauben</string>
     <string name="oem_action_disable_battery_optimization">Akku-Optimierung aufheben</string>
     <string name="oem_action_allow_exact_alarms">Exakte Alarme freischalten</string>
+    <!-- F-20 Nachzug: PR #239 hat in dieser Karte nur die drei Knopfbeschriftungen
+         lokalisiert; Titel, Statusabzeichen und die vier Befundzeilen blieben hart im
+         Quelltext. Auf Englisch stand damit ein englischer Knopf unter deutschem Titel. -->
+    <string name="oem_card_title">Geräte- &amp; Alarm-Diagnose</string>
+    <string name="oem_badge_check_needed">Prüfung nötig</string>
+    <string name="oem_badge_optimal">Optimal konfiguriert</string>
+    <string name="oem_detail_model">Modell: %1$s %2$s (Android %3$s)</string>
+    <string name="oem_detail_vibration">• Hardware-Vibration: %1$s</string>
+    <string name="oem_vibration_present">Vorhanden</string>
+    <string name="oem_vibration_absent">Nicht vorhanden (Akustischer Alarmton wird forciert)</string>
+    <string name="oem_detail_notifications">• Benachrichtigungen: %1$s</string>
+    <string name="oem_state_allowed">Erlaubt</string>
+    <string name="oem_notifications_blocked">Blockiert</string>
+    <string name="oem_detail_exact_alarms">• Exakte Alarme: %1$s</string>
+    <string name="oem_exact_alarms_restricted">Eingeschränkt</string>
+    <string name="oem_detail_battery">• Akku-Optimierung: %1$s</string>
+    <string name="oem_battery_exempt">Ausgenommen (Keine Einschränkungen)</string>
+    <string name="oem_battery_restricted">Eingeschränkt (kann Alarme verzögern)</string>
+    <string name="oem_recommended_actions">Empfohlene Aktionen für zuverlässige Alarme:</string>
+    <string name="oem_autostart_xiaomi">Xiaomi / HyperOS Autostart prüfen</string>
+    <string name="oem_autostart_huawei">Huawei / EMUI Geschützte Apps prüfen</string>
+    <string name="oem_autostart_oppo">Oppo / ColorOS Autostart prüfen</string>
+    <string name="oem_autostart_vivo">Vivo Autostart prüfen</string>
+    <string name="oem_autostart_oneplus">OnePlus / OxygenOS Autostart prüfen</string>
+    <string name="oem_autostart_samsung">Samsung Geräte-Wartung: „Nicht überwachte Apps“ prüfen (nicht auf jeder One-UI-Version vorhanden)</string>
     <string name="mic_status_wav_disabled">WAV: AUS (DSGVO)</string>
     <string name="mic_status_wav_active">WAV: AKTIV</string>
     <string name="mic_status_wav_inactive">WAV: INAKTIV</string>
