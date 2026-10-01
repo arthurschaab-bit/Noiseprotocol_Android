@@ -2,8 +2,10 @@ package com.example.lrmprotokoll.backup
 
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -17,6 +19,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SicherungEinstellungenTest {
+
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
 
     private fun neueSettings() = SettingsManager(
         ApplicationProvider.getApplicationContext(),

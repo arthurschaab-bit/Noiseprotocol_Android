@@ -26,6 +26,7 @@ import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.meter.MeasurementRange
 import com.example.lrmprotokoll.meter.TimeWeighting
 import com.example.lrmprotokoll.meter.Weighting
+import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -71,6 +72,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "de-rDE-w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class GeraetetestS3CockpitTest {
+    /** F-Isolation: die gepinnte Kopplung ueberlebt sonst diese Klasse (siehe Regel-KDoc). */
+    @get:Rule
+    val kopplungAufraeumen = MessgeraetKopplungAufraeumenRegel()
+
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val app get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>()

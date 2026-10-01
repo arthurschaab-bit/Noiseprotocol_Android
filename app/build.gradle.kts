@@ -1,3 +1,4 @@
+import java.time.Duration
 import java.util.Date
 
 plugins {
@@ -365,6 +366,26 @@ dependencies {
     // "implementation", weil er als eigene APK neben der Test-APK installiert und vom
     // Testrunner aus gestartet wird, nicht in die Test-APK hineingelinkt.
     androidTestUtil(libs.androidx.test.orchestrator)
+}
+
+// Harte Schranke fuer die JVM-Testaufgabe (01.10.2026, Flakiness-Bericht Abschnitt 4.8).
+//
+// Nicht gegen eine einzelne endlose Wartung - die gibt es nicht, Espressos Master-Idling-Policy
+// deckelt jede bei 60 s. Sondern gegen deren Summe: ein roter Vollauf verliert 60 s je
+// betroffenem Test, gemessen zehn Fehlschlaege in einem Lauf, und ein schlechterer Lauf frisst
+// damit das Zeitbudget des CI-Jobs.
+//
+// Die Grenze ist bewusst weit: ein gruener Vollauf braucht lokal rund 2 Minuten, der gemessene
+// rote rund 12. Zwanzig Minuten lassen also Luft fuer einen ausgelasteten Runner und schneiden
+// einen Lauf ab, der ins Uferlose laeuft.
+//
+// Wichtig dabei: Gradle erzeugt die XML-Berichte erst beim Abschluss der Aufgabe aus den
+// Binaerergebnissen. Ein abgeschnittener Lauf hinterlaesst deshalb kein XML - wohl aber die
+// Binaerergebnisse unter app/build/test-results/testDebugUnitTest/binary/ und die laufende
+// Diagnose aus ZeitwaechterRegel in app/build/zeitwaechter-diagnose.txt. Beide Pfade liegen im
+// Artefakt des CI-Schritts "Upload test reports".
+tasks.withType<Test>().configureEach {
+    timeout.set(Duration.ofMinutes(20))
 }
 
 // Praefprotokoll Frage 5 (Owner-Entscheidung vom 11.09.2026: "Pruefe das selber und ueberlege

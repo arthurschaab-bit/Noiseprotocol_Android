@@ -568,6 +568,155 @@ diesen Mechanismus zeigt.
 
 ---
 
+### 4.8 `AppNotIdleException` im Vollauf — die Ausnahme ohne Diagnose (Robolectric, 01.10.2026)
+
+- **Symptom:** In etwa einem von vier lokalen Vollläufen fallen 8–10 Tests in sechs Klassen mit
+  `AppNotIdleException`: `HomeNavigationComposeTest`, `MainActivityLaunchTest`,
+  `MarkNoiseEventBottomSheetTest`, `MeterScreenComposeTest`, `MeterScreenPermissionAndScanTest`,
+  `ReportConfigSettingsTest`. Auf der CI bisher 3 rote von 11 Läufen.
+- **Nicht zu verwechseln mit 4.5.** Dort war die Ursache die Endlosanimation in
+  `BluetoothStatusBadge`, behoben in PR #189 (`ebb9f17`). Dieser Fix ist intakt — nachgesehen am
+  01.10.2026: `rememberInfiniteTransition` nur bei `isAnimating`, Alpha in der Draw-Phase über
+  `Modifier.graphicsLayer`. Eine Sonde bestätigt es: `BluetoothStatusBadge(CONNECTING)` wird idle
+  (10,9 s gegen 0,285 s bei `IDLE` — die Animation kostet Faktor 38, blockiert aber nicht).
+
+#### Warum dieser Fehlschlag so lange ununtersuchbar war
+
+Die Ausnahme hört wortwörtlich so auf:
+
+```
+androidx.test.espresso.AppNotIdleException: Compose did not get idle after 2161789 attempts
+in 60 SECONDS. Please check your measure/layout lambdas, they may be causing an infinite
+composition loop. Or set Espresso's master idling policy if you require a longer timeout.
+The following Idle Conditions failed .
+```
+
+**Die Liste ist leer.** Composes `getDiagnosticMessageIfBusy` gibt nichts zurück, obwohl
+`ComposeIdlingResource.isIdleNow` dauerhaft `false` liefert. In jedem roten Lauf stand also eine
+Ausnahme ohne jede Angabe, was beschäftigt war. Das ist der eigentliche Grund, warum zu diesem
+Flake über Monate nur Vermutungen entstanden sind: es gab nichts zu lesen.
+
+Dazu kommt: Gradle erzeugt die XML-Berichte erst beim **Abschluss** der Testaufgabe aus den
+Binärergebnissen. Ein Lauf, den man abbricht, weil er schon zwanzig Minuten brennt, hinterlässt
+deshalb keinen einzigen Testbericht. Die Binärergebnisse unter
+`app/build/test-results/testDebugUnitTest/binary/` liegen allerdings da.
+
+#### Gemessen am laufenden Prozess
+
+Zwei Läufe wurden im Zustand erwischt und per `jstack` von außen aufgenommen. Beide Male dieselbe
+Form, verschiedene Tests:
+
+```
+"SDK 34 Main Thread"  runnable   cpu=1273229ms / elapsed=1316s   ← 96,7 % reine Rechenzeit
+
+Lauf A: MeterScreenComposeTest.scanButtonAmEndeDesKopfbereichsIstPerScrollErreichbar(:75)
+Lauf B: MeterScreenPermissionAndScanTest.meterScreenZeigtBerechtigungshinweis…(:69)
+
+  → AndroidComposeTestRule.setContent
+    → AndroidComposeUiTestImpl.setContent         (ComposeUiTest.android.kt:489)
+      → waitForIdle                               (ComposeUiTest.android.kt:340)
+        → RobolectricIdlingStrategy.runUntilIdle  (RobolectricIdlingStrategy.android.kt:48)
+
+Aufnahme 1, Spitze:  ShadowPausedLooper.triggerIdleHandlersIfNeeded:554 → MessageQueue.isIdle
+Aufnahme 2, Spitze:  ComposeIdlingResource.isIdleNow:73
+```
+
+Beide Male hängt es in der **ersten Komposition**, im impliziten `waitForIdle` von `setContent` —
+vor der ersten Zusicherung und vor jedem Klick.
+
+Die Schleife in `runUntilIdle` wechselt zwischen „Looper leerlaufen lassen" und „Compose fragen".
+Dass Aufnahme 1 im Looper-Teil steht und die Diagnoseliste der Ausnahme leer bleibt, deutet auf
+die Espresso-Seite: der Main-Looper wird nicht leer, nicht Composes eigene ausstehende Arbeit.
+Belegt ist das nicht.
+
+#### Eine Richtigstellung in eigener Sache
+
+Eine erste Fassung dieses Abschnitts behauptete, der Pfad habe **kein** Timeout und der Hänger sei
+unbegrenzt; die 24 Minuten eines Laufs galten als eine einzige endlose Wartung. Das ist falsch.
+Espressos Master-Idling-Policy deckelt jede Wartung bei 60 s, auch die innerhalb von `setContent`.
+Die Laufzeiten der zehn Fehlschläge eines roten Vollaufs am 01.10.2026:
+
+```
+60,411  HomeNavigationComposeTest.diagnoseIstUeberEinstellungenErreichbar
+60,180  HomeNavigationComposeTest.navigationsleisteBleibtAufDemEinstellungenScreenSichtbar
+60,735  MainActivityLaunchTest.mainActivityStartetErfolgreich
+60,380  MarkNoiseEventBottomSheetTest.stateRestorationSurvivesNoteAndCategory
+60,115  MeterScreenComposeTest.scanButtonAmEndeDesKopfbereichsIstPerScrollErreichbar
+60,126  MeterScreenComposeTest.trennenKnopfLiegtNebenEntkoppelnUndFasstDieKopplungNichtAn
+60,118  MeterScreenComposeTest.trennenKnopfIstAusgegrautWennNichtsZuTrennenIst
+60,159  MeterScreenComposeTest.entkoppelnButtonWirdAngezeigtUndLoeschtGeraeteadresse
+60,125  MeterScreenPermissionAndScanTest.meterScreenZeigtBerechtigungshinweis…
+60,133  ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden
+```
+
+Strikt 60,1 bis 60,7 s. Die 24 Minuten waren rund zwei Dutzend solcher Wartungen, nicht eine
+endlose. **Die Konsequenz für den Zeitwächter ist nicht kosmetisch:** eine Grenze über 60 s hätte
+nie ausgelöst. Sie steht deshalb bei 50 s.
+
+#### Was den Auslöser eingrenzt
+
+| Versuch | Ergebnis |
+|---|---|
+| `MeterScreenComposeTest` allein, 6 Läufe | **6 / 6 grün**, je ~18 s |
+| die sechs betroffenen Klassen zusammen, 5 Läufe | **5 / 5 grün**, je ~25 s |
+| Vollauf (1250 Tests) | rot in etwa 1 von 4 |
+
+Es braucht die ganze Suite. Weder die Klasse noch die sechs Klassen untereinander reichen. Damit
+ist es **Verunreinigung über Klassengrenzen** im geteilten Robolectric-Prozess, keine Eigenschaft
+von `MeterScreen`.
+
+#### Eine belegte Verunreinigung, gefunden auf dem Weg
+
+Acht JVM-Testklassen schreiben `meterDeviceAddress`/`meterDeviceName` und leeren sie nie:
+`BootCompletedReceiverTest`, `DienstvoraussetzungenTest`, `SicherungEinstellungenTest`,
+`BildschirmfotoWerkstatt`, `DiagnoseScreenComposeTest`, `GeraetetestS3CockpitTest`,
+`MeterScreenComposeTest`, `UnkalibrierteMessungHinweisTest`. Fünf haben überhaupt kein `@After`;
+drei setzen den Container zurück, was den Einstellungsspeicher nicht anfasst.
+
+Warum das mehr ist als Ordnungsliebe: `MainActivity.onResume` ruft
+`MeterAutoConnect.verbindeWennGewuenscht()`, und das braucht genau zwei Dinge — den
+Automatikschalter und eine gepinnte Adresse. Eine geleckte Adresse lässt eine spätere Testklasse
+also einen Verbindungsaufbau starten, den ihr Autor nicht vorgesehen hat.
+
+`BootCompletedReceiverTest` kannte das Problem bereits und verteidigt sich in `@Before`
+(„sonst trägt ein vorheriger Test eine gepinnte Geräteadresse in den nächsten"). Das schützt die
+eigene Klasse, nicht die nächste. Behoben über `testhilfen/MessgeraetKopplungAufraeumenRegel`.
+
+Die beiden instrumentierten Klassen, die dieselbe Einstellung schreiben
+(`MeterScreenInstrumentedTest`, `ForegroundServiceOhneMikrofonPermissionInstrumentedTest`),
+sichern den Vorwert und stellen ihn wieder her — dort ist nichts zu tun.
+
+**Was damit NICHT belegt ist:** dass diese Verunreinigung der Auslöser ist. Die Zählung nach dem
+Fix zeigt es. Vor dem Fix: 4 rote von 13 lokalen Vollläufen, 3 von 11 auf der CI.
+
+#### Der Zeitwächter — und warum JUnits eigene Regel dafür nicht geht
+
+`testhilfen/ZeitwaechterRegel` startet einen Beobachterthread, der nach 50 s die Stacks des
+Testthreads und aller `SDK <n> Main Thread` nach `System.err` **und** in
+`app/build/zeitwaechter-diagnose.txt` schreibt und danach schweigt. Sie löst also 10 s vor der
+Ausnahme aus, während die Wartung noch läuft — und liefert genau das, was die leere
+Diagnoseliste der Ausnahme nicht hergibt.
+
+Sie kann einen leerdrehenden Thread nicht anhalten; das kann unter Robolectric niemand.
+
+JUnits `Timeout.builder().withLookingForStuckThread(true)` wäre das Naheliegende und ist
+**unbrauchbar**. Gemessen, nicht vermutet: sie führt den Testrumpf über
+`FailOnTimeout$CallableStatement` auf einem Fremdthread aus, und Robolectric lehnt das ab.
+
+```
+java.lang.UnsupportedOperationException: main looper can only be controlled from main thread
+  at org.robolectric.shadows.ShadowPausedLooper.executeOnLooper(ShadowPausedLooper.java:761)
+  ...
+  at org.junit.internal.runners.statements.FailOnTimeout$CallableStatement.call(FailOnTimeout.java:299)
+```
+
+In der Sonde fielen dadurch **beide** Tests, auch der, der nur `Text("Hallo")` rendert.
+
+Die Summenschranke setzt `tasks.withType<Test>` in `app/build.gradle.kts` mit 20 Minuten: nicht
+gegen eine einzelne Wartung, sondern gegen deren Summe — ein roter Lauf verliert 60 s je
+betroffenem Test, und ein schlechterer Lauf als der gemessene frisst sonst das Zeitbudget des
+Jobs.
+
 ## 5 · Prüfpunkte & Empfehlungen nach AGENTS.md §8a
 
 Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidung von Flakes:
@@ -588,3 +737,17 @@ Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidu
    Singleton fortbestehen.
 4. **Locale-Unabhängigkeit:** UI-Tests dürfen keine hartcodierten Lokalisierungs-Strings abfragen,
    sondern müssen stets `context.getString(R.string...)` verwenden.
+5. **Einstellungs-Isolation (01.10.2026, Abschnitt 4.8):** `SettingsManager` schreibt in
+   EncryptedSharedPreferences und ist damit prozessweiter Zustand — genau wie die Room-Instanz aus
+   Punkt 3. Ein `app.resetContainer()` tauscht den Container, **nicht** den Einstellungsspeicher.
+   Jede Testklasse, die eine Einstellung schreibt, muss sie hinterher leeren oder den Vorwert
+   wiederherstellen; für die Messgerät-Kopplung gibt es dafür
+   `testhilfen/MessgeraetKopplungAufraeumenRegel`. Eine Abwehr im eigenen `@Before` genügt nicht —
+   sie schützt die eigene Klasse, nicht die nächste.
+6. **Eine `AppNotIdleException` sagt nicht, was beschäftigt war (01.10.2026, Abschnitt 4.8):**
+   ihre Zeile „The following Idle Conditions failed" endet in diesem Repo leer. Wer so einen
+   Fehlschlag untersuchen will, braucht die Stacks *während* der Wartung — Compose-Testklassen, die
+   einen vollständigen Screen rendern, sollten dafür `testhilfen/ZeitwaechterRegel` tragen. Deren
+   Grenze muss **unter** 60 s liegen, weil Espressos Master-Idling-Policy dort abbricht; ein
+   Wächter mit größerer Grenze löst nie aus. Die Summenschranke gegen viele solcher 60-Sekunden-
+   Verluste in einem Lauf steht als `tasks.withType<Test>` in `app/build.gradle.kts`.
