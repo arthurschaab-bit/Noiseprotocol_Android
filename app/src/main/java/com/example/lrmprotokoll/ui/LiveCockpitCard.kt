@@ -61,6 +61,11 @@ const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
 const val COCKPIT_TRIGGER_CHIP_TAG = "cockpit_trigger_chip"
 const val VIDEO_BEWEIS_BUTTON_TAG = "video_beweis_button"
 const val END_MEASUREMENT_CONFIRM_DIALOG_TAG = "end_measurement_confirm_dialog"
+
+// Der Bestaetigungsknopf traegt denselben Text wie der Knopf, der den Dialog oeffnet - ein
+// Klick ueber den Text ist deshalb nicht eindeutig. Dieser Tag macht die Bedienstrecke
+// pruefbar (B3, Geraetetest 30.09.2026).
+const val END_MEASUREMENT_CONFIRM_BUTTON_TAG = "end_measurement_confirm_button"
 const val DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG = "disconnect_bluetooth_confirm_dialog"
 
 /** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
@@ -148,6 +153,7 @@ fun LiveCockpitCard(
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
     var showEndMeasurementConfirm by remember { mutableStateOf(false) }
     var showDisconnectBluetoothConfirm by remember { mutableStateOf(false) }
+    var zeigeUnkalibriertDialog by remember { mutableStateOf(false) }
 
     // Notification-Aktion "Stoppen" kann selbst keinen Dialog zeigen (siehe PendingUiAction) -
     // sie signalisiert hierueber, dass derselbe Bestaetigungsdialog wie beim In-App-Button
@@ -224,10 +230,46 @@ fun LiveCockpitCard(
     // Mikrofonwert ueberhaupt ein FALLBACK - bei einem reinen Mikrofonlauf ist er schon immer die
     // normale, einzige Quelle und bleibt unveraendert ohne diese Kennzeichnung.
     val istMeterFallback = dienstAktiv && !istMikrofonMessung && !isCalibrated
-    val liveLevel = if (isCalibrated) letzterFrame?.level else if (dienstAktiv) micDb else null
+
+    // F-37 (Owner-Meldung 30.09.2026): Wer die Messung startet, WAEHREND das Messgeraet getrennt
+    // ist, bekam bisher gar nichts zu sehen - die Session traegt dann eine leere deviceAddress,
+    // gilt also als reiner Mikrofonlauf, und istMeterFallback ist per Definition aus. Eine
+    // unkalibrierte Messung sah damit genauso aus wie eine kalibrierte: dieselbe Zahl, dieselbe
+    // Einheit "dB", kein Zusatz.
+    //
+    // Der Unterschied, den der Code bisher nicht kannte: "ich habe gar kein Geraet" gegen "ich
+    // habe eins, es ist nur nicht dran". Die Antwort steht nicht in der Session, sondern in der
+    // Kopplung.
+    val geraetGepinnt = settings.meterDeviceAddress != null
+    val unkalibriertTrotzGeraet = dienstAktiv && istMikrofonMessung && geraetGepinnt
+
+    // Einmal je Messungsstart, nicht bei jeder Rueckkehr aufs Cockpit (Owner-Entscheidung
+    // 30.09.2026). Ausgeloest wird an der Session-ID, nicht am Dienstzustand: beim Umschalten von
+    // dienstAktiv existiert die Session noch nicht, istMikrofonMessung faellt dann auf die
+    // VORIGE Session zurueck und koennte faelschlich "hatte ein Geraet" melden.
+    val offeneSessionId = offeneSession?.id
+    LaunchedEffect(offeneSessionId, unkalibriertTrotzGeraet) {
+        val id = offeneSessionId
+        if (unkalibriertTrotzGeraet && id != null && settings.unkalibriertHinweisSessionId != id) {
+            settings.unkalibriertHinweisSessionId = id
+            zeigeUnkalibriertDialog = true
+        }
+    }
+    // S-3/F-02: der kalibrierte Pegel haengt an der Verbindung, nicht am Dienst. Vor diesem
+    // Fix zeigte das Cockpit ohne laufende Messung "--.-", obwohl das Messgeraet Werte lieferte -
+    // damit war die Trennung von Verbindung und Aufzeichnung am Geraet nicht nachweisbar
+    // (Owner-Gerätetest A5/B4 zu PR #216).
+    val pegelAnzeige =
+        leitePegelAnzeigeAb(
+            dienstAktiv = dienstAktiv,
+            verbindungszustand = verbindungszustand,
+            messgeraetPegel = letzterFrame?.level,
+            mikrofonPegel = micDb,
+        )
+    val liveLevel = pegelAnzeige.wert
     val weightingText = when {
-        isCalibrated -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
-        istMeterFallback -> stringResource(R.string.cockpit_meter_fallback_unit)
+        pegelAnzeige.kalibriert -> letzterFrame?.weighting?.let { "dB(${it.name})" } ?: "dB"
+        istMeterFallback || unkalibriertTrotzGeraet -> stringResource(R.string.cockpit_meter_fallback_unit)
         else -> "dB"
     }
 
@@ -501,6 +543,14 @@ fun LiveCockpitCard(
                     maxLines = 1
                 )
             }
+            if (pegelAnzeige.nurLive) {
+                Text(
+                    text = stringResource(R.string.cockpit_live_level_not_recorded),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("cockpit_live_pegel_hinweis"),
+                )
+            }
 
             val levelVal = liveLevel ?: 0.0
             val levelDescription = when {
@@ -516,6 +566,16 @@ fun LiveCockpitCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (unkalibriertTrotzGeraet) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.cockpit_unkalibriert_hinweis),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("cockpit_unkalibriert_hinweis"),
+                )
+            }
 
             if (istMeterFallback) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -793,15 +853,48 @@ fun LiveCockpitCard(
                 TextButton(
                     onClick = {
                         showEndMeasurementConfirm = false
+                        // B3, Geraetetest 30.09.2026: Hier stand ein
+                        // container.connectionSupervisor.stop(). Es trennte die Verbindung,
+                        // die F-02 gerade erhalten soll, und zwar VOR dem Dienstabbau - danach
+                        // protokollierte AudioRecordingService.onDestroy brav
+                        // "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)" mit
+                        // meterState=IDLE, also ueber eine schon getrennte Verbindung.
+                        //
+                        // Das Trennen entscheidet allein
+                        // AudioRecordingService.trenneMessgeraetFallsNiemandEsBraucht(), gerufen
+                        // aus onDestroy: sie trennt nur, wenn die Automatik es nicht will. Die
+                        // Oberflaeche darf diese Entscheidung nicht vorwegnehmen.
                         context.startService(Intent(context, AudioRecordingService::class.java).apply {
                             action = ACTION_STOP_SERVICE
                         })
-                        container.connectionSupervisor.stop()
-                    }
+                    },
+                    modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG),
                 ) { Text("Messung beenden") }
             },
             dismissButton = {
                 TextButton(onClick = { showEndMeasurementConfirm = false }) { Text("Abbrechen") }
+            },
+        )
+    }
+
+    if (zeigeUnkalibriertDialog) {
+        AlertDialog(
+            modifier = Modifier.testTag("dialog_unkalibriert"),
+            onDismissRequest = { zeigeUnkalibriertDialog = false },
+            title = { Text(stringResource(R.string.cockpit_unkalibriert_dialog_titel)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.cockpit_unkalibriert_dialog_text,
+                        settings.meterDeviceName?.takeIf { it.isNotBlank() } ?: "Das Messgerät",
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { zeigeUnkalibriertDialog = false },
+                    modifier = Modifier.testTag("btn_unkalibriert_verstanden"),
+                ) { Text(stringResource(R.string.cockpit_unkalibriert_dialog_ok)) }
             },
         )
     }

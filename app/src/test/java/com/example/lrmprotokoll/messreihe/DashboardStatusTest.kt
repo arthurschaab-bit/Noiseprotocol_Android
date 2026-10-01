@@ -2,7 +2,9 @@ package com.example.lrmprotokoll.messreihe
 
 import com.example.lrmprotokoll.meter.ConnectionState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DashboardStatusTest {
@@ -131,5 +133,89 @@ class DashboardStatusTest {
 
         assertEquals("1:05", anzeige.dauerText)
         assertEquals("Läuft seit 1:05", anzeige.laufzeitText)
+    }
+
+    // S-3/F-02, Gerätetest A5/B4: vor dem Fix zeigte das Cockpit ohne laufende Messung "--.-",
+    // obwohl das Messgeraet Werte lieferte.
+
+    @Test
+    fun verbundenOhneMessungZeigtDenKalibriertenPegelAlsNichtAufgezeichnet() {
+        val anzeige =
+            leitePegelAnzeigeAb(
+                dienstAktiv = false,
+                verbindungszustand = ConnectionState.STREAMING,
+                messgeraetPegel = 63.4,
+                mikrofonPegel = null,
+            )
+
+        assertEquals(63.4, anzeige.wert!!, 0.001)
+        assertTrue("Ohne Aufzeichnung muss der Wert als nur-live gekennzeichnet sein", anzeige.nurLive)
+        assertTrue("Der Wert kommt vom Messgeraet, ist also kalibriert", anzeige.kalibriert)
+    }
+
+    @Test
+    fun laufendeMessungMitMessgeraetIstNichtNurLive() {
+        val anzeige =
+            leitePegelAnzeigeAb(
+                dienstAktiv = true,
+                verbindungszustand = ConnectionState.STREAMING,
+                messgeraetPegel = 63.4,
+                mikrofonPegel = 40.0,
+            )
+
+        assertEquals(63.4, anzeige.wert!!, 0.001)
+        assertFalse("Bei laufender Aufzeichnung ist der Hinweis falsch", anzeige.nurLive)
+        assertTrue(anzeige.kalibriert)
+    }
+
+    @Test
+    fun ohneStreamingIstDerMessgeraetwertEinRestwertUndZaehltNicht() {
+        val anzeige =
+            leitePegelAnzeigeAb(
+                dienstAktiv = false,
+                verbindungszustand = ConnectionState.DISCONNECTED,
+                messgeraetPegel = 63.4,
+                mikrofonPegel = 40.0,
+            )
+
+        assertNull("Ein Pegel ohne STREAMING waere ein veralteter Restwert", anzeige.wert)
+        assertFalse(anzeige.nurLive)
+        assertFalse(anzeige.kalibriert)
+    }
+
+    @Test
+    fun ohneMessgeraetBleibtDerMikrofonpegelAnDenDienstGebunden() {
+        val mitDienst =
+            leitePegelAnzeigeAb(
+                dienstAktiv = true,
+                verbindungszustand = ConnectionState.IDLE,
+                messgeraetPegel = null,
+                mikrofonPegel = 41.5,
+            )
+        val ohneDienst =
+            leitePegelAnzeigeAb(
+                dienstAktiv = false,
+                verbindungszustand = ConnectionState.IDLE,
+                messgeraetPegel = null,
+                mikrofonPegel = 41.5,
+            )
+
+        assertEquals(41.5, mitDienst.wert!!, 0.001)
+        assertFalse("Der Mikrofonpegel ist unkalibriert", mitDienst.kalibriert)
+        assertNull("Ohne Aufzeichnung gibt es keinen Mikrofonpegel", ohneDienst.wert)
+    }
+
+    @Test
+    fun streamingOhneFrameFaelltAufDenMikrofonpegelZurueck() {
+        val anzeige =
+            leitePegelAnzeigeAb(
+                dienstAktiv = true,
+                verbindungszustand = ConnectionState.STREAMING,
+                messgeraetPegel = null,
+                mikrofonPegel = 42.0,
+            )
+
+        assertEquals(42.0, anzeige.wert!!, 0.001)
+        assertFalse(anzeige.kalibriert)
     }
 }

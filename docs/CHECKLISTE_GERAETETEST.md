@@ -34,13 +34,19 @@ Verbinde erneut… · Getrennt · Fehlgeschlagen*.
 
 ## Teil A — Grundfunktion (M2)
 
-| # | Schritt | Erwartung | Ergebnis |
-|---|---------|-----------|----------|
-| A1 | Messgerät-Screen öffnen, Scan starten | PCE-323 erscheint mit Name und Signalstärke | |
-| A2 | Gerät auswählen | Zustand geht über *Verbinde…* auf **Verbunden** | |
-| A3 | Pegel ablesen | App-Wert stimmt mit dem Gerätedisplay überein (±0,1 dB) | |
-| A4 | 2 Minuten beobachten | Wert aktualisiert sich flüssig, rund zweimal pro Sekunde, keine Aussetzer | |
-| A5 | App schließen (nicht beenden), Notification prüfen | Zustand steht weiterhin auf **Verbunden** | |
+> **Spalte „CI"** (neu, 30.09.2026): ob die App-Seite dieses Schritts bereits automatisiert
+> geprüft wird. `✅` vollständig · `◐` teilweise · `—` nur am Gerät. Welcher Test das jeweils ist
+> und was er **nicht** beweist, steht in [`CI_ABDECKUNG_GERAETETEST.md`](CI_ABDECKUNG_GERAETETEST.md).
+> Ein `✅` ist **kein Grund, den Schritt zu überspringen** — es heißt nur, dass eine Regression
+> auffallen würde. Die Hardware-Seite prüft weiterhin allein dieser Durchlauf.
+
+| # | Schritt | Erwartung | CI | Ergebnis |
+|---|---------|-----------|----|----------|
+| A1 | Messgerät-Screen öffnen, Scan starten | PCE-323 erscheint mit Name und Signalstärke | ◐ Emulator | |
+| A2 | Gerät auswählen | Zustand geht über *Verbinde…* auf **Verbunden** | ✅ JVM + Emulator | |
+| A3 | Pegel ablesen | App-Wert stimmt mit dem Gerätedisplay überein (±0,1 dB) | — Metrologie | |
+| A4 | 2 Minuten beobachten | Wert aktualisiert sich flüssig, rund zweimal pro Sekunde, keine Aussetzer | ◐ JVM | |
+| A5 | App schließen (nicht beenden), Notification prüfen | Zustand steht weiterhin auf **Verbunden** | ◐ Emulator | |
 
 **Wenn A3 abweicht:** Zahlenwerte beider Anzeigen notieren. Eine konstante Differenz deutet auf
 einen Dekodierfehler, eine schwankende auf ein Timing-Problem.
@@ -48,6 +54,9 @@ einen Dekodierfehler, eine schwankende auf ein Timing-Problem.
 ---
 
 ## Teil B — Die zwei inhaltlichen Fragen
+
+> **CI: — für beide Fragen.** Das ist Physik, keine Softwarefrage, und kein Testlauf wird sie je
+> beantworten. Teil B ist der Grund, warum es diese Checkliste gibt.
 
 ### B1 — Verfälscht die Funkverbindung die Messung?
 
@@ -110,19 +119,52 @@ damit, ob M4 die Frequenzbewertung überhaupt mitspeichern kann.
 
 Zwischen den Szenarien jeweils warten, bis die App wieder **Verbunden** meldet.
 
-| # | Szenario | Erwartung | Ergebnis |
-|---|----------|-----------|----------|
-| C1 | Mit dem Telefon aus der Funkreichweite gehen (anderer Raum, Tür zu) | Zustand wechselt auf *Verbinde erneut…*, kein Absturz | |
-| C2 | Zurückkommen | Verbindung stellt sich **von allein** wieder her, ohne Zutun | |
-| C3 | Messgerät ausschalten und aus lassen | Nach rund **zwei Minuten** steht **Fehlgeschlagen** | |
-| C4 | Messgerät wieder einschalten | *(App versucht nach FAILED nicht mehr von allein — erneutes Verbinden über den Screen prüfen)* | |
-| C5 | Bluetooth am Telefon aus | Zustand *Getrennt*, **keine** hektischen Wiederholversuche im Logcat | |
-| C6 | Bluetooth wieder an | Sofortiger Verbindungsversuch, ohne Wartezeit | |
-| C7 | App-Prozess killen: `adb shell am kill com.example.lrmprotokoll` | Dienst startet neu, Verbindung kommt zurück | |
-| C8 | Telefon neu starten | Überwachung nimmt **automatisch** wieder auf, ohne die App zu öffnen | |
+| # | Szenario | Erwartung | CI | Ergebnis |
+|---|----------|-----------|----|----------|
+| C0a | Messgerät an, App öffnen, **keine** Messung starten | Im Cockpit läuft der Pegel mit, darunter steht **„Live-Pegel · wird nicht aufgezeichnet"**, und es erscheint **keine** Notification (seit S-3/F-02; vorher zeigte das Cockpit ohne Messung "--.-") | ◐ JVM | |
+| C0b | Nach C0a eine Messung starten und wieder beenden | Der Pegel läuft danach weiter, der Hinweis erscheint wieder. Beweis im Diagnoseprotokoll: „Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)" | ◐ JVM | |
+| C1 | Mit dem Telefon aus der Funkreichweite gehen (anderer Raum, Tür zu) | Zustand wechselt auf *Verbinde erneut…*, kein Absturz | ✅ JVM | |
+| C2 | Zurückkommen | Verbindung stellt sich **von allein** wieder her, ohne Zutun | ✅ JVM | |
+| C3 | Messgerät ausschalten und aus lassen | Nach **gut drei Minuten** steht **Fehlgeschlagen** (am Gerät gemessen: 3 min 09 s) | ✅ JVM | |
+| C4 | Messgerät wieder einschalten, App im Vordergrund lassen | Spätestens nach **15 Minuten** läuft ein neuer Anlauf und die Verbindung kommt zurück (seit S-3/F-03; vorher versuchte die App es nie wieder) | ✅ JVM | |
+| C4b | In **Fehlgeschlagen** die App in den Hintergrund und wieder nach vorn holen | **Sofort** ein neuer Anlauf, ohne die 15 Minuten abzuwarten | ◐ JVM | |
+| C5 | Bluetooth am Telefon aus | Zustand *Getrennt*, **keine** hektischen Wiederholversuche im Logcat | ✅ JVM | |
+| C6 | Bluetooth wieder an | Sofortiger Verbindungsversuch, ohne Wartezeit | ✅ JVM | |
+| C7 | App-Prozess killen: `adb shell am kill com.example.lrmprotokoll` | Dienst startet neu, Verbindung kommt zurück | — Prozesstod | |
+| C8 | Telefon neu starten | Überwachung nimmt **automatisch** wieder auf, ohne die App zu öffnen | — Neustart | |
+
+**Wofür das `◐` in C0a, C0b und C4b steht** (Zusammenführung von S-3 und der CI-Spalte aus
+PR #238, 30.09.2026): Geprüft ist jeweils nur die Hälfte, die in der App liegt.
+
+- **C0a/C0b:** `GeraetetestS3CockpitTest` belegt die Anzeige — Pegel und Hinweistext vor,
+  während und nach einer Messung. **Nicht** geprüft sind das Ausbleiben der Notification
+  (C0a) und der Breadcrumb im Diagnoseprotokoll (C0b); beide entstehen im echten
+  Dienstlebenszyklus.
+- **C4b:** `ConnectionSupervisorTest.erneutVersuchenHoltDenAnlaufVorDieWartezeit` belegt,
+  *dass* der Anlauf vorgezogen wird. **Nicht** geprüft ist der Auslöser: der Aufruf aus
+  `MainActivity.onResume()` hat keinen Test — dieselbe Lücke zwischen reiner Funktion und
+  Verdrahtung, in der der `--.-`-Fehler saß.
 
 **Bei C3 besonders auf die Zeit achten:** Erwartet sind acht Versuche über die Backoff-Folge
 (1, 2, 4, 8, 16, 30, 60, 60 Sekunden). Deutlich schneller oder deutlich langsamer ist ein Befund.
+
+> **Korrektur 30.09.2026, aus dem Gerätetest.** Hier stand „nach rund **zwei** Minuten". Das war
+> falsch gerechnet: die Backoff-Folge allein summiert sich auf 121 Sekunden, **aber jeder Versuch
+> wartet zusätzlich 5 Sekunden auf den ersten Frame**, bevor er verworfen wird. Am PCE-323
+> gemessen (Support-Bundle vom 30.09.2026, Build `ci764+bbf1a09`):
+>
+> ```
+> 18:14:38  BLE_STREAM_STALLED, Datenstillstand        ← Gerät ausgeschaltet
+> 18:14:49 … 18:17:58   acht Versuche, Abstände 12·11·14·19·24·36·73 s
+> 18:17:58  Verbindung fehlgeschlagen nach 8 Versuchen ← Fehlgeschlagen
+> ```
+>
+> **3 min 09 s** ab dem ersten Versuch, 3 min 20 s ab dem Datenstillstand. Wer nach zwei Minuten
+> nachsieht, sieht noch *Verbinde erneut…* und hält ein korrektes Verhalten für einen Befund —
+> genau das ist am 30.09. passiert.
+
+**Bei C4/C4b ins Diagnoseprotokoll sehen:** dort steht „Neuer Anlauf auf Anforderung" (C4b) oder
+„Neuer Anlauf nach 15 min" (C4). Bleibt beides aus, greift F-03 nicht.
 
 **Bei C5 im Logcat prüfen**, dass wirklich pausiert wird — laufende Verbindungsversuche bei
 ausgeschaltetem Bluetooth wären genau der Fehler, den die Adapter-Beobachtung verhindern soll.
@@ -130,6 +172,10 @@ ausgeschaltetem Bluetooth wären genau der Fehler, den die Adapter-Beobachtung v
 ---
 
 ## Teil D — Dauerlauf
+
+> **CI: — vollständig gerätegebunden.** Echte Zeit, echter Funkstack, echte Akkuverwaltung. Das
+> Speicherproblem vom 23.09.2026 (89 Abstürze in einer Woche, 88 davon Speichermangel) hätte
+> kein CI-Lauf gezeigt.
 
 - [ ] Über Nacht verbunden laufen lassen, Telefon am Ladegerät
 - [ ] Am Morgen prüfen: Zustand immer noch **Verbunden**? Notification noch da?

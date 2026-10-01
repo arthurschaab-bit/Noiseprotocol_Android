@@ -65,6 +65,8 @@ import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
+import com.example.lrmprotokoll.meter.BadgeTippAktion
+import com.example.lrmprotokoll.meter.badgeTippAktion
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
@@ -92,6 +94,22 @@ import java.util.*
 // unproblematisch; setContent()/enableEdgeToEdge() bleiben unveraendert nutzbar, da
 // AppCompatActivity ueber FragmentActivity weiterhin eine ComponentActivity ist.
 class MainActivity : AppCompatActivity() {
+    /**
+     * S-3/F-02: baut die Verbindung zum gepinnten Messgeraet auf, sobald die App im Vordergrund
+     * ist - ohne Vordergrunddienst und ohne eine Aufzeichnung zu starten.
+     *
+     * Bewusst hier in der Activity und nicht in einem Composable: die Verbindung gehoert zur App,
+     * nicht zu einem Screen. Ein `DisposableEffect` in der Navigation wuerde bei jedem
+     * Screenwechsel ab- und wieder aufgebaut.
+     *
+     * Deckt zugleich F-03 ab: wartet die Ueberwachung nach erschoepften Versuchen in FAILED,
+     * holt dieser Aufruf den naechsten Anlauf sofort, statt die Wartezeit abzusitzen.
+     */
+    override fun onResume() {
+        super.onResume()
+        (application as LaermprotokollApp).container.meterAutoConnect.verbindeWennGewuenscht()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as LaermprotokollApp).container
         val language = container.settingsManager.appLanguage
@@ -748,13 +766,34 @@ fun NoiseProtocolApp(
                     BluetoothStatusBadge(
                         state = verbindungszustand,
                         deviceName = settingsManager.meterDeviceName,
-                        onClick = { showPairingDialog = true },
+                        // F-03, Audit-Punkt 2 (Owner-Entscheidung 29.09.2026): Im Zustand
+                        // "Fehlgeschlagen" mit gepinntem Geraet holt derselbe Tipp den naechsten
+                        // Anlauf sofort, statt den Kopplungsdialog mit 10-Sekunden-Scan zu
+                        // oeffnen. Die Abgrenzung steckt in badgeTippAktion() und ist dort ohne
+                        // Compose geprueft.
+                        onClick = {
+                            when (badgeTippAktion(verbindungszustand, settingsManager.meterDeviceAddress != null)) {
+                                BadgeTippAktion.ERNEUT_VERBINDEN -> {
+                                    container.connectionSupervisor.erneutVersuchen()
+                                    onShowSnackbar(
+                                        context.getString(R.string.meter_erneut_verbinden_angestossen),
+                                        null,
+                                        null,
+                                    )
+                                }
+                                BadgeTippAktion.KOPPLUNGSDIALOG -> showPairingDialog = true
+                            }
+                        },
                         // F-36, Owner-Entscheidung 30.09.2026 (Variante d): hier nur Farbe und
-                        // Punkt. In 84 dp bleiben 50 px fuer die Schrift, gebraucht werden
+                        // Punkt. In 84 dp blieben 50 px fuer die Schrift, gebraucht wurden
                         // 94-148 px - der Text war in allen zehn Zustaenden abgeschnitten. Der
                         // volle Zustand steht in der contentDescription und sichtbar auf dem
-                        // Messgeraet-Screen. Die vier anderen Aufrufstellen behalten den Text:
-                        // sie haben keine Breitenbegrenzung, und fuer sie liegt keine Messung vor.
+                        // Messgeraet-Screen.
+                        //
+                        // Beide Aenderungen zusammengefuehrt (Merge 30.09.2026): F-03 bestimmt,
+                        // WAS der Tipp tut, F-36 WAS zu sehen ist. Sie schliessen einander nicht
+                        // aus - die widthIn-Begrenzung entfaellt mit F-36, weil ohne Text nichts
+                        // mehr abgeschnitten werden kann.
                         zeigeText = false,
                         modifier = Modifier.padding(end = 4.dp).testTag("badge_bluetooth_status"),
                     )
@@ -1659,8 +1698,12 @@ fun NoiseProtocolApp(
                 settingsManager.meterDeviceAddress = device.address
                 settingsManager.meterDeviceName = device.name
                 showPairingDialog = false
-                val intent = Intent(context, AudioRecordingService::class.java)
-                context.startForegroundService(intent)
+                // S-3/F-02: Koppeln ist kein Messbeginn. Vorher startete diese Stelle den
+                // Vordergrunddienst - ohne EXTRA_START_AUDIO_MONITORING zwar ohne Audioaufnahme,
+                // aber mit _laeuft = true und Notification, also sichtbar als "MESSUNG LAEUFT".
+                // Der Weg ueber den Statusbadge ist fuer viele der einzige zum Koppeln
+                // (Owner-Geraetetest 27.09.2026), und genau dort blieb F-02 damit wirkungslos.
+                container.meterAutoConnect.verbindeJetzt()
                 onShowSnackbar(context.getString(R.string.meter_paired_success, device.name ?: device.address), null, null)
             },
             onDismiss = { showPairingDialog = false },

@@ -76,11 +76,27 @@ Verbindungsaufbau beim App-Start, wenn der Schalter an ist. `FAILED` wird zu ein
 dem ein erneuter Versuch herausführt.
 
 **Fallen:**
-- Der Foreground-Service-Typ wird aus den vorhandenen Berechtigungen berechnet
-  (`berechneForegroundServiceType()`) und kann **`0`** liefern, wenn weder Mikrofon noch
-  gepinntes Gerät vorliegen. Der typlose Rückfall existiert (`:409`, `:423`), **ist aber in
-  dieser Kombination nie beobachtet worden** (Audit Kapitel 35.1). Ein instrumentierter Test
-  dafür liegt in PR #204 bereit — prüf, ob er inzwischen gelaufen ist.
+- ~~Der typlose Rückfall bei `serviceType == 0` ist nie beobachtet worden.~~ **Überholt,
+  richtiggestellt am 26.09.2026.** Der Fall wurde am 25.09. am Emulator beobachtet, als
+  [F-35](UX_UI_AUDIT.md) nachgetragen und inzwischen behoben: die Dienstseite in PR #213, die
+  Aufruferseite in PR #215. Der Stand heute:
+  - Die Typberechnung liegt **nicht mehr privat im Dienst**, sondern als
+    `berechneForegroundServiceType(context, settingsManager)` in
+    `audio/Dienstvoraussetzungen.kt`, daneben `kannDienstInDenVordergrund()`. Wer vor einem Start
+    prüfen will, ob der Dienst überhaupt in den Vordergrund kommt, benutzt diese Funktion und
+    baut die Bedingung nicht nach.
+  - `startForegroundService()` im Dienst gibt `Boolean` zurück und startet bei `serviceType == 0`
+    gar nicht erst — erfüllt aber vorher den Android-Vertrag (`startForeground` +
+    `stopForeground`), weil alle Aufrufer `Context.startForegroundService()` benutzen. **Diesen
+    Vertrag nicht wegoptimieren:** ohne ihn wirft das System ab Android 12 eine
+    `ForegroundServiceDidNotStartInTimeException`, und das ist ein App-Absturz, kein Testproblem
+    (belegt im Logcat von CI-Lauf 36244540843).
+  - Kachel, Widget und Boot-Receiver prüfen seit #215 vor dem Start. Die übrigen acht
+    Aufrufpfade prüfen die Mikrofonberechtigung ohnehin schon.
+  - Der instrumentierte Test heißt `ForegroundServiceOhneMikrofonPermissionInstrumentedTest`,
+    liegt auf `main` und läuft in der CI. Er sichert zu, dass der Dienst in diesem Zustand
+    **bewusst nicht** in den Vordergrund geht — wer S-3 so umbaut, dass er es doch tut, macht
+    diesen Test rot und muss das begründen.
 - Ein Dienst, der ohne Aufzeichnung im Vordergrund läuft, braucht eine Notification, die das
   ehrlich benennt. „Messung läuft" wäre dann falsch.
 

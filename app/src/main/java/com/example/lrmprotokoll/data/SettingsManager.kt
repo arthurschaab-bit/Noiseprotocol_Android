@@ -185,6 +185,18 @@ class SettingsManager(
         get() = prefs.getString("meter_device_name", null)
         set(value) = prefs.edit().putString("meter_device_name", value).apply()
 
+    /**
+     * Baut die App beim Start selbsttaetig eine Verbindung zum gepinnten Messgeraet auf?
+     *
+     * Owner-Entscheidung 25.09.2026: freigegeben, **Default an** (S-3/F-02). Die Verbindung
+     * laeuft ohne Vordergrunddienst - der kommt erst dazu, wenn eine Messung startet
+     * (Owner-Entscheidung 26.09.2026). Ohne gepinntes Geraet oder ohne BLUETOOTH_CONNECT
+     * passiert unabhaengig von diesem Schalter nichts.
+     */
+    var meterAutoConnect: Boolean
+        get() = prefs.getBoolean("meter_auto_connect", true)
+        set(value) = prefs.edit().putBoolean("meter_auto_connect", value).apply()
+
     // Fuer die automatische Wiederaufnahme nach einem Geraeteneustart (Plan Abschnitt 5.4):
     // monitoringWasActive haelt fest, ob der Foreground Service beim letzten expliziten Stop
     // noch lief (egal ob wegen Audio- oder Messgeraet-Ueberwachung), audioMonitoringWasActive
@@ -323,6 +335,17 @@ class SettingsManager(
     var driveUploadWav: Boolean
         get() = prefs.getBoolean("drive_upload_wav", true)
         set(value) = prefs.edit().putBoolean("drive_upload_wav", value).apply()
+
+    /**
+     * F-37: Fuer welche Session der Hinweis "laeuft unkalibriert" schon gezeigt wurde.
+     *
+     * Nicht `remember`: der Nutzer soll ihn einmal je Messungsstart sehen, nicht jedes Mal, wenn
+     * er waehrend derselben Messung auf das Cockpit zurueckkehrt (Owner-Entscheidung 30.09.2026).
+     * `remember` ueberlebt einen Tabwechsel nicht, eine Einstellung schon.
+     */
+    var unkalibriertHinweisSessionId: Long
+        get() = prefs.getLong("unkalibriert_hinweis_session", -1L)
+        set(value) = prefs.edit().putLong("unkalibriert_hinweis_session", value).apply()
 
     var driveSyncLastSuccessAt: Long
         get() = prefs.getLong("drive_sync_last_success_at", 0L)

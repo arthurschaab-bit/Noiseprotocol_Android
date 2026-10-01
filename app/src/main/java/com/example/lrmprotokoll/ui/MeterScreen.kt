@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -68,7 +70,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
-import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.GeraetePinning
 import com.example.lrmprotokoll.meter.MeasurementRange
@@ -130,9 +131,13 @@ fun MeterScreen(
     val foundDevices = remember { mutableStateMapOf<String, BleDevice>() }
     var verdaechtigesGeraet by remember { mutableStateOf<BleDevice?>(null) }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
+    var autoConnect by remember { mutableStateOf(settings.meterAutoConnect) }
 
     fun ensureConnected() {
-        context.startForegroundService(Intent(context, AudioRecordingService::class.java))
+        // S-3/F-02: "Verbinden" startet keinen Vordergrunddienst mehr und damit auch keine
+        // Aufzeichnung. Der ConnectionSupervisor haengt am AppContainer, nicht am Dienst - wer
+        // nur den Pegel sehen will, bekommt genau das (Owner-Entscheidung 26.09.2026).
+        container.meterAutoConnect.verbindeJetzt()
     }
 
     fun starteScan() {
@@ -362,25 +367,101 @@ fun MeterScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    // S-3/F-02: Owner-Entscheidung 25.09.2026 - Schalter freigegeben, Default an.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = autoConnect,
+                            onCheckedChange = {
+                                autoConnect = it
+                                settings.meterAutoConnect = it
+                                // Review-Befund 27.09.2026: hier stand zusaetzlich
+                                // "&& hasBluetoothPermissions". Das verlangt ab API 31 SCAN *und*
+                                // CONNECT, fuer ein bereits gepinntes Geraet braucht es aber nur
+                                // CONNECT. Wer SCAN entzogen hat, bekam den Schalter auf "an"
+                                // gespeichert, aber keinen Verbindungsaufbau (Gerätetest C3).
+                                // Die Berechtigung pruefen ist Sache von MeterAutoConnect
+                                // (hatVerbindungsberechtigung -> hasConnectPermission); eine
+                                // zweite Entscheidung an dieser Stelle konnte nur abweichen.
+                                if (it) container.meterAutoConnect.verbindeWennGewuenscht()
+                            },
+                            modifier = Modifier.testTag("switch_meter_auto_connect"),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(stringResource(R.string.meter_auto_connect))
+                            Text(
+                                stringResource(R.string.meter_auto_connect_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
                             onClick = {
-                                if (hasBluetoothPermissions) ensureConnected()
+                                // Derselbe Befund wie beim Automatik-Schalter daneben: ein
+                                // gepinntes Geraet zu verbinden braucht CONNECT, nicht SCAN.
+                                // Mit hasBluetoothPermissions fragte dieser Knopf bei entzogenem
+                                // SCAN erneut nach Berechtigungen, statt zu verbinden.
+                                if (BluetoothPermissions.hasConnectPermission(context)) ensureConnected()
                                 else permissionLauncher.launch(BluetoothPermissions.requiredPermissions())
                             },
                             modifier = Modifier.testTag("btn_meter_connect")
                         ) {
                             Text(stringResource(R.string.meter_action_connect))
                         }
+                        // F-20b/Owner-Entscheidung 29.09.2026: Der Automatik-Schalter darueber
+                        // bleibt ausdruecklich "nur beim App-Start" - er trennt nicht, wenn man
+                        // ihn ausschaltet. Wer die laufende Verbindung jetzt beenden wollte,
+                        // hatte bisher nur "Entkoppeln" und verlor damit die Kopplung. Dieser
+                        // Knopf trennt, ohne sie zu verlieren.
                         OutlinedButton(
-                            onClick = { showDisconnectConfirm = true },
-                            modifier = Modifier.testTag("btn_meter_unpair")
+                            onClick = {
+                                supervisor.stop()
+                                // Ohne diesen Hinweis wirkt der Knopf defekt: steht die
+                                // Automatik auf "an", verbindet MainActivity.onResume beim
+                                // naechsten Vordergrund wieder.
+                                if (autoConnect) {
+                                    onShowSnackbar?.invoke(
+                                        context.getString(R.string.meter_disconnect_automatik_hinweis),
+                                    )
+                                }
+                            },
+                            enabled = connectionState != ConnectionState.IDLE,
+                            modifier = Modifier.testTag("btn_meter_disconnect"),
                         ) {
-                            Text(stringResource(R.string.meter_action_unpair))
+                            Text(stringResource(R.string.meter_action_disconnect))
                         }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // Geraetetest 30.09.2026, Schritt C4: "Entkoppeln-Schalter nicht sichtbar".
+                    //
+                    // Dieser PR hatte den Knopf von OutlinedButton auf TextButton gesetzt, mit
+                    // der Begruendung "mit drei Aktionen nebeneinander passte die Zeile nicht
+                    // mehr". Die Absicht war richtig - "Entkoppeln" ist die seltene,
+                    // verlustbehaftete Aktion und soll nicht mit "Verbinden"/"Trennen"
+                    // konkurrieren. Das Ergebnis war es nicht: ein TextButton hat weder Rahmen
+                    // noch Flaeche und liest sich als Beschriftung, nicht als Bedienelement.
+                    // Der Owner hat ihn am Geraet nicht gefunden.
+                    //
+                    // Der Platzgrund greift ohnehin nicht mehr: der Knopf steht in einer eigenen
+                    // Zeile. Er bekommt den Umriss zurueck, bleibt aber untergeordnet - in
+                    // Fehlerfarbe statt in der Primaerfarbe, wie es sich fuer eine
+                    // verlustbehaftete Aktion gehoert.
+                    OutlinedButton(
+                        onClick = { showDisconnectConfirm = true },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("btn_meter_unpair"),
+                    ) {
+                        Text(stringResource(R.string.meter_action_unpair))
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
