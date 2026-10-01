@@ -62,11 +62,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.BeweisVideoEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
@@ -238,7 +240,7 @@ fun VideoAufnahmeScreen(
             delay(1000)
             sekunden += 1
             if (sekunden >= maxDauerSekunden) {
-                onShowSnackbar("Maximaldauer erreicht – Aufnahme beendet")
+                onShowSnackbar(context.getString(R.string.video_max_duration_reached))
                 aufnahme?.stop()
             }
         }
@@ -247,10 +249,10 @@ fun VideoAufnahmeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Videobeweis") },
+                title = { Text(stringResource(R.string.video_screen_title)) },
                 navigationIcon = {
                     IconButton(onClick = { if (!laeuft) onBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -305,7 +307,7 @@ fun VideoAufnahmeScreen(
                         }
                     }
                 } else {
-                    Text("Kamera-Berechtigung erforderlich", color = Color.White)
+                    Text(stringResource(R.string.video_camera_permission_required), color = Color.White)
                 }
             }
 
@@ -324,7 +326,7 @@ fun VideoAufnahmeScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Das Mikrofon läuft nicht – dieses Video wird ohne Ton aufgezeichnet.",
+                            text = stringResource(R.string.video_no_mic_warning),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(12.dp),
@@ -342,7 +344,7 @@ fun VideoAufnahmeScreen(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "noch ${Videospeicher.formatiereDauer(maxDauerSekunden - sekunden)}",
+                        text = stringResource(R.string.video_remaining_time, Videospeicher.formatiereDauer(maxDauerSekunden - sekunden)),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -352,7 +354,7 @@ fun VideoAufnahmeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp))
                         Text(
-                            text = "  Kamera wird vorbereitet …",
+                            text = "  " + stringResource(R.string.video_camera_preparing),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -374,7 +376,7 @@ fun VideoAufnahmeScreen(
                         .testTag(VIDEO_AUFNAHME_STOP_TAG),
                 ) {
                     Icon(Icons.Default.Close, contentDescription = null)
-                    Text("  Aufnahme beenden")
+                    Text("  " + stringResource(R.string.video_stop_recording))
                 }
             }
         }

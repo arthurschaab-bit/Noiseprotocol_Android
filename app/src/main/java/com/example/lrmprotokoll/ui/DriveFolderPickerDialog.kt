@@ -11,9 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.drive.DriveDatei
 import kotlinx.coroutines.launch
 
@@ -35,6 +38,7 @@ fun DriveFolderPickerDialog(
     onLoadFolders: suspend () -> Result<List<DriveDatei>>,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var folders by remember { mutableStateOf<List<DriveDatei>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -58,7 +62,7 @@ fun DriveFolderPickerDialog(
                     isLoading = false
                 },
                 onFailure = { error ->
-                    errorMessage = error.localizedMessage ?: "Fehler beim Laden der Ordner"
+                    errorMessage = error.localizedMessage ?: context.getString(R.string.drive_load_folders_error)
                     isLoading = false
                 }
             )
@@ -73,18 +77,18 @@ fun DriveFolderPickerDialog(
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { if (!isCreating) showCreateDialog = false },
-            title = { Text("Neuen Ordner erstellen", fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.drive_create_folder_title), fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text(
-                        "Gib den Namen für den neuen Google Drive Ordner ein:",
+                        stringResource(R.string.drive_create_folder_message),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = newFolderNameInput,
                         onValueChange = { newFolderNameInput = it },
-                        label = { Text("Ordnername") },
+                        label = { Text(stringResource(R.string.drive_folder_name_label)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating
@@ -107,7 +111,7 @@ fun DriveFolderPickerDialog(
                                     },
                                     onFailure = { err ->
                                         isCreating = false
-                                        errorMessage = "Ordner konnte nicht erstellt werden: ${err.message}"
+                                        errorMessage = context.getString(R.string.drive_create_folder_error, err.message ?: "")
                                     }
                                 )
                             }
@@ -119,7 +123,7 @@ fun DriveFolderPickerDialog(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text("Erstellen & Auswählen")
+                    Text(stringResource(R.string.drive_create_and_select))
                 }
             },
             dismissButton = {
@@ -127,7 +131,7 @@ fun DriveFolderPickerDialog(
                     onClick = { showCreateDialog = false },
                     enabled = !isCreating
                 ) {
-                    Text("Abbrechen")
+                    Text(stringResource(R.string.drive_dialog_cancel))
                 }
             }
         )
@@ -138,18 +142,18 @@ fun DriveFolderPickerDialog(
         val target = folderToRename!!
         AlertDialog(
             onDismissRequest = { if (!isRenaming) folderToRename = null },
-            title = { Text("Ordner umbenennen", fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.drive_rename_folder_title), fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text(
-                        "Neuer Name für \"${target.name}\":",
+                        stringResource(R.string.drive_rename_folder_message, target.name),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = renameInput,
                         onValueChange = { renameInput = it },
-                        label = { Text("Neuer Name") },
+                        label = { Text(stringResource(R.string.drive_rename_folder_label)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isRenaming
@@ -171,7 +175,7 @@ fun DriveFolderPickerDialog(
                                     },
                                     onFailure = { err ->
                                         isRenaming = false
-                                        errorMessage = "Umbenennen fehlgeschlagen: ${err.message}"
+                                        errorMessage = context.getString(R.string.drive_rename_folder_error, err.message ?: "")
                                     }
                                 )
                             }
@@ -183,7 +187,7 @@ fun DriveFolderPickerDialog(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text("Umbenennen")
+                    Text(stringResource(R.string.drive_rename_action))
                 }
             },
             dismissButton = {
@@ -191,7 +195,7 @@ fun DriveFolderPickerDialog(
                     onClick = { folderToRename = null },
                     enabled = !isRenaming
                 ) {
-                    Text("Abbrechen")
+                    Text(stringResource(R.string.drive_dialog_cancel))
                 }
             }
         )
@@ -217,20 +221,20 @@ fun DriveFolderPickerDialog(
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Google Drive Ordner", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.drive_folder_dialog_title), fontWeight = FontWeight.Bold)
                 }
                 IconButton(
                     onClick = { refreshFolders() },
                     modifier = Modifier.testTag(DRIVE_REFRESH_FOLDERS_BUTTON_TAG)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
+                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.drive_refresh_folders_cd))
                 }
             }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Wähle einen Zielordner für Messdaten und WAV-Aufnahmen oder verwalte bestehende Ordner.",
+                    text = stringResource(R.string.drive_folder_dialog_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -253,7 +257,7 @@ fun DriveFolderPickerDialog(
                                 onClick = { refreshFolders() },
                                 modifier = Modifier.align(Alignment.End)
                             ) {
-                                Text("Erneut versuchen")
+                                Text(stringResource(R.string.drive_retry_action))
                             }
                         }
                     }
@@ -270,7 +274,7 @@ fun DriveFolderPickerDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Lade Google Drive Ordner…", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.drive_loading_folders), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 } else if (folders.isEmpty()) {
@@ -290,12 +294,12 @@ fun DriveFolderPickerDialog(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Noch keine Ordner vorhanden",
+                                stringResource(R.string.drive_no_folders_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Erstelle jetzt einen neuen Ordner für deine Messungen.",
+                                stringResource(R.string.drive_no_folders_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -362,7 +366,7 @@ fun DriveFolderPickerDialog(
                                     ) {
                                         Icon(
                                             Icons.Default.Edit,
-                                            contentDescription = "Umbenennen",
+                                            contentDescription = stringResource(R.string.drive_rename_action),
                                             modifier = Modifier.size(16.dp),
                                             tint = MaterialTheme.colorScheme.primary
                                         )
@@ -384,12 +388,12 @@ fun DriveFolderPickerDialog(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Neuer Ordner")
+                Text(stringResource(R.string.drive_new_folder_button))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Schließen")
+                Text(stringResource(R.string.drive_close_button))
             }
         }
     )

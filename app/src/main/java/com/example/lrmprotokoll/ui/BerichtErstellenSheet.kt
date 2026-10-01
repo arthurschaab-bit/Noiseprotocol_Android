@@ -172,13 +172,15 @@ fun BerichtErstellenSheet(
             modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp)
                 .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
-            Text("High-End-Bericht erzeugen", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.bericht_create_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            Text("Wähle den dokumentierten Messzeitraum. Verdichtete Rohdaten verhindern den Bericht; fehlende Stammdaten werden sichtbar als Lücke bezeichnet.",
-                style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(R.string.bericht_create_intro),
+                style = MaterialTheme.typography.bodySmall,
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = { datumDialogOffen = true }, modifier = Modifier.testTag("btn_bericht_datumsbereich")) {
-                Text("Datumsbereich wählen")
+                Text(stringResource(R.string.bericht_choose_date_range))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
@@ -230,11 +232,22 @@ fun BerichtErstellenSheet(
             tage.forEach { tag ->
                 Spacer(Modifier.height(12.dp))
                 Text(tag.label, style = MaterialTheme.typography.titleSmall)
-                Text("Rohwerte: ${tag.rohwerte}" +
-                    if (tag.verdichteteMinuten > 0) " · bereits verdichtete Minuten: ${tag.verdichteteMinuten}" else "",
-                    style = MaterialTheme.typography.bodySmall)
-                if (tag.rohwerte == 0) Text("Messlücke: keine Rohwerte an diesem Tag.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(
+                    stringResource(R.string.bericht_tag_raw_values, tag.rohwerte) +
+                        if (tag.verdichteteMinuten > 0) {
+                            stringResource(R.string.bericht_tag_condensed_minutes, tag.verdichteteMinuten)
+                        } else {
+                            ""
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (tag.rohwerte == 0) {
+                    Text(
+                        stringResource(R.string.bericht_tag_measurement_gap),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
 
                 val kandidaten = tag.stammdatenKandidaten
                 if (kandidaten.size > 1) {
@@ -242,14 +255,23 @@ fun BerichtErstellenSheet(
                         OutlinedButton(
                             onClick = { offenesAuswahlDatum = tag.datum },
                             modifier = Modifier.testTag("btn_bericht_stammdaten_${tag.datum}"),
-                        ) { Text(gewaehlteStammdaten(tag, ausgewaehlteIds)?.messort ?: "Stammdaten auswählen") }
+                        ) {
+                            Text(
+                                gewaehlteStammdaten(tag, ausgewaehlteIds)?.messort
+                                    ?: stringResource(R.string.bericht_choose_master_data)
+                            )
+                        }
                         DropdownMenu(
                             expanded = offenesAuswahlDatum == tag.datum,
                             onDismissRequest = { offenesAuswahlDatum = null },
                         ) {
                             kandidaten.forEach { kandidat ->
                                 DropdownMenuItem(
-                                    text = { Text("${kandidat.messort.ifBlank { "kein Messort" }} · #${kandidat.id}") },
+                                    text = {
+                                        Text(
+                                            "${kandidat.messort.ifBlank { stringResource(R.string.report_metadata_no_location) }} · #${kandidat.id}"
+                                        )
+                                    },
                                     onClick = {
                                         ausgewaehlteIds = ausgewaehlteIds + (tag.datum to kandidat.id)
                                         offenesAuswahlDatum = null
@@ -262,24 +284,28 @@ fun BerichtErstellenSheet(
                 val ausgewaehlt = gewaehlteStammdaten(tag, ausgewaehlteIds)
                 val luecken = fehlendeStammdatenFelder(ausgewaehlt)
                 if (luecken.isNotEmpty()) {
-                    Text("Stammdaten-Lücke: ${luecken.joinToString()}",
+                    Text(
+                        stringResource(R.string.bericht_master_data_gap, luecken.joinToString()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.testTag("bericht_stammdaten_luecke_${tag.datum}"))
+                        modifier = Modifier.testTag("bericht_stammdaten_luecke_${tag.datum}"),
+                    )
                 }
                 OutlinedButton(
                     onClick = { nachtragTag = tag },
                     modifier = Modifier.testTag("btn_bericht_stammdaten_nachtragen_${tag.datum}"),
-                ) { Text("Angaben für diesen Tag nachtragen") }
+                ) { Text(stringResource(R.string.bericht_add_data_for_day)) }
             }
 
             val unbestaetigt = tage.any { it.unbestaetigteWerte > 0 }
             if (unbestaetigt && config?.erzwingeBerichtOhneBestaetigteBewertung == true) {
                 Spacer(Modifier.height(12.dp))
-                Text("Warnung: A-/Zeitbewertung nicht bestätigt. Der Bericht muss einen sichtbaren Vorbehalt enthalten.",
+                Text(
+                    stringResource(R.string.bericht_unconfirmed_rating_warning),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.testTag("bericht_override_warnung"))
+                    modifier = Modifier.testTag("bericht_override_warnung"),
+                )
             }
             Spacer(Modifier.height(12.dp))
             Text(
@@ -318,24 +344,30 @@ fun BerichtErstellenSheet(
             }
             pdfPfad?.let {
                 Spacer(Modifier.height(12.dp))
-                Text("Bericht wurde erzeugt.", modifier = Modifier.testTag("bericht_erstellen_erfolg"))
+                Text(stringResource(R.string.bericht_created_success), modifier = Modifier.testTag("bericht_erstellen_erfolg"))
                 OutlinedButton(onClick = {
                     try {
                         BerichtDatei.teile(context, File(it))
                     } catch (_: Exception) {
-                        meldung = "Der Bericht konnte nicht zum Teilen geöffnet werden."
+                        meldung = context.getString(R.string.bericht_share_error)
                     }
-                }, modifier = Modifier.testTag("btn_high_end_teilen")) { Text("PDF teilen") }
+                }, modifier = Modifier.testTag("btn_high_end_teilen")) { Text(stringResource(R.string.bericht_share_pdf)) }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onFertig, enabled = !erzeugt) { Text("Schließen") }
+                OutlinedButton(onClick = onFertig, enabled = !erzeugt) { Text(stringResource(R.string.bericht_close)) }
                 Button(
                     onClick = { erzeugen() },
                     enabled = !erzeugt && !laedt && ersterBlocker == null,
                     modifier = Modifier.testTag("btn_bericht_erstellen_start"),
                 ) {
-                    Text(if (erzeugt) "Erzeuge …" else "Bericht jetzt erzeugen")
+                    Text(
+                        if (erzeugt) {
+                            stringResource(R.string.bericht_generating)
+                        } else {
+                            stringResource(R.string.bericht_generate_now)
+                        }
+                    )
                 }
             }
             ersterBlocker?.takeUnless { laedt }?.let {
@@ -384,7 +416,7 @@ fun BerichtErstellenSheet(
                         TextButton(
                             onClick = { datumDialogOffen = false },
                             modifier = Modifier.testTag("btn_bericht_datumsbereich_abbrechen"),
-                        ) { Text("Abbrechen") }
+                        ) { Text(stringResource(R.string.bericht_date_range_cancel)) }
                         TextButton(
                             onClick = {
                                 val start = picker.selectedStartDateMillis
@@ -392,10 +424,10 @@ fun BerichtErstellenSheet(
                                 if (start != null && ende != null) {
                                     waehleZeitraum(BerichtZeitraum.ausPicker(start, ende))
                                     datumDialogOffen = false
-                                } else meldung = "Bitte Start- und Enddatum wählen."
+                                } else meldung = context.getString(R.string.bericht_select_start_end_date)
                             },
                             modifier = Modifier.testTag("btn_bericht_datumsbereich_uebernehmen"),
-                        ) { Text("Übernehmen") }
+                        ) { Text(stringResource(R.string.bericht_date_range_apply)) }
                     }
                     DateRangePicker(state = picker, modifier = Modifier.weight(1f))
                 }

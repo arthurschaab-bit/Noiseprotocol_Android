@@ -233,7 +233,7 @@ fun DiagnoseScreen(
             "Diagnose",
             "Kein Systemdialog erreichbar fuer: $beschreibung",
         )
-        val meldung = "Die Einstellungen für „$beschreibung\" lassen sich auf diesem Gerät nicht öffnen."
+        val meldung = context.getString(R.string.diagnose_system_dialog_unavailable, beschreibung)
         if (onShowSnackbar != null) {
             onShowSnackbar(meldung)
         } else {
@@ -497,7 +497,7 @@ fun DiagnoseScreen(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("Diagnose-ID", letzteDiagnoseId))
-                                        val kopiert = "Diagnose-ID in Zwischenablage kopiert"
+                                        val kopiert = context.getString(R.string.diagnose_id_copied)
                                         onShowSnackbar?.invoke(kopiert)
                                             ?: Toast.makeText(context, kopiert, Toast.LENGTH_SHORT).show()
                                     },
@@ -545,7 +545,7 @@ fun DiagnoseScreen(
                                     )
                                 }
                                 val shareIntent = container.supportBundleExporter.createShareIntent(zipFile)
-                                context.startActivity(Intent.createChooser(shareIntent, "Support-Bundle teilen…"))
+                                context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.diagnose_share_bundle_chooser)))
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
@@ -560,7 +560,7 @@ fun DiagnoseScreen(
                                     cause = e,
                                     message = "Support-Bundle konnte nicht erstellt oder geteilt werden",
                                 )
-                                val msg = "Export fehlgeschlagen: ${e.message}"
+                                val msg = context.getString(R.string.diagnose_export_failed, e.message ?: "")
                                 onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             } finally {
                                 exportiertGerade = false
@@ -644,7 +644,7 @@ fun DiagnoseScreen(
                                             cause = e,
                                             message = "Support-Bundle konnte nicht erstellt oder eingereiht werden",
                                         )
-                                        val msg = "Fehlgeschlagen: ${e.message}"
+                                        val msg = context.getString(R.string.diagnose_upload_failed, e.message ?: "")
                                         onShowSnackbar?.invoke(msg) ?: Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                     } finally {
                                         supportBundleAktionLaeuft = false
@@ -673,13 +673,13 @@ fun DiagnoseScreen(
                             )
                             letzteDiagnoseId = id.shortCode
                             container.settingsManager.letzteDiagnoseId = id.shortCode
-                            val gesendet = "Test-Event gesendet ($id)"
+                            val gesendet = context.getString(R.string.diagnose_test_event_sent, id)
                             onShowSnackbar?.invoke(gesendet)
                                 ?: Toast.makeText(context, gesendet, Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Test-Diagnose-Event auslösen")
+                        Text(stringResource(R.string.diagnose_trigger_test_event))
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -842,13 +842,13 @@ fun DiagnoseScreen(
  */
 @Composable
 internal fun CrashTriggerButtons() {
-    Text("Testabsturz (M12 Schritt 1)", style = MaterialTheme.typography.labelMedium)
+    Text(stringResource(R.string.diagnose_crash_section_label), style = MaterialTheme.typography.labelMedium)
     Spacer(modifier = Modifier.height(4.dp))
     OutlinedButton(
         onClick = { throw RuntimeException("Testabsturz (Debug): ACRA-Kette pruefen") },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text("RuntimeException auslösen")
+        Text(stringResource(R.string.diagnose_crash_runtime_exception))
     }
     Spacer(modifier = Modifier.height(8.dp))
     OutlinedButton(
@@ -861,7 +861,7 @@ internal fun CrashTriggerButtons() {
         },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text("OutOfMemoryError provozieren")
+        Text(stringResource(R.string.diagnose_crash_oom))
     }
     Spacer(modifier = Modifier.height(8.dp))
     OutlinedButton(
@@ -874,7 +874,7 @@ internal fun CrashTriggerButtons() {
         },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text("Main-Thread blockieren (ANR)")
+        Text(stringResource(R.string.diagnose_crash_anr))
     }
 }
 
@@ -935,7 +935,7 @@ private fun SyncHistorieZeile(tag: DriveDailyFileEntity) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            Text("${tag.date} · ${tag.state} · ${tag.lastRowCount} Zeilen", color = farbe, style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.diagnose_sync_history_row, tag.date, tag.state, tag.lastRowCount), color = farbe, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

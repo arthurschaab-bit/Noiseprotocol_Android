@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.report.ReportArea
 import com.example.lrmprotokoll.report.areaSelectionError
 
@@ -33,11 +35,11 @@ internal fun ReportAreaSelection(value: String, enabled: Boolean, onSelect: (Str
             onValueChange = {},
             readOnly = true,
             enabled = enabled,
-            label = { Text("Gebietseinstufung") },
-            placeholder = { Text("Gebiet auswählen") },
+            label = { Text(stringResource(R.string.report_area_selection_label)) },
+            placeholder = { Text(stringResource(R.string.report_area_selection_placeholder)) },
             isError = value.isNotBlank() && error != null,
             supportingText = {
-                Text(error ?: "Die Auswahl bestätigt keine behördliche Einstufung. Ungeprüfte Gebietstypen sind nicht auswählbar.")
+                Text(error ?: stringResource(R.string.report_area_selection_supporting_default))
             },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
@@ -47,7 +49,7 @@ internal fun ReportAreaSelection(value: String, enabled: Boolean, onSelect: (Str
             ReportArea.entries.forEach { area ->
                 DropdownMenuItem(
                     text = {
-                        Text("${area.name} – ${area.label}" + if (area.hasVerifiedLimits) "" else " (Zuordnung ungeprüft)")
+                        Text("${area.name} – ${area.label}" + if (area.hasVerifiedLimits) "" else stringResource(R.string.report_area_unverified_suffix))
                     },
                     enabled = area.hasVerifiedLimits,
                     onClick = { onSelect(area.name); expanded = false },

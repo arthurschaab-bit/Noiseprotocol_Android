@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import org.junit.After
 import org.junit.Rule
@@ -33,10 +34,10 @@ class MicrophoneStatusBadgeInstrumentedTest {
             // echten AudioRecord-Zustand verwenden.
             MicrophoneStatusBadge(audioMonitoringActive = true, recordWavAudio = true)
         }
-        composeRule.onNodeWithText("WAV: INAKTIV").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_inactive)).assertIsDisplayed()
 
         composeRule.runOnIdle { AudioRecordingService.testSetzeAudioAufnahmeAktiv(true) }
-        composeRule.onNodeWithText("WAV: AKTIV").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_active)).assertIsDisplayed()
     }
 
     @Test
@@ -46,14 +47,14 @@ class MicrophoneStatusBadgeInstrumentedTest {
             MicrophoneStatusBadge(audioMonitoringActive = true, recordWavAudio = true)
         }
 
-        composeRule.onNodeWithText("WAV: AKTIV").performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_status_wav_active)).performClick()
         composeRule.onNodeWithTag(WAV_STOP_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("WAV-Aufzeichnung beenden?").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_stop_confirm_title)).assertIsDisplayed()
 
         // Regressionsklasse Datumsbereich-Dialog: beide Buttons muessen auf dem echten
         // Bildschirm sichtbar sein und Abbrechen muss den Dialog wirklich schliessen.
-        composeRule.onNodeWithText("WAV beenden").assertIsDisplayed()
-        composeRule.onNodeWithText("Abbrechen").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_stop_confirm_action)).assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.mic_stop_confirm_cancel)).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(WAV_STOP_CONFIRM_DIALOG_TAG).assertDoesNotExist()
     }

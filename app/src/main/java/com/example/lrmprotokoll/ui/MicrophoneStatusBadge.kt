@@ -26,10 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.ACTION_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.AudioRecordingService
@@ -87,9 +89,9 @@ fun MicrophoneStatusBadge(
     val colors = MaterialTheme.colorScheme.statusColors
     val (statusColor, text) =
         when {
-            !recordWavAudio -> colors.idle to "WAV: AUS (DSGVO)"
-            runtimeAudioActive -> colors.connected to "WAV: AKTIV"
-            else -> colors.warning to "WAV: INAKTIV"
+            !recordWavAudio -> colors.idle to stringResource(R.string.mic_status_wav_disabled)
+            runtimeAudioActive -> colors.connected to stringResource(R.string.mic_status_wav_active)
+            else -> colors.warning to stringResource(R.string.mic_status_wav_inactive)
         }
     val containerColor = MaterialTheme.colorScheme.statusContainer(statusColor)
     val textColor = MaterialTheme.colorScheme.onStatusContainer(statusColor)
@@ -124,12 +126,9 @@ fun MicrophoneStatusBadge(
         AlertDialog(
             modifier = Modifier.testTag(WAV_STOP_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showStopConfirm = false },
-            title = { Text("WAV-Aufzeichnung beenden?") },
+            title = { Text(stringResource(R.string.mic_stop_confirm_title)) },
             text = {
-                Text(
-                    "Die Mikrofon-/WAV-Erfassung wird beendet. Das PCE-323 kann weiter messen, " +
-                        "aber neue Lärmereignisse erhalten dann keinen Tonmitschnitt, bis WAV wieder gestartet wird."
-                )
+                Text(stringResource(R.string.mic_stop_confirm_message))
             },
             confirmButton = {
                 TextButton(
@@ -139,10 +138,10 @@ fun MicrophoneStatusBadge(
                             action = ACTION_STOP_AUDIO_RECORDING
                         })
                     }
-                ) { Text("WAV beenden") }
+                ) { Text(stringResource(R.string.mic_stop_confirm_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showStopConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showStopConfirm = false }) { Text(stringResource(R.string.mic_stop_confirm_cancel)) }
             },
         )
     }

@@ -180,7 +180,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         // Zuletzt gespeicherter Eintrag ("Neuer Ort") ist vorausgefuellt.
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Neuer Ort")
 
-        composeRule.onNodeWithText("Andere gespeicherte Angaben wählen (2)").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_choose_saved, 2)).performClick()
         composeRule.onNodeWithText("Alter Ort", substring = true).performClick()
 
         composeRule.onNodeWithTag("input_bericht_messort").assertTextContains("Alter Ort")
@@ -195,7 +195,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Überspringen").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).performScrollTo().performClick()
 
         assertTrue("Überspringen muss onFertig aufrufen", fertig)
         val eintraege = runBlocking { app.container.database.stammdatenVerlaufDao().letzte(10) }
@@ -231,7 +231,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
 
         composeRule.onNodeWithTag("button_standort_ermitteln").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("Kein Standort verfügbar").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(app.getString(R.string.report_metadata_err_no_location_available)).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -267,7 +267,7 @@ class GesamtberichtStammdatenSheetInstrumentedTest {
 
         composeRule.onNodeWithTag("button_wetter_abrufen").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
-            composeRule.onAllNodesWithText("Wetterdienst nicht erreichbar").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(app.getString(R.string.report_metadata_err_weather_failed)).fetchSemanticsNodes().isNotEmpty()
         }
     }
 }

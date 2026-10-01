@@ -168,7 +168,7 @@ fun GesamtberichtStammdatenSheet(
         } else if (!erlaubt) {
             standortLaedt = false
             wetterLaedt = false
-            hinweis = "Ohne Standort-Berechtigung nicht möglich"
+            hinweis = context.getString(R.string.report_metadata_err_no_location_permission)
         }
     }
 
@@ -190,7 +190,7 @@ fun GesamtberichtStammdatenSheet(
                 val standort = withContext(Dispatchers.IO) { container.standortErmittlung.aktuellerStandort() }
                 if (standort == null) {
                     standortLaedt = false
-                    hinweis = "Kein Standort verfügbar"
+                    hinweis = context.getString(R.string.report_metadata_err_no_location_available)
                     return@launch
                 }
                 val adresse = withContext(Dispatchers.IO) { container.standortErmittlung.adresseFuer(standort) }
@@ -199,7 +199,7 @@ fun GesamtberichtStammdatenSheet(
                     messort = adresse
                 } else {
                     messort = "%.5f, %.5f".format(Locale.getDefault(), standort.breitengrad, standort.laengengrad)
-                    hinweis = "Adresse konnte nicht aufgelöst werden - Koordinaten eingetragen"
+                    hinweis = context.getString(R.string.report_metadata_err_address_failed)
                 }
             }
         }
@@ -212,13 +212,13 @@ fun GesamtberichtStammdatenSheet(
                 val standort = withContext(Dispatchers.IO) { container.standortErmittlung.aktuellerStandort() }
                 if (standort == null) {
                     wetterLaedt = false
-                    hinweis = "Kein Standort für die Wetterabfrage verfügbar"
+                    hinweis = context.getString(R.string.report_metadata_err_no_weather_location)
                     return@launch
                 }
                 val ergebnis = container.wetterProvider.aktuelleWetterlage(standort.breitengrad, standort.laengengrad)
                 wetterLaedt = false
                 ergebnis.onSuccess { wetter = it.alsKurztext() }
-                    .onFailure { hinweis = "Wetterdienst nicht erreichbar" }
+                    .onFailure { hinweis = context.getString(R.string.report_metadata_err_weather_failed) }
             }
         }
     }
@@ -278,15 +278,18 @@ fun GesamtberichtStammdatenSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
             Text(
-                if (giltFuerTagStart == null) "Berichtsangaben für diese Messung" else "Berichtsangaben nachtragen",
+                if (giltFuerTagStart == null) {
+                    stringResource(R.string.report_metadata_title_current)
+                } else {
+                    stringResource(R.string.report_metadata_title_retroactive)
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Gerät, Messaufbau und Randbedingungen für den Gesamtbericht. Vorausgefüllt mit den " +
-                    "zuletzt verwendeten Angaben - einfach anpassen, was abweicht. " +
-                    if (giltFuerTagStart == null) "" else "Dieser Nachtrag wird mit dem heutigen Erfassungszeitpunkt und dem gewählten Messtag gespeichert.",
+                stringResource(R.string.report_metadata_description) +
+                    if (giltFuerTagStart == null) "" else stringResource(R.string.report_metadata_description_retroactive_suffix),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -295,7 +298,7 @@ fun GesamtberichtStammdatenSheet(
                 Spacer(Modifier.height(8.dp))
                 androidx.compose.foundation.layout.Box {
                     TextButton(onClick = { auswahlOffen = true }) {
-                        Text("Andere gespeicherte Angaben wählen (${verlauf.size})")
+                        Text(stringResource(R.string.report_metadata_choose_saved, verlauf.size))
                     }
                     DropdownMenu(expanded = auswahlOffen, onDismissRequest = { auswahlOffen = false }) {
                         verlauf.forEach { eintrag ->
@@ -303,7 +306,7 @@ fun GesamtberichtStammdatenSheet(
                                 text = {
                                     Text(
                                         "${zeitFormat.format(Date(eintrag.erstelltAm))} – " +
-                                            eintrag.messort.ifBlank { "kein Messort" }
+                                            eintrag.messort.ifBlank { stringResource(R.string.report_metadata_no_location) }
                                     )
                                 },
                                 onClick = { uebernehmen(eintrag); auswahlOffen = false },
@@ -319,32 +322,36 @@ fun GesamtberichtStammdatenSheet(
             }
 
             Spacer(Modifier.height(12.dp))
-            Text("Messgerät", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.report_metadata_device_section), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = geraetHersteller, onValueChange = { geraetHersteller = it },
-                label = { Text("Hersteller") }, modifier = Modifier.testTag("input_bericht_hersteller").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_manufacturer)) },
+                modifier = Modifier.testTag("input_bericht_hersteller").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = geraetTyp, onValueChange = { geraetTyp = it },
-                label = { Text("Typ") }, modifier = Modifier.testTag("input_bericht_typ").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_type)) },
+                modifier = Modifier.testTag("input_bericht_typ").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = geraetGenauigkeitsklasse, onValueChange = { geraetGenauigkeitsklasse = it },
-                label = { Text("Genauigkeitsklasse") }, modifier = Modifier.testTag("input_bericht_genauigkeitsklasse").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_accuracy_class)) },
+                modifier = Modifier.testTag("input_bericht_genauigkeitsklasse").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = geraetSeriennummer, onValueChange = { geraetSeriennummer = it },
-                label = { Text("Seriennummer") }, modifier = Modifier.testTag("input_bericht_seriennummer").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_serial_number)) },
+                modifier = Modifier.testTag("input_bericht_seriennummer").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = geraetKalibrierung, onValueChange = { geraetKalibrierung = it },
                 label = { Text(stringResource(R.string.report_metadata_calibration)) },
-                placeholder = { Text("z. B. 94 dB(A) mit Kalibrator XY; vor Messung protokolliert") },
+                placeholder = { Text(stringResource(R.string.report_metadata_calibration_placeholder)) },
                 modifier = Modifier.testTag("input_bericht_kalibrierung").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
@@ -359,11 +366,12 @@ fun GesamtberichtStammdatenSheet(
             }
 
             Spacer(Modifier.height(16.dp))
-            Text("Messaufbau", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.report_metadata_setup_section), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = messort, onValueChange = { messort = it },
-                label = { Text("Genauer Messort") }, modifier = Modifier.testTag("input_bericht_messort").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_location)) },
+                modifier = Modifier.testTag("input_bericht_messort").fillMaxWidth(),
             )
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -372,7 +380,13 @@ fun GesamtberichtStammdatenSheet(
                     enabled = !standortLaedt,
                     modifier = Modifier.testTag("button_standort_ermitteln"),
                 ) {
-                    Text(if (standortLaedt) "Ermittle …" else "Standort ermitteln")
+                    Text(
+                        if (standortLaedt) {
+                            stringResource(R.string.report_metadata_determining_location)
+                        } else {
+                            stringResource(R.string.report_metadata_determine_location)
+                        }
+                    )
                 }
                 if (standortLaedt) {
                     Spacer(Modifier.width(8.dp))
@@ -382,33 +396,38 @@ fun GesamtberichtStammdatenSheet(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = mikrofonposition, onValueChange = { mikrofonposition = it },
-                label = { Text("Mikrofonposition") }, modifier = Modifier.testTag("input_bericht_mikrofonposition").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_mic_position)) },
+                modifier = Modifier.testTag("input_bericht_mikrofonposition").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = mikrofonhoehe, onValueChange = { mikrofonhoehe = it },
-                label = { Text("Mikrofonhöhe") }, modifier = Modifier.testTag("input_bericht_mikrofonhoehe").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_mic_height)) },
+                modifier = Modifier.testTag("input_bericht_mikrofonhoehe").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = entfernungZurQuelle, onValueChange = { entfernungZurQuelle = it },
-                label = { Text("Entfernung Mikrofon–Quelle") }, modifier = Modifier.testTag("input_bericht_entfernung").fillMaxWidth(),
+                label = { Text(stringResource(R.string.report_metadata_distance)) },
+                modifier = Modifier.testTag("input_bericht_entfernung").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = innenAussen, onValueChange = { innenAussen = it },
-                label = { Text("Innen-/Außenmessung") }, placeholder = { Text("z. B. Außen") },
+                label = { Text(stringResource(R.string.report_metadata_indoor_outdoor)) },
+                placeholder = { Text(stringResource(R.string.report_metadata_indoor_outdoor_placeholder)) },
                 modifier = Modifier.testTag("input_bericht_innen_aussen").fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = fensterzustand, onValueChange = { fensterzustand = it },
-                label = { Text("Fenster (nur bei Innenraummessung)") }, placeholder = { Text("z. B. geschlossen") },
+                label = { Text(stringResource(R.string.report_metadata_window_state)) },
+                placeholder = { Text(stringResource(R.string.report_metadata_window_state_placeholder)) },
                 modifier = Modifier.testTag("input_bericht_fensterzustand").fillMaxWidth(),
             )
 
             Spacer(Modifier.height(16.dp))
-            Text("Randbedingungen", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.report_metadata_conditions_section), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = wetter, onValueChange = { wetter = it },
@@ -432,7 +451,13 @@ fun GesamtberichtStammdatenSheet(
                     enabled = !wetterLaedt,
                     modifier = Modifier.testTag("button_wetter_abrufen"),
                 ) {
-                    Text(if (wetterLaedt) "Rufe ab …" else "Wetter automatisch abrufen")
+                    Text(
+                        if (wetterLaedt) {
+                            stringResource(R.string.report_metadata_fetching_weather)
+                        } else {
+                            stringResource(R.string.report_metadata_fetch_weather)
+                        }
+                    )
                 }
                 if (wetterLaedt) {
                     Spacer(Modifier.width(8.dp))
@@ -442,8 +467,8 @@ fun GesamtberichtStammdatenSheet(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = datenqualitaetHinweis, onValueChange = { datenqualitaetHinweis = it },
-                label = { Text("Hinweis zur Datenqualität (optional)") },
-                placeholder = { Text("z. B. bekannte Ursache einer Messlücke") },
+                label = { Text(stringResource(R.string.report_metadata_data_quality_hint)) },
+                placeholder = { Text(stringResource(R.string.report_metadata_data_quality_placeholder)) },
                 modifier = Modifier.testTag("input_bericht_datenqualitaet").fillMaxWidth(),
             )
             zeitgebundeneQuelle?.let { quelle ->
@@ -460,7 +485,7 @@ fun GesamtberichtStammdatenSheet(
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onFertig, modifier = Modifier.weight(1f)) {
-                    Text("Überspringen")
+                    Text(stringResource(R.string.report_metadata_skip))
                 }
                 Button(onClick = { speichern() }, enabled = !speichert, modifier = Modifier.weight(1f)) {
                     Text(stringResource(if (speichert) R.string.report_metadata_saving else R.string.report_metadata_save))

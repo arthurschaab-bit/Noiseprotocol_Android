@@ -9,8 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.drive.DriveDatei
@@ -88,18 +90,18 @@ fun DriveStatusCard(
         } else {
             AlertDialog(
                 onDismissRequest = { showFolderDialog = false },
-                title = { Text("Google Drive Zielordner", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.drive_target_folder_dialog_title), fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
                         Text(
-                            "Gib den exakten Namen des Zielordners in deinem Google Drive an. Wenn der Ordner noch nicht existiert, wird er automatisch angelegt.",
+                            stringResource(R.string.drive_target_folder_dialog_desc),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedTextField(
                             value = inputFolderName,
                             onValueChange = { inputFolderName = it },
-                            label = { Text("Ordnername") },
+                            label = { Text(stringResource(R.string.drive_folder_name_label)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -116,12 +118,12 @@ fun DriveStatusCard(
                         },
                         enabled = inputFolderName.isNotBlank()
                     ) {
-                        Text("Speichern & Synchronisieren")
+                        Text(stringResource(R.string.drive_save_and_sync))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showFolderDialog = false }) {
-                        Text("Abbrechen")
+                        Text(stringResource(R.string.drive_dialog_cancel))
                     }
                 }
             )
@@ -149,7 +151,7 @@ fun DriveStatusCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Google Drive Sync",
+                    text = stringResource(R.string.drive_sync_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -162,10 +164,10 @@ fun DriveStatusCard(
                 else -> StatusPillType.NEUTRAL
             }
             val pillText = when {
-                hasError -> "Gestört"
-                isConnected && syncEnabled -> "Aktiv"
-                isConnected -> "Pausiert"
-                else -> "Nicht verbunden"
+                hasError -> stringResource(R.string.drive_status_pill_error)
+                isConnected && syncEnabled -> stringResource(R.string.drive_status_pill_active)
+                isConnected -> stringResource(R.string.drive_status_pill_paused)
+                else -> stringResource(R.string.drive_status_pill_disconnected)
             }
             StatusPill(text = pillText, type = pillType)
         }
@@ -197,8 +199,13 @@ fun DriveStatusCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()
         ) {
+            val folderSuffix = if (folderId != null) {
+                stringResource(R.string.drive_folder_id_suffix, folderId.take(8))
+            } else {
+                stringResource(R.string.drive_folder_not_created)
+            }
             Text(
-                text = "Ordner: $folderName" + (if (folderId != null) " (ID: ${folderId.take(8)}…)" else " (noch nicht angelegt)"),
+                text = stringResource(R.string.drive_folder_label, folderName) + folderSuffix,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
@@ -212,7 +219,7 @@ fun DriveStatusCard(
             ) {
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Ordner wählen", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.drive_choose_folder_button), style = MaterialTheme.typography.labelSmall)
             }
         }
 
@@ -223,11 +230,11 @@ fun DriveStatusCard(
         val lastSuccessText = if (lastSuccessAt > 0L) {
             dateFormat.format(Date(lastSuccessAt))
         } else {
-            "Noch kein Upload erfolgt"
+            stringResource(R.string.drive_no_upload_yet)
         }
 
         Text(
-            text = "Letzter erfolgreicher Sync: $lastSuccessText",
+            text = stringResource(R.string.drive_last_successful_sync, lastSuccessText),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -235,7 +242,7 @@ fun DriveStatusCard(
         if (!lastMessage.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Status: $lastMessage",
+                text = stringResource(R.string.drive_status_prefix, lastMessage),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = if (hasError) FontWeight.Bold else FontWeight.Normal
@@ -248,11 +255,11 @@ fun DriveStatusCard(
             val backupText = if (datenbankSicherungLastSuccessAt > 0L) {
                 dateFormat.format(Date(datenbankSicherungLastSuccessAt))
             } else {
-                "Noch keine Sicherung hochgeladen"
+                stringResource(R.string.drive_no_backup_yet)
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Letzte Datenbank-Sicherung: $backupText",
+                text = stringResource(R.string.drive_last_db_backup, backupText),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (backupIstVeraltet) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = if (backupIstVeraltet) FontWeight.Bold else FontWeight.Normal
@@ -271,7 +278,7 @@ fun DriveStatusCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Automatischer 30-Minuten-Upload",
+                    text = stringResource(R.string.drive_auto_upload_toggle),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Switch(
@@ -303,11 +310,11 @@ fun DriveStatusCard(
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Wird hochgeladen…")
+                        Text(stringResource(R.string.drive_uploading_progress))
                     } else {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Jetzt synchronisieren")
+                        Text(stringResource(R.string.drive_sync_now_action))
                     }
                 }
 
@@ -318,7 +325,7 @@ fun DriveStatusCard(
                         .heightIn(min = 44.dp)
                         .testTag(DRIVE_DISCONNECT_BUTTON_TAG)
                 ) {
-                    Text("Trennen")
+                    Text(stringResource(R.string.drive_disconnect_action))
                 }
             } else {
                 Button(
@@ -331,7 +338,7 @@ fun DriveStatusCard(
                 ) {
                     Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Mit Google Drive verbinden")
+                    Text(stringResource(R.string.drive_connect_action))
                 }
             }
         }
