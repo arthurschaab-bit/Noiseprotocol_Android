@@ -10,7 +10,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Assert.assertNotEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -153,6 +157,42 @@ class GeraetetestS3CockpitTest {
         composeRule
             .onNodeWithText(app.getString(R.string.cockpit_live_level_not_recorded))
             .assertIsDisplayed()
+    }
+
+    /**
+     * Plan-Schritt **B3**, zweiter Anlauf - **der Test, der am Geraet gefehlt hat.**
+     *
+     * Der Test darueber simuliert das Messungsende mit `testSetzeLaeuft(false)` und prueft, dass
+     * die Anzeige richtig darauf reagiert. Er geht damit **nicht durch den Dialog**, und genau
+     * dort sass der Fehler: `LiveCockpitCard` rief im Bestaetigungsknopf
+     * `container.connectionSupervisor.stop()` und trennte die Verbindung, die F-02 erhalten soll.
+     *
+     * Der Owner hat das am 30.09.2026 am PCE-323 gefunden: nach dem Messungsende war der Pegel
+     * weg und die Ampel grau. Im Support-Bundle stand der Beweis - beide Messungsenden mit
+     * `meterState=IDLE` in der Breadcrumb "Messgeraet-Verbindung bleibt bestehen (Automatik
+     * aktiv)", also eine Erhaltungsmeldung ueber eine bereits getrennte Verbindung.
+     *
+     * Dieser Test faehrt deshalb die echte Bedienung: Knopf, Dialog, Bestaetigung.
+     */
+    @Test
+    fun b3_messungUeberDenDialogBeendenTrenntDieVerbindungNicht() {
+        verbindeUndSpeiseFrameEin(68.4)
+        oeffneSession()
+        AudioRecordingService.testSetzeLaeuft(true)
+        zeigeCockpit()
+
+        composeRule.onNodeWithTag(END_MEASUREMENT_BUTTON_TAG).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertExists()
+        composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG).performClick()
+        composeRule.waitForIdle()
+
+        // Die Oberflaeche darf die Verbindung nicht angefasst haben. IDLE ist der Zustand, den
+        // ConnectionSupervisor.stop() setzt - er waere der Fingerabdruck des alten Fehlers.
+        assertNotEquals(
+            ConnectionState.IDLE,
+            app.container.connectionSupervisor.state.value,
+        )
     }
 
     /**

@@ -61,6 +61,11 @@ const val MARK_NOISE_EVENT_BUTTON_TAG = "mark_noise_event_button"
 const val COCKPIT_TRIGGER_CHIP_TAG = "cockpit_trigger_chip"
 const val VIDEO_BEWEIS_BUTTON_TAG = "video_beweis_button"
 const val END_MEASUREMENT_CONFIRM_DIALOG_TAG = "end_measurement_confirm_dialog"
+
+// Der Bestaetigungsknopf traegt denselben Text wie der Knopf, der den Dialog oeffnet - ein
+// Klick ueber den Text ist deshalb nicht eindeutig. Dieser Tag macht die Bedienstrecke
+// pruefbar (B3, Geraetetest 30.09.2026).
+const val END_MEASUREMENT_CONFIRM_BUTTON_TAG = "end_measurement_confirm_button"
 const val DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG = "disconnect_bluetooth_confirm_dialog"
 
 /** Zeitfenster des Live-Charts (dieselbe Grenze wie in der Chart-Anzeige weiter unten) und die
@@ -848,11 +853,22 @@ fun LiveCockpitCard(
                 TextButton(
                     onClick = {
                         showEndMeasurementConfirm = false
+                        // B3, Geraetetest 30.09.2026: Hier stand ein
+                        // container.connectionSupervisor.stop(). Es trennte die Verbindung,
+                        // die F-02 gerade erhalten soll, und zwar VOR dem Dienstabbau - danach
+                        // protokollierte AudioRecordingService.onDestroy brav
+                        // "Messgeraet-Verbindung bleibt bestehen (Automatik aktiv)" mit
+                        // meterState=IDLE, also ueber eine schon getrennte Verbindung.
+                        //
+                        // Das Trennen entscheidet allein
+                        // AudioRecordingService.trenneMessgeraetFallsNiemandEsBraucht(), gerufen
+                        // aus onDestroy: sie trennt nur, wenn die Automatik es nicht will. Die
+                        // Oberflaeche darf diese Entscheidung nicht vorwegnehmen.
                         context.startService(Intent(context, AudioRecordingService::class.java).apply {
                             action = ACTION_STOP_SERVICE
                         })
-                        container.connectionSupervisor.stop()
-                    }
+                    },
+                    modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG),
                 ) { Text("Messung beenden") }
             },
             dismissButton = {
