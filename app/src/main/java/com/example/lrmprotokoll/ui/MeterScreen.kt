@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -437,12 +438,27 @@ fun MeterScreen(
                             Text(stringResource(R.string.meter_action_disconnect))
                         }
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    // Vom Textknopf statt Umriss: mit drei Aktionen nebeneinander passte die
-                    // Zeile nicht mehr, und "Entkoppeln" ist die seltene, verlustbehaftete -
-                    // sie soll optisch nicht mit "Verbinden"/"Trennen" konkurrieren.
-                    TextButton(
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // Geraetetest 30.09.2026, Schritt C4: "Entkoppeln-Schalter nicht sichtbar".
+                    //
+                    // Dieser PR hatte den Knopf von OutlinedButton auf TextButton gesetzt, mit
+                    // der Begruendung "mit drei Aktionen nebeneinander passte die Zeile nicht
+                    // mehr". Die Absicht war richtig - "Entkoppeln" ist die seltene,
+                    // verlustbehaftete Aktion und soll nicht mit "Verbinden"/"Trennen"
+                    // konkurrieren. Das Ergebnis war es nicht: ein TextButton hat weder Rahmen
+                    // noch Flaeche und liest sich als Beschriftung, nicht als Bedienelement.
+                    // Der Owner hat ihn am Geraet nicht gefunden.
+                    //
+                    // Der Platzgrund greift ohnehin nicht mehr: der Knopf steht in einer eigenen
+                    // Zeile. Er bekommt den Umriss zurueck, bleibt aber untergeordnet - in
+                    // Fehlerfarbe statt in der Primaerfarbe, wie es sich fuer eine
+                    // verlustbehaftete Aktion gehoert.
+                    OutlinedButton(
                         onClick = { showDisconnectConfirm = true },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                         modifier = Modifier.testTag("btn_meter_unpair"),
                     ) {
                         Text(stringResource(R.string.meter_action_unpair))
