@@ -29,13 +29,29 @@ private const val EINSTELLUNGEN_ENTRY = "settings.json"
 internal const val SICHERUNG_FORMAT_VERSION = 1
 
 /**
- * Sicherheitsaufschlag auf die reine Datenbankgröße für den Platzbedarf der Sicherungs-ZIP
- * (Bugfix, Owner-Entscheidung 23.09.2026: "streamend reparieren" -
- * docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 1). ZIP-Header/Manifest/Einstellungen sind
- * verschwindend klein gegen eine ~500-MB-Datenbank; die 10% Puffer fangen das plus etwas
- * Dateisystem-Overhead ab, ohne unnötig konservativ zu sein.
+ * Schätzt den benötigten freien Speicherplatz im Zielverzeichnis für die Sicherungs-ZIP ab.
+ *
+ * Hintergrund (Befund 2 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md):
+ * Früher wurde pauschal `dbDatei.length() * 1.1` verlangt. SQLite-Datenbanken komprimieren im
+ * ZIP-Format jedoch typischerweise um 40–80 % (reale ZIP-Größe meist deutlich unter der Rohgröße).
+ * Bei einer 1-GB-Datenbank forderte die alte Formel mindestens 1,16 GB freien internen Speicher,
+ * was auf Geräten mit z. B. 650 MB freiem Speicher zu dauerhaften Fehlschlägen führte, obwohl der
+ * Platz für die komprimierte ZIP (~250–350 MB) vollkommen ausgereicht hätte.
+ *
+ * Schätzformel:
+ * - Bei kleinen Datenbanken (< 50 MB): konservativ 1.1x der Dateigröße plus 10 MB Sicherheitszuschlag.
+ * - Bei großen Datenbanken (>= 50 MB): Berücksichtigung der DEFLATE-Kompression mit konservativem
+ *   Faktor 0.60x der Rohgröße plus 30 MB Sicherheitszuschlag.
  */
-private const val SICHERUNG_SPEICHERPLATZ_FAKTOR = 1.1
+internal fun schatzeBenoetigtenSpeicherplatz(dbGroesse: Long): Long {
+    val schwellwertGross = 50L * 1024L * 1024L // 50 MB
+    val basis = if (dbGroesse < schwellwertGross) {
+        (dbGroesse * 1.1).toLong() + 10L * 1024L * 1024L
+    } else {
+        (dbGroesse * 0.60).toLong() + 30L * 1024L * 1024L
+    }
+    return maxOf(10L * 1024L * 1024L, basis)
+}
 
 data class SicherungsErgebnis(val erfolg: Boolean, val nachricht: String)
 
@@ -50,7 +66,9 @@ data class SicherungsErgebnis(val erfolg: Boolean, val nachricht: String)
 class UnzureichenderSpeicherplatzException(
     val freierPlatz: Long,
     val benoetigterPlatz: Long,
-) : IOException("Zu wenig Speicherplatz für die Sicherung: frei $freierPlatz Bytes, nötig $benoetigterPlatz Bytes.")
+) : IOException(
+    "Zu wenig Speicherplatz für die Sicherung: frei $freierPlatz Bytes (${freierPlatz / 1_048_576} MB), nötig $benoetigterPlatz Bytes (${benoetigterPlatz / 1_048_576} MB).",
+)
 
 /**
  * F13 (PROMPT_M10_FUNKTIONEN.md): Sicherung/Wiederherstellung über das Storage Access Framework,
@@ -127,7 +145,7 @@ object SicherungManager {
 
             // Vorab prüfen, BEVOR ueberhaupt etwas geschrieben wird (Schritt 1) - eine zu spaete
             // Pruefung liesse eine halb geschriebene Zieldatei zurueck.
-            val benoetigterPlatz = (dbDatei.length() * SICHERUNG_SPEICHERPLATZ_FAKTOR).toLong()
+            val benoetigterPlatz = schatzeBenoetigtenSpeicherplatz(dbDatei.length())
             val zielVerzeichnis = ziel.absoluteFile.parentFile ?: ziel.absoluteFile
             val freierPlatz = freierPlatzErmitteln(zielVerzeichnis)
             if (freierPlatz < benoetigterPlatz) {
