@@ -358,4 +358,34 @@ class SicherungManagerTest {
                 tempDateienNachher,
             )
         }
+
+    /**
+     * Befund 2 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md:
+     * Bei sehr großen Datenbanken (z. B. ~1,05 GB auf dem Huawei P30) darf die Speicherplatzschätzung
+     * nicht unkomprimierte 1,1x verlangen, wenn durch die ZIP-DEFLATE-Kompression real deutlich weniger
+     * Platz benötigt wird.
+     */
+    @Test
+    fun schatzeBenoetigtenSpeicherplatzBeruecksichtigtKompressionFuerGrosseDatenbanken() {
+        // Kleine DB: 10 MB -> konservative Schätzung mit Puffer
+        val klein = 10L * 1024L * 1024L
+        val platzKlein = schatzeBenoetigtenSpeicherplatz(klein)
+        assertTrue("Kleine DB benötigt Mindestpuffer", platzKlein >= klein)
+        assertTrue("Kleine DB bleibt im Rahmen", platzKlein <= klein * 3)
+
+        // Große 1-GB-DB aus dem Huawei P30 Support-Bundle (1.054.580.829 Bytes):
+        // Stand 02.10.2026: 686.071.808 Bytes freier Speicher im Cache.
+        val huaweiDbGroesse = 1_054_580_829L
+        val huaweiFreierPlatz = 686_071_808L
+        val platzGross = schatzeBenoetigtenSpeicherplatz(huaweiDbGroesse)
+
+        assertTrue(
+            "Schätzung für 1 GB DB muss unter dem freien Speicher des P30 liegen, damit Sicherung möglich ist",
+            platzGross < huaweiFreierPlatz,
+        )
+        assertTrue(
+            "Schätzung muss substanziell kleiner sein als die unkomprimierte DB-Größe",
+            platzGross < (huaweiDbGroesse * 0.8).toLong(),
+        )
+    }
 }
