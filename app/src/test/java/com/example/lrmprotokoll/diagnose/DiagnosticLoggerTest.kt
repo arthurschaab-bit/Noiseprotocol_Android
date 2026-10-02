@@ -23,8 +23,8 @@ class DiagnosticLoggerTest {
         override suspend fun insert(eintrag: DiagnosticLogEntity) { zeilen += eintrag }
         override fun neueste(grenze: Int) = flowOf(zeilen.sortedByDescending { it.timestamp }.take(grenze))
         override suspend fun loescheAelterAls(grenze: Long) { zeilen.removeAll { it.timestamp < grenze } }
-        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> =
-            zeilen.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)
+        override suspend fun seiteRueckwaerts(vorId: Long, seitengroesse: Int): List<DiagnosticLogEntity> =
+            zeilen.filter { it.id < vorId }.sortedByDescending { it.id }.take(seitengroesse)
         override suspend fun anzahlSeit(von: Long): Long = zeilen.count { it.timestamp >= von }.toLong()
     }
 
