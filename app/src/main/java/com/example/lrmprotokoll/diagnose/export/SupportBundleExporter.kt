@@ -327,17 +327,17 @@ class SupportBundleExporter(
     }
 
     /**
-     * Liest [DiagnosticLogDao] seitenweise (Aufgabe 2) - nie mehr als [SEITENGROESSE] Zeilen
-     * gleichzeitig im Heap, egal wie gross die Tabelle ist. Genau das ersetzt den alten Weg
-     * (`createBundle(diagnosticLogs: List<DiagnosticLogEntity>)`), der die ganze Tabelle auf
-     * einmal in den Heap zog.
+     * Liest [DiagnosticLogDao] seitenweise rückwärts (Befund 5 aus
+     * docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md): nie mehr als [SEITENGROESSE] Zeilen gleichzeitig
+     * im Heap, und liest die neuesten Einträge zuerst. Erreicht der Export [maxBytes], bricht er ab,
+     * enthält aber garantiert die aktuellen Diagnose-Events und nicht nur Altbestände.
      */
     private suspend fun schreibeEventsSeitenweise(out: OutputStream, maxBytes: Long) {
         if (maxBytes <= 0) return
-        var nachId = 0L
+        var vorId = Long.MAX_VALUE
         var geschrieben = 0L
         while (true) {
-            val seite = diagnosticLogDao.seite(nachId, SEITENGROESSE)
+            val seite = diagnosticLogDao.seiteRueckwaerts(vorId, SEITENGROESSE)
             if (seite.isEmpty()) break
             for (log in seite) {
                 val json = JSONObject()
@@ -350,7 +350,7 @@ class SupportBundleExporter(
                 out.write(zeile)
                 geschrieben += zeile.size
             }
-            nachId = seite.last().id
+            vorId = seite.last().id
             if (seite.size < SEITENGROESSE) break
         }
     }

@@ -49,8 +49,8 @@ class AnrWatchdogCoordinatorTest {
 
         override suspend fun loescheAelterAls(grenze: Long) {}
 
-        override suspend fun seite(
-            nachId: Long,
+        override suspend fun seiteRueckwaerts(
+            vorId: Long,
             seitengroesse: Int,
         ): List<DiagnosticLogEntity> = emptyList()
 

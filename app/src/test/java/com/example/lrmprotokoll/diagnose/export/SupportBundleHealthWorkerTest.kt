@@ -62,7 +62,7 @@ class SupportBundleHealthWorkerTest {
         override suspend fun insert(eintrag: DiagnosticLogEntity) {}
         override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(emptyList())
         override suspend fun loescheAelterAls(grenze: Long) {}
-        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
+        override suspend fun seiteRueckwaerts(vorId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
         override suspend fun anzahlSeit(von: Long): Long = anzahl
     }
 
