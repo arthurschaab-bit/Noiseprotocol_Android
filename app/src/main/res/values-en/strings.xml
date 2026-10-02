@@ -546,6 +546,8 @@
     <string name="bericht_share_pdf">Share PDF</string>
     <string name="bericht_close">Close</string>
     <string name="bericht_generating">Generating …</string>
+    <string name="bericht_generating_hint">The evaluation is being calculated and rendered as a PDF. The display will remain awake during generation. Please keep the app open.</string>
+    <string name="bericht_large_range_warning">Large report period (%1$d days): Evaluation and PDF generation are computationally intensive and may take up to 15 minutes on this device. Please keep the app open during this process.</string>
     <string name="bericht_generate_now">Generate report now</string>
     <string name="bericht_date_range_cancel">Cancel</string>
     <string name="bericht_select_start_end_date">Please select start and end date.</string>

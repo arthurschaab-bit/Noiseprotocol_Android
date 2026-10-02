@@ -142,6 +142,9 @@ class ProtokollExportAndroidTest {
         assertTrue("CSV muss Messwerte enthalten", csvText.contains("55,4") || csvText.contains("55.4"))
 
         // Share-Intent Prüfung
+        composeRule.waitUntil(timeoutMillis = 5_000L) {
+            Intents.getIntents().isNotEmpty()
+        }
         intended(hasAction(Intent.ACTION_CHOOSER))
 
         // 2. PDF EXPORT PRÜFUNG (echtes android.graphics.pdf.PdfDocument)
