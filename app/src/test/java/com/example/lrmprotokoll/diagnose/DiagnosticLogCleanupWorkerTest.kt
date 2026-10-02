@@ -39,7 +39,7 @@ class DiagnosticLogCleanupWorkerTest {
             letzteGrenze = grenze
             if (beimLoeschenFehlschlagen) error("Simulierter DB-Fehler fuer den Retry-Test")
         }
-        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
+        override suspend fun seiteRueckwaerts(vorId: Long, seitengroesse: Int): List<DiagnosticLogEntity> = emptyList()
         override suspend fun anzahlSeit(von: Long): Long = 0L
     }
 

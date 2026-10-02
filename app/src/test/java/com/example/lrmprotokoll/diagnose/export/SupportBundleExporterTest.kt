@@ -48,10 +48,10 @@ class SupportBundleExporterTest {
         override suspend fun insert(eintrag: DiagnosticLogEntity) {}
         override fun neueste(grenze: Int): Flow<List<DiagnosticLogEntity>> = flowOf(eintraege.take(grenze))
         override suspend fun loescheAelterAls(grenze: Long) {}
-        override suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity> {
+        override suspend fun seiteRueckwaerts(vorId: Long, seitengroesse: Int): List<DiagnosticLogEntity> {
             if (schlaegtFehl) error("Simulierter DB-Fehler fuer den Fehlertoleranz-Test")
             abgefragteSeiten++
-            return eintraege.filter { it.id > nachId }.sortedBy { it.id }.take(seitengroesse)
+            return eintraege.filter { it.id < vorId }.sortedByDescending { it.id }.take(seitengroesse)
         }
         override suspend fun anzahlSeit(von: Long): Long = eintraege.count { it.timestamp >= von }.toLong()
     }
@@ -450,10 +450,33 @@ class SupportBundleExporterTest {
             val zeilen = zip.getInputStream(zip.getEntry("log/events.jsonl")).bufferedReader().readLines()
                 .filter { it.isNotBlank() }
             assertEquals(1234, zeilen.size)
-            val ids = zeilen.map { org.json.JSONObject(it).getLong("id") }.toSet()
-            assertEquals(1234, ids.size)
+            val idList = zeilen.map { org.json.JSONObject(it).getLong("id") }
+            assertEquals(1234, idList.toSet().size)
+            // Neueste zuerst (Befund 5 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md)
+            assertEquals(1234L, idList.first())
+            assertEquals(1L, idList.last())
         }
         assertTrue("Mehr als eine Seite muss abgefragt worden sein", dao.abgefragteSeiten >= 3)
+    }
+
+    @Test
+    fun neuesteEintraegeWerdenBeiBudgetUeberschreitungExportiert() = runTest {
+        // 20.000 Eintraege - sprengt das 1-MB-Budget eines periodischen Bundles bei Weitem (~2.4 MB vs 1 MB).
+        val eintraege = (1..20_000L).map { logEintrag(it, "Diagnosemeldung $it mit langem Detailtext fuer realistisches Bytevolumen") }
+        val dao = FakeDiagnosticLogDao(eintraege)
+
+        val zipFile = exporter(dao).createBundle(BundleKontext(typ = BundleTyp.PERIODISCH, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val zeilen = zip.getInputStream(zip.getEntry("log/events.jsonl")).bufferedReader().readLines()
+                .filter { it.isNotBlank() }
+            assertTrue("Es duerfen nicht alle 20.000 Eintraege im Budget Platz finden", zeilen.size < 20_000)
+            assertTrue("Mindestens eine Seite muss exportiert worden sein", zeilen.size >= 500)
+            val ersteId = org.json.JSONObject(zeilen.first()).getLong("id")
+            val letzteId = org.json.JSONObject(zeilen.last()).getLong("id")
+            assertEquals("Der allererste exportierte Eintrag muss der neueste (20.000) sein", 20_000L, ersteId)
+            assertTrue("Die aelteste ID in der gekuerzten Liste muss deutlich groesser als 1 sein", letzteId > 1L)
+        }
     }
 
     @Test

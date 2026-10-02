@@ -27,13 +27,13 @@ interface DiagnosticLogDao {
     suspend fun loescheAelterAls(grenze: Long)
 
     /**
-     * Seitenweises, Keyset-paginiertes Lesen fuer den streamenden Bundle-Export (M12 Schritt 4,
-     * Konzept Aufgabe 2): liest ab `id > nachId` aufsteigend. Anders als LIMIT/OFFSET liefert das
-     * bei gleichzeitigen Einfuegungen waehrend des Exports garantiert jede Zeile genau einmal -
-     * OFFSET wuerde bei wachsender Tabelle Zeilen ueberspringen oder doppelt liefern.
+     * Seitenweises, Keyset-paginiertes Lesen fuer den streamenden Bundle-Export in absteigender
+     * Reihenfolge (Befund 5 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md): liest ab `id < vorId`
+     * absteigend (neueste zuerst). Garantiert, dass bei Erreichen des Byte-Budgets die neuesten
+     * Diagnoseeintraege im Bundle enthalten sind.
      */
-    @Query("SELECT * FROM diagnostic_log_entries WHERE id > :nachId ORDER BY id ASC LIMIT :seitengroesse")
-    suspend fun seite(nachId: Long, seitengroesse: Int): List<DiagnosticLogEntity>
+    @Query("SELECT * FROM diagnostic_log_entries WHERE id < :vorId ORDER BY id DESC LIMIT :seitengroesse")
+    suspend fun seiteRueckwaerts(vorId: Long, seitengroesse: Int): List<DiagnosticLogEntity>
 
     /**
      * Fuer das periodische Gesundheits-Bundle (M12 Schritt 6, Konzept Aufgabe 3): Anzahl der
