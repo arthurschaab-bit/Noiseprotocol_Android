@@ -313,8 +313,8 @@ class SettingsManager(
      * der feinstmoeglichen Aufloesung; dafuer ist [driveWlanOnly] default an.
      */
     var driveAggregationSekunden: Int
-        get() = prefs.getInt("drive_aggregation_seconds", 1).coerceAtLeast(1)
-        set(value) = prefs.edit().putInt("drive_aggregation_seconds", value.coerceAtLeast(1)).apply()
+        get() = prefs.getInt("drive_aggregation_seconds", 1).coerceIn(1, 60)
+        set(value) = prefs.edit().putInt("drive_aggregation_seconds", value.coerceIn(1, 60)).apply()
 
     /**
      * Default AN: bei feinstmoeglicher Aggregation (1 s) faellt deutlich mehr Uploadvolumen an

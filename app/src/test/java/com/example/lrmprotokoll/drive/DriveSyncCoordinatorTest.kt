@@ -61,6 +61,10 @@ class DriveSyncCoordinatorTest {
             eingefuegt.removeAll { it.at < vor }
         }
 
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
+        }
+
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 
@@ -534,6 +538,95 @@ class DriveSyncCoordinatorTest {
 
             assertEquals(
                 "Ein Sample innerhalb der 30-Tage-Frist darf nicht geloescht werden",
+                1,
+                levelSampleDao.eingefuegt.size,
+            )
+        }
+
+    @Test
+    fun synchronisierterTagAelterAls3TageWirdBereinigt() =
+        runTest {
+            val tageZurueck = 5L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            val tagDatum = uhr.now().atZone(zone).toLocalDate().minusDays(tageZurueck)
+            val tagBis = tagDatum.plusDays(1).atStartOfDay(zone).toInstant()
+            val tagesSchluessel = DriveAblage.tagesordner(tagDatum.atStartOfDay(zone).toInstant(), zone)
+
+            // Tag ist bereits erfolgreich nach Drive synchronisiert (z. B. vor 4 Tagen)
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = tagesSchluessel,
+                    fileId = "drive_id_$tagesSchluessel",
+                    state = DriveSyncState.SYNCED,
+                    lastSyncedAt = tagBis.plusSeconds(3600).toEpochMilli(),
+                    lastRowCount = 100,
+                ),
+            )
+
+            baueKoordinator().syncEinenZyklus()
+
+            assertTrue(
+                "Rohwerte eines bereits nach Drive synchronisierten Tages aelter als 3 Tage muessen bereinigt werden",
+                levelSampleDao.eingefuegt.isEmpty(),
+            )
+        }
+
+    @Test
+    fun synchronisierterTagJuengerAls3TageBehaeltRohwerte() =
+        runTest {
+            val tageZurueck = 2L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            val tagDatum = uhr.now().atZone(zone).toLocalDate().minusDays(tageZurueck)
+            val tagBis = tagDatum.plusDays(1).atStartOfDay(zone).toInstant()
+            val tagesSchluessel = DriveAblage.tagesordner(tagDatum.atStartOfDay(zone).toInstant(), zone)
+
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = tagesSchluessel,
+                    fileId = "drive_id_$tagesSchluessel",
+                    state = DriveSyncState.SYNCED,
+                    lastSyncedAt = tagBis.plusSeconds(3600).toEpochMilli(),
+                    lastRowCount = 100,
+                ),
+            )
+
+            baueKoordinator().syncEinenZyklus()
+
+            assertEquals(
+                "Rohwerte eines synchronisierten Tages juenger als 3 Tage muessen als Puffer erhalten bleiben",
+                1,
+                levelSampleDao.eingefuegt.size,
+            )
+        }
+
+    @Test
+    fun unsynchronisierterTagAelterAls3TageBehaeltRohwerte() =
+        runTest {
+            val tageZurueck = 5L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            // Kein Eintrag in dailyFileDao bzw. nicht erfolgreich synchronisiert (z. B. Netzwerkfehler)
+            val fakeDriveApi = FakeDriveApiClient().apply {
+                dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("Kein Netz", httpCode = null))
+            }
+
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = fakeDriveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus()
+
+            assertEquals(
+                "Rohwerte eines noch nicht erfolgreich nach Drive synchronisierten Tages muessen auch nach >3 Tagen erhalten bleiben",
                 1,
                 levelSampleDao.eingefuegt.size,
             )
@@ -1381,6 +1474,10 @@ class DriveSyncCoordinatorTest {
             eingefuegt.removeAll { it.at < vor }
         }
 
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
+        }
+
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 
@@ -1454,6 +1551,10 @@ class DriveSyncCoordinatorTest {
 
         override suspend fun loescheVor(vor: Long) {
             eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
         }
 
         override suspend fun anzahl(): Int = eingefuegt.size
@@ -1601,7 +1702,7 @@ class DriveSyncCoordinatorTest {
     @Test
     fun keinRohwertAufrufUeberschreitetEineAbschnittslaenge() =
         runTest {
-            for (fensterSekunden in listOf(1, 7, 10, 60, 3600)) {
+            for (fensterSekunden in listOf(1, 7, 10, 60)) {
                 val protokollDao = ProtokollierendesLevelSampleDao()
                 val mitternacht =
                     uhr
@@ -1632,7 +1733,7 @@ class DriveSyncCoordinatorTest {
 
                 koordinator.syncEinenZyklus()
 
-                val vielfaches = Math.round(3600.0 / fensterSekunden.coerceAtLeast(1)).coerceAtLeast(1)
+                val vielfaches = Math.round(1800.0 / fensterSekunden.coerceAtLeast(1)).coerceAtLeast(1)
                 val maxAbschnittMillis = fensterSekunden * 1000L * vielfaches
                 assertTrue(
                     "Kein zwischen()-Aufruf darf bei Fensterdauer ${fensterSekunden}s mehr als " +
@@ -1705,7 +1806,7 @@ class DriveSyncCoordinatorTest {
                     )
                 }
 
-            for (fensterSekunden in listOf(1, 10, 60, 300, 3600, 7)) {
+            for (fensterSekunden in listOf(1, 7, 10, 60)) {
                 val dao = FakeLevelSampleDao().apply { eingefuegt += samples }
                 settings.driveAggregationSekunden = fensterSekunden
                 val eigenerDriveApi = FakeDriveApiClient()

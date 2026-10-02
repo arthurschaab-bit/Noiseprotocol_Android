@@ -126,4 +126,24 @@ class SicherungEinstellungenTest {
 
         assertEquals("bereits-konfiguriertes-topic", ziel.ntfyTopic)
     }
+
+    @Test
+    fun driveAggregationSekundenWirdAusSicherungAufGueltigenBereichBegrenzt() {
+        val ziel = neueSettings()
+
+        // Restaurierter Wert 3600 (aus alten Versionen oder manipuliertem Backup) muss auf 60 gedeckelt werden
+        val jsonZuGross = org.json.JSONObject().apply {
+            put("driveAggregationSekunden", 3600)
+        }
+        wendeEinstellungenAn(jsonZuGross, ziel)
+        assertEquals(60, ziel.driveAggregationSekunden)
+
+        // Ungültiger Wert <= 0 muss auf mindestens 1 begrenzt werden
+        val jsonZuKlein = org.json.JSONObject().apply {
+            put("driveAggregationSekunden", 0)
+        }
+        wendeEinstellungenAn(jsonZuKlein, ziel)
+        assertEquals(1, ziel.driveAggregationSekunden)
+    }
 }
+

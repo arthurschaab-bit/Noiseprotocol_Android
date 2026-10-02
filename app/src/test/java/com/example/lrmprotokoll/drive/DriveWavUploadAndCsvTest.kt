@@ -85,6 +85,7 @@ class DriveWavUploadAndCsvTest {
         override suspend fun zwischen(von: Long, bis: Long): List<LevelSampleEntity> =
             samples.filter { it.at in von until bis }
         override suspend fun loescheVor(vor: Long) { samples.removeAll { it.at < vor } }
+        override suspend fun loescheBereich(von: Long, bis: Long) { samples.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = samples.size
     }
 

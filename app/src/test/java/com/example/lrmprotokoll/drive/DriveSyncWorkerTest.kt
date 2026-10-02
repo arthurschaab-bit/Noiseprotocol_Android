@@ -56,6 +56,7 @@ class DriveSyncWorkerTest {
         override suspend fun zwischen(von: Long, bis: Long): List<LevelSampleEntity> =
             eingefuegt.filter { it.at in von until bis }
         override suspend fun loescheVor(vor: Long) { eingefuegt.removeAll { it.at < vor } }
+        override suspend fun loescheBereich(von: Long, bis: Long) { eingefuegt.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 
@@ -218,7 +219,7 @@ class DriveSyncWorkerTest {
 
     @Test
     fun erfolgreicherSyncLiefertResultSuccess() = runTest {
-        settings.driveAggregationSekunden = 3600
+        settings.driveAggregationSekunden = 60
         val worker = bauWorker(baueKoordinator())
 
         // Ohne Pegelwerte meldet der Koordinator KeineAenderung/Erfolgreich(0) - fuer den Test
@@ -235,7 +236,7 @@ class DriveSyncWorkerTest {
     @Test
     fun fehlgeschlagenerSyncOhneOrdnerbezugLiefertResultRetry() = runTest {
         driveApi.dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("kein Netz", httpCode = null))
-        settings.driveAggregationSekunden = 3600
+        settings.driveAggregationSekunden = 60
         // Mindestens ein Pegelwert, sonst gibt es nichts hochzuladen und der Fehlerpfad greift nie.
         val koordinatorMitDaten = baueKoordinator(
             levelSampleDao = FakeLevelSampleDao().apply { eingefuegt += sampleVorEinerStunde() },
@@ -254,7 +255,7 @@ class DriveSyncWorkerTest {
     @Test
     fun ordnerNichtGefundenLiefertResultFailureStattEndlosemRetry() = runTest {
         driveApi.dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("Ordner weg", httpCode = 404))
-        settings.driveAggregationSekunden = 3600
+        settings.driveAggregationSekunden = 60
         val koordinatorMitDaten = baueKoordinator(
             levelSampleDao = FakeLevelSampleDao().apply { eingefuegt += sampleVorEinerStunde() },
         )
