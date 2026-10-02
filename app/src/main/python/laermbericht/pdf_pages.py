@@ -7,7 +7,9 @@ Originalfundstelle; vollständige Zuordnung in docs/BERICHT_PDF_SEITEN_V1.md.
 """
 from __future__ import annotations
 
+import gc
 import math
+from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -90,6 +92,7 @@ def save_page(pdf, fig):
                  fontsize=8, color="#777777")
         pdf.savefig(fig)
     finally:
+        fig.clear()
         plt.close(fig)
 
 
@@ -395,6 +398,7 @@ def page_messaufbau(pdf, day, config, override):
                 img = ImageOps.exif_transpose(original)
                 img.thumbnail((1600, 1100))
                 ax.imshow(np.asarray(img.convert("RGB")))
+                del img
         except (OSError, ValueError):
             ax.text(.5, .5, "Dokumentationsfoto fehlt oder ist nicht lesbar", ha="center", transform=ax.transAxes, color=RED)
         captured = datetime.fromtimestamp(photo["capturedAt"]/1000, ZoneInfo(config.time_zone)).strftime("%d.%m.%Y %H:%M:%S")
@@ -425,6 +429,13 @@ def page_manifest(pdf, days, override):
     text_pages(pdf, "ROHDATEN-MANIFEST - GESPEICHERTE SHA-256", blocks, override)
 
 
+def _strip_day_series(day):
+    m = day.get("metrics")
+    if m is not None and getattr(m, "energy_level_1hz_db", None) is not None:
+        empty = pd.Series(dtype=float)
+        day["metrics"] = replace(m, energy_level_1hz_db=empty, peak_level_1hz_db=empty, laeq_1min_db=empty)
+
+
 def render_report(path, days, config, area, texts, override):
     """PdfPages wie im Original; alle Figuren schließen auch im Fehlerfall."""
     with plt.rc_context({"font.family": "DejaVu Sans", "pdf.fonttype": 42}):
@@ -441,6 +452,9 @@ def render_report(path, days, config, area, texts, override):
                 for day in days:
                     page_day(pdf, day, config, texts, override)
                     page_messaufbau(pdf, day, config, override)
+                    _strip_day_series(day)
+                    gc.collect()
                 page_manifest(pdf, days, override)
         finally:
             plt.close("all")
+            gc.collect()
