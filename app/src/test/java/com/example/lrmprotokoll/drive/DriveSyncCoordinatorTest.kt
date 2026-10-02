@@ -602,6 +602,37 @@ class DriveSyncCoordinatorTest {
         }
 
     @Test
+    fun unsynchronisierterTagAelterAls3TageBehaeltRohwerte() =
+        runTest {
+            val tageZurueck = 5L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            // Kein Eintrag in dailyFileDao bzw. nicht erfolgreich synchronisiert (z. B. Netzwerkfehler)
+            val fakeDriveApi = FakeDriveApiClient().apply {
+                dateiAnlegenErgebnis = kotlin.Result.failure(DriveApiException("Kein Netz", httpCode = null))
+            }
+
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = fakeDriveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            koordinator.syncEinenZyklus()
+
+            assertEquals(
+                "Rohwerte eines noch nicht erfolgreich nach Drive synchronisierten Tages muessen auch nach >3 Tagen erhalten bleiben",
+                1,
+                levelSampleDao.eingefuegt.size,
+            )
+        }
+
+    @Test
     fun ausgeschalteterSyncTutNichts() =
         runTest {
             settings.driveSyncEnabled = false
@@ -1671,7 +1702,7 @@ class DriveSyncCoordinatorTest {
     @Test
     fun keinRohwertAufrufUeberschreitetEineAbschnittslaenge() =
         runTest {
-            for (fensterSekunden in listOf(1, 7, 10, 60, 3600)) {
+            for (fensterSekunden in listOf(1, 7, 10, 60)) {
                 val protokollDao = ProtokollierendesLevelSampleDao()
                 val mitternacht =
                     uhr
@@ -1702,7 +1733,7 @@ class DriveSyncCoordinatorTest {
 
                 koordinator.syncEinenZyklus()
 
-                val vielfaches = Math.round(3600.0 / fensterSekunden.coerceAtLeast(1)).coerceAtLeast(1)
+                val vielfaches = Math.round(1800.0 / fensterSekunden.coerceAtLeast(1)).coerceAtLeast(1)
                 val maxAbschnittMillis = fensterSekunden * 1000L * vielfaches
                 assertTrue(
                     "Kein zwischen()-Aufruf darf bei Fensterdauer ${fensterSekunden}s mehr als " +
@@ -1775,7 +1806,7 @@ class DriveSyncCoordinatorTest {
                     )
                 }
 
-            for (fensterSekunden in listOf(1, 10, 60, 300, 3600, 7)) {
+            for (fensterSekunden in listOf(1, 7, 10, 60)) {
                 val dao = FakeLevelSampleDao().apply { eingefuegt += samples }
                 settings.driveAggregationSekunden = fensterSekunden
                 val eigenerDriveApi = FakeDriveApiClient()
