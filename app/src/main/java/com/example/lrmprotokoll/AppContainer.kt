@@ -266,6 +266,7 @@ class AppContainer(
                 cadenceTolerance = 0.5,
                 diagnosticLogger = diagnosticLogger,
                 diagnosticsReporter = diagnosticsReporter,
+                dienstAktiv = AudioRecordingService.laeuft,
             )
         }
     val connectionSupervisor: ConnectionSupervisor by connectionSupervisorLazy

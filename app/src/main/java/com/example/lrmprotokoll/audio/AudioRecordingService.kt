@@ -302,6 +302,7 @@ class AudioRecordingService : LifecycleService() {
         aktualisiereForegroundServiceTypeFallsNoetig()
         val device = BoundDevice(address, settingsManager.meterDeviceName ?: address)
         connectionSupervisor.start(device)
+        connectionSupervisor.erneutVersuchen()
 
         if (settingsManager.alarmierungAktiv) {
             alarmCoordinator.start()

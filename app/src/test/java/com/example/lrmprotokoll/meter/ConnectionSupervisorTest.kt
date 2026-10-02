@@ -90,6 +90,8 @@ class ConnectionSupervisorTest {
         cadenceTolerance: Double = 0.2,
         diagnosticLogger: DiagnosticLogger? = null,
         failedRetryInterval: Duration = Duration.ofMinutes(15),
+        dienstAktiv: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
+        failedRetryIntervalLeerlauf: Duration = Duration.ofHours(1),
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -106,6 +108,8 @@ class ConnectionSupervisorTest {
             expectedFramePeriod = expectedFramePeriod,
             cadenceTolerance = cadenceTolerance,
             diagnosticLogger = diagnosticLogger,
+            dienstAktiv = dienstAktiv,
+            failedRetryIntervalLeerlauf = failedRetryIntervalLeerlauf,
         )
     }
 
@@ -789,6 +793,136 @@ class ConnectionSupervisorTest {
         assertFalse(
             "Ein selbst ausgeloester Abbruch darf nicht zusaetzlich als Fremdabbruch erscheinen, war ${dao.zeilen.map { it.message }}",
             dao.zeilen.any { it.message.contains("vom Geraet/System beendet") },
+        )
+    }
+
+    @Test
+    fun inaktiverDienstVerlaengertRetryIntervallImLeerlaufProgressiv() = runTest {
+        // Befund 6 / Abschnitt 4: Wenn keine Messung laeuft (dienstAktiv = false),
+        // soll nach FAILED nicht starr alle 15 min neu versucht werden, sondern progressiv
+        // verlaengert (15 min -> 30 min -> 60 min bzw. in Test-Einheiten 10s -> 20s -> 40s).
+        val transport = NeverStreamingTransport(testScheduler)
+        val dienstAktiv = MutableStateFlow(false)
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = 1,
+            failedRetryInterval = Duration.ofSeconds(10),
+            failedRetryIntervalLeerlauf = Duration.ofSeconds(40),
+            dienstAktiv = dienstAktiv,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(1, transport.connectTimestampsMillis.size)
+
+        // Runde 1: Wartezeit 10s (multiplikator 1x). Bei 9s noch kein neuer Versuch:
+        advanceTimeBy(9_000)
+        runCurrent()
+        assertEquals(1, transport.connectTimestampsMillis.size)
+
+        // Nach Ablauf der 10s (weitere 1s) laeuft der 2. Anlauf und scheitert:
+        advanceTimeBy(1_000)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(2, transport.connectTimestampsMillis.size)
+
+        // Runde 2: Wartezeit 20s (multiplikator 2x). Bei 19s noch kein neuer Versuch:
+        advanceTimeBy(19_000)
+        runCurrent()
+        assertEquals(2, transport.connectTimestampsMillis.size)
+
+        // Nach Ablauf der 20s (weitere 1s) laeuft der 3. Anlauf:
+        advanceTimeBy(1_000)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(3, transport.connectTimestampsMillis.size)
+
+        // Runde 3: Wartezeit 40s (multiplikator 4x, gedeckelt auf failedRetryIntervalLeerlauf).
+        advanceTimeBy(39_000)
+        runCurrent()
+        assertEquals(3, transport.connectTimestampsMillis.size)
+
+        advanceTimeBy(1_000)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(4, transport.connectTimestampsMillis.size)
+    }
+
+    @Test
+    fun dienstStartBeendetLeerlaufWartezeitSofort() = runTest {
+        // Startet der Dienst waehrend der Leerlauf-Wartezeit, muss die Wartezeit sofort
+        // abgebrochen und ein Verbindungsaufbau versucht werden.
+        val transport = NeverStreamingTransport(testScheduler)
+        val dienstAktiv = MutableStateFlow(false)
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = 1,
+            failedRetryInterval = Duration.ofHours(1),
+            failedRetryIntervalLeerlauf = Duration.ofHours(1),
+            dienstAktiv = dienstAktiv,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(1, transport.connectTimestampsMillis.size)
+
+        // Mitten in der 1-stuendigen Wartezeit startet die Messung:
+        advanceTimeBy(60_000) // 1 Minute vergangen
+        runCurrent()
+        assertEquals(1, transport.connectTimestampsMillis.size)
+
+        dienstAktiv.value = true
+        runCurrent()
+
+        assertTrue(
+            "Dienststart muss die Wartezeit sofort beenden und einen neuen Versuch ausloesen",
+            transport.connectTimestampsMillis.size > 1,
+        )
+    }
+
+    @Test
+    fun erneutVersuchenBeendetLeerlaufWartezeitSofort() = runTest {
+        // Holt der Nutzer die App in den Vordergrund (verbindeWennGewuenscht ruft erneutVersuchen),
+        // muss die Leerlauf-Wartezeit sofort beendet werden.
+        val transport = NeverStreamingTransport(testScheduler)
+        val dienstAktiv = MutableStateFlow(false)
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = 1,
+            failedRetryInterval = Duration.ofHours(1),
+            failedRetryIntervalLeerlauf = Duration.ofHours(1),
+            dienstAktiv = dienstAktiv,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(10)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(1, transport.connectTimestampsMillis.size)
+
+        advanceTimeBy(10_000)
+        runCurrent()
+        supervisor.erneutVersuchen()
+        runCurrent()
+
+        assertTrue(
+            "erneutVersuchen() muss die Leerlauf-Wartezeit sofort beenden",
+            transport.connectTimestampsMillis.size > 1,
         )
     }
 }
