@@ -24,6 +24,13 @@ interface LevelSampleDao {
     @Query("DELETE FROM level_samples WHERE at < :vor")
     suspend fun loescheVor(vor: Long)
 
+    /**
+     * Gezielte Puffer-Bereinigung fuer Tage, deren Messwerte bereits vollstaendig und erfolgreich
+     * nach Google Drive synchronisiert wurden (Befund 1 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md).
+     */
+    @Query("DELETE FROM level_samples WHERE at >= :von AND at < :bis")
+    suspend fun loescheBereich(von: Long, bis: Long)
+
     @Query("SELECT COUNT(*) FROM level_samples")
     suspend fun anzahl(): Int
 }

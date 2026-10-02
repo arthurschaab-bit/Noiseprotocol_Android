@@ -56,6 +56,7 @@ class DriveSyncWorkerTest {
         override suspend fun zwischen(von: Long, bis: Long): List<LevelSampleEntity> =
             eingefuegt.filter { it.at in von until bis }
         override suspend fun loescheVor(vor: Long) { eingefuegt.removeAll { it.at < vor } }
+        override suspend fun loescheBereich(von: Long, bis: Long) { eingefuegt.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 

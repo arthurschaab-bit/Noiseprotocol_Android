@@ -34,6 +34,7 @@ class LevelSampleCollectorTest {
         override suspend fun zwischen(von: Long, bis: Long): List<LevelSampleEntity> =
             geschrieben.filter { it.at in von until bis }
         override suspend fun loescheVor(vor: Long) { geschrieben.removeAll { it.at < vor } }
+        override suspend fun loescheBereich(von: Long, bis: Long) { geschrieben.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = geschrieben.size
     }
 

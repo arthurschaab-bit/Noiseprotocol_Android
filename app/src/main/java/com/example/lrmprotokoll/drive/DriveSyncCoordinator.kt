@@ -485,6 +485,13 @@ class DriveSyncCoordinator(
                 if (registry != null && registry.state == DriveSyncState.SYNCED &&
                     registry.lastSyncedAt >= tagBis.toEpochMilli()
                 ) {
+                    // Tag ist bereits nach Tagesende endgültig synchronisiert.
+                    // Wenn der Tag älter als 3 Tage ist, können die 10-Hz-Rohwerte in level_samples
+                    // bereinigt werden, da sie in Drive als laermprotokoll_YYYY-MM-DD.csv gesichert sind (Befund 1
+                    // aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md). Tage jünger als 3 Tage behalten ihre Rohwerte.
+                    if (tagBis.isBefore(jetzt.minus(Duration.ofDays(3)))) {
+                        levelSampleDao.loescheBereich(tagVon.toEpochMilli(), tagBis.toEpochMilli())
+                    }
                     return@runCatching // nach Tagesende synchronisiert -> endgueltig, nichts zu tun
                 }
 
@@ -623,7 +630,9 @@ class DriveSyncCoordinator(
         if (!bis.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
 
         val fensterSekunden = fensterDauer.seconds.coerceAtLeast(1)
-        val vielfaches = Math.round(3600.0 / fensterSekunden).coerceAtLeast(1)
+        // 30 Minuten (1800s) statt 60 Minuten (3600s), um SQLite-CursorWindow-Ueberlaeufe (2-MB-Grenze
+        // bei 10-Hz-Samples, ~36.000 Zeilen/h) zuverlaessig zu verhindern (Befund 4 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md).
+        val vielfaches = Math.round(1800.0 / fensterSekunden).coerceAtLeast(1)
         val abschnittDauer = fensterDauer.multipliedBy(vielfaches)
 
         val zeilen = mutableListOf<AggregatZeile>()

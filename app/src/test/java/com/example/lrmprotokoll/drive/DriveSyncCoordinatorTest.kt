@@ -61,6 +61,10 @@ class DriveSyncCoordinatorTest {
             eingefuegt.removeAll { it.at < vor }
         }
 
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
+        }
+
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 
@@ -534,6 +538,64 @@ class DriveSyncCoordinatorTest {
 
             assertEquals(
                 "Ein Sample innerhalb der 30-Tage-Frist darf nicht geloescht werden",
+                1,
+                levelSampleDao.eingefuegt.size,
+            )
+        }
+
+    @Test
+    fun synchronisierterTagAelterAls3TageWirdBereinigt() =
+        runTest {
+            val tageZurueck = 5L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            val tagDatum = uhr.now().atZone(zone).toLocalDate().minusDays(tageZurueck)
+            val tagBis = tagDatum.plusDays(1).atStartOfDay(zone).toInstant()
+            val tagesSchluessel = DriveAblage.tagesordner(tagDatum.atStartOfDay(zone).toInstant(), zone)
+
+            // Tag ist bereits erfolgreich nach Drive synchronisiert (z. B. vor 4 Tagen)
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = tagesSchluessel,
+                    fileId = "drive_id_$tagesSchluessel",
+                    state = DriveSyncState.SYNCED,
+                    lastSyncedAt = tagBis.plusSeconds(3600).toEpochMilli(),
+                    lastRowCount = 100,
+                ),
+            )
+
+            baueKoordinator().syncEinenZyklus()
+
+            assertTrue(
+                "Rohwerte eines bereits nach Drive synchronisierten Tages aelter als 3 Tage muessen bereinigt werden",
+                levelSampleDao.eingefuegt.isEmpty(),
+            )
+        }
+
+    @Test
+    fun synchronisierterTagJuengerAls3TageBehaeltRohwerte() =
+        runTest {
+            val tageZurueck = 2L
+            fuegeSampleFuerTagHinzu(tageZurueck = tageZurueck, sekundenSeitMitternacht = 3600L, db = 55.0)
+
+            val tagDatum = uhr.now().atZone(zone).toLocalDate().minusDays(tageZurueck)
+            val tagBis = tagDatum.plusDays(1).atStartOfDay(zone).toInstant()
+            val tagesSchluessel = DriveAblage.tagesordner(tagDatum.atStartOfDay(zone).toInstant(), zone)
+
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = tagesSchluessel,
+                    fileId = "drive_id_$tagesSchluessel",
+                    state = DriveSyncState.SYNCED,
+                    lastSyncedAt = tagBis.plusSeconds(3600).toEpochMilli(),
+                    lastRowCount = 100,
+                ),
+            )
+
+            baueKoordinator().syncEinenZyklus()
+
+            assertEquals(
+                "Rohwerte eines synchronisierten Tages juenger als 3 Tage muessen als Puffer erhalten bleiben",
                 1,
                 levelSampleDao.eingefuegt.size,
             )
@@ -1381,6 +1443,10 @@ class DriveSyncCoordinatorTest {
             eingefuegt.removeAll { it.at < vor }
         }
 
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
+        }
+
         override suspend fun anzahl(): Int = eingefuegt.size
     }
 
@@ -1454,6 +1520,10 @@ class DriveSyncCoordinatorTest {
 
         override suspend fun loescheVor(vor: Long) {
             eingefuegt.removeAll { it.at < vor }
+        }
+
+        override suspend fun loescheBereich(von: Long, bis: Long) {
+            eingefuegt.removeAll { it.at in von until bis }
         }
 
         override suspend fun anzahl(): Int = eingefuegt.size
