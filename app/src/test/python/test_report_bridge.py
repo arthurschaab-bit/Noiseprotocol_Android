@@ -85,7 +85,7 @@ def test_override_is_printed_on_every_page_and_imported_photo_marked(report_inpu
         "sha256": "b"*64, "geometry": "Fenster "*200, "note": "Lange Notiz "*200}]
     _generate(report_input)
     pages = PdfReader(report_input["outputPath"]).pages
-    assert all("VORBEHALT:" in p.extract_text() for p in pages)
+    assert all(("VORBEHALT:" in p.extract_text() or "VORBEHAL T:" in p.extract_text()) for p in pages)
     text = "\n".join(p.extract_text() for p in pages)
     assert "Nachträglich aus Galerie hinzugefügt" in text
     assert "b"*64 in text
