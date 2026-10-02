@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -121,6 +123,25 @@ class ConnectionSupervisor(
      */
     private val diagnosticLogger: DiagnosticLogger? = null,
     private val diagnosticsReporter: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
+    /**
+     * Maximaler Abstand zwischen zwei Anlaeufen im Leerlauf (Dienst nicht aktiv, F-03 / Befund 6
+     * aus Support-Bundles Oktober 2026).
+     *
+     * Laeuft keine Messung ([dienstAktiv] liefert false) und ist das Geraet nicht erreichbar
+     * (z. B. ausgeschaltet oder an einem anderen Smartphone gekoppelt), wuerden periodische
+     * 15-Minuten-Anlaeufe im Hintergrund unnoetig Funkressourcen verbrauchen und den Prozess
+     * gefaehrden (Pixel 9 Pro LOW_MEMORY-Absturz).
+     *
+     * Im Leerlauf verlaengert sich der Abstand nach jedem fehlgeschlagenen Anlauf progressiv
+     * (15 min -> 30 min -> 60 min), gedeckelt auf diesen Wert. Startet der Dienst oder holt der
+     * Nutzer die App in den Vordergrund ([erneutVersuchen]), wird die Wartezeit sofort beendet.
+     */
+    private val failedRetryIntervalLeerlauf: Duration = Duration.ofHours(1),
+    /**
+     * Gibt an, ob der Messdienst aktiv ist (z. B. [AudioRecordingService.laeuft]).
+     * Default ist `true` fuer Rueckwaertskompatibilitaet in bestehenden Tests.
+     */
+    private val dienstAktiv: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
 ) {
     private val _state = MutableStateFlow(ConnectionState.IDLE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -212,6 +233,7 @@ class ConnectionSupervisor(
         val forwarder = launch { transport.state.collectLatest { publish(it) } }
         try {
             var consecutiveFailures = 0
+            var consecutiveFailedRounds = 0
             var isFirstAttempt = true
             while (isActive) {
                 if (!adapterEnabled.value) {
@@ -250,9 +272,13 @@ class ConnectionSupervisor(
                 }
 
                 when (outcome) {
-                    AttemptOutcome.STREAMED_STABLY -> consecutiveFailures = 0
+                    AttemptOutcome.STREAMED_STABLY -> {
+                        consecutiveFailures = 0
+                        consecutiveFailedRounds = 0
+                    }
                     AttemptOutcome.ADAPTER_OFF -> {
                         consecutiveFailures = 0
+                        consecutiveFailedRounds = 0
                         isFirstAttempt = true // sofortige Wiederaufnahme ohne Backoff-Wartezeit
                     }
                     AttemptOutcome.STREAMED_BRIEFLY, AttemptOutcome.NEVER_STREAMED -> {
@@ -269,18 +295,39 @@ class ConnectionSupervisor(
                             // F-03: Frueher endete die Schleife hier mit return@coroutineScope und
                             // die Verbindung blieb tot, bis der Nutzer eingriff. Jetzt bleibt sie in
                             // FAILED stehen und nimmt einen neuen Anlauf, sobald entweder
-                            // [failedRetryInterval] verstrichen ist oder jemand [erneutVersuchen]
-                            // ruft - was immer zuerst kommt.
-                            val anforderung =
-                                withTimeoutOrNull(failedRetryInterval.toMillis()) {
-                                    anlaufAnforderungen.first { it != standVorDemWarten }
+                            // die Wartezeit verstrichen ist, jemand [erneutVersuchen] ruft oder
+                            // der Dienst gestartet wird - was immer zuerst kommt.
+                            consecutiveFailedRounds++
+                            val warteDauer = if (dienstAktiv.value) {
+                                consecutiveFailedRounds = 0
+                                failedRetryInterval
+                            } else {
+                                val multiplikator = 1 shl (consecutiveFailedRounds - 1).coerceIn(0, 2)
+                                val dauer = failedRetryInterval.multipliedBy(multiplikator.toLong())
+                                if (dauer > failedRetryIntervalLeerlauf) failedRetryIntervalLeerlauf else dauer
+                            }
+                            val aufgewacht =
+                                withTimeoutOrNull(warteDauer.toMillis()) {
+                                    if (!dienstAktiv.value) {
+                                        merge(
+                                            anlaufAnforderungen.filter { it != standVorDemWarten },
+                                            dienstAktiv.filter { it },
+                                        ).first()
+                                    } else {
+                                        anlaufAnforderungen.first { it != standVorDemWarten }
+                                    }
                                 }
-                            val angestossen = anforderung != null
+                            val angestossen = aufgewacht != null
                             diagnosticLogger?.protokolliere(
                                 if (angestossen) {
                                     "Neuer Anlauf auf Anforderung"
                                 } else {
-                                    "Neuer Anlauf nach ${failedRetryInterval.toMinutes()} min"
+                                    val minuten = warteDauer.toMinutes()
+                                    if (minuten > 0) {
+                                        "Neuer Anlauf nach $minuten min"
+                                    } else {
+                                        "Neuer Anlauf nach ${warteDauer.toMillis()} ms"
+                                    }
                                 },
                             )
                             consecutiveFailures = 0

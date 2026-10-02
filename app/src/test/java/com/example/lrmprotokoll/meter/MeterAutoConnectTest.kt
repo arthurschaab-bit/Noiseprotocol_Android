@@ -102,4 +102,12 @@ class MeterAutoConnectTest {
         settings.meterDeviceAddress = null
         assertFalse(autoConnect().verbindeJetzt())
     }
+
+    @Test
+    fun verbindeWennGewuenschtFunktioniertAuchBeiInaktivemDienst() {
+        // Befund 6 / Abschnitt 4: MeterAutoConnect haengt bewusst am AppContainer
+        // und verbindet bei App-Start / Foregrounding auch dann, wenn AudioRecordingService
+        // noch nicht gestartet wurde.
+        assertTrue(autoConnect().verbindeWennGewuenscht())
+    }
 }
