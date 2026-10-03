@@ -7,6 +7,7 @@ PdfPages-Seiten Z. 917–3022. Seiteninventar: docs/BERICHT_PDF_SEITEN_V1.md.
 from __future__ import annotations
 
 import csv
+import gc
 import json
 import math
 import os
@@ -16,7 +17,7 @@ from threading import Lock
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from laermbericht.areas import apply_area_to_config, area_report_texts, get_area
-from laermbericht.day_metrics import DayConfig, Sample, calculate_day_metrics
+from laermbericht.day_metrics import DayConfig, Sample, calculate_day_metrics, compute_day_curves
 
 _RENDER_LOCK = Lock()
 _PRIVATE_DIRECTORIES = None
@@ -65,6 +66,16 @@ def _load_samples(day, handoff_root, override):
     if len(samples) != day["rawSampleCount"]:
         raise ValueError(f"Rohdaten für {day['date']} sind unvollständig. Bitte erneut exportieren.")
     return samples, unconfirmed, sorted(modes)
+
+
+def _make_curves_loader(source, handoff_root, override, time_zone):
+    def loader():
+        samples, _, _ = _load_samples(source, handoff_root, override)
+        day_date = date.fromisoformat(source["date"])
+        levels, peaks, laeq_1min = compute_day_curves(samples, day_date, time_zone)
+        del samples
+        return levels, peaks, laeq_1min
+    return loader
 
 
 def _parse_private_directories(private_directories_json):
@@ -187,10 +198,15 @@ def generate_report(parameter_json: str) -> str:
         )
         # Fehlende Aufstellung ist keine stillschweigende Außenmessung. Der reine Kern hat
         # nur einen Innen-Schalter: True sperrt in diesem Fall beide Außenhochrechnungen.
-        metrics = calculate_day_metrics(samples, date.fromisoformat(source["date"]), config,
-                                        is_indoor=environment != "outside") if samples else None
-        days.append(dict(source=source, metrics=metrics, environment=environment, modes=modes))
+        metrics = calculate_day_metrics(
+            samples, date.fromisoformat(source["date"]), config,
+            is_indoor=environment != "outside",
+            include_series=False,
+        ) if samples else None
+        curves_loader = _make_curves_loader(source, handoff_root, override, config.time_zone) if samples else None
+        days.append(dict(source=source, metrics=metrics, environment=environment, modes=modes, curves_loader=curves_loader))
         del samples
+    gc.collect()
     if not any(d["metrics"] is not None for d in days):
         raise ValueError("Im gewählten Zeitraum liegen keine Rohdaten für einen Bericht vor.")
     # Keine Teil-PDF als Erfolg und kein Überschreiben eines bestehenden Berichts bei Fehlern.

@@ -7,7 +7,9 @@ Originalfundstelle; vollständige Zuordnung in docs/BERICHT_PDF_SEITEN_V1.md.
 """
 from __future__ import annotations
 
+import gc
 import math
+from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -90,6 +92,7 @@ def save_page(pdf, fig):
                  fontsize=8, color="#777777")
         pdf.savefig(fig)
     finally:
+        fig.clear()
         plt.close(fig)
 
 
@@ -299,8 +302,21 @@ def page_day(pdf, day, config, texts, override):
     m = day["metrics"]
     if m is None:
         return
+    curves = None
+    if m.energy_level_1hz_db is None or m.energy_level_1hz_db.empty:
+        loader = day.get("curves_loader")
+        if loader is not None:
+            curves = loader()
+            levels, peaks, laeq_1min = curves
+        else:
+            levels = m.energy_level_1hz_db
+            peaks = m.peak_level_1hz_db
+            laeq_1min = m.laeq_1min_db
+    else:
+        levels = m.energy_level_1hz_db
+        peaks = m.peak_level_1hz_db
+        laeq_1min = m.laeq_1min_db
     fig = new_page(f"{m.day:%d.%m.%Y} - {ENVIRONMENT[day['environment']]}", override)
-    levels = m.energy_level_1hz_db
     # Wandzeit-Achse, damit Android/Host unabhängig von Matplotlibs Default-Zeitzone sind.
     start = pd.Timestamp(m.day).tz_localize(config.time_zone).replace(hour=7)
     end = pd.Timestamp(m.day).tz_localize(config.time_zone).replace(hour=20)
@@ -309,7 +325,7 @@ def page_day(pdf, day, config, texts, override):
     ax = fig.add_axes([.07, .39, .87, .43])
     ax.set_xlim(left, right)
     ax.set_ylim(min(25, float(levels.min())-3) if levels.notna().any() else 25,
-                max(105, float(m.peak_level_1hz_db.max())+3) if levels.notna().any() else 105)
+                max(105, float(peaks.max())+3) if levels.notna().any() else 105)
     grid = pd.date_range(left, right, freq="s", inclusive="left")
     visible = levels.copy()
     visible.index = visible.index.tz_localize(None)
@@ -323,7 +339,7 @@ def page_day(pdf, day, config, texts, override):
         ax.axvspan(grid[a], grid[min(b, len(grid)-1)] + pd.Timedelta(seconds=int(b == len(grid))),
                    color="#DDDDDD", alpha=.5, hatch="//", label="nicht gemessen" if i == 0 else None)
     ax.plot(levels.index.tz_localize(None), levels.values, color="#BBBBBB", lw=.5, label="Sekunden-Energiemittel")
-    ax.plot(m.laeq_1min_db.index.tz_localize(None), m.laeq_1min_db.values, color=TITLE, lw=1.2, label="LAeq 1 min gleitend")
+    ax.plot(laeq_1min.index.tz_localize(None), laeq_1min.values, color=TITLE, lw=1.2, label="LAeq 1 min gleitend")
     if day["environment"] == "outside":
         ax.hlines(config.day_guideline_db, start.tz_localize(None), end.tz_localize(None), color=RED,
                   label=texts["day_line_label"])
@@ -342,6 +358,7 @@ def page_day(pdf, day, config, texts, override):
     fig.text(.06, .18, "Grau: Sekundenmittel; Blau: gleitender LAeq; schraffierte Bereiche: fehlende Sekunden.", fontsize=10)
     fig.text(.06, .145, "Schwellenlinien nur bei dokumentierter Außenlage und nur 07–20 Uhr; keine automatische Rechtsbewertung.", fontsize=10)
     save_page(pdf, fig)
+    del curves, levels, peaks, laeq_1min
     details = [
         ("Messzeiten / Datenqualität", f"{m.measurement_period_text}\n{m.laeq_day_label}\n"
          "Abdeckung wird anhand gültiger Sekunden bestimmt. Interne GAP-Lücken können auch innerhalb einer Session liegen."),
@@ -395,6 +412,7 @@ def page_messaufbau(pdf, day, config, override):
                 img = ImageOps.exif_transpose(original)
                 img.thumbnail((1600, 1100))
                 ax.imshow(np.asarray(img.convert("RGB")))
+                del img
         except (OSError, ValueError):
             ax.text(.5, .5, "Dokumentationsfoto fehlt oder ist nicht lesbar", ha="center", transform=ax.transAxes, color=RED)
         captured = datetime.fromtimestamp(photo["capturedAt"]/1000, ZoneInfo(config.time_zone)).strftime("%d.%m.%Y %H:%M:%S")
@@ -425,6 +443,14 @@ def page_manifest(pdf, days, override):
     text_pages(pdf, "ROHDATEN-MANIFEST - GESPEICHERTE SHA-256", blocks, override)
 
 
+def _strip_day_series(day):
+    day.pop("curves_loader", None)
+    m = day.get("metrics")
+    if m is not None and getattr(m, "energy_level_1hz_db", None) is not None:
+        empty = pd.Series(dtype=float)
+        day["metrics"] = replace(m, energy_level_1hz_db=empty, peak_level_1hz_db=empty, laeq_1min_db=empty)
+
+
 def render_report(path, days, config, area, texts, override):
     """PdfPages wie im Original; alle Figuren schließen auch im Fehlerfall."""
     with plt.rc_context({"font.family": "DejaVu Sans", "pdf.fonttype": 42}):
@@ -441,6 +467,9 @@ def render_report(path, days, config, area, texts, override):
                 for day in days:
                     page_day(pdf, day, config, texts, override)
                     page_messaufbau(pdf, day, config, override)
+                    _strip_day_series(day)
+                    gc.collect()
                 page_manifest(pdf, days, override)
         finally:
             plt.close("all")
+            gc.collect()

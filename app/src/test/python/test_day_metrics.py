@@ -12,6 +12,7 @@ from laermbericht import (
     Sample,
     calculate_day_metrics,
     calculate_rating_level,
+    compute_day_curves,
     get_tier,
     resample_to_one_hz,
 )
@@ -247,6 +248,53 @@ def test_invalid_config_is_rejected_before_calculation(config: DayConfig) -> Non
 
     with pytest.raises(ValueError, match="Abdeckungsschwellen"):
         calculate_day_metrics(samples, TEST_DAY, invalid, is_indoor=False)
+
+
+def test_compute_day_curves_returns_expected_series() -> None:
+    start = datetime(2026, 6, 1, 7, 0, tzinfo=TEST_ZONE)
+    samples = [
+        _sample(start, 50.0),
+        _sample(start, 60.0),
+        _sample(start + timedelta(seconds=1), 70.0),
+    ]
+    levels, peaks, laeq_1min = compute_day_curves(samples, TEST_DAY, "Europe/Berlin")
+
+    assert len(levels) == 2
+    assert len(peaks) == 2
+    assert len(laeq_1min) == 2
+    assert peaks.iloc[0] == pytest.approx(60.0)
+    assert peaks.iloc[1] == pytest.approx(70.0)
+    # 50 dB and 60 dB mean energy: 10*log10((10^5 + 10^6)/2) = 57.41 dB
+    expected_energy_first_sec = 10.0 * np.log10(0.5 * (10**5 + 10**6))
+    assert levels.iloc[0] == pytest.approx(expected_energy_first_sec)
+
+
+def test_calculate_day_metrics_without_series_omits_heavy_series(config: DayConfig) -> None:
+    start = datetime(2026, 6, 1, 7, 0, tzinfo=TEST_ZONE)
+    samples = _constant_samples(start, 3600, 55.0)
+
+    full = calculate_day_metrics(samples, TEST_DAY, config, is_indoor=False, include_series=True)
+    compact = calculate_day_metrics(samples, TEST_DAY, config, is_indoor=False, include_series=False)
+
+    # Scalars must be identical
+    assert compact.day_seconds == full.day_seconds
+    assert compact.coverage_day == pytest.approx(full.coverage_day)
+    assert compact.tier == full.tier
+    assert compact.laeq_day_db == pytest.approx(full.laeq_day_db)
+    assert compact.l1_day_db == pytest.approx(full.l1_day_db)
+    assert compact.highest_db == pytest.approx(full.highest_db)
+    assert compact.rating_level_day_db == pytest.approx(full.rating_level_day_db)
+    assert compact.impulse_adjustment_day_db == pytest.approx(full.impulse_adjustment_day_db)
+    assert compact.loudest_hour_db == pytest.approx(full.loudest_hour_db)
+
+    # Compact must have empty series to save RAM
+    assert not full.energy_level_1hz_db.empty
+    assert not full.peak_level_1hz_db.empty
+    assert not full.laeq_1min_db.empty
+
+    assert compact.energy_level_1hz_db.empty
+    assert compact.peak_level_1hz_db.empty
+    assert compact.laeq_1min_db.empty
 
 
 def _constant_samples(start: datetime, seconds: int, level_db: float) -> list[Sample]:
