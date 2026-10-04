@@ -124,7 +124,9 @@ class ForegroundServiceAndroidTest {
             composeRule.onAllNodesWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("Messung beenden").performClick()
+        composeRule
+            .onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_end_measurement))
+            .performClick()
 
         // 4. Warten bis Service beendet und Notification entfernt ist
         composeRule.waitUntil(timeoutMillis = 7_000L) {

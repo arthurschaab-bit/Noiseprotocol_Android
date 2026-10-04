@@ -1082,7 +1082,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitForIdle()
 
             val wohnraumButtonText = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_ta_laerm_presets)
-            val schliessenText = "Schließen"
+            val schliessenText = composeRule.activity.getString(R.string.action_close)
 
             // Einstieg 1: Sektion "Schwellenwerte & Audio"
             val aufnahmeTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
