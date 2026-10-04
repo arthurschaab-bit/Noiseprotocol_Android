@@ -19,6 +19,7 @@ import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.ui.END_MEASUREMENT_BUTTON_TAG
+import com.example.lrmprotokoll.ui.END_MEASUREMENT_CONFIRM_BUTTON_TAG
 import com.example.lrmprotokoll.ui.END_MEASUREMENT_CONFIRM_DIALOG_TAG
 import com.example.lrmprotokoll.ui.LiveCockpitCard
 import com.example.lrmprotokoll.ui.START_MEASUREMENT_BUTTON_TAG
@@ -124,9 +125,7 @@ class ForegroundServiceAndroidTest {
             composeRule.onAllNodesWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule
-            .onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.cockpit_end_measurement))
-            .performClick()
+        composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG).performClick()
 
         // 4. Warten bis Service beendet und Notification entfernt ist
         composeRule.waitUntil(timeoutMillis = 7_000L) {
