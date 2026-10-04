@@ -17,7 +17,24 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.report.ReportArea
-import com.example.lrmprotokoll.report.areaSelectionError
+
+@Composable
+private fun reportAreaLabel(area: ReportArea): String =
+    stringResource(
+        when (area) {
+            ReportArea.WA -> R.string.report_area_wa
+            ReportArea.WR -> R.string.report_area_wr
+            ReportArea.MI -> R.string.report_area_mi
+            ReportArea.GE -> R.string.report_area_ge
+            ReportArea.GI -> R.string.report_area_gi
+            ReportArea.WS -> R.string.report_area_ws
+            ReportArea.WB -> R.string.report_area_wb
+            ReportArea.MD -> R.string.report_area_md
+            ReportArea.MDW -> R.string.report_area_mdw
+            ReportArea.MU -> R.string.report_area_mu
+            ReportArea.MK -> R.string.report_area_mk
+        },
+    )
 
 /** Feste Gebietsauswahl gemäß Owner-Entscheidung 18.09.2026. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,13 +42,20 @@ import com.example.lrmprotokoll.report.areaSelectionError
 internal fun ReportAreaSelection(value: String, enabled: Boolean, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val selected = ReportArea.fromCode(value)
-    val error = areaSelectionError(value)
+    val error =
+        when {
+            value.isBlank() -> stringResource(R.string.report_precondition_error_area_missing)
+            selected == null -> stringResource(R.string.report_precondition_error_area_unknown, value)
+            !selected.hasVerifiedLimits ->
+                stringResource(R.string.report_area_unverified_error, reportAreaLabel(selected), selected.name)
+            else -> null
+        }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { if (enabled) expanded = it },
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.name} – ${it.label}" } ?: value,
+            value = selected?.let { stringResource(R.string.report_area_option, it.name, reportAreaLabel(it)) } ?: value,
             onValueChange = {},
             readOnly = true,
             enabled = enabled,
@@ -49,7 +73,13 @@ internal fun ReportAreaSelection(value: String, enabled: Boolean, onSelect: (Str
             ReportArea.entries.forEach { area ->
                 DropdownMenuItem(
                     text = {
-                        Text("${area.name} – ${area.label}" + if (area.hasVerifiedLimits) "" else stringResource(R.string.report_area_unverified_suffix))
+                        Text(
+                            stringResource(
+                                if (area.hasVerifiedLimits) R.string.report_area_option else R.string.report_area_option_unverified,
+                                area.name,
+                                reportAreaLabel(area),
+                            ),
+                        )
                     },
                     enabled = area.hasVerifiedLimits,
                     onClick = { onSelect(area.name); expanded = false },

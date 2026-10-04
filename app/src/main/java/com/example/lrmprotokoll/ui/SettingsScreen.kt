@@ -552,7 +552,7 @@ fun SettingsScreen(
                 Text(
                     text = stringResource(R.string.settings_language_desc),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -887,7 +887,7 @@ fun SettingsScreen(
                         if (!exakteAlarmeErlaubt) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Ohne Berechtigung für exakte Alarme kann die Karenzzeit verzögert ablaufen.",
+                                stringResource(R.string.settings_f20_exact_alarm_warning),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -900,7 +900,7 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.testTag("btn_exakte_alarme_erlauben")
                             ) {
-                                Text("Exakte Alarme erlauben")
+                                Text(stringResource(R.string.settings_f20_allow_exact_alarms))
                             }
                         }
 
@@ -968,31 +968,42 @@ fun SettingsScreen(
                         Button(
                             onClick = {
                                 scope.launch {
-                                    val alert = com.example.lrmprotokoll.alert.Alert(
-                                        alertId = 0,
-                                        kind = com.example.lrmprotokoll.alert.AlertKind.TEST,
-                                        reason = com.example.lrmprotokoll.alert.AlertReason.DISCONNECTED,
-                                        since = java.time.Instant.now(),
-                                        message = "Test-Alarm: Verbindung zum Messgerät unterbrochen."
-                                    )
-                                    val res = com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel(context, settings).send(alert)
-                                    testErgebnis = if (res.isSuccess) "Test-Alarm ausgelöst (Ton, Notification & Vibration)" else "Fehlgeschlagen: ${res.exceptionOrNull()?.message}"
+                                    val alert =
+                                        com.example.lrmprotokoll.alert.Alert(
+                                            alertId = 0,
+                                            kind = com.example.lrmprotokoll.alert.AlertKind.TEST,
+                                            reason = com.example.lrmprotokoll.alert.AlertReason.DISCONNECTED,
+                                            since = java.time.Instant.now(),
+                                            message = "Test-Alarm: Verbindung zum Messgerät unterbrochen.",
+                                        )
+                                    val res =
+                                        com.example.lrmprotokoll.alert.local
+                                            .LocalNotificationAlertChannel(
+                                                context,
+                                                settings,
+                                            ).send(alert)
+                                    testErgebnis =
+                                        if (res.isSuccess) {
+                                            context.getString(R.string.settings_f20_test_alarm_sent)
+                                        } else {
+                                            context.getString(R.string.settings_f20_test_alarm_failed, res.exceptionOrNull()?.message)
+                                        }
                                 }
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Test-Alarm")
+                            Text(stringResource(R.string.settings_f20_test_alarm))
                         }
 
                         OutlinedButton(
                             onClick = {
                                 com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel.stoppeAlarmTon(context)
-                                testErgebnis = "Alarmton gestoppt"
+                                testErgebnis = context.getString(R.string.settings_f20_alarm_stopped)
                             },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Alarm stoppen")
+                            Text(stringResource(R.string.settings_f20_stop_alarm))
                         }
                     }
                     testErgebnis?.let {
@@ -1005,19 +1016,20 @@ fun SettingsScreen(
             // Sektion 3: KI-Erkennung
             SettingsSectionCard(
                 title = stringResource(R.string.settings_ai_title),
-                summary = when (aiMode) {
-                    "BATCH" -> "Im Batch (Standard / Empfohlen)"
-                    "ONLINE" -> "Online / Live direkt"
-                    else -> "Deaktiviert"
-                },
+                summary =
+                    when (aiMode) {
+                        "BATCH" -> stringResource(R.string.settings_f20_ai_batch_summary)
+                        "ONLINE" -> stringResource(R.string.settings_f20_ai_online_summary)
+                        else -> stringResource(R.string.settings_f20_disabled)
+                    },
                 expanded = expKi,
                 onToggle = { expKi = !expKi },
                 zeigen = selectedTab == SettingsTab.START,
             ) {
                 Text(
-                    text = "Wähle, wann die KI-Geräuschklassifikation (YAMNet) ausgeführt werden soll:",
+                    text = stringResource(R.string.settings_f20_ai_choose_mode),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -1031,7 +1043,7 @@ fun SettingsScreen(
                             aiMode = "BATCH"
                             settings.aiMode = "BATCH"
                         },
-                        label = { Text("Im Batch (Default)") },
+                        label = { Text(stringResource(R.string.settings_f20_ai_batch)) },
                         modifier = Modifier.weight(1.1f)
                     )
                     FilterChip(
@@ -1040,7 +1052,7 @@ fun SettingsScreen(
                             aiMode = "ONLINE"
                             settings.aiMode = "ONLINE"
                         },
-                        label = { Text("Online / Live") },
+                        label = { Text(stringResource(R.string.settings_f20_ai_online)) },
                         modifier = Modifier.weight(1.0f)
                     )
                     FilterChip(
@@ -1049,23 +1061,24 @@ fun SettingsScreen(
                             aiMode = "OFF"
                             settings.aiMode = "OFF"
                         },
-                        label = { Text("Aus") },
+                        label = { Text(stringResource(R.string.settings_f20_off)) },
                         modifier = Modifier.weight(0.7f)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
                 TextButton(onClick = { onOpenKiErklaerung?.invoke() }) {
-                    Text("Wie die Lärmerkennung arbeitet – und wo ihre Grenzen liegen")
+                    Text(stringResource(R.string.settings_f20_ai_explanation_link))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = when (aiMode) {
-                        "BATCH" -> "Schont Akku und CPU während der kontinuierlichen Lärmmessung. Aufnahmen werden nach Abschluss der Messung oder im Hintergrund klassifiziert."
-                        "ONLINE" -> "Klassifiziert jede Audioaufnahme sofort live im Moment der Schwellwertüberschreitung."
-                        else -> "Keine automatische KI-Klassifikation von Geräuschen."
-                    },
+                    text =
+                        when (aiMode) {
+                            "BATCH" -> stringResource(R.string.settings_f20_ai_batch_desc)
+                            "ONLINE" -> stringResource(R.string.settings_f20_ai_online_desc)
+                            else -> stringResource(R.string.settings_f20_ai_off_desc)
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1328,8 +1341,17 @@ fun SettingsScreen(
 
             // Sektion 6: Google Drive Synchronisation
             SettingsSectionCard(
-                title = "Google Drive Synchronisation",
-                summary = if (driveSyncAktiv && !googleAccountEmail.isNullOrBlank()) "Aktiv ($googleAccountEmail)" else if (!googleAccountEmail.isNullOrBlank()) "Verbunden (Pausiert)" else "Nicht verbunden",
+                title = stringResource(R.string.settings_drive_title),
+                summary =
+                    if (driveSyncAktiv &&
+                        !googleAccountEmail.isNullOrBlank()
+                    ) {
+                        stringResource(R.string.settings_f20_drive_active, googleAccountEmail.orEmpty())
+                    } else if (!googleAccountEmail.isNullOrBlank()) {
+                        stringResource(R.string.settings_f20_drive_paused)
+                    } else {
+                        stringResource(R.string.settings_f20_drive_disconnected)
+                    },
                 expanded = expDrive,
                 onToggle = { expDrive = !expDrive },
                 zeigen = selectedTab == SettingsTab.DATEN,
@@ -1341,7 +1363,7 @@ fun SettingsScreen(
                         onClick = onOpenDriveUploads,
                         modifier = Modifier.fillMaxWidth().testTag("btn_open_drive_uploads"),
                     ) {
-                        Text("Upload-Übersicht öffnen")
+                        Text(stringResource(R.string.settings_f20_open_uploads))
                     }
                 }
 
@@ -1411,7 +1433,7 @@ fun SettingsScreen(
 
                 if (driveSyncAktiv || !googleAccountEmail.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Upload-Optionen", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.settings_f20_upload_options), style = MaterialTheme.typography.titleSmall)
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1420,7 +1442,7 @@ fun SettingsScreen(
                             onCheckedChange = { driveUploadWav = it; settings.driveUploadWav = it },
                             modifier = Modifier.testTag("checkbox_drive_upload_wav"),
                         )
-                        Text("Audioaufnahmen (WAV) hochladen")
+                        Text(stringResource(R.string.settings_f20_upload_wav))
                     }
 
                     if (isProMode) {
@@ -1436,7 +1458,7 @@ fun SettingsScreen(
                                 modifier = Modifier.testTag("switch_drive_wlan_only"),
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Nur über WLAN synchronisieren")
+                            Text(stringResource(R.string.settings_drive_wlan_only))
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1504,11 +1526,11 @@ fun SettingsScreen(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Von Drive wiederherstellen")
+                    Text(stringResource(R.string.settings_f20_restore_drive))
                 }
                 if (driveOrdnerId == null) {
                     Text(
-                        "Erst verfügbar, wenn Drive-Sync eingerichtet ist.",
+                        stringResource(R.string.settings_f20_restore_drive_unavailable),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1526,7 +1548,7 @@ fun SettingsScreen(
                     text = {
                         Text(
                             stringResource(R.string.settings_backup_restore_warning_text) +
-                                " Die Sicherung wird zuerst von Google Drive heruntergeladen."
+                                stringResource(R.string.settings_f20_restore_drive_download),
                         )
                     },
                     confirmButton = {
@@ -1652,8 +1674,8 @@ fun SettingsScreen(
 
             // Sektion 8: Diagnose & Systemgesundheit
             SettingsSectionCard(
-                title = "Fotodokumentation",
-                summary = if (fotoDokuAktiv) "Aktiv" else "Deaktiviert",
+                title = stringResource(R.string.settings_f20_photo_title),
+                summary = stringResource(if (fotoDokuAktiv) R.string.settings_f20_active else R.string.settings_f20_disabled),
                 expanded = expFoto,
                 onToggle = { expFoto = !expFoto },
                 zeigen = selectedTab == SettingsTab.BERICHT,
@@ -1663,7 +1685,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Beim Start eines Messvorgangs nach Fotos fragen", modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.settings_f20_photo_prompt), modifier = Modifier.weight(1f))
                     Switch(
                         checked = fotoDokuAktiv,
                         onCheckedChange = {
@@ -1674,9 +1696,7 @@ fun SettingsScreen(
                     )
                 }
                 Text(
-                    "Ein Foto vom Messaufbau belegt später, wie und wo gemessen wurde – die häufigste " +
-                        "Entkräftung eines privaten Messprotokolls. Die Messung läuft dabei schon; " +
-                        "sie wird nie durch die Fotoabfrage verzögert.",
+                    stringResource(R.string.settings_f20_photo_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1691,13 +1711,27 @@ fun SettingsScreen(
                             fotoKalibrierung = wert; settings.fotoDokuKalibrierung = wert
                         },
                     ).forEach { (bezeichnung, aktuell, setzen) ->
-                        Text(bezeichnung, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(
+                                if (bezeichnung == "Messaufbau") {
+                                    R.string.settings_f20_photo_setup
+                                } else {
+                                    R.string.settings_f20_photo_calibration
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         FlowRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            listOf("AUS" to "Aus", "OPTIONAL" to "Optional", "PFLICHT" to "Empfohlen").forEach { (wert, beschriftung) ->
+                            listOf(
+                                "AUS" to stringResource(R.string.settings_f20_off),
+                                "OPTIONAL" to stringResource(R.string.settings_f20_optional),
+                                "PFLICHT" to stringResource(R.string.settings_f20_recommended),
+                            ).forEach { (wert, beschriftung) ->
                                 FilterChip(
                                     selected = aktuell == wert,
                                     onClick = { setzen(wert) },
@@ -1709,15 +1743,14 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                     }
                     Text(
-                        "\"Empfohlen\" hebt die Kategorie hervor und hält eine Auslassung im Diagnoseprotokoll " +
-                            "fest – die Messung wird nie blockiert.",
+                        stringResource(R.string.settings_f20_photo_recommended_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     if (isProMode) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Höchstens ${fotoMax.toInt()} Fotos je Kategorie")
+                        Text(stringResource(R.string.settings_f20_photo_max, fotoMax.toInt()))
                         Slider(
                             value = fotoMax,
                             onValueChange = { fotoMax = it },
@@ -1731,7 +1764,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Fotos nach Google Drive hochladen", modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.settings_f20_photo_drive_upload), modifier = Modifier.weight(1f))
                             Switch(
                                 checked = fotoDriveUpload,
                                 onCheckedChange = {
@@ -1751,8 +1784,8 @@ fun SettingsScreen(
             // zuletzt verwendeten Werte dienen dort als Vorschlag. Hier bleibt nur noch der
             // Ein/Aus-Schalter, analog zur Fotodokumentation oben.
             SettingsSectionCard(
-                title = "Berichtsangaben (Gerät, Messaufbau, Randbedingungen)",
-                summary = if (stammdatenAbfrageAktiv) "Aktiv" else "Deaktiviert",
+                title = stringResource(R.string.settings_f20_report_details_title),
+                summary = stringResource(if (stammdatenAbfrageAktiv) R.string.settings_f20_active else R.string.settings_f20_disabled),
                 expanded = expBericht,
                 onToggle = { expBericht = !expBericht },
                 zeigen = selectedTab == SettingsTab.BERICHT,
@@ -1769,7 +1802,7 @@ fun SettingsScreen(
                     // echter Layout-Bug (analog zur Fotodokumentation-Zeile oben, die aber einen
                     // kuerzeren Text hat und dort noch nicht beobachtet wurde).
                     Text(
-                        "Beim Start eines Messvorgangs nach Berichtsangaben fragen",
+                        stringResource(R.string.settings_f20_report_details_prompt),
                         modifier = Modifier.weight(1f),
                     )
                     Switch(
@@ -1865,9 +1898,9 @@ fun SettingsScreen(
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("Schätzpegel für nicht erfasste Restzeit", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.settings_f20_estimated_level_title), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    String.format(Locale.getDefault(), "Bei Teilerfassung: %.1f dB(A)", schaetzpegelTeilerfassung),
+                    stringResource(R.string.settings_f20_partial_estimate, schaetzpegelTeilerfassung),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
@@ -1878,13 +1911,13 @@ fun SettingsScreen(
                     modifier = Modifier.testTag("slider_report_schaetzpegel_teilerfassung"),
                 )
                 Text(
-                    "Bei Messfenster: Tagesrichtwert des gewählten Gebiets. Der bisher gespeicherte freie Schätzpegel wird dafür nicht verwendet.",
+                    stringResource(R.string.settings_f20_measurement_window_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    String.format(Locale.getDefault(), "Messunsicherheit Messgerät: ±%.1f dB(A)", geraeteUnsicherheit),
+                    stringResource(R.string.settings_f20_device_uncertainty, geraeteUnsicherheit),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Slider(
@@ -1896,9 +1929,9 @@ fun SettingsScreen(
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("Konservatives Messende-Fenster", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.settings_f20_conservative_window), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Beginn: $konservativFensterStart Uhr · Ende: $konservativFensterEnde Uhr",
+                    stringResource(R.string.settings_f20_window_times, konservativFensterStart, konservativFensterEnde),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
@@ -1945,8 +1978,10 @@ fun SettingsScreen(
             // Grundbedarf, kein Komfortmerkmal - anders als die automatische Bereinigung, die
             // ungefragt loeschen wuerde und deshalb dort bleibt, wo sie war.
             SettingsSectionCard(
-                title = "Speicherplatz",
-                summary = belegung?.let { "Belegt: ${formatiereBytes(it.gesamtBytes)}" } ?: "Belegung anzeigen und freigeben",
+                title = stringResource(R.string.settings_f20_storage_title),
+                summary =
+                    belegung?.let { stringResource(R.string.settings_f20_storage_used, formatiereBytes(it.gesamtBytes)) }
+                        ?: stringResource(R.string.settings_f20_storage_summary),
                 expanded = expSpeicher,
                 onToggle = { expSpeicher = !expSpeicher },
                 zeigen = selectedTab == SettingsTab.DATEN,
@@ -1958,7 +1993,7 @@ fun SettingsScreen(
 
                 val aktuell = belegung
                 if (aktuell == null) {
-                    Text("Belegung wird ermittelt …", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.settings_f20_storage_loading), style = MaterialTheme.typography.bodySmall)
                 } else {
                     Speicherkategorie.entries.forEach { kategorie ->
                         val posten = aktuell.posten(kategorie)
@@ -1966,30 +2001,57 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text("${kategorie.anzeigename} (${posten.anzahl})", style = MaterialTheme.typography.bodyMedium)
-                            Text(formatiereBytes(posten.bytes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(
+                                    R.string.settings_f20_storage_category_count,
+                                    stringResource(kategorie.labelRes()),
+                                    posten.anzahl,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                formatiereBytes(posten.bytes),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Berichte & Sonstiges (${aktuell.sonstigesAnzahl})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatiereBytes(aktuell.sonstigesBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.settings_f20_storage_other_count, aktuell.sonstigesAnzahl),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            formatiereBytes(aktuell.sonstigesBytes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Datenbank", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatiereBytes(aktuell.datenbankBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.settings_f20_storage_database),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            formatiereBytes(aktuell.datenbankBytes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Auf dem Gerät noch frei", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.settings_f20_storage_free), style = MaterialTheme.typography.bodyMedium)
                         Text(formatiereBytes(aktuell.freiBytes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     }
 
@@ -2006,10 +2068,13 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
-                    Text("Speicher freigeben", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "Löscht nur die Dateien. Die Protokolleinträge bleiben erhalten – Zeitpunkt, " +
-                            "Pegel und Klassifikation sind das eigentliche Protokoll, die Datei ist die Beilage.",
+                        stringResource(R.string.settings_f20_storage_cleanup),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.settings_f20_storage_cleanup_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -2029,22 +2094,26 @@ fun SettingsScreen(
                                         gewaehlteKategorien + kategorie
                                     }
                                 },
-                                label = { Text(kategorie.anzeigename) },
+                                label = { Text(stringResource(kategorie.labelRes())) },
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Zeitraum", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.settings_f20_period),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         listOf<Pair<Int?, String>>(
-                            90 to "älter als 90 Tage",
-                            30 to "älter als 30 Tage",
-                            7 to "älter als 7 Tage",
-                            null to "alles",
+                            90 to stringResource(R.string.settings_f20_older_90),
+                            30 to stringResource(R.string.settings_f20_older_30),
+                            7 to stringResource(R.string.settings_f20_older_7),
+                            null to stringResource(R.string.settings_f20_all),
                         ).forEach { (tage, beschriftung) ->
                             FilterChip(
                                 selected = gewaehlterZeitraum == tage,
@@ -2064,11 +2133,10 @@ fun SettingsScreen(
                         enabled = gewaehlteKategorien.isNotEmpty() && !raeumtAuf,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (raeumtAuf) "Wird freigegeben …" else "Freigeben …")
+                        Text(stringResource(if (raeumtAuf) R.string.settings_f20_cleaning else R.string.settings_f20_clean))
                     }
                     Text(
-                        "Dateien der letzten Minuten bleiben immer erhalten – während einer " +
-                            "laufenden Messung wird gerade an ihnen geschrieben.",
+                        stringResource(R.string.settings_f20_recent_files_preserved),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -2078,15 +2146,24 @@ fun SettingsScreen(
             aufraeumVorschau?.let { vorschau ->
                 AlertDialog(
                     onDismissRequest = { aufraeumVorschau = null },
-                    title = { Text("Speicher freigeben?") },
+                    title = { Text(stringResource(R.string.settings_f20_cleanup_confirm_title)) },
                     text = {
                         Text(
                             if (vorschau.anzahl == 0) {
-                                "Für diese Auswahl gibt es nichts freizugeben."
+                                stringResource(R.string.settings_f20_cleanup_empty)
                             } else {
-                                "${vorschau.anzahl} Dateien werden gelöscht und geben " +
-                                    "${formatiereBytes(vorschau.bytes)} frei. Die zugehörigen " +
-                                    "Protokolleinträge bleiben erhalten. Das lässt sich nicht rückgängig machen."
+                                stringResource(
+                                    R.string.settings_f20_cleanup_preview,
+                                    stringResource(
+                                        if (vorschau.anzahl == 1) {
+                                            R.string.settings_f20_cleanup_count_one
+                                        } else {
+                                            R.string.settings_f20_cleanup_count_many
+                                        },
+                                        vorschau.anzahl,
+                                    ),
+                                    formatiereBytes(vorschau.bytes),
+                                )
                             }
                         )
                     },
@@ -2102,18 +2179,26 @@ fun SettingsScreen(
                                     raeumtAuf = false
                                     onShowSnackbar?.invoke(
                                         if (ergebnis.fehlgeschlagen > 0) {
-                                            "${ergebnis.geloescht} Dateien gelöscht (${formatiereBytes(ergebnis.bytes)}), " +
-                                                "${ergebnis.fehlgeschlagen} konnten nicht gelöscht werden"
+                                            context.getString(
+                                                R.string.settings_f20_cleanup_partial,
+                                                ergebnis.geloescht,
+                                                formatiereBytes(ergebnis.bytes),
+                                                ergebnis.fehlgeschlagen,
+                                            )
                                         } else {
-                                            "${ergebnis.geloescht} Dateien gelöscht, ${formatiereBytes(ergebnis.bytes)} freigegeben"
-                                        }
+                                            context.getString(
+                                                R.string.settings_f20_cleanup_success,
+                                                ergebnis.geloescht,
+                                                formatiereBytes(ergebnis.bytes),
+                                            )
+                                        },
                                     )
                                 }
                             }) {
-                                Text("Endgültig löschen")
+                                Text(stringResource(R.string.settings_f20_delete_permanently))
                             }
                         } else {
-                            TextButton(onClick = { aufraeumVorschau = null }) { Text("OK") }
+                            TextButton(onClick = { aufraeumVorschau = null }) { Text(stringResource(R.string.settings_f20_ok)) }
                         }
                     },
                     dismissButton = if (vorschau.anzahl > 0) {
@@ -2125,7 +2210,7 @@ fun SettingsScreen(
             }
 
             SettingsSectionCard(
-                title = "Videobeweis",
+                title = stringResource(R.string.settings_f20_video_title),
                 summary = "Maximaldauer ${videoMaxDauer.toInt() / 60}:${String.format(java.util.Locale.GERMANY, "%02d", videoMaxDauer.toInt() % 60)} · " +
                     if (videoAufloesung == "FHD") "1080p" else "720p",
                 expanded = expVideo,
@@ -2133,16 +2218,19 @@ fun SettingsScreen(
                 zeigen = selectedTab == SettingsTab.BERICHT,
             ) {
                 Text(
-                    "Während einer laufenden Messung lässt sich im Cockpit ein Beweisvideo aufnehmen. " +
-                        "Die Kamera nimmt dabei ohne Tonspur auf, damit die Pegelmessung ungestört " +
-                        "weiterläuft – der Ton kommt aus der laufenden Messung und wird nach der " +
-                        "Aufnahme in das Video eingefügt.",
+                    stringResource(R.string.settings_f20_video_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Maximaldauer: ${videoMaxDauer.toInt() / 60} min ${videoMaxDauer.toInt() % 60} s")
+                Text(
+                    stringResource(
+                        R.string.settings_f20_video_max_duration,
+                        videoMaxDauer.toInt() / 60,
+                        videoMaxDauer.toInt() % 60,
+                    ),
+                )
                 Slider(
                     value = videoMaxDauer,
                     onValueChange = { videoMaxDauer = it },
@@ -2152,23 +2240,31 @@ fun SettingsScreen(
                     modifier = Modifier.testTag("slider_video_max_dauer"),
                 )
                 Text(
-                    "Die Grenze schützt nicht nur den Speicher: Bild und Ton stammen aus zwei " +
-                        "unabhängig getakteten Quellen, über sehr lange Aufnahmen können sie " +
-                        "auseinanderlaufen.",
+                    stringResource(R.string.settings_f20_video_limit_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Auflösung", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(R.string.settings_f20_video_resolution),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    listOf("HD" to "720p (empfohlen)", "FHD" to "1080p").forEach { (wert, beschriftung) ->
+                    listOf(
+                        "HD" to stringResource(R.string.settings_f20_video_720p),
+                        "FHD" to stringResource(R.string.settings_f20_video_1080p),
+                    ).forEach { (wert, beschriftung) ->
                         FilterChip(
                             selected = videoAufloesung == wert,
-                            onClick = { videoAufloesung = wert; settings.videoAufloesung = wert },
+                            onClick = {
+                                videoAufloesung = wert
+                                settings.videoAufloesung = wert
+                            },
                             label = { Text(beschriftung) },
                             modifier = Modifier.testTag("chip_video_aufloesung_$wert"),
                         )
@@ -2181,7 +2277,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Videos nach Google Drive hochladen", modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.settings_f20_video_drive_upload), modifier = Modifier.weight(1f))
                     Switch(
                         checked = videoDriveUpload,
                         onCheckedChange = {
@@ -2192,10 +2288,7 @@ fun SettingsScreen(
                     )
                 }
                 Text(
-                    "Standardmäßig an, wie Audio und Fotos. Ein Video kann Dritte, Kennzeichen " +
-                        "und Wohnungsinneres zeigen und ist dabei um ein Vielfaches größer als " +
-                        "alles andere, was die App speichert – wer das nicht möchte, kann hier " +
-                        "widersprechen.",
+                    stringResource(R.string.settings_f20_video_upload_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2203,7 +2296,7 @@ fun SettingsScreen(
 
             SettingsSectionCard(
                 title = stringResource(R.string.settings_section_diagnostics),
-                summary = "Systemstatus, Sensoren, Berechtigungen & Ereignis-Log",
+                summary = stringResource(R.string.settings_f20_diagnostics_summary),
                 expanded = expSystem,
                 onToggle = { expSystem = !expSystem },
                 zeigen = selectedTab == SettingsTab.START,
@@ -2222,7 +2315,7 @@ fun SettingsScreen(
                         },
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Diagnose-Log aktiv")
+                    Text(stringResource(R.string.settings_f20_diagnostic_log_active))
                 }
 
                 // M12 Schritt 8 (Konzept Aufgabe 2): Schalter fuer den automatischen Support-
@@ -2271,12 +2364,17 @@ fun SettingsScreen(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("Akku-Optimierung", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.settings_f20_battery_optimization), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    if (batteryOptimizationIgnored) "Diese App ist von der Akku-Optimierung ausgenommen. Die Hintergrund-Überwachung läuft zuverlässig."
-                    else "Eingeschränkt. Bitte Ausnahme in Systemeinstellungen aktivieren.",
+                    stringResource(
+                        if (batteryOptimizationIgnored) {
+                            R.string.settings_f20_battery_exempt
+                        } else {
+                            R.string.settings_f20_battery_restricted
+                        },
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2290,7 +2388,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Vollständige Diagnose aufrufen")
+                    Text(stringResource(R.string.settings_f20_open_diagnostics))
                 }
             }
 
@@ -2482,4 +2580,11 @@ internal tailrec fun findeAutorisierungBenoetigt(fehler: Throwable?): Autorisier
         null -> null
         is AutorisierungBenoetigtException -> fehler
         else -> findeAutorisierungBenoetigt(fehler.cause)
+    }
+
+private fun Speicherkategorie.labelRes(): Int =
+    when (this) {
+        Speicherkategorie.AUDIO -> R.string.settings_f20_storage_audio
+        Speicherkategorie.VIDEO -> R.string.settings_f20_storage_video
+        Speicherkategorie.FOTO -> R.string.settings_f20_storage_photo
     }

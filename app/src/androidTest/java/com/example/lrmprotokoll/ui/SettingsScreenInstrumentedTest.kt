@@ -30,12 +30,11 @@ import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasExtra
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.alert.Alert
 import com.example.lrmprotokoll.alert.AlertKind
 import com.example.lrmprotokoll.alert.AlertReason
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
-import java.io.File
-import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.allOf
 import org.junit.After
@@ -47,10 +46,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.time.Instant
 
 @RunWith(AndroidJUnit4::class)
 class SettingsScreenInstrumentedTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -72,7 +72,8 @@ class SettingsScreenInstrumentedTest {
         // als logcat-failure.txt bzw. nach PR #154 auch als vollständiges Logcat gesichert.
         runCatching {
             composeRule.onRoot().printToLog("ComposeSemantik-$bezeichnung-zusammengefuehrt")
-            composeRule.onRoot(useUnmergedTree = true)
+            composeRule
+                .onRoot(useUnmergedTree = true)
                 .printToLog("ComposeSemantik-$bezeichnung-unmerged")
         }
     }
@@ -85,8 +86,10 @@ class SettingsScreenInstrumentedTest {
 
         composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.nav_settings)).assertIsDisplayed()
         composeRule.onNodeWithTag(BILDSCHIRM_ENDE_TAG).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back))
-            .assertIsDisplayed().performClick()
+        composeRule
+            .onNodeWithContentDescription(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_back))
+            .assertIsDisplayed()
+            .performClick()
         assertTrue(backed)
     }
 
@@ -98,13 +101,27 @@ class SettingsScreenInstrumentedTest {
         composeRule.onNodeWithTag("btn_settings_mode_pro").performClick()
         val secThresholds = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
         composeRule.onNodeWithText(secThresholds, substring = true).performScrollTo().performClick()
-        composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_16k), substring = true)
-            .performScrollTo().assertIsDisplayed().performClick()
-        composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_44k), substring = true)
-            .performScrollTo().assertIsDisplayed().performClick()
+        composeRule
+            .onNodeWithText(
+                composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_16k),
+                substring = true,
+            ).performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule
+            .onNodeWithText(
+                composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_sample_rate_44k),
+                substring = true,
+            ).performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
 
         val secAi = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_ai_title)
-        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().performScrollTo().performClick()
+        composeRule
+            .onAllNodesWithText(secAi, substring = true)
+            .onFirst()
+            .performScrollTo()
+            .performClick()
         composeRule.onAllNodesWithText(secAi, substring = true).onFirst().assertIsDisplayed()
     }
 
@@ -156,10 +173,16 @@ class SettingsScreenInstrumentedTest {
             // im Baum (siehe values-en/strings.xml), waehrend andere Strings deutsch bleiben, wenn
             // sie nicht ueber stringResource() laufen. Deshalb ueber getString() aufloesen statt
             // hartzukodieren - funktioniert unabhaengig von der tatsaechlichen Geraete-Locale.
-            val audioLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_audio)
-                .substringBefore("%1\$s").trim()
-            val dbLabel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_database)
-                .substringBefore("%1\$s").trim()
+            val audioLabel =
+                composeRule.activity
+                    .getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_audio)
+                    .substringBefore("%1\$s")
+                    .trim()
+            val dbLabel =
+                composeRule.activity
+                    .getString(com.example.lrmprotokoll.R.string.settings_cleanup_storage_database)
+                    .substringBefore("%1\$s")
+                    .trim()
             val sectionTitle = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_cleanup_title)
             composeRule.onNodeWithText(sectionTitle, substring = true).performScrollTo().performClick()
             composeRule.waitForIdle()
@@ -234,7 +257,7 @@ class SettingsScreenInstrumentedTest {
                         amplitude = 0.0,
                         dbValue = 55.0,
                         filePath = "/tmp/nicht-vorhanden-retention-test.wav",
-                    )
+                    ),
                 )
             }
             // Nicht auf "genau 1 Kandidat" verlassen: die App-DB wird zwischen den ueber 160
@@ -242,12 +265,13 @@ class SettingsScreenInstrumentedTest {
             // in @Before/@After dieser Klasse), andere Tests koennen bereits aeltere,
             // unmarkierte Aufnahmen hinterlassen haben. Stattdessen dieselbe Funktion wie die
             // Produktion aufrufen und den Dialog gegen deren echtes Ergebnis pruefen.
-            val erwarteteVorschau = runBlocking {
-                com.example.lrmprotokoll.messreihe.ermittleRetentionVorschau(
-                    app.container.database.noiseDao(),
-                    settingsManager.autoRetentionDays.toInt(),
-                )
-            }
+            val erwarteteVorschau =
+                runBlocking {
+                    com.example.lrmprotokoll.messreihe.ermittleRetentionVorschau(
+                        app.container.database.noiseDao(),
+                        settingsManager.autoRetentionDays.toInt(),
+                    )
+                }
 
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
@@ -272,12 +296,14 @@ class SettingsScreenInstrumentedTest {
             // values-en-Uebersetzung ("... recordings older than ..."), ein deutscher
             // Teilstring wie "1 Aufnahmen" existiert auf einem englischsprachigen Emulator gar
             // nicht im Baum, was den vorherigen CI-Fehler "could not find any node" erklaert.
-            val erwarteterDialogText = composeRule.activity.getString(
-                com.example.lrmprotokoll.R.string.settings_cleanup_preview_text,
-                erwarteteVorschau.anzahlAufnahmen,
-                settingsManager.autoRetentionDays.toInt(),
-                com.example.lrmprotokoll.messreihe.formatiereBytes(erwarteteVorschau.audioBytes),
-            )
+            val erwarteterDialogText =
+                composeRule.activity.getString(
+                    com.example.lrmprotokoll.R.string.settings_cleanup_preview_text,
+                    erwarteteVorschau.anzahlAufnahmen,
+                    settingsManager.autoRetentionDays.toInt(),
+                    com.example.lrmprotokoll.messreihe
+                        .formatiereBytes(erwarteteVorschau.audioBytes),
+                )
             // Anders als der (laengere) Dialog in GesamtberichtStammdatenSheetInstrumentedTest.kt
             // (PR #156) hat dieser Dialogtext KEIN scrollbares Elternlayout - ein CI-Lauf hat das
             // bewiesen ("Semantic Node has no parent layout with a Scroll SemanticsAction"),
@@ -363,20 +389,28 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Audioaufnahmen (WAV)").performScrollTo().performClick()
-            composeRule.onNodeWithText("alles").performScrollTo().performClick()
-            composeRule.onNodeWithText("Freigeben …").performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_audio)).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_all)).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_clean)).performScrollTo().performClick()
 
             composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Speicher freigeben?").fetchSemanticsNodes().isNotEmpty()
+                composeRule
+                    .onAllNodesWithText(
+                        app.getString(R.string.settings_f20_cleanup_confirm_title),
+                    ).fetchSemanticsNodes()
+                    .isNotEmpty()
             }
             // Echte Vorschau-Zahl, kein Platzhalter - genau unsere eine Testdatei.
-            composeRule.onNodeWithText("1 Dateien", substring = true).assertIsDisplayed()
+            composeRule
+                .onNodeWithText(
+                    app.getString(R.string.settings_f20_cleanup_count_one, 1),
+                    substring = true,
+                ).assertIsDisplayed()
 
-            composeRule.onNodeWithText("Endgültig löschen").performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_delete_permanently)).performClick()
 
             composeRule.waitUntil(timeoutMillis = 5_000L) { !datei.exists() }
             assertTrue("Datei muss nach Bestaetigung tatsaechlich geloescht sein", !datei.exists())
@@ -396,15 +430,19 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Audioaufnahmen (WAV)").performScrollTo().performClick()
-            composeRule.onNodeWithText("alles").performScrollTo().performClick()
-            composeRule.onNodeWithText("Freigeben …").performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_audio)).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_all)).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_clean)).performScrollTo().performClick()
 
             composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Speicher freigeben?").fetchSemanticsNodes().isNotEmpty()
+                composeRule
+                    .onAllNodesWithText(
+                        app.getString(R.string.settings_f20_cleanup_confirm_title),
+                    ).fetchSemanticsNodes()
+                    .isNotEmpty()
             }
             composeRule.onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.action_cancel)).performClick()
             composeRule.waitForIdle()
@@ -590,7 +628,11 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitForIdle()
             val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
             composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
-            composeRule.onNodeWithTag("switch_ntfy_enabled").performScrollTo().assertIsDisplayed().performClick()
+            composeRule
+                .onNodeWithTag("switch_ntfy_enabled")
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
 
             composeRule.waitUntil(timeoutMillis = 5_000L) { settingsManager.ntfyTopic.isNotBlank() }
             val generatedTopic = settingsManager.ntfyTopic
@@ -621,7 +663,11 @@ class SettingsScreenInstrumentedTest {
             composeRule.waitForIdle()
             val title = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_alerting_title)
             composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
-            composeRule.onNodeWithTag("switch_ntfy_enabled").performScrollTo().assertIsDisplayed().performClick()
+            composeRule
+                .onNodeWithTag("switch_ntfy_enabled")
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
 
             composeRule.waitForIdle()
             assertEquals(existingTopic, settingsManager.ntfyTopic)
@@ -773,7 +819,11 @@ class SettingsScreenInstrumentedTest {
             composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithTag("btn_exakte_alarme_erlauben").performScrollTo().assertIsDisplayed().performClick()
+            composeRule
+                .onNodeWithTag("btn_exakte_alarme_erlauben")
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
             intended(hasAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
         } finally {
             Intents.release()
@@ -829,7 +879,7 @@ class SettingsScreenInstrumentedTest {
                 allOf(
                     hasAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS),
                     hasData(packageUri),
-                )
+                ),
             )
 
             composeRule.onNodeWithTag(OEM_EXACT_ALARM_BUTTON_TAG).assertIsDisplayed().performClick()
@@ -837,7 +887,7 @@ class SettingsScreenInstrumentedTest {
                 allOf(
                     hasAction(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM),
                     hasData(packageUri),
-                )
+                ),
             )
         } finally {
             Intents.release()
@@ -873,7 +923,7 @@ class SettingsScreenInstrumentedTest {
                 allOf(
                     hasAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS),
                     hasExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
-                )
+                ),
             )
         } finally {
             Intents.release()
@@ -913,21 +963,29 @@ class SettingsScreenInstrumentedTest {
             composeRule.onNodeWithText(secAlarm, substring = true).performScrollTo().performClick()
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Test-Alarm").performScrollTo().assertIsDisplayed().performClick()
+            composeRule
+                .onNodeWithText(app.getString(R.string.settings_f20_test_alarm))
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
             composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Test-Alarm ausgelöst", substring = true).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_test_alarm_sent)).fetchSemanticsNodes().isNotEmpty()
             }
             // Layout-Umbau (12.09.2026): der neue Seiten-Umschalter oben in SettingsScreen
             // verschiebt den gesamten Inhalt um ein Stueck nach unten - ohne erneutes
             // performScrollTo() kann der Ergebnistext zwar (fuer waitUntil) im Semantics-Baum
             // existieren, aber knapp ausserhalb des sichtbaren Viewports liegen.
-            composeRule.onNodeWithText("Test-Alarm ausgelöst", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_test_alarm_sent)).performScrollTo().assertIsDisplayed()
 
-            composeRule.onNodeWithText("Alarm stoppen").performScrollTo().assertIsDisplayed().performClick()
+            composeRule
+                .onNodeWithText(app.getString(R.string.settings_f20_stop_alarm))
+                .performScrollTo()
+                .assertIsDisplayed()
+                .performClick()
             composeRule.waitUntil(timeoutMillis = 5_000L) {
-                composeRule.onAllNodesWithText("Alarmton gestoppt", substring = true).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_alarm_stopped)).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Alarmton gestoppt", substring = true).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_alarm_stopped)).performScrollTo().assertIsDisplayed()
         } finally {
             settingsManager.alarmTonAktiv = initialAlarmTonAktiv
             settingsManager.alarmierungAktiv = initialAlarmAktiv
@@ -943,25 +1001,27 @@ class SettingsScreenInstrumentedTest {
         )
 
         val context = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-        val channel = LocalNotificationAlertChannel(
-            context = context,
-            settings = context.container.settingsManager,
-            notificationPermissionOverride = false,
-        )
+        val channel =
+            LocalNotificationAlertChannel(
+                context = context,
+                settings = context.container.settingsManager,
+                notificationPermissionOverride = false,
+            )
 
         assertFalse("Kanal muss ohne POST_NOTIFICATIONS als nicht verfügbar gelten", channel.isAvailable)
 
-        val result = runBlocking {
-            channel.send(
-                Alert(
-                    alertId = 0,
-                    kind = AlertKind.TEST,
-                    reason = AlertReason.DISCONNECTED,
-                    since = Instant.now(),
-                    message = "Test-Meldung ohne Benachrichtigungsberechtigung",
+        val result =
+            runBlocking {
+                channel.send(
+                    Alert(
+                        alertId = 0,
+                        kind = AlertKind.TEST,
+                        reason = AlertReason.DISCONNECTED,
+                        since = Instant.now(),
+                        message = "Test-Meldung ohne Benachrichtigungsberechtigung",
+                    ),
                 )
-            )
-        }
+            }
 
         assertTrue(
             "Fehlende Benachrichtigungsberechtigung darf Ton/Vibration des lokalen Alarmwegs nicht abbrechen",
@@ -985,23 +1045,23 @@ class SettingsScreenInstrumentedTest {
 
         val startTitel = composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_section_thresholds)
         composeRule.onNodeWithText(startTitel, substring = true).assertIsDisplayed()
-        composeRule.onAllNodesWithText("Speicherplatz", substring = true).assertCountEquals(0)
-        composeRule.onAllNodesWithText("Fotodokumentation", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_storage_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_photo_title)).assertCountEquals(0)
 
         composeRule.onNodeWithTag("settings_tab_daten").performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(startTitel, substring = true).assertCountEquals(0)
-        composeRule.onNodeWithText("Speicherplatz", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_title)).assertIsDisplayed()
 
         composeRule.onNodeWithTag("settings_tab_bericht").performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Speicherplatz", substring = true).assertCountEquals(0)
-        composeRule.onNodeWithText("Fotodokumentation", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_storage_title)).assertCountEquals(0)
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_photo_title)).assertIsDisplayed()
 
         composeRule.onNodeWithTag("settings_tab_start").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText(startTitel, substring = true).assertIsDisplayed()
-        composeRule.onAllNodesWithText("Fotodokumentation", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText(app.getString(R.string.settings_f20_photo_title)).assertCountEquals(0)
     }
 
     /**
@@ -1092,7 +1152,7 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Speicherplatz", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_storage_title)).performScrollTo().performClick()
         composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 10_000L) {
@@ -1117,7 +1177,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Berichtsangaben", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_f20_report_details_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
             // Echter Layout-Bug gefunden und behoben (nicht nur ein Testproblem): der Semantics-
@@ -1157,7 +1217,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_drive_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
             composeRule.onNodeWithTag("checkbox_drive_upload_wav").performScrollTo().assertIsOff()
@@ -1185,7 +1245,7 @@ class SettingsScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_drive_title)).performScrollTo().performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("btn_open_drive_uploads").performScrollTo().performClick()
@@ -1211,7 +1271,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_drive_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
             composeRule.onNodeWithTag("switch_drive_wlan_only").performScrollTo().assertIsOff()
@@ -1245,7 +1305,7 @@ class SettingsScreenInstrumentedTest {
             composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.DATEN) }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithText("Google Drive Synchronisation", substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithText(app.getString(R.string.settings_drive_title)).performScrollTo().performClick()
             composeRule.waitForIdle()
 
             val slider = composeRule.onNodeWithTag("slider_drive_aggregation").performScrollTo().assertIsDisplayed()

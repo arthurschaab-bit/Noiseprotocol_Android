@@ -919,7 +919,7 @@ private fun DiagnoseLogZeile(eintrag: DiagnosticLogEntity) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Text(formatierer.format(eintrag.timestamp), style = MaterialTheme.typography.bodySmall)
         Spacer(modifier = Modifier.height(0.dp))
-        Text(" — ${eintrag.message}", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.diagnose_log_message, eintrag.message), style = MaterialTheme.typography.bodySmall)
     }
 }
 
