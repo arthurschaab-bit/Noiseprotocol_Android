@@ -548,6 +548,8 @@
     <string name="bericht_share_pdf">PDF teilen</string>
     <string name="bericht_close">Schließen</string>
     <string name="bericht_generating">Erzeuge …</string>
+    <string name="bericht_generating_hint">Die Auswertung wird berechnet und als PDF gerendert. Das Display bleibt während der Erstellung aktiv. Bitte lassen Sie die App geöffnet.</string>
+    <string name="bericht_large_range_warning">Großer Berichtszeitraum (%1$d Tage): Die Auswertung und PDF-Erstellung ist rechenintensiv und kann auf diesem Gerät bis zu 15 Minuten dauern. Bitte lassen Sie die App währenddessen geöffnet.</string>
     <string name="bericht_generate_now">Bericht jetzt erzeugen</string>
     <string name="bericht_date_range_cancel">Abbrechen</string>
     <string name="bericht_select_start_end_date">Bitte Start- und Enddatum wählen.</string>
