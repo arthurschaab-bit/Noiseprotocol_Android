@@ -241,6 +241,20 @@ def resample_to_one_hz(
     )
 
 
+def compute_day_curves(
+    samples: Sequence[Sample],
+    day: date,
+    time_zone: str,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Erzeugt die drei 1-Hz-Zeitreihen für das Tagesdiagramm on-demand."""
+    grid = resample_to_one_hz(samples, day, time_zone)
+    levels = grid.energy_level_db
+    peaks = grid.peak_level_db
+    energy = np.power(10.0, levels / 10.0)
+    laeq_1min = 10.0 * np.log10(energy.rolling(60, min_periods=20).mean())
+    return levels, peaks, laeq_1min
+
+
 def calculate_rating_level(
     peak_levels_db: pd.Series | Sequence[float],
     laeq_db: float,
@@ -358,6 +372,7 @@ def calculate_day_metrics(
     config: DayConfig,
     *,
     is_indoor: bool,
+    include_series: bool = True,
 ) -> DayMetrics:
     """Portiert den datenfreien Teil von ``compute_day`` (Referenzzeilen 646-822)."""
 
@@ -545,9 +560,9 @@ def calculate_day_metrics(
         laeq_day_label=day_label,
         coverage_supplement_text=supplement,
         measurement_period_text=measurement_period_text,
-        energy_level_1hz_db=levels,
-        peak_level_1hz_db=peaks,
-        laeq_1min_db=laeq_1min,
+        energy_level_1hz_db=levels if include_series else pd.Series(dtype=float),
+        peak_level_1hz_db=peaks if include_series else pd.Series(dtype=float),
+        laeq_1min_db=laeq_1min if include_series else pd.Series(dtype=float),
         sessions=grid.sessions,
     )
 
