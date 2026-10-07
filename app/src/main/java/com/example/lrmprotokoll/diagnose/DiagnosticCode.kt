@@ -65,6 +65,13 @@ enum class DiagnosticCode {
     BLE_GATT_ERROR,
     BLE_GATT_TIMEOUT,
     BLE_STREAM_STALLED,
+
+    /**
+     * Verbindung stand und CCCD war geschrieben, aber innerhalb des Timeouts traf kein erstes Frame ein.
+     * Unterscheidet sich von [BLE_STREAM_STALLED], da hier nie ein Datenfluss begann (E1 aus
+     * PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md).
+     */
+    BLE_NO_FIRST_FRAME,
     BLE_DECODE_RATE_HIGH,
     BLE_CADENCE_INVALID,
 

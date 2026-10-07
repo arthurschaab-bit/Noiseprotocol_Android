@@ -431,6 +431,19 @@ UI-Umbau vom 21.08.2026 (Befund J in `docs/BEFUNDE_BUNDLES_2026-10-07.md`).
 | Aufzeichnung starten und 30 min warten | Die Pings kommen im 15-Minuten-Takt | |
 | App über Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“ stoppen | Nach spätestens etwa 45 min alarmiert healthchecks.io | |
 
+### F21 — Gescheiterte Verbindungsaufbauten richtig benennen und als Fehlercode melden (Bugfix 07.10.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md`), aber **noch nicht auf echter Hardware
+gesehen**. Auslöser war Befund C (`docs/BEFUNDE_BUNDLES_2026-10-07.md`): 244 × irreführender Text
+„Kein Frame innerhalb von 5000ms nach Verbindungsaufbau - Versuch verworfen“ bei ausgeschaltetem Gerät
+und fehlender Fehlercode in `health_metrics.json`.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Messgerät ausschalten, Aufzeichnung laufen lassen, bis `FAILED` erscheint (etwa 3 min) | Im Diagnose-Screen steht „Verbindungsaufbau gescheitert“, nicht „Kein Frame … nach Verbindungsaufbau“ | |
+| Im nächsten Gesundheits-Bundle `health_metrics.json` prüfen | Unter `fehlerJeCode` existiert ein Eintrag `BLE_CONNECT_FAILED` | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

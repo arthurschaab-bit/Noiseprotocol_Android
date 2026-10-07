@@ -153,8 +153,10 @@ class ReportConfigSettingsInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Berichtsparameter", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Bei Messfenster: Tagesrichtwert", substring = true)
-            .performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithText(composeRule.activity.getString(com.example.lrmprotokoll.R.string.settings_f20_measurement_window_desc))
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithTag("slider_report_schaetzpegel_messfenster").assertDoesNotExist()
     }
 

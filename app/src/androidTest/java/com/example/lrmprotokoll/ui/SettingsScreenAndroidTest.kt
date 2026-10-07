@@ -33,7 +33,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsScreenAndroidTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -192,7 +191,7 @@ class SettingsScreenAndroidTest {
             LaermprotokollTheme {
                 SettingsScreen(
                     onBack = {},
-                    onOpenKiErklaerung = { erklaerungOpened = true }
+                    onOpenKiErklaerung = { erklaerungOpened = true },
                 )
             }
         }
@@ -200,26 +199,31 @@ class SettingsScreenAndroidTest {
 
         // KI-Sektion aufklappen
         val secAi = composeRule.activity.getString(R.string.settings_ai_title)
-        composeRule.onAllNodesWithText(secAi, substring = true).onFirst().performScrollTo().performClick()
+        composeRule
+            .onAllNodesWithText(secAi, substring = true)
+            .onFirst()
+            .performScrollTo()
+            .performClick()
         composeRule.waitForIdle()
 
         // Online / Live wählen
-        composeRule.onNodeWithText("Online / Live").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_ai_online)).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals("ONLINE", settings.aiMode)
 
         // Aus wählen
-        composeRule.onNodeWithText("Aus").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_off)).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals("OFF", settings.aiMode)
 
         // Batch wählen
-        composeRule.onNodeWithText("Im Batch (Default)").performScrollTo().performClick()
+        composeRule.onNodeWithText(app.getString(R.string.settings_f20_ai_batch)).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals("BATCH", settings.aiMode)
 
         // Erklärung aufrufen
-        composeRule.onNodeWithText("Wie die Lärmerkennung arbeitet", substring = true)
+        composeRule
+            .onNodeWithText(app.getString(R.string.settings_f20_ai_explanation_link))
             .performScrollTo()
             .performClick()
         assertTrue("In-App KI-Erklärung Callback sollte aufgerufen worden sein", erklaerungOpened)
@@ -262,7 +266,7 @@ class SettingsScreenAndroidTest {
             LaermprotokollTheme {
                 SettingsScreen(
                     onBack = {},
-                    onNavigateToDiagnose = { diagnoseOpened = true }
+                    onNavigateToDiagnose = { diagnoseOpened = true },
                 )
             }
         }
@@ -274,7 +278,11 @@ class SettingsScreenAndroidTest {
         composeRule.waitForIdle()
 
         // Diagnose-Button klicken
-        composeRule.onNodeWithTag("btn_open_diagnose").performScrollTo().assertIsDisplayed().performClick()
+        composeRule
+            .onNodeWithTag("btn_open_diagnose")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         assertTrue("Diagnose-Callback sollte aufgerufen worden sein", diagnoseOpened)
     }
 }

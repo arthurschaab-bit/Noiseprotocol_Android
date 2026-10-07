@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import org.junit.After
@@ -59,8 +60,8 @@ class StopConfirmationRegressionTest {
             .performClick()
 
         composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("Messung wirklich beenden?").assertIsDisplayed()
-        composeRule.onNodeWithText("Abbrechen").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.cockpit_stop_confirm_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(app.getString(R.string.action_cancel)).performClick()
         composeRule.onNodeWithTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG).assertDoesNotExist()
     }
 }

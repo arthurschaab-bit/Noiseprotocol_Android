@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import com.example.lrmprotokoll.testhilfen.MessgeraetKopplungAufraeumenRegel
 import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
@@ -96,7 +97,7 @@ class MeterScreenComposeTest {
         composeRule.onNodeWithTag("btn_meter_unpair").performScrollTo().assertIsDisplayed().performClick()
         // Entkoppeln verlangt seit der Sicherheitsabfrage eine explizite Bestätigung.
         composeRule.onNodeWithTag(METER_DISCONNECT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("PCE trennen").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.cockpit_disconnect_bluetooth_action)).performClick()
 
         assertNull(app.container.settingsManager.meterDeviceAddress)
     }

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,7 +40,7 @@ class FotodokumentationSettingsInstrumentedTest {
     private fun oeffneFotodokumentationSektion() {
         composeRule.setContent { SettingsScreen(onBack = {}, initialTab = SettingsTab.BERICHT) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Fotodokumentation", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.settings_f20_photo_title)).performScrollTo().performClick()
         composeRule.waitForIdle()
     }
 
