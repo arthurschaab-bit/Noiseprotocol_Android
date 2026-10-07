@@ -419,7 +419,7 @@ Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueErr
 eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
 zurückmelden statt selbst zu beheben.
 
-### F18 — Stromversorgung und Akkustand protokollieren (07.10.2026, Befund G)
+### F20 — Stromversorgung und Akkustand protokollieren (07.10.2026, Befund G)
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|

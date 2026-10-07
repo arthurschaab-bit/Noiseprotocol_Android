@@ -325,21 +325,16 @@ class AudioRecordingService : LifecycleService() {
 
     private fun meldeStromEmpfaengerAn() {
         if (stromReceiver != null) return
-        val receiver = com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger { eintrag ->
-            val container = (application as? LaermprotokollApp)?.container
-            container?.diagnosticLogger?.let { logger ->
-                serviceScope.launch {
-                    logger.protokolliere(eintrag)
+        val receiver =
+            com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger { eintrag ->
+                if (::diagnosticsReporter.isInitialized) {
+                    diagnosticsReporter.breadcrumb(
+                        category = "Power",
+                        message = eintrag,
+                        level = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.INFO,
+                    )
                 }
             }
-            if (::diagnosticsReporter.isInitialized) {
-                diagnosticsReporter.breadcrumb(
-                    category = "Power",
-                    message = eintrag,
-                    level = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.INFO,
-                )
-            }
-        }
         stromReceiver = receiver
         androidx.core.content.ContextCompat.registerReceiver(
             this,

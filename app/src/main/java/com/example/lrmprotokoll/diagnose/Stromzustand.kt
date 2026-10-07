@@ -13,6 +13,7 @@ data class Stromzustand(
         NETZTEIL("Netzteil"),
         USB("USB"),
         KABELLOS("kabellos"),
+        SONSTIGE("sonstige"),
         KEINE("keine"),
     }
 
@@ -20,6 +21,7 @@ data class Stromzustand(
         LAEDT("lädt"),
         VOLL("voll"),
         ENTLAEDT("entlädt"),
+        ANGESCHLOSSEN_LAEDT_NICHT("angeschlossen, lädt nicht"),
         UNBEKANNT("unbekannt"),
     }
 }

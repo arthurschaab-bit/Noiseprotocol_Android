@@ -10,8 +10,8 @@ import com.example.lrmprotokoll.diagnose.export.BundleKontext
 import com.example.lrmprotokoll.diagnose.export.BundleTyp
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -30,7 +30,6 @@ import java.util.zip.ZipFile
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class StromversorgungEmpfaengerTest {
-
     private lateinit var context: Context
 
     @Before
@@ -38,19 +37,25 @@ class StromversorgungEmpfaengerTest {
         context = ApplicationProvider.getApplicationContext()
     }
 
+    @After
+    fun abbauen() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        app.container.settingsManager.monitoringWasActive = false
+        app.container.settingsManager.audioMonitoringWasActive = false
+    }
+
     private fun erstelleBatteryIntent(
         plugged: Int,
         status: Int,
         level: Int = 100,
         scale: Int = 100,
-    ): Intent {
-        return Intent(Intent.ACTION_BATTERY_CHANGED).apply {
+    ): Intent =
+        Intent(Intent.ACTION_BATTERY_CHANGED).apply {
             putExtra(BatteryManager.EXTRA_PLUGGED, plugged)
             putExtra(BatteryManager.EXTRA_STATUS, status)
             putExtra(BatteryManager.EXTRA_LEVEL, level)
             putExtra(BatteryManager.EXTRA_SCALE, scale)
         }
-    }
 
     /**
      * Test 2: Robolectric: Empfaenger mit Fake-Reporter / Liste.
@@ -60,26 +65,29 @@ class StromversorgungEmpfaengerTest {
     @Test
     fun testZweiBroadcastsErgebenGenauZweiEintraege() {
         val eingegangeneEintraege = mutableListOf<String>()
-        val empfaenger = StromversorgungEmpfaenger { nachricht ->
-            eingegangeneEintraege.add(nachricht)
-        }
+        val empfaenger =
+            StromversorgungEmpfaenger { nachricht ->
+                eingegangeneEintraege.add(nachricht)
+            }
 
         // 1. Broadcast: USB, lädt, 90%
-        val intent1 = erstelleBatteryIntent(
-            plugged = BatteryManager.BATTERY_PLUGGED_USB,
-            status = BatteryManager.BATTERY_STATUS_CHARGING,
-            level = 90,
-            scale = 100,
-        )
+        val intent1 =
+            erstelleBatteryIntent(
+                plugged = BatteryManager.BATTERY_PLUGGED_USB,
+                status = BatteryManager.BATTERY_STATUS_CHARGING,
+                level = 90,
+                scale = 100,
+            )
         empfaenger.onReceive(context, intent1)
 
         // 2. Broadcast: Nicht eingesteckt (0), entlädt, 90%
-        val intent2 = erstelleBatteryIntent(
-            plugged = 0,
-            status = BatteryManager.BATTERY_STATUS_DISCHARGING,
-            level = 90,
-            scale = 100,
-        )
+        val intent2 =
+            erstelleBatteryIntent(
+                plugged = 0,
+                status = BatteryManager.BATTERY_STATUS_DISCHARGING,
+                level = 90,
+                scale = 100,
+            )
         empfaenger.onReceive(context, intent2)
 
         assertEquals("Genau zwei Eintraege erwartet", 2, eingegangeneEintraege.size)
@@ -94,75 +102,93 @@ class StromversorgungEmpfaengerTest {
     }
 
     /**
-     * Test 3: Nach onDestroy() erzeugt ein Broadcast keinen Eintrag mehr (Empfaenger abgemeldet).
+     * Test 3: Dienst registriert Empfaenger fuer ACTION_BATTERY_CHANGED und meldet ihn in onDestroy() ab.
      */
     @Test
-    fun testNachOnDestroyKeinEintragMehr() {
-        val eingegangeneEintraege = mutableListOf<String>()
-        val empfaenger = StromversorgungEmpfaenger { nachricht ->
-            eingegangeneEintraege.add(nachricht)
-        }
-        val filter = android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        context.registerReceiver(empfaenger, filter)
-
-        // 1. Broadcast vor Abmeldung
-        val intent1 = erstelleBatteryIntent(
-            plugged = BatteryManager.BATTERY_PLUGGED_USB,
-            status = BatteryManager.BATTERY_STATUS_CHARGING,
-            level = 90,
-            scale = 100,
-        )
-        empfaenger.onReceive(context, intent1)
-        assertEquals(1, eingegangeneEintraege.size)
-
-        // Abmelden (wie in onDestroy())
-        context.unregisterReceiver(empfaenger)
-
-        // Shadow pruefen: darf nicht mehr registriert sein
-        val shadowApp = shadowOf(ApplicationProvider.getApplicationContext<LaermprotokollApp>())
-        val nochRegistriert = shadowApp.registeredReceivers.filter {
-            it.intentFilter.hasAction(Intent.ACTION_BATTERY_CHANGED)
-        }
-        assertTrue("Empfaenger muss abgemeldet sein", nochRegistriert.isEmpty())
-
-        // Service startet und beendet ebenfalls sauber
+    fun testServiceRegistriertUndEntferntEmpfaengerSauber() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-        val startIntent = Intent(app, AudioRecordingService::class.java).apply {
-            putExtra(com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING, true)
-        }
+        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
+
+        val startIntent =
+            Intent(app, AudioRecordingService::class.java).apply {
+                putExtra(com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING, true)
+            }
         val serviceController = Robolectric.buildService(AudioRecordingService::class.java, startIntent)
-        serviceController.create()
-        serviceController.startCommand(0, 1)
+        val service = serviceController.create().startCommand(0, 1).get()
+        val shadowApp = shadowOf(app)
+
+        val registriertWaehrendDienst =
+            shadowApp.registeredReceivers.filter {
+                it.intentFilter.hasAction(Intent.ACTION_BATTERY_CHANGED)
+            }
+        assertEquals("Genau ein Empfänger für ACTION_BATTERY_CHANGED registriert", 1, registriertWaehrendDienst.size)
+
         serviceController.destroy()
+
+        val registriertNachDestroy =
+            shadowApp.registeredReceivers.filter {
+                it.intentFilter.hasAction(Intent.ACTION_BATTERY_CHANGED)
+            }
+        assertEquals("Nach destroy() muss der Empfänger abgemeldet sein", 0, registriertNachDestroy.size)
+    }
+
+    /**
+     * Parser-Test fuer Randfaelle (BATTERY_STATUS_NOT_CHARGING und BATTERY_PLUGGED_DOCK).
+     */
+    @Test
+    fun testParseStromzustandSonderfaelle() {
+        val notChargingIntent =
+            erstelleBatteryIntent(
+                plugged = BatteryManager.BATTERY_PLUGGED_AC,
+                status = BatteryManager.BATTERY_STATUS_NOT_CHARGING,
+                level = 100,
+                scale = 100,
+            )
+        val zustandNotCharging = parseStromzustand(notChargingIntent)
+        assertEquals(Stromzustand.Quelle.NETZTEIL, zustandNotCharging.quelle)
+        assertEquals(Stromzustand.Status.ANGESCHLOSSEN_LAEDT_NICHT, zustandNotCharging.status)
+
+        val dockIntent =
+            erstelleBatteryIntent(
+                plugged = BatteryManager.BATTERY_PLUGGED_DOCK,
+                status = BatteryManager.BATTERY_STATUS_CHARGING,
+                level = 75,
+                scale = 100,
+            )
+        val zustandDock = parseStromzustand(dockIntent)
+        assertEquals(Stromzustand.Quelle.SONSTIGE, zustandDock.quelle)
+        assertEquals(Stromzustand.Status.LAEDT, zustandDock.status)
     }
 
     /**
      * Test 4: runtime.json enthaelt stromquelle und akkuStatus.
      */
     @Test
-    fun testRuntimeJsonEnthaeltStromquelleUndAkkuStatus() = runTest {
-        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
-        // Sticky Broadcast fuer Robolectric simulieren
-        val stickyIntent = erstelleBatteryIntent(
-            plugged = BatteryManager.BATTERY_PLUGGED_AC,
-            status = BatteryManager.BATTERY_STATUS_CHARGING,
-            level = 85,
-            scale = 100,
-        )
-        context.sendStickyBroadcast(stickyIntent)
+    fun testRuntimeJsonEnthaeltStromquelleUndAkkuStatus() =
+        runTest {
+            val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+            // Sticky Broadcast fuer Robolectric simulieren
+            val stickyIntent =
+                erstelleBatteryIntent(
+                    plugged = BatteryManager.BATTERY_PLUGGED_AC,
+                    status = BatteryManager.BATTERY_STATUS_CHARGING,
+                    level = 85,
+                    scale = 100,
+                )
+            context.sendStickyBroadcast(stickyIntent)
 
-        val exporter = app.container.supportBundleExporter
-        val zipFile = exporter.createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
-        ZipFile(zipFile).use { zip ->
-            val entry = zip.getEntry("state/runtime.json")
-            assertNotNull("state/runtime.json muss existieren", entry)
-            val jsonStr = zip.getInputStream(entry).bufferedReader().readText()
-            val json = JSONObject(jsonStr)
+            val exporter = app.container.supportBundleExporter
+            val zipFile = exporter.createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+            ZipFile(zipFile).use { zip ->
+                val entry = zip.getEntry("state/runtime.json")
+                assertNotNull("state/runtime.json muss existieren", entry)
+                val jsonStr = zip.getInputStream(entry).bufferedReader().readText()
+                val json = JSONObject(jsonStr)
 
-            assertTrue("Muss 'stromquelle' enthalten", json.has("stromquelle"))
-            assertTrue("Muss 'akkuStatus' enthalten", json.has("akkuStatus"))
-            assertEquals("Netzteil", json.getString("stromquelle"))
-            assertEquals("lädt", json.getString("akkuStatus"))
+                assertTrue("Muss 'stromquelle' enthalten", json.has("stromquelle"))
+                assertTrue("Muss 'akkuStatus' enthalten", json.has("akkuStatus"))
+                assertEquals("Netzteil", json.getString("stromquelle"))
+                assertEquals("lädt", json.getString("akkuStatus"))
+            }
         }
-    }
 }

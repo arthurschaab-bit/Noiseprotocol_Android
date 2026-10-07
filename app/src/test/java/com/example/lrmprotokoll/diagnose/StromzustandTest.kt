@@ -83,5 +83,23 @@ class StromzustandTest {
             prozent = 95,
         )
         assertNull("Laden von 89% auf 95% darf keinen Eintrag erzeugen", naechsterEintrag(laden89, laden95))
+
+        // 7. Angeschlossen, laedt nicht (BATTERY_STATUS_NOT_CHARGING)
+        val angeschlossenLaedtNicht = Stromzustand(
+            quelle = Stromzustand.Quelle.NETZTEIL,
+            status = Stromzustand.Status.ANGESCHLOSSEN_LAEDT_NICHT,
+            prozent = 100,
+        )
+        val nichtLadenEintrag = naechsterEintrag(laden95, angeschlossenLaedtNicht)
+        assertEquals("Stromversorgung: Netzteil, Akku 100 %, angeschlossen, lädt nicht", nichtLadenEintrag)
+
+        // 8. Sonstige Quelle (z.B. Dock)
+        val dockZustand = Stromzustand(
+            quelle = Stromzustand.Quelle.SONSTIGE,
+            status = Stromzustand.Status.LAEDT,
+            prozent = 80,
+        )
+        val dockEintrag = naechsterEintrag(null, dockZustand)
+        assertEquals("Stromversorgung beim Start: sonstige, Akku 80 %, lädt", dockEintrag)
     }
 }
