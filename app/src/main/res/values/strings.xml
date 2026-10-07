@@ -285,6 +285,15 @@
     <string name="settings_alerting_ntfy_topic">Topic</string>
     <string name="settings_alerting_local">Lokale Geräte-Alarmierung</string>
     <string name="settings_alerting_sound">Akustischer Alarmton (für Tablets &amp; Lautlos)</string>
+    <string name="settings_heartbeat_title">Totmannschaltung</string>
+    <string name="settings_heartbeat_desc">Das Handy meldet sich alle 15 Minuten bei einem Überwachungsdienst, z. B. healthchecks.io. Bleibt die Meldung aus, alarmiert der Dienst – auch wenn das Handy oder die App ausgefallen ist.</string>
+    <string name="settings_heartbeat_url">Ping-URL (https://…)</string>
+    <string name="settings_heartbeat_url_invalid">Keine gültige https://-Adresse – wird nicht gespeichert.</string>
+    <string name="settings_heartbeat_probe">Probe-Ping senden</string>
+    <string name="settings_heartbeat_probe_ok">Probe-Ping angekommen</string>
+    <string name="settings_heartbeat_probe_empty">Keine Ping-URL eingetragen</string>
+    <string name="settings_heartbeat_probe_failed">Fehlgeschlagen: %1$s</string>
+    <string name="settings_heartbeat_probe_failed_generic">Fehlgeschlagen: Dienst nicht erreichbar</string>
     <string name="settings_battery_optimization_title">Akku-Optimierung für Hintergrunddienst</string>
     <string name="settings_battery_optimization_desc">Hintergrundüberwachung ohne Unterbrechungen durch das Android-System</string>
     <string name="settings_battery_optimization_button">Akku-Optimierung anpassen</string>

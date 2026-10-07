@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -107,5 +108,71 @@ class HeartbeatPingerTest {
 
         assertTrue("ping() darf nie werfen, sondern nur ein Ergebnis liefern", ergebnis.isSuccess)
         assertEquals(HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN, ergebnis.getOrNull())
+    }
+
+    // ---- probe(): Probe-Ping aus den Einstellungen (Befund J) ----
+
+    @Test
+    fun probeSendetAuchOhneLaufendeUeberwachung() = runTest {
+        settings.monitoringWasActive = false
+        server.enqueue(MockResponse().setResponseCode(200))
+
+        val probe = pinger.probe()
+
+        assertEquals(HeartbeatPinger.Ergebnis.GESENDET, probe.ergebnis)
+        assertEquals("Ein Probe-Ping muss auch vor dem ersten Messstart senden", 1, server.requestCount)
+        assertEquals("/ping/geheim", server.takeRequest().path)
+    }
+
+    @Test
+    fun probeMeldetHttpFehlerOhneUrl() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404))
+
+        val probe = pinger.probe()
+
+        assertEquals(HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN, probe.ergebnis)
+        assertEquals("Heartbeat-Dienst antwortete mit HTTP 404", probe.hinweis)
+        assertFalse("Der Hinweis darf die Capability-URL nicht enthalten", probe.hinweis!!.contains("geheim"))
+    }
+
+    @Test
+    fun probeMeldetUnerreichbarenDienstOhneUrl() = runTest {
+        server.shutdown()
+
+        val probe = pinger.probe()
+
+        assertEquals(HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN, probe.ergebnis)
+        assertEquals("Heartbeat-Dienst nicht erreichbar", probe.hinweis)
+    }
+
+    @Test
+    fun probeOhneUrlUeberspringtUndSendetNichts() = runTest {
+        settings.heartbeatUrl = ""
+
+        assertEquals(HeartbeatPinger.Ergebnis.UEBERSPRUNGEN, pinger.probe().ergebnis)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun probeWirftNieUndVerraetDieUrlAuchBeiKaputterUrlNicht() = runTest {
+        settings.heartbeatUrl = "kein-url-geheim"
+
+        val ergebnis = runCatching { pinger.probe() }
+
+        assertTrue("probe() darf nie werfen", ergebnis.isSuccess)
+        val probe = ergebnis.getOrThrow()
+        assertEquals(HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN, probe.ergebnis)
+        assertFalse(probe.hinweis.orEmpty().contains("geheim"))
+    }
+
+    @Test
+    fun urlPruefungErlaubtLeerUndHttpsAberNichtHttpOderMuell() {
+        assertTrue(HeartbeatPinger.istGueltigeUrl(""))
+        assertTrue(HeartbeatPinger.istGueltigeUrl("   "))
+        assertTrue(HeartbeatPinger.istGueltigeUrl("https://hc-ping.com/abc-123"))
+        assertTrue(HeartbeatPinger.istGueltigeUrl("  https://hc-ping.com/abc-123  "))
+        assertFalse(HeartbeatPinger.istGueltigeUrl("http://hc-ping.com/abc-123"))
+        assertFalse(HeartbeatPinger.istGueltigeUrl("kein-url"))
+        assertFalse(HeartbeatPinger.istGueltigeUrl("https://"))
     }
 }
