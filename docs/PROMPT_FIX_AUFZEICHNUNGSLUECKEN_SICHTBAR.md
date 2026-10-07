@@ -3,9 +3,10 @@
 **Priorität 8, Welle 3.** Befund G aus [`BEFUNDE_BUNDLES_2026-10-07.md`](BEFUNDE_BUNDLES_2026-10-07.md).
 
 **Owner-Freigabe vom 07.10.2026:** „Ja, mach die Vorschläge.“ Dazu gehört „Lücken sichtbar machen:
-in der CSV und im Verlauf“. Grundsätzlich ist das freigegeben. **Die Einzelheiten E1–E4 in
-Abschnitt 5 sind offen.** Sie ändern das Dateiformat aus Plan 8.4.2 und damit eine Beweisdatei.
-Kläre sie mit dem Owner, **bevor** du Code schreibst (AGENTS.md §8a).
+in der CSV und im Verlauf“. **Die Einzelheiten E1–E4 hat der Owner am selben Tag entschieden**
+(„Empfehlungen freigeben“, Abschnitt 5). Sie ändern das Dateiformat aus Plan 8.4.2 und damit
+eine Beweisdatei. Halte dich genau daran. Weicht etwas im Code davon ab oder passt nicht, frag
+den Owner, bevor du anders baust (AGENTS.md §8a).
 
 Technisch hängt dieser Auftrag von keinem anderen ab. Die CSV unterscheidet nicht zwischen einem
 ausdrücklichen Stopp und einem Ausfall, beides ist „keine Aufzeichnung“. Den Grund einer
@@ -26,8 +27,7 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
   und Chart in getrennten Commits.
 - **Nach jeder Änderung:** `./gradlew assembleDebug lintDebug test` und `./gradlew ktlintCheck`
   (keine neuen Befunde in den geänderten Dateien). Nur bei Grün committen und pushen.
-- **Nur handgeschriebene Fakes.** Kein Mockito, kein MockK. **Keine Schemaänderung** ohne
-  ausdrückliche Owner-Freigabe (siehe E2).
+- **Nur handgeschriebene Fakes.** Kein Mockito, kein MockK. **Keine Schemaänderung** (E2).
 - **Tests nicht abschwächen.** Ein bestehender Test, der das alte Verhalten festschreibt, wird
   umgeschrieben, nicht gelöscht. Die Spezifikationsänderung steht ausdrücklich im PR.
 - Plan 8.4.2 wird an das neue Format angepasst. Das ist eine Plan-Abweichung, die im PR geflaggt
@@ -69,7 +69,7 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
 ---
 
-## 2 · Auftrag (Umfang je nach Antworten auf E1–E4)
+## 2 · Auftrag (nach den Owner-Entscheidungen E1–E4)
 
 ### Schritt 1 — Reine Funktion für Aufzeichnungsintervalle
 
@@ -83,10 +83,19 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
 ### Schritt 2 — Tages-CSV
 
-- Zeitraum laut E1 füllen.
-- Fenster ohne Samples **außerhalb** jeder Session bekommen die Quelle laut E2, solche
-  **innerhalb** einer Session bleiben `KEINE_VERBINDUNG`.
+- **Zeitraum (E1):** Ein abgeschlossener Tag wird vollständig von 00:00:00 bis 23:59:59 gefüllt.
+  Der laufende Tag wird bis zum letzten vollständigen Fenster vor dem Sync gefüllt.
+- **Bezeichnung (E2):** Fenster ohne Samples **außerhalb** jeder Session bekommen die neue Quelle
+  `KEINE_AUFZEICHNUNG`, als Konstante `QUELLE_KEINE_AUFZEICHNUNG` neben
+  `QUELLE_KEINE_VERBINDUNG` in `PegelAggregator.kt`. Fenster ohne Samples **innerhalb** einer
+  Session bleiben `KEINE_VERBINDUNG`. Grundlage sind die Sessions aus Schritt 1, keine
+  Schemaänderung.
+- **Tage ganz ohne Daten (E3):** keine Datei, wie bisher.
 - `AggregatZeile` bekommt dafür einen Parameter, kein neues Literal an mehreren Stellen.
+- **Bekannte Unschärfe (zu E2):** Im reinen Messgerät-Betrieb entsteht die Session erst mit dem
+  ersten Frame. Die Minuten davor erscheinen als `KEINE_AUFZEICHNUNG`, obwohl der Dienst schon
+  lief. Quantifiziere das im PR (typische Dauer bis zum ersten Frame laut Diagnoseprotokoll) und
+  bau nichts dagegen.
 - Das Stitching in `aggregiereInAbschnitten` muss dieselbe Unterscheidung treffen. Lies dessen
   KDoc vollständig, der Abschnitt ist fehleranfällig (Rasterausrichtung, Nachbesserung
   24.09.2026).
@@ -101,9 +110,13 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
 ### Schritt 3 — Pegelverlauf
 
-- `PegelverlaufChart` erhält zusätzlich die Lücken aus Schritt 1 und zeichnet sie **anders als
-  die roten Ausfallbänder**, laut E4.
-- Legende bzw. Beschriftung: „Keine Aufzeichnung“ gegenüber „Verbindungsausfall“.
+- `PegelverlaufChart` erhält zusätzlich die Lücken aus Schritt 1 und zeichnet sie **als graues,
+  schraffiertes Band** (E4). Die roten Bänder bleiben für Verbindungsausfälle.
+- Beschriftung bzw. Legende: „Keine Aufzeichnung“ gegenüber „Verbindungsausfall“. Das Grau
+  braucht im Hell- und Dunkelmodus genug Kontrast; nimm die Farbe aus dem Theme, nicht hart
+  codiert.
+- Gilt für den Chart im Cockpit (`LiveCockpitCard`) und im Protokoll-Detail
+  (`ProtokollDetailScreen`). **Nicht** für `zeichnePegelverlaufChart` in den PDF-Berichten.
 - Prüfe, welchen Zeitraum der Chart im Cockpit und im Detail zeigt (`ChartDaten.kt`). Lücken
   außerhalb des angezeigten Zeitraums spielen keine Rolle.
 
@@ -113,7 +126,7 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
   (`Datenverfuegbarkeit.kt`, `Messintegritaet.kt`, `PeriodenBerichtExport`, `GesamtberichtExport`).
   Die Berichte sind für § 287 ZPO gedacht, ihre Semantik entscheidet der Owner gesondert. Melde im
   PR, ob und wo sie Aufzeichnungslücken heute anders zählen als die CSV.
-- Keine Tage ganz ohne Daten, es sei denn, E3 sagt es.
+- Keine Dateien für Tage ganz ohne Daten (E3).
 
 ---
 
@@ -128,57 +141,51 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
    - Samples 00:00–04:26:43, Session-Ende 04:26:43;
    - neue Session 06:53:44–12:41:23, Samples darin;
    - die CSV hat 86.400 Zeilen;
-   - 04:26:44–06:53:43 und 12:41:24–23:59:59 tragen den Wert aus E2.
+   - 04:26:44–06:53:43 und 12:41:24–23:59:59 tragen `KEINE_AUFZEICHNUNG`.
 3. Lücke **innerhalb** einer Session bleibt `KEINE_VERBINDUNG`.
-4. `leereZeitenVorUndNachMessungWerdenNichtAlsLeereZeilenErzeugt` wird nach E1 **umgeschrieben**.
-   Der neue Name sagt, was jetzt gilt, und der PR nennt die Änderung ausdrücklich.
-5. Abschnittsgrenzen: Eine Lücke, die eine Abschnittsgrenze von `aggregiereInAbschnitten`
+4. `leereZeitenVorUndNachMessungWerdenNichtAlsLeereZeilenErzeugt` wird nach E1 **umgeschrieben**:
+   Ein abgeschlossener Tag beginnt um 00:00:00 und endet um 23:59:59, auch wenn die Messung nur
+   von Minute 10 bis 12 lief. Der neue Name sagt, was jetzt gilt, und der PR nennt die Änderung
+   ausdrücklich.
+5. Der laufende Tag endet beim letzten vollständigen Fenster vor dem Sync, nicht um 23:59:59.
+6. Ein Tag ohne einen einzigen Messwert erzeugt keine Datei (E3).
+7. Abschnittsgrenzen: Eine Lücke, die eine Abschnittsgrenze von `aggregiereInAbschnitten`
    überspannt, erscheint vollständig und mit dem richtigen Wert.
-6. Chart: Bei gegebenen Lücken erhält `PegelverlaufChart` sie. Ein Compose- oder
+8. Chart: Bei gegebenen Lücken erhält `PegelverlaufChart` sie. Ein Compose- oder
    Semantik-Test prüft die Beschriftung „Keine Aufzeichnung“.
 
-Die Tests 2 und 5 müssen ohne deine Änderung rot sein. Zeig das im PR.
+Die Tests 2, 5 und 7 müssen ohne deine Änderung rot sein. Zeig das im PR.
 
 ---
 
 ## 4 · Akzeptanzkriterien
 
-- [ ] Eine Tages-CSV zeigt jede Aufzeichnungslücke im vereinbarten Zeitraum als eigene Zeilen
-      (Test 2).
-- [ ] „Keine Aufzeichnung“ ist von „Keine Verbindung“ unterscheidbar (Tests 2 und 3).
-- [ ] Der Pegelverlauf zeigt Aufzeichnungslücken sichtbar anders als Verbindungsausfälle
-      (Test 6, Screenshot).
+- [ ] Eine abgeschlossene Tages-CSV reicht von 00:00:00 bis 23:59:59 und zeigt jede
+      Aufzeichnungslücke als eigene Zeilen (Tests 2 und 4).
+- [ ] `KEINE_AUFZEICHNUNG` ist von `KEINE_VERBINDUNG` unterscheidbar (Tests 2 und 3).
+- [ ] Der Pegelverlauf zeigt Aufzeichnungslücken als graues, schraffiertes Band, getrennt von
+      den roten Verbindungsausfällen (Test 8, Screenshot).
 - [ ] Plan 8.4.2 ist angepasst, die Abweichung im PR geflaggt.
 - [ ] Kein Leser des CSV-Formats bricht. Die Liste der Leser steht im PR.
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidungen (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidungen (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Welcher Zeitraum wird gefüllt?**
-  - (a) Abgeschlossene Tage vollständig 00:00:00–23:59:59, der laufende Tag bis zum Zeitpunkt
-    des Syncs.
-  - (b) Nur zwischen der ersten und der letzten Session des Tages.
+- **E1 — Zeitraum: abgeschlossene Tage vollständig von 00:00:00 bis 23:59:59**, der laufende Tag
+  bis zum Sync. Verworfen: nur zwischen der ersten und der letzten Session des Tages. Das hätte
+  den Ausfall vom 06.10. nicht sichtbar gemacht.
+- **E2 — Neuer Wert `KEINE_AUFZEICHNUNG`, abgeleitet aus den Sessions, ohne Schemaänderung.**
+  Verworfen wurden zwei Alternativen:
+  - eine neue Tabelle mit Dienst-Laufzeiten (Schema 26 und Migration);
+  - alles bei `KEINE_VERBINDUNG` zu belassen.
 
-  **Empfehlung: (a).** Nur (a) hätte den Ausfall vom 06.10. sichtbar gemacht.
-- **E2 — Wie heißt eine Zeile ohne laufende Aufzeichnung?**
-  - (a) Neuer Wert `KEINE_AUFZEICHNUNG`, abgeleitet aus den Sessions, ohne Schemaänderung.
-  - (b) Wie (a), aber aus einer neuen Tabelle mit Dienst-Laufzeiten. Das ist genauer, braucht
-    aber Schema 26 und eine Migration.
-  - (c) Bei `KEINE_VERBINDUNG` bleiben.
-
-  **Empfehlung: (a).** Bekannte Unschärfe: Im reinen Messgerät-Betrieb gibt es vor dem ersten
-  Frame noch keine Session. Diese Minuten würden als `KEINE_AUFZEICHNUNG` erscheinen, obwohl der
-  Dienst schon lief. Der PR quantifiziert das.
-- **E3 — Tage ganz ohne Daten (wie 03./04.10.)?**
-  - (a) Weiterhin keine Datei.
-  - (b) Eine Datei voller `KEINE_AUFZEICHNUNG`.
-
-  **Empfehlung: (a)**, solange im Ordner sonst nichts auf einen Ausfall hindeutet. Ein bewusst
-  ausgeschaltetes Wochenende erzeugt sonst Dateien mit 86.400 leeren Zeilen.
-- **E4 — Darstellung im Verlauf?** **Empfehlung:** graues, schraffiertes Band mit der Beschriftung
-  „Keine Aufzeichnung“, die roten Bänder bleiben für Verbindungsausfälle. Gilt für den Chart im
-  Cockpit und im Protokoll-Detail, **nicht** in den PDF-Berichten (siehe „Nicht Teil dieses
-  Auftrags“).
+  Die bekannte Unschärfe im reinen Messgerät-Betrieb vor dem ersten Frame wird hingenommen und im
+  PR beziffert.
+- **E3 — Tage ganz ohne Daten: weiterhin keine Datei.** Ein bewusst ausgeschaltetes Wochenende
+  erzeugt sonst Dateien mit 86.400 leeren Zeilen.
+- **E4 — Darstellung: graues, schraffiertes Band „Keine Aufzeichnung“** im Chart von Cockpit und
+  Protokoll-Detail. Die roten Bänder bleiben für Verbindungsausfälle. Die PDF-Berichte bleiben
+  unverändert.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 

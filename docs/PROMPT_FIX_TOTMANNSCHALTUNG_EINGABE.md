@@ -104,8 +104,7 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 - Kein neues Intervall (bleibt 15 min) und keine Änderung an `HeartbeatWorker` und
   `HeartbeatPlanung`.
 - Keine Kopplung an den BLE-Zustand (Plan 7.5, „Wichtiges Detail“).
-- Kein Hinweis im Cockpit, wenn die Totmannschaltung fehlt. Das ist eine offene Entscheidung,
-  siehe Abschnitt 5.
+- Kein Hinweis im Cockpit, wenn die Totmannschaltung fehlt (Owner-Entscheidung E1, Abschnitt 5).
 
 ---
 
@@ -141,11 +140,11 @@ ohne Zustimmung des Owners.
 - [ ] README und `EXTERNE_DIENSTE_EINRICHTUNG.md` sind korrigiert.
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidung (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidung (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Hinweis bei fehlender Totmannschaltung?** Läuft eine Aufzeichnung und ist keine URL
-  eingetragen, könnte das Cockpit dezent darauf hinweisen. Empfehlung: **nein in diesem PR.**
-  Erst einrichten und am Gerät prüfen, dann über einen Hinweis entscheiden.
+- **E1 — Hinweis bei fehlender Totmannschaltung: nicht in diesem PR.** Läuft eine Aufzeichnung
+  ohne eingetragene URL, könnte das Cockpit dezent darauf hinweisen. Erst wird die Funktion
+  eingerichtet und am Gerät geprüft, danach entscheidet der Owner über einen Hinweis.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 

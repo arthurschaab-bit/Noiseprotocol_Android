@@ -145,6 +145,9 @@ Kein Code vor der Entscheidung.
 
   Empfehlung erst nach den Messdaten.
 
+Die Freigabe vom 07.10.2026 („Empfehlungen freigeben“) deckt E1 **nicht** ab, weil es dafür noch
+keine Empfehlung gab. E1 bleibt offen, bis Teil 2 ausgewertet ist.
+
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 
 - Nach einem Messtag ein Bundle erzeugen. `runtime.json` zeigt die Arbeiten mit Zustand, und im
