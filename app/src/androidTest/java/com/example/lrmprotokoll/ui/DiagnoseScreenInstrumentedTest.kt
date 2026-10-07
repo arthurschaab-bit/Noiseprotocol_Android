@@ -50,6 +50,7 @@ class DiagnoseScreenInstrumentedTest {
     fun tearDown() {
         app.container.database.clearAllTables()
         app.container.settingsManager.letzteDiagnoseId = null
+        composeRule.waitForIdle()
     }
 
     @Test

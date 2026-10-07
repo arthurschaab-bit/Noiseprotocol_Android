@@ -265,8 +265,8 @@ fun ProtokollScreen(
                     OutlinedTextField(
                         value = sessionFilter.labelQuery,
                         onValueChange = { aktualisiereSessionFilter(sessionFilter.copy(labelQuery = it)) },
-                        label = { Text("Geräuschtyp") },
-                        placeholder = { Text("z. B. Bohren") },
+                        label = { Text(stringResource(R.string.protocol_sound_type)) },
+                        placeholder = { Text(stringResource(R.string.protocol_sound_example)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("input_session_filter_label"),
                     )

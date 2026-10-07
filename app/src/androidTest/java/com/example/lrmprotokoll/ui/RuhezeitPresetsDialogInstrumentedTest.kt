@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.lrmprotokoll.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -43,7 +44,7 @@ class RuhezeitPresetsDialogInstrumentedTest {
         }
         // WA-Preset hat nachtGrenzwertDb = 40f, muss als aktiv markiert sein - Index 1 (WR, WA, ...).
         composeRule.onNodeWithTag(RUHEZEIT_PRESETS_LAZY_COLUMN_TAG).performScrollToIndex(1)
-        composeRule.onNodeWithContentDescription("Aktiv").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.quiet_time_active)).assertIsDisplayed()
     }
 
     @Test
@@ -111,7 +112,7 @@ class RuhezeitPresetsDialogInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Schließen").performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.action_close)).performClick()
 
         assertTrue(dismissed)
         assertTrue("Schliessen darf kein Preset auswaehlen", !ausgewaehlt)

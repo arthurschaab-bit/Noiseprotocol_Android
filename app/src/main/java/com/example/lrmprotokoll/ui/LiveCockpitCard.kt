@@ -842,11 +842,10 @@ fun LiveCockpitCard(
         AlertDialog(
             modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showEndMeasurementConfirm = false },
-            title = { Text("Messung wirklich beenden?") },
+            title = { Text(stringResource(R.string.cockpit_stop_confirm_title)) },
             text = {
                 Text(
-                    "Damit werden die laufende Messung, die WAV-/Mikrofonaufzeichnung und die " +
-                        "PCE-323-Verbindung beendet. Die bisher erfassten Daten bleiben erhalten."
+                    stringResource(R.string.cockpit_stop_confirm_description),
                 )
             },
             confirmButton = {
@@ -869,10 +868,10 @@ fun LiveCockpitCard(
                         })
                     },
                     modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG),
-                ) { Text("Messung beenden") }
+                ) { Text(stringResource(R.string.cockpit_end_measurement)) }
             },
             dismissButton = {
-                TextButton(onClick = { showEndMeasurementConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showEndMeasurementConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -903,11 +902,10 @@ fun LiveCockpitCard(
         AlertDialog(
             modifier = Modifier.testTag(DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showDisconnectBluetoothConfirm = false },
-            title = { Text("Bluetooth-Verbindung beenden?") },
+            title = { Text(stringResource(R.string.cockpit_disconnect_bluetooth_title)) },
             text = {
                 Text(
-                    "Der Trigger wird auf das interne Mikrofon umgestellt und die Verbindung zum " +
-                        "PCE-323 beendet. Kalibrierte PCE-Messwerte stehen danach nicht mehr zur Verfügung."
+                    stringResource(R.string.cockpit_disconnect_bluetooth_description),
                 )
             },
             confirmButton = {
@@ -917,10 +915,10 @@ fun LiveCockpitCard(
                         container.connectionSupervisor.stop()
                         showDisconnectBluetoothConfirm = false
                     }
-                ) { Text("PCE trennen") }
+                ) { Text(stringResource(R.string.cockpit_disconnect_bluetooth_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDisconnectBluetoothConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showDisconnectBluetoothConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
