@@ -419,6 +419,14 @@ Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueErr
 eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
 zurückmelden statt selbst zu beheben.
 
+### F18 — Aufzeichnung nach unerwartetem Ende beim Öffnen fortsetzen (Bugfix 07.10.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung starten, Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“, App öffnen | Die Aufzeichnung läuft innerhalb weniger Sekunden wieder; im Cockpit steht die Hinweiskarte mit Beginn und Ende der Unterbrechung; sie bleibt, bis „Verstanden“ getippt wird | |
+| Diagnose-Screen nach Wiederaufnahme prüfen | Ein Eintrag `RECORDING_ENDED_UNEXPECTEDLY` mit plausibler Dauer ist vorhanden | |
+| Gegenprobe: Aufzeichnung in der App beenden, App schließen und wieder öffnen | Es startet nichts | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

@@ -38,6 +38,12 @@ enum class DiagnosticCode {
      */
     TRIGGER_STILLER_AUSFALL,
 
+    /**
+     * Die Aufzeichnung war aktiv, wurde aber unerwartet beendet (z. B. durch Prozesstod/OS-Kill),
+     * und wird beim Oeffnen der App oder durch den Waechter-Job fortgesetzt (Befund G).
+     */
+    RECORDING_ENDED_UNEXPECTEDLY,
+
     // Videobeweis (M11 Etappe B)
 
     /** Die Kamera liess sich nicht oeffnen oder die Aufnahme brach ab. */

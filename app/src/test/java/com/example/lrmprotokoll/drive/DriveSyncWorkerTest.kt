@@ -58,6 +58,7 @@ class DriveSyncWorkerTest {
         override suspend fun loescheVor(vor: Long) { eingefuegt.removeAll { it.at < vor } }
         override suspend fun loescheBereich(von: Long, bis: Long) { eingefuegt.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = eingefuegt.size
+        override suspend fun maxAt(): Long? = eingefuegt.maxOfOrNull { it.at }
     }
 
     private class FakeDailyFileDao : DriveDailyFileDao {

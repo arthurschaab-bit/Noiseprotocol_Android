@@ -782,4 +782,11 @@
     <string name="meter_pair_confirm_text">Die App bindet sich fest an %1$s (%2$s) und verbindet sich ab jetzt ausschließlich mit dieser Adresse.\n\nDie Liste zeigt alle Bluetooth-Geräte in Reichweite, nicht nur Messgeräte. Ein Gerät, das kein Schallpegelmesser ist, liefert keine Messwerte. Die App versucht es dann rund drei Minuten lang immer wieder, meldet danach „Fehlgeschlagen“ und nimmt alle 15 Minuten einen neuen Anlauf.</string>
     <string name="meter_pair_confirm_action">Koppeln</string>
     <string name="meter_device_without_name">(ohne Namen)</string>
+    <string name="cockpit_unterbrechung_titel">Aufzeichnung war unterbrochen</string>
+    <string name="cockpit_unterbrechung_text_einzeln">Die Aufzeichnung war von %1$s bis %2$s unterbrochen und läuft wieder.</string>
+    <string name="cockpit_unterbrechung_text_einzeln_unbekannt">Die Aufzeichnung war bis %1$s unterbrochen (Beginn unbekannt) und läuft wieder.</string>
+    <string name="cockpit_unterbrechung_eintrag">Unterbrochen von %1$s bis %2$s (läuft wieder)</string>
+    <string name="cockpit_unterbrechung_eintrag_unbekannt">Unterbrochen bis %1$s (Beginn unbekannt, läuft wieder)</string>
+    <string name="cockpit_unterbrechung_beginn_unbekannt">Beginn unbekannt</string>
+    <string name="btn_unterbrechung_bestaetigen">Verstanden</string>
 </resources>

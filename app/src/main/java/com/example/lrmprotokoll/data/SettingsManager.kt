@@ -6,6 +6,9 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 private const val TAG = "SettingsManager"
 
@@ -820,6 +823,79 @@ class SettingsManager(
             .putLong("high_end_bericht_erster_tag", ersterTag)
             .putLong("high_end_bericht_letzter_tag", letzterTag)
             .apply()
+    }
+
+    // ---------------------------------------------------------------- Befund G / E1: Aufzeichnungsunterbrechung
+
+    private val _unterbrechungenFlow = MutableStateFlow(ladeAktiveUnterbrechungen())
+    val unterbrechungenFlow: StateFlow<List<AufzeichnungsUnterbrechung>> =
+        _unterbrechungenFlow.asStateFlow()
+
+    private fun ladeAktiveUnterbrechungen(): List<AufzeichnungsUnterbrechung> {
+        val bestaetigt = prefs.getBoolean("unterbrechung_bestaetigt", true)
+        if (bestaetigt) return emptyList()
+        val raw = prefs.getString("unterbrechung_eintraege", null) ?: return emptyList()
+        return deserialisiereUnterbrechungen(raw)
+    }
+
+    /**
+     * Liefert die Liste aller noch unbestaetigten Aufzeichnungsunterbrechungen.
+     */
+    fun aktiveUnterbrechungen(): List<AufzeichnungsUnterbrechung> = ladeAktiveUnterbrechungen()
+
+    /**
+     * Speichert eine neu erkannte Unterbrechung. Eine neue Unterbrechung ueberschreibt bereits
+     * bestaetigte Unterbrechungen. War die vorherige noch unbestaetigt, werden beide gelistet,
+     * damit keine Luecke verloren geht (Owner-Entscheidung E1).
+     */
+    fun speichereUnterbrechung(beginn: Long?, ende: Long) {
+        val bestehende = if (prefs.getBoolean("unterbrechung_bestaetigt", true)) {
+            emptyList()
+        } else {
+            deserialisiereUnterbrechungen(prefs.getString("unterbrechung_eintraege", null))
+        }
+        val neueListe = bestehende + AufzeichnungsUnterbrechung(beginn = beginn, ende = ende)
+        val raw = serialisiereUnterbrechungen(neueListe)
+        prefs.edit()
+            .putString("unterbrechung_eintraege", raw)
+            .putBoolean("unterbrechung_bestaetigt", false)
+            .apply()
+        _unterbrechungenFlow.value = neueListe
+    }
+
+    /**
+     * Bestaetigt alle anstehenden Unterbrechungen ("Verstanden"-Klick, Owner-Entscheidung E1).
+     */
+    fun bestaetigeUnterbrechungen() {
+        prefs.edit()
+            .putBoolean("unterbrechung_bestaetigt", true)
+            .remove("unterbrechung_eintraege")
+            .apply()
+        _unterbrechungenFlow.value = emptyList()
+    }
+
+    private fun serialisiereUnterbrechungen(liste: List<AufzeichnungsUnterbrechung>): String =
+        liste.joinToString(";") { "${it.beginn ?: -1L}:${it.ende}" }
+
+    private fun deserialisiereUnterbrechungen(raw: String?): List<AufzeichnungsUnterbrechung> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split(";").mapNotNull { teil ->
+            val parts = teil.split(":")
+            if (parts.size == 2) {
+                val b = parts[0].toLongOrNull()
+                val e = parts[1].toLongOrNull()
+                if (e != null) {
+                    AufzeichnungsUnterbrechung(
+                        beginn = if (b != null && b > 0L) b else null,
+                        ende = e,
+                    )
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        }
     }
 }
 

@@ -66,6 +66,7 @@ class DriveSyncCoordinatorTest {
         }
 
         override suspend fun anzahl(): Int = eingefuegt.size
+        override suspend fun maxAt(): Long? = eingefuegt.maxOfOrNull { it.at }
     }
 
     private class FakeDailyFileDao : DriveDailyFileDao {
@@ -1479,6 +1480,7 @@ class DriveSyncCoordinatorTest {
         }
 
         override suspend fun anzahl(): Int = eingefuegt.size
+        override suspend fun maxAt(): Long? = eingefuegt.maxOfOrNull { it.at }
     }
 
     /**
@@ -1558,6 +1560,7 @@ class DriveSyncCoordinatorTest {
         }
 
         override suspend fun anzahl(): Int = eingefuegt.size
+        override suspend fun maxAt(): Long? = eingefuegt.maxOfOrNull { it.at }
     }
 
     /** True, wenn ein protokollierter `(von, bis)`-Aufruf den Zeitraum [tagVon, tagBis) beruehrt. */
