@@ -87,6 +87,7 @@ class DriveWavUploadAndCsvTest {
         override suspend fun loescheVor(vor: Long) { samples.removeAll { it.at < vor } }
         override suspend fun loescheBereich(von: Long, bis: Long) { samples.removeAll { it.at in von until bis } }
         override suspend fun anzahl(): Int = samples.size
+        override suspend fun maxAt(): Long? = samples.maxOfOrNull { it.at }
     }
 
     private class TestDriveApiClient : DriveApiClient {

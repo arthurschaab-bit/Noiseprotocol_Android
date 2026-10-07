@@ -51,6 +51,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 const val START_MEASUREMENT_BUTTON_TAG = "start_measurement_button"
@@ -140,6 +142,7 @@ fun LiveCockpitCard(
     val letzterFrame by container.meterTransport.frames.collectAsState(initial = null)
     val micDb by AudioRecordingService.currentMicDb.collectAsState()
     val aufzeichnungsHinweis by AudioRecordingService.aufzeichnungsHinweis.collectAsState()
+    val unterbrechungen by settings.unterbrechungenFlow.collectAsState()
 
     val db = container.database
     val letzteSession by db.sessionDao().letzteSessionFlow().collectAsState(initial = null)
@@ -416,6 +419,94 @@ fun LiveCockpitCard(
                     modifier = Modifier.clickable { onNavigateToSettings?.invoke() },
                     maxLines = 1
                 )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = unterbrechungen.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Card(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("cockpit_unterbrechung_karte"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.cockpit_unterbrechung_titel),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            val zeitFormat = remember { SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()) }
+                            if (unterbrechungen.size == 1) {
+                                val u = unterbrechungen.first()
+                                val endeStr = zeitFormat.format(Date(u.ende))
+                                val text = if (u.beginn != null) {
+                                    val beginnStr = zeitFormat.format(Date(u.beginn))
+                                    stringResource(R.string.cockpit_unterbrechung_text_einzeln, beginnStr, endeStr)
+                                } else {
+                                    stringResource(R.string.cockpit_unterbrechung_text_einzeln_unbekannt, endeStr)
+                                }
+                                Text(
+                                    text = text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.testTag("cockpit_unterbrechung_text"),
+                                )
+                            } else {
+                                unterbrechungen.forEach { u ->
+                                    val endeStr = zeitFormat.format(Date(u.ende))
+                                    val text = if (u.beginn != null) {
+                                        val beginnStr = zeitFormat.format(Date(u.beginn))
+                                        stringResource(R.string.cockpit_unterbrechung_eintrag, beginnStr, endeStr)
+                                    } else {
+                                        stringResource(R.string.cockpit_unterbrechung_eintrag_unbekannt, endeStr)
+                                    }
+                                    Text(
+                                        text = "• $text",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = { settings.bestaetigeUnterbrechungen() },
+                            modifier = Modifier.testTag("btn_unterbrechung_bestaetigen"),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.btn_unterbrechung_bestaetigen),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -842,11 +933,10 @@ fun LiveCockpitCard(
         AlertDialog(
             modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showEndMeasurementConfirm = false },
-            title = { Text("Messung wirklich beenden?") },
+            title = { Text(stringResource(R.string.cockpit_stop_confirm_title)) },
             text = {
                 Text(
-                    "Damit werden die laufende Messung, die WAV-/Mikrofonaufzeichnung und die " +
-                        "PCE-323-Verbindung beendet. Die bisher erfassten Daten bleiben erhalten."
+                    stringResource(R.string.cockpit_stop_confirm_description),
                 )
             },
             confirmButton = {
@@ -869,10 +959,10 @@ fun LiveCockpitCard(
                         })
                     },
                     modifier = Modifier.testTag(END_MEASUREMENT_CONFIRM_BUTTON_TAG),
-                ) { Text("Messung beenden") }
+                ) { Text(stringResource(R.string.cockpit_end_measurement)) }
             },
             dismissButton = {
-                TextButton(onClick = { showEndMeasurementConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showEndMeasurementConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -903,11 +993,10 @@ fun LiveCockpitCard(
         AlertDialog(
             modifier = Modifier.testTag(DISCONNECT_BLUETOOTH_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showDisconnectBluetoothConfirm = false },
-            title = { Text("Bluetooth-Verbindung beenden?") },
+            title = { Text(stringResource(R.string.cockpit_disconnect_bluetooth_title)) },
             text = {
                 Text(
-                    "Der Trigger wird auf das interne Mikrofon umgestellt und die Verbindung zum " +
-                        "PCE-323 beendet. Kalibrierte PCE-Messwerte stehen danach nicht mehr zur Verfügung."
+                    stringResource(R.string.cockpit_disconnect_bluetooth_description),
                 )
             },
             confirmButton = {
@@ -917,10 +1006,10 @@ fun LiveCockpitCard(
                         container.connectionSupervisor.stop()
                         showDisconnectBluetoothConfirm = false
                     }
-                ) { Text("PCE trennen") }
+                ) { Text(stringResource(R.string.cockpit_disconnect_bluetooth_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDisconnectBluetoothConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showDisconnectBluetoothConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

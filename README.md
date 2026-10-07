@@ -84,7 +84,10 @@ Wiederaufnahme nach Neustart.
 **Aus M5:** Alarm bei Verbindungsabbruch nach 60 s Karenzzeit, Push über **ntfy** auf ein zweites
 Gerät und Meldung auf dem Gerät selbst, beide parallel; Cooldown, Eskalation und Entwarnung;
 Alarmzustand in Room, damit ein Prozess-Tod während der Karenzzeit den Alarm nicht verschluckt;
-**Totmannschaltung** über eine Ping-URL; Probealarm je Kanal in den Einstellungen.
+**Totmannschaltung** über eine Ping-URL; Probealarm je Kanal in den Einstellungen. Das
+Eingabefeld für die Ping-URL fehlte seit dem UI-Umbau vom 21.08.2026 (`179295e0`) und ist erst mit
+`PROMPT_FIX_TOTMANNSCHALTUNG_EINGABE.md` zurück (Einstellungen → Alarmierung → Totmannschaltung,
+mit „Probe-Ping senden“). Vorher war die Funktion gebaut, aber nicht einrichtbar.
 
 **Aus M7b:** Pegelwerte aus Mikrofon *und* PCE-323 werden gepuffert, zu Zeitfenstern verdichtet
 (LAeq als energetischer Mittelwert, Lücken bleiben als Lücken sichtbar) und alle 30 Minuten als

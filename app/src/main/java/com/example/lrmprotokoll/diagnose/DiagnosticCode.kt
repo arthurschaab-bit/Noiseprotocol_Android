@@ -38,6 +38,12 @@ enum class DiagnosticCode {
      */
     TRIGGER_STILLER_AUSFALL,
 
+    /**
+     * Die Aufzeichnung war aktiv, wurde aber unerwartet beendet (z. B. durch Prozesstod/OS-Kill),
+     * und wird beim Oeffnen der App oder durch den Waechter-Job fortgesetzt (Befund G).
+     */
+    RECORDING_ENDED_UNEXPECTEDLY,
+
     // Videobeweis (M11 Etappe B)
 
     /** Die Kamera liess sich nicht oeffnen oder die Aufnahme brach ab. */
@@ -65,6 +71,13 @@ enum class DiagnosticCode {
     BLE_GATT_ERROR,
     BLE_GATT_TIMEOUT,
     BLE_STREAM_STALLED,
+
+    /**
+     * Verbindung stand und CCCD war geschrieben, aber innerhalb des Timeouts traf kein erstes Frame ein.
+     * Unterscheidet sich von [BLE_STREAM_STALLED], da hier nie ein Datenfluss begann (E1 aus
+     * PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md).
+     */
+    BLE_NO_FIRST_FRAME,
     BLE_DECODE_RATE_HIGH,
     BLE_CADENCE_INVALID,
 

@@ -235,6 +235,8 @@ class ConnectionSupervisor(
             var consecutiveFailures = 0
             var consecutiveFailedRounds = 0
             var isFirstAttempt = true
+            var connectFailedInRound = 0
+            var noFirstFrameInRound = 0
             while (isActive) {
                 if (!adapterEnabled.value) {
                     setOverride(ConnectionState.DISCONNECTED)
@@ -268,22 +270,55 @@ class ConnectionSupervisor(
                     Log.w(TAG, "Verbindungsversuch mit Ausnahme gescheitert", e)
                     diagnosticLogger?.protokolliere("Verbindungsversuch gescheitert: ${e.javaClass.simpleName}: ${e.message}")
                     runCatching { transport.disconnect() }
-                    AttemptOutcome.NEVER_STREAMED
+                    AttemptOutcome.NeverStreamed(NeverStreamedReason.CONNECT_FAILED)
                 }
 
                 when (outcome) {
-                    AttemptOutcome.STREAMED_STABLY -> {
+                    is AttemptOutcome.StreamedStably -> {
                         consecutiveFailures = 0
                         consecutiveFailedRounds = 0
+                        connectFailedInRound = 0
+                        noFirstFrameInRound = 0
                     }
-                    AttemptOutcome.ADAPTER_OFF -> {
+                    is AttemptOutcome.AdapterOff -> {
                         consecutiveFailures = 0
                         consecutiveFailedRounds = 0
+                        connectFailedInRound = 0
+                        noFirstFrameInRound = 0
                         isFirstAttempt = true // sofortige Wiederaufnahme ohne Backoff-Wartezeit
                     }
-                    AttemptOutcome.STREAMED_BRIEFLY, AttemptOutcome.NEVER_STREAMED -> {
+                    is AttemptOutcome.StreamedBriefly, is AttemptOutcome.NeverStreamed -> {
+                        if (outcome is AttemptOutcome.NeverStreamed) {
+                            when (outcome.reason) {
+                                NeverStreamedReason.CONNECT_FAILED -> connectFailedInRound++
+                                NeverStreamedReason.NO_FIRST_FRAME -> noFirstFrameInRound++
+                            }
+                        }
                         consecutiveFailures++
                         if (consecutiveFailures >= maxAttempts) {
+                            if (connectFailedInRound > 0) {
+                                diagnosticsReporter?.report(
+                                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_CONNECT_FAILED,
+                                    component = "ConnectionSupervisor",
+                                    operation = "supervise",
+                                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                    message = "Verbindungsaufbau gescheitert ($connectFailedInRound Versuche)",
+                                    details = mapOf("anzahl" to connectFailedInRound, "grund" to "CONNECT_FAILED"),
+                                )
+                            }
+                            if (noFirstFrameInRound > 0) {
+                                diagnosticsReporter?.report(
+                                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_NO_FIRST_FRAME,
+                                    component = "ConnectionSupervisor",
+                                    operation = "supervise",
+                                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                    message = "Kein Frame empfangen ($noFirstFrameInRound Versuche)",
+                                    details = mapOf("anzahl" to noFirstFrameInRound, "grund" to "NO_FIRST_FRAME"),
+                                )
+                            }
+                            connectFailedInRound = 0
+                            noFirstFrameInRound = 0
+
                             diagnosticLogger?.protokolliere(
                                 "Verbindung fehlgeschlagen nach $consecutiveFailures Versuchen - warte auf neuen Anlauf",
                             )
@@ -343,11 +378,23 @@ class ConnectionSupervisor(
 
     /**
      * STREAMED_BRIEFLY: die Session hat [minStableSession] nicht erreicht (Review-Befund 3,
-     * PR #16) - zaehlt fuer den Fehlschlagszaehler wie NEVER_STREAMED, sonst wuerde ein Geraet,
+     * PR #16) - zaehlt fuer den Fehlschlagszaehler wie NeverStreamed, sonst wuerde ein Geraet,
      * das verbindet, kurz Daten liefert und sofort wieder abbricht, endlos im Sekundentakt neu
      * verbunden, weil jeder Zyklus formal als Erfolg zaehlte und der Backoff nie greift.
      */
-    private enum class AttemptOutcome { STREAMED_STABLY, STREAMED_BRIEFLY, NEVER_STREAMED, ADAPTER_OFF }
+    private sealed interface AttemptOutcome {
+        data object StreamedStably : AttemptOutcome
+
+        data object StreamedBriefly : AttemptOutcome
+
+        data class NeverStreamed(
+            val reason: NeverStreamedReason,
+        ) : AttemptOutcome
+
+        data object AdapterOff : AttemptOutcome
+    }
+
+    private enum class NeverStreamedReason { CONNECT_FAILED, NO_FIRST_FRAME }
 
     private enum class StreamEndReason { LOST, ADAPTER_OFF }
 
@@ -364,11 +411,19 @@ class ConnectionSupervisor(
             }
         }
         if (reached != ConnectionState.STREAMING) {
-            diagnosticLogger?.protokolliere(
-                "Kein Frame innerhalb von ${staleAfter.toMillis()}ms nach Verbindungsaufbau - Versuch verworfen"
-            )
+            if (reached == null) {
+                diagnosticLogger?.protokolliere(
+                    "Kein Frame innerhalb von ${staleAfter.toMillis()}ms nach Verbindungsaufbau - Versuch verworfen",
+                )
+            } else {
+                diagnosticLogger?.protokolliere(
+                    "Verbindungsaufbau gescheitert ($reached)",
+                )
+            }
             transport.disconnect()
-            return AttemptOutcome.NEVER_STREAMED
+            return AttemptOutcome.NeverStreamed(
+                if (reached == null) NeverStreamedReason.NO_FIRST_FRAME else NeverStreamedReason.CONNECT_FAILED,
+            )
         }
         // Sofort beim Erreichen von STREAMING protokolliert, nicht erst nach Sitzungsende (Plan/
         // Owner-Wunsch: die Wiederherstellung soll sichtbar sein, sobald sie passiert, nicht erst
@@ -383,15 +438,15 @@ class ConnectionSupervisor(
         )
         val streamingStartedAt = now.now()
         val endReason = monitorStreamingSession()
-        if (endReason == StreamEndReason.ADAPTER_OFF) return AttemptOutcome.ADAPTER_OFF
+        if (endReason == StreamEndReason.ADAPTER_OFF) return AttemptOutcome.AdapterOff
         val sessionDuration = Duration.between(streamingStartedAt, now.now())
         return if (sessionDuration >= minStableSession) {
-            AttemptOutcome.STREAMED_STABLY
+            AttemptOutcome.StreamedStably
         } else {
             diagnosticLogger?.protokolliere(
                 "Streaming nach nur ${sessionDuration.toMillis()}ms beendet - zaehlt als Fehlversuch"
             )
-            AttemptOutcome.STREAMED_BRIEFLY
+            AttemptOutcome.StreamedBriefly
         }
     }
 

@@ -283,6 +283,15 @@
     <string name="settings_alerting_ntfy_topic">Topic</string>
     <string name="settings_alerting_local">Local Device Alert</string>
     <string name="settings_alerting_sound">Audible alarm sound (for tablets &amp; silent mode)</string>
+    <string name="settings_heartbeat_title">Dead man\'s switch</string>
+    <string name="settings_heartbeat_desc">The phone checks in with a monitoring service (e.g. healthchecks.io) every 15 minutes. If the check-in stops, the service raises the alarm – even if the phone or the app has failed.</string>
+    <string name="settings_heartbeat_url">Ping URL (https://…)</string>
+    <string name="settings_heartbeat_url_invalid">Not a valid https:// address – it will not be saved.</string>
+    <string name="settings_heartbeat_probe">Send test ping</string>
+    <string name="settings_heartbeat_probe_ok">Test ping delivered</string>
+    <string name="settings_heartbeat_probe_empty">No ping URL entered</string>
+    <string name="settings_heartbeat_probe_failed">Failed: %1$s</string>
+    <string name="settings_heartbeat_probe_failed_generic">Failed: service not reachable</string>
     <string name="settings_battery_optimization_title">Battery Optimization for Background Service</string>
     <string name="settings_battery_optimization_desc">Uninterrupted background monitoring by Android system</string>
     <string name="settings_battery_optimization_button">Adjust battery optimization</string>
@@ -778,4 +787,10 @@
     <string name="meter_pair_confirm_text">The app binds to %1$s (%2$s) and will connect to this address only from now on.\n\nThe list shows every Bluetooth device in range, not just meters. A device that is not a sound level meter delivers no readings. The app then keeps retrying for about three minutes, reports “Failed” and starts a fresh attempt every 15 minutes.</string>
     <string name="meter_pair_confirm_action">Pair</string>
     <string name="meter_device_without_name">(unnamed)</string>
+    <string name="cockpit_unterbrechung_titel">Recording was interrupted</string>
+    <string name="cockpit_unterbrechung_text_einzeln">The recording was interrupted from %1$s to %2$s and is running again.</string>
+    <string name="cockpit_unterbrechung_text_einzeln_unbekannt">The recording was interrupted until %1$s (start unknown) and is running again.</string>
+    <string name="cockpit_unterbrechung_eintrag">Interrupted from %1$s to %2$s (running again)</string>
+    <string name="cockpit_unterbrechung_eintrag_unbekannt">Interrupted until %1$s (start unknown, running again)</string>
+    <string name="btn_unterbrechung_bestaetigen">Understood</string>
 </resources>

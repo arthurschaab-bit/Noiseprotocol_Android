@@ -6,6 +6,7 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -64,6 +65,48 @@ class HeartbeatPinger(
         return runCatching { client.hole(url) }
             .fold(onSuccess = { Ergebnis.GESENDET }, onFailure = { Ergebnis.FEHLGESCHLAGEN })
     }
+
+    /**
+     * Ergebnis eines [probe]-Pings. [hinweis] ist ein kurzer Klartext fuer die Anzeige
+     * ("Heartbeat-Dienst antwortete mit HTTP 404"). Er stammt ausschliesslich aus den eigenen
+     * Meldungen dieser Datei und enthaelt nie die URL.
+     */
+    class ProbeErgebnis(
+        val ergebnis: Ergebnis,
+        val hinweis: String? = null,
+    )
+
+    /**
+     * Probe-Ping aus den Einstellungen: bestaetigt dem Nutzer, dass die eingetragene URL beim
+     * Dienst ankommt. Anders als [ping] prueft er nur die URL und NICHT `monitoringWasActive` -
+     * er soll ja gerade vor dem ersten Messstart funktionieren.
+     * Er nutzt dieselbe HTTP-Funktion wie [ping] und wirft nie.
+     */
+    suspend fun probe(): ProbeErgebnis {
+        val url = settings.heartbeatUrl
+        if (url.isBlank()) return ProbeErgebnis(Ergebnis.UEBERSPRUNGEN)
+
+        return runCatching { client.hole(url) }.fold(
+            onSuccess = { ProbeErgebnis(Ergebnis.GESENDET) },
+            // Nur die eigenen IOException-Texte von hole() zeigen: Jede andere Ausnahme (etwa
+            // IllegalArgumentException bei einer kaputten URL) koennte die URL in ihrer Meldung
+            // tragen.
+            onFailure = { ProbeErgebnis(Ergebnis.FEHLGESCHLAGEN, (it as? IOException)?.message) },
+        )
+    }
+
+    companion object {
+        /**
+         * Leer heisst "aus" und ist erlaubt. Sonst muss die Eingabe eine parsbare
+         * `https://`-URL sein - die Ping-URL ist eine Capability-URL und soll nie im Klartext
+         * uebertragen werden.
+         */
+        fun istGueltigeUrl(eingabe: String): Boolean {
+            val url = eingabe.trim()
+            if (url.isEmpty()) return true
+            return url.toHttpUrlOrNull()?.isHttps == true
+        }
+    }
 }
 
 /**
@@ -87,7 +130,7 @@ private suspend fun OkHttpClient.hole(url: String) =
                         fortsetzung.resumeWith(Result.success(Unit))
                     } else {
                         fortsetzung.resumeWithException(
-                            IOException("Heartbeat-Dienst antwortete mit HTTP ${it.code}")
+                            IOException("Heartbeat-Dienst antwortete mit HTTP ${it.code}"),
                         )
                     }
                 }

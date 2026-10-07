@@ -222,9 +222,14 @@ fun BerichtErstellenSheet(
                 }
             }
             zeitraum?.let {
-                Text("${it.ersterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN))} – " +
-                    it.letzterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN)),
-                    modifier = Modifier.testTag("bericht_datumsbereich_anzeige"))
+                Text(
+                    stringResource(
+                        R.string.report_creation_selected_range,
+                        it.ersterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.getDefault())),
+                        it.letzterTag.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.getDefault())),
+                    ),
+                    modifier = Modifier.testTag("bericht_datumsbereich_anzeige"),
+                )
             }
             val anzahlTage = tage.size.takeIf { it > 0 }
                 ?: zeitraum?.let { (it.letzterTag.toEpochDay() - it.ersterTag.toEpochDay() + 1).toInt() }

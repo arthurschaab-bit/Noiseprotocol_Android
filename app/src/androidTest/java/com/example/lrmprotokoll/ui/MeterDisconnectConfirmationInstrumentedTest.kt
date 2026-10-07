@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.AppContainer
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.meter.FakeMeterTransport
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -48,10 +49,10 @@ class MeterDisconnectConfirmationInstrumentedTest {
         composeRule.onNodeWithTag("btn_meter_unpair").performScrollTo().performClick()
 
         composeRule.onNodeWithTag(METER_DISCONNECT_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeRule.onNodeWithText("Bluetooth-Verbindung beenden?").assertIsDisplayed()
+        composeRule.onNodeWithText(app.getString(R.string.cockpit_disconnect_bluetooth_title)).assertIsDisplayed()
         assertEquals("AA:BB:CC:DD:EE:FF", app.container.settingsManager.meterDeviceAddress)
 
-        composeRule.onNodeWithText("Abbrechen").performClick()
+        composeRule.onNodeWithText(app.getString(R.string.action_cancel)).performClick()
         assertEquals("AA:BB:CC:DD:EE:FF", app.container.settingsManager.meterDeviceAddress)
     }
 }

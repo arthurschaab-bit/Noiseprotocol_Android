@@ -734,7 +734,7 @@ fun ProtokollDetailScreen(
                                         }
                                     }
                                     IconButton(onClick = { scope.launch { container.fotoDokumentation.loesche(foto.id) } }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Foto löschen")
+                                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.protocol_delete_photo))
                                     }
                                 }
                             }

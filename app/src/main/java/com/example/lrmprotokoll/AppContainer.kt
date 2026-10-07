@@ -420,6 +420,15 @@ class AppContainer(
         )
     }
 
+    val aufzeichnungsFortsetzer: com.example.lrmprotokoll.audio.AufzeichnungsFortsetzer by lazy {
+        com.example.lrmprotokoll.audio.AufzeichnungsFortsetzer(
+            context = context.applicationContext,
+            settingsManager = settingsManager,
+            levelSampleDao = database.levelSampleDao(),
+            diagnosticsReporter = diagnosticsReporter,
+        )
+    }
+
     /**
      * CI-Fund (22.09.2026, PR #182): produktiv wird nie mehr als ein [AppContainer] pro
      * Prozesslauf gebraucht (die App ersetzt ihren Container nie - [LaermprotokollApp.setCustomContainer]/

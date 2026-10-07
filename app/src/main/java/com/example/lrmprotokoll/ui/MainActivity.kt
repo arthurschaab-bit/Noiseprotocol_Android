@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -107,7 +108,9 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
-        (application as LaermprotokollApp).container.meterAutoConnect.verbindeWennGewuenscht()
+        val container = (application as LaermprotokollApp).container
+        container.meterAutoConnect.verbindeWennGewuenscht()
+        container.aufzeichnungsFortsetzer.pruefeUndSetzeFort(lifecycleScope)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
