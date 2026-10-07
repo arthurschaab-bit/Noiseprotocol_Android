@@ -245,11 +245,15 @@ fun MeterScreen(
         val device = verdaechtigesGeraet!!
         AlertDialog(
             onDismissRequest = { verdaechtigesGeraet = null },
-            title = { Text("Mögliches Ersatzgerät gefunden") },
+            title = { Text(stringResource(R.string.meter_replacement_warning_title)) },
             text = {
                 Text(
-                    "Das gefundene Gerät '${device.name}' hat die Adresse ${device.address}. " +
-                        "Gepinnt ist bisher ${pairedAddress}. Möchten Sie die Bindung auf das neue Gerät übertragen?"
+                    stringResource(
+                        R.string.meter_replacement_warning_description,
+                        device.name ?: device.address,
+                        device.address,
+                        pairedAddress ?: stringResource(R.string.meter_unknown_address),
+                    ),
                 )
             },
             confirmButton = {
@@ -259,13 +263,13 @@ fun MeterScreen(
                         verdaechtigesGeraet = null
                     },
                     modifier = Modifier.testTag("dialog_spoofing_confirm")
-                ) { Text("Trotzdem koppeln") }
+                ) { Text(stringResource(R.string.meter_pair_anyway)) }
             },
             dismissButton = {
                 TextButton(
                     onClick = { verdaechtigesGeraet = null },
                     modifier = Modifier.testTag("dialog_spoofing_dismiss")
-                ) { Text("Abbrechen") }
+                ) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -274,11 +278,10 @@ fun MeterScreen(
         AlertDialog(
             modifier = Modifier.testTag(METER_DISCONNECT_CONFIRM_DIALOG_TAG),
             onDismissRequest = { showDisconnectConfirm = false },
-            title = { Text("Bluetooth-Verbindung beenden?") },
+            title = { Text(stringResource(R.string.cockpit_disconnect_bluetooth_title)) },
             text = {
                 Text(
-                    "Das PCE-323 wird getrennt und aus der App-Kopplung entfernt. " +
-                        "Eine laufende Mikrofon-/WAV-Erfassung kann weiterlaufen, kalibrierte PCE-Werte aber nicht."
+                    stringResource(R.string.meter_disconnect_description),
                 )
             },
             confirmButton = {
@@ -291,10 +294,10 @@ fun MeterScreen(
                         supervisor.stop()
                         showDisconnectConfirm = false
                     }
-                ) { Text("PCE trennen") }
+                ) { Text(stringResource(R.string.cockpit_disconnect_bluetooth_action)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDisconnectConfirm = false }) { Text("Abbrechen") }
+                TextButton(onClick = { showDisconnectConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -562,7 +565,7 @@ fun MeterScreen(
                                 onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
-                                Text("Standort aktivieren")
+                                Text(stringResource(R.string.meter_enable_location))
                             }
                         }
                     }
@@ -598,7 +601,10 @@ fun MeterScreen(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(device.name ?: "(ohne Namen)", style = MaterialTheme.typography.bodyLarge)
-                        Text("${device.address} · ${device.rssi} dBm", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            stringResource(R.string.meter_scan_result_details, device.address, device.rssi),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         if (befund == PinningBefund.VERDAECHTIG_GLEICHER_NAME) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {

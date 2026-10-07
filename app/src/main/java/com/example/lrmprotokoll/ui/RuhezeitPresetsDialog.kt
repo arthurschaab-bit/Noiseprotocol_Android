@@ -40,8 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.ui.theme.TechBluePrimary
 
 const val RUHEZEIT_PRESETS_LAZY_COLUMN_TAG = "ruhezeit_presets_lazy_column"
@@ -244,7 +246,7 @@ fun RuhezeitPresetsDialog(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Aktiv",
+                                        contentDescription = stringResource(R.string.quiet_time_active),
                                         tint = TechBluePrimary,
                                         modifier = Modifier.size(20.dp),
                                     )
@@ -279,7 +281,7 @@ fun RuhezeitPresetsDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Schließen", color = TechBluePrimary)
+                Text(stringResource(R.string.action_close), color = TechBluePrimary)
             }
         },
     )

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.DokumentationsFotoEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -60,10 +61,10 @@ class DriveUploadScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Drive-Uploads").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.drive_uploads_title)).assertIsDisplayed()
         composeRule.onNodeWithText("Noch nichts aufgezeichnet, was hochgeladen werden könnte.").assertIsDisplayed()
 
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.action_back)).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 

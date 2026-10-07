@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.lrmprotokoll.R
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,7 +29,7 @@ class KiErklaerungScreenInstrumentedTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Wie die Lärmerkennung arbeitet").assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.ai_explanation_title)).assertIsDisplayed()
 
         // Letzter Abschnitt (Index 5 von 6, "Was das fuer Sie praktisch bedeutet") ist in der
         // LazyColumn anfangs nicht komponiert - onNodeWithText(...).performScrollTo() faende ihn
@@ -43,7 +44,7 @@ class KiErklaerungScreenInstrumentedTest {
             substring = true,
         ).assertIsDisplayed()
 
-        composeRule.onNodeWithContentDescription("Zurück").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.action_back)).assertIsDisplayed().performClick()
         assertTrue(backed)
     }
 }
