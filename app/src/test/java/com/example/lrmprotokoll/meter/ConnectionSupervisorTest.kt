@@ -2,7 +2,15 @@ package com.example.lrmprotokoll.meter
 
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
+import com.example.lrmprotokoll.diagnose.DiagnosticBreadcrumb
+import com.example.lrmprotokoll.diagnose.DiagnosticCode
+import com.example.lrmprotokoll.diagnose.DiagnosticContext
+import com.example.lrmprotokoll.diagnose.DiagnosticEvent
+import com.example.lrmprotokoll.diagnose.DiagnosticId
 import com.example.lrmprotokoll.diagnose.DiagnosticLogger
+import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
+import com.example.lrmprotokoll.diagnose.export.berechneHealthMetrics
 import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
@@ -89,6 +97,7 @@ class ConnectionSupervisorTest {
         expectedFramePeriod: Duration? = null,
         cadenceTolerance: Double = 0.2,
         diagnosticLogger: DiagnosticLogger? = null,
+        diagnosticsReporter: DiagnosticsReporter? = null,
         failedRetryInterval: Duration = Duration.ofMinutes(15),
         dienstAktiv: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
         failedRetryIntervalLeerlauf: Duration = Duration.ofHours(1),
@@ -108,9 +117,93 @@ class ConnectionSupervisorTest {
             expectedFramePeriod = expectedFramePeriod,
             cadenceTolerance = cadenceTolerance,
             diagnosticLogger = diagnosticLogger,
+            diagnosticsReporter = diagnosticsReporter,
             dienstAktiv = dienstAktiv,
             failedRetryIntervalLeerlauf = failedRetryIntervalLeerlauf,
         )
+    }
+
+    private class FakeDiagnosticsReporter : DiagnosticsReporter {
+        val events = mutableListOf<DiagnosticEvent>()
+
+        override fun breadcrumb(
+            category: String,
+            message: String,
+            data: Map<String, Any?>,
+            level: DiagnosticSeverity,
+        ) {}
+
+        override fun breadcrumb(breadcrumb: DiagnosticBreadcrumb) {}
+
+        override fun report(event: DiagnosticEvent, cause: Throwable?): DiagnosticId {
+            events += event
+            return event.diagnosticId
+        }
+
+        override fun report(
+            code: DiagnosticCode,
+            component: String,
+            operation: String,
+            severity: DiagnosticSeverity,
+            handled: Boolean,
+            retryable: Boolean,
+            userVisible: Boolean,
+            cause: Throwable?,
+            message: String?,
+            statusCode: String?,
+            details: Map<String, Any?>,
+        ): DiagnosticId {
+            val event = DiagnosticEvent(
+                code = code,
+                component = component,
+                operation = operation,
+                severity = severity,
+                handled = handled,
+                retryable = retryable,
+                userVisible = userVisible,
+                causeClass = cause?.javaClass?.name,
+                message = message,
+                statusCode = statusCode,
+                details = details,
+            )
+            events += event
+            return event.diagnosticId
+        }
+
+        override fun updateContext(update: (DiagnosticContext) -> DiagnosticContext) {}
+        override fun currentContext(): DiagnosticContext = DiagnosticContext()
+        override fun recentBreadcrumbs(limit: Int): List<DiagnosticBreadcrumb> = emptyList()
+        override fun recentEvents(limit: Int): List<DiagnosticEvent> = events.takeLast(limit)
+    }
+
+    private class ConfigurableTransport(
+        private val scheduler: TestCoroutineScheduler,
+        private val onConnect: suspend (ConfigurableTransport) -> Unit,
+    ) : MeterTransport {
+        private val _state = MutableStateFlow(ConnectionState.IDLE)
+        override val state: StateFlow<ConnectionState> = _state.asStateFlow()
+        override val frames: SharedFlow<MeterFrame> = MutableSharedFlow()
+        private val _lastFrameAt = MutableStateFlow<Instant?>(null)
+        override val lastFrameAt: StateFlow<Instant?> = _lastFrameAt.asStateFlow()
+        private val _frameQuality = MutableStateFlow(FrameQuality())
+        override val frameQuality: StateFlow<FrameQuality> = _frameQuality.asStateFlow()
+
+        val connectTimestampsMillis = mutableListOf<Long>()
+
+        fun setState(newState: ConnectionState) {
+            _state.value = newState
+        }
+
+        override suspend fun connect(device: BoundDevice) {
+            connectTimestampsMillis.add(scheduler.currentTime)
+            onConnect(this)
+        }
+
+        override suspend fun disconnect() {
+            _state.value = ConnectionState.DISCONNECTED
+        }
+
+        override suspend fun send(command: MeterCommand): Result<Unit> = Result.success(Unit)
     }
 
     /** Liefert immer 0 Jitter, damit Backoff-Werte in Tests exakt den Nominalwerten entsprechen. */
@@ -924,5 +1017,237 @@ class ConnectionSupervisorTest {
             "erneutVersuchen() muss die Leerlauf-Wartezeit sofort beenden",
             transport.connectTimestampsMillis.size > 1,
         )
+    }
+
+    @Test
+    fun transportGehtSofortAufFailedMeldetConnectFailedUndNichtKeinFrame() = runTest {
+        // Test 1: Der Transport geht nach connect jedes Mal sofort auf FAILED, bis maxAttempts erreicht ist:
+        // - Text "Verbindungsaufbau gescheitert";
+        // - nicht "Kein Frame";
+        // - genau eine Meldung BLE_CONNECT_FAILED mit Anzahl maxAttempts.
+        val maxAttempts = 3
+        val transport = ConfigurableTransport(testScheduler) { t ->
+            t.setState(ConnectionState.FAILED)
+        }
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(
+            dao,
+            InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+            aktiv = { true },
+        )
+        val reporter = FakeDiagnosticsReporter()
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = maxAttempts,
+            random = zeroJitterRandom,
+            diagnosticLogger = logger,
+            diagnosticsReporter = reporter,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertTrue(
+            "Log muss 'Verbindungsaufbau gescheitert' enthalten: ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Verbindungsaufbau gescheitert") },
+        )
+        assertFalse(
+            "Log darf NICHT 'Kein Frame' enthalten: ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Kein Frame") },
+        )
+
+        assertEquals(1, reporter.events.size)
+        val event = reporter.events.first()
+        assertEquals(DiagnosticCode.BLE_CONNECT_FAILED, event.code)
+        assertEquals("ConnectionSupervisor", event.component)
+        assertEquals(maxAttempts, event.details["anzahl"])
+    }
+
+    @Test
+    fun transportOhneErstesFrameMeldetNoFirstFrame() = runTest {
+        // Test 2: Der Transport bleibt in SUBSCRIBING, kein Frame, über eine ganze Runde:
+        // Text "Kein Frame ..." und genau eine Meldung BLE_NO_FIRST_FRAME.
+        val maxAttempts = 3
+        val transport = ConfigurableTransport(testScheduler) { t ->
+            t.setState(ConnectionState.SUBSCRIBING)
+        }
+        val dao = FakeDiagnosticLogDao()
+        val logger = DiagnosticLogger(
+            dao,
+            InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+            aktiv = { true },
+        )
+        val reporter = FakeDiagnosticsReporter()
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = maxAttempts,
+            random = zeroJitterRandom,
+            diagnosticLogger = logger,
+            diagnosticsReporter = reporter,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertTrue(
+            "Log muss 'Kein Frame' enthalten: ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Kein Frame") },
+        )
+        assertFalse(
+            "Log darf NICHT 'Verbindungsaufbau gescheitert' enthalten: ${dao.zeilen.map { it.message }}",
+            dao.zeilen.any { it.message.contains("Verbindungsaufbau gescheitert") },
+        )
+
+        assertEquals(1, reporter.events.size)
+        val event = reporter.events.first()
+        assertEquals(DiagnosticCode.BLE_NO_FIRST_FRAME, event.code)
+        assertEquals(maxAttempts, event.details["anzahl"])
+    }
+
+    @Test
+    fun ausnahmeBeimVerbindenZaehltAlsBleConnectFailed() = runTest {
+        // Test 3: Eine Ausnahme aus transport.connect zählt in der Runde als gescheiterter Aufbau
+        // und landet in der Meldung BLE_CONNECT_FAILED.
+        val maxAttempts = 3
+        val transport = ConfigurableTransport(testScheduler) { _ ->
+            throw IllegalStateException("GATT-Stack Fehler")
+        }
+        val reporter = FakeDiagnosticsReporter()
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = maxAttempts,
+            random = zeroJitterRandom,
+            diagnosticsReporter = reporter,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        assertEquals(1, reporter.events.size)
+        val event = reporter.events.first()
+        assertEquals(DiagnosticCode.BLE_CONNECT_FAILED, event.code)
+        assertEquals(maxAttempts, event.details["anzahl"])
+    }
+
+    @Test
+    fun gemischteRundeMeldetBeideGruendeUndZweiteRundeEbenfallsNurEinmalJeGrund() = runTest {
+        // Test 4: Gemischte Runde (teils Aufbau gescheitert, teils kein Frame) -> je eine Meldung pro Grund
+        // mit den richtigen Anzahlen. Zweite Runde -> wieder nur je eine.
+        var attemptCount = 0
+        val transport = ConfigurableTransport(testScheduler) { t ->
+            attemptCount++
+            if (attemptCount % 2 == 1) {
+                t.setState(ConnectionState.FAILED)
+            } else {
+                t.setState(ConnectionState.SUBSCRIBING)
+            }
+        }
+        val reporter = FakeDiagnosticsReporter()
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = 4,
+            random = zeroJitterRandom,
+            diagnosticsReporter = reporter,
+            failedRetryInterval = Duration.ofMinutes(1),
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        // In Runde 1 gab es 4 Versuche: 2 FAILED, 2 SUBSCRIBING
+        assertEquals(2, reporter.events.size)
+        val r1ConnectFailed = reporter.events.first { it.code == DiagnosticCode.BLE_CONNECT_FAILED }
+        val r1NoFirstFrame = reporter.events.first { it.code == DiagnosticCode.BLE_NO_FIRST_FRAME }
+        assertEquals(2, r1ConnectFailed.details["anzahl"])
+        assertEquals(2, r1NoFirstFrame.details["anzahl"])
+
+        // Zweite Runde nach Wartezeit:
+        advanceTimeBy(61_000)
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        // Jetzt insgesamt 4 Meldungen: 2 aus Runde 1, 2 aus Runde 2
+        assertEquals(4, reporter.events.size)
+        val r2Events = reporter.events.subList(2, 4)
+        val r2ConnectFailed = r2Events.first { it.code == DiagnosticCode.BLE_CONNECT_FAILED }
+        val r2NoFirstFrame = r2Events.first { it.code == DiagnosticCode.BLE_NO_FIRST_FRAME }
+        assertEquals(2, r2ConnectFailed.details["anzahl"])
+        assertEquals(2, r2NoFirstFrame.details["anzahl"])
+    }
+
+    @Test
+    fun dreiFehlversucheDannErfolgMeldetNichts() = runTest {
+        // Test 5: Drei Fehlversuche, dann Erfolg -> keine Meldung.
+        var attemptCount = 0
+        val transport = ConfigurableTransport(testScheduler) { t ->
+            attemptCount++
+            if (attemptCount <= 3) {
+                t.setState(ConnectionState.FAILED)
+            } else {
+                t.setState(ConnectionState.STREAMING)
+            }
+        }
+        val reporter = FakeDiagnosticsReporter()
+        val supervisor = newSupervisor(
+            transport,
+            staleAfter = Duration.ofMillis(1),
+            maxAttempts = 8,
+            minStableSession = Duration.ofMillis(10),
+            random = zeroJitterRandom,
+            diagnosticsReporter = reporter,
+        )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        assertTrue(
+            "Bei Erfolg vor maxAttempts darf nichts an den DiagnosticsReporter gemeldet werden",
+            reporter.events.isEmpty(),
+        )
+    }
+
+    @Test
+    fun healthMetricsErkenntBleConnectFailed() {
+        // Test 7: berechneHealthMetrics mit solchen Ereignissen -> fehlerJeCode[BLE_CONNECT_FAILED] > 0
+        // und istUnveraendert() == false.
+        val event = DiagnosticEvent(
+            code = DiagnosticCode.BLE_CONNECT_FAILED,
+            component = "ConnectionSupervisor",
+            operation = "supervise",
+            severity = DiagnosticSeverity.WARN,
+            details = mapOf("anzahl" to 8, "grund" to "CONNECT_FAILED"),
+        )
+        val metrics = berechneHealthMetrics(
+            connectionEventsSeitLetztemBundle = emptyList(),
+            diagnosticLogEntryCountSeitLetztemBundle = 0L,
+            dbGroesseAktuellBytes = 1000L,
+            dbGroesseLetztesBundleBytes = 1000L,
+            heapHochstandBytes = 5000L,
+            eventsSeitLetztemBundle = listOf(event),
+        )
+
+        assertEquals(1, metrics.fehlerJeCode[DiagnosticCode.BLE_CONNECT_FAILED])
+        assertFalse("HealthMetrics darf bei aufgetretenen Fehlern nicht als unveraendert gelten", metrics.istUnveraendert())
     }
 }
