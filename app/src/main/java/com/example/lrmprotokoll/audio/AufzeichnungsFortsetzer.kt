@@ -15,7 +15,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Koordiniert die Erkennung und Wiederaufnahme unerwartet beendeter Aufzeichnungen (Befund G / E2).
@@ -34,8 +33,11 @@ class AufzeichnungsFortsetzer(
     private val zeitProvider: () -> Long = { System.currentTimeMillis() },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val hinweisZeiger: (String) -> Unit = { text -> Toast.makeText(context, text, Toast.LENGTH_LONG).show() },
+    private val startInFlightTimeoutMs: Long = 5_000L,
 ) {
-    private val startInFlight = AtomicBoolean(false)
+    private var letzterStartVersuchAt = 0L
+    private var nichtStartbarGemeldet = false
+    private val lock = Any()
 
     /**
      * Suspendierende Kernlogik fuer Bewertung und Fortsetzung der Aufzeichnung.
@@ -45,55 +47,86 @@ class AufzeichnungsFortsetzer(
     ) {
         val dienstLaeuft = dienstLaeuftProvider()
         if (dienstLaeuft) {
-            startInFlight.set(false)
+            synchronized(lock) {
+                letzterStartVersuchAt = 0L
+                nichtStartbarGemeldet = false
+            }
             return
         }
 
         val kannInDenVordergrund = kannInVordergrundProvider()
-        val lage = bewerteAufzeichnungsLage(
-            monitoringWasActive = settingsManager.monitoringWasActive,
-            dienstLaeuft = false,
-            kannInDenVordergrund = kannInDenVordergrund,
-        )
+        val lage =
+            bewerteAufzeichnungsLage(
+                monitoringWasActive = settingsManager.monitoringWasActive,
+                dienstLaeuft = false,
+                kannInDenVordergrund = kannInDenVordergrund,
+            )
 
         when (lage) {
             AufzeichnungsLage.LAEUFT -> {
-                startInFlight.set(false)
+                synchronized(lock) {
+                    letzterStartVersuchAt = 0L
+                    nichtStartbarGemeldet = false
+                }
             }
             AufzeichnungsLage.AUS -> {
-                startInFlight.set(false)
+                synchronized(lock) {
+                    letzterStartVersuchAt = 0L
+                    nichtStartbarGemeldet = false
+                }
             }
             AufzeichnungsLage.SOLL_ABER_NICHT_STARTBAR -> {
-                startInFlight.set(false)
-                diagnosticsReporter.report(
-                    code = DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION,
-                    component = "Aufzeichnung",
-                    operation = "pruefeUndSetzeFort",
-                    severity = DiagnosticSeverity.WARN,
-                    message = "Aufzeichnung soll laufen, kann aber nicht gestartet werden: weder Mikrofonberechtigung noch gekoppeltes Messgeraet",
-                    details = mapOf(
-                        "quelle" to quelle,
-                        "monitoringWasActive" to true,
-                    ),
-                )
-                hinweisZeiger(context.getString(R.string.dienst_start_ohne_quelle))
+                val melden =
+                    synchronized(lock) {
+                        letzterStartVersuchAt = 0L
+                        if (!nichtStartbarGemeldet) {
+                            nichtStartbarGemeldet = true
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                if (melden) {
+                    diagnosticsReporter.report(
+                        code = DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION,
+                        component = "Aufzeichnung",
+                        operation = "pruefeUndSetzeFort",
+                        severity = DiagnosticSeverity.WARN,
+                        message =
+                            "Aufzeichnung soll laufen, kann aber nicht gestartet werden: " +
+                                "weder Mikrofonberechtigung noch gekoppeltes Messgeraet",
+                        details =
+                            mapOf(
+                                "quelle" to quelle,
+                                "monitoringWasActive" to true,
+                            ),
+                    )
+                    hinweisZeiger(context.getString(R.string.dienst_start_ohne_quelle))
+                }
             }
             AufzeichnungsLage.SOLL_LAEUFT_NICHT -> {
-                if (!startInFlight.compareAndSet(false, true)) {
-                    // Start ist bereits in flight, Doppelstart verhindern
-                    return
+                val jetzt = zeitProvider()
+                synchronized(lock) {
+                    nichtStartbarGemeldet = false
+                    if (jetzt - letzterStartVersuchAt < startInFlightTimeoutMs) {
+                        // Startversuch laeuft noch oder wurde kuerzlich initiiert (Doppelstart-Schutz)
+                        return
+                    }
+                    letzterStartVersuchAt = jetzt
                 }
 
                 try {
-                    val letzteDatenAt = withContext(ioDispatcher) {
-                        runCatching { levelSampleDao.maxAt() }.getOrNull()
-                    }
-                    val entdecktAt = zeitProvider()
-                    val lueckeMinuten = if (letzteDatenAt != null && letzteDatenAt < entdecktAt) {
-                        (entdecktAt - letzteDatenAt) / (60 * 1000L)
-                    } else {
-                        0L
-                    }
+                    val letzteDatenAt =
+                        withContext(ioDispatcher) {
+                            runCatching { levelSampleDao.maxAt() }.getOrNull()
+                        }
+                    val entdecktAt = jetzt
+                    val lueckeMinuten =
+                        if (letzteDatenAt != null && letzteDatenAt < entdecktAt) {
+                            (entdecktAt - letzteDatenAt) / (60 * 1000L)
+                        } else {
+                            0L
+                        }
 
                     diagnosticsReporter.report(
                         code = DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY,
@@ -101,23 +134,27 @@ class AufzeichnungsFortsetzer(
                         operation = "fortsetzen",
                         severity = DiagnosticSeverity.WARN,
                         message = "Aufzeichnung unerwartet beendet und fortgesetzt",
-                        details = mapOf(
-                            "letzteDatenAt" to letzteDatenAt,
-                            "entdecktAt" to entdecktAt,
-                            "lueckeMinuten" to lueckeMinuten,
-                            "audioWarAktiv" to settingsManager.audioMonitoringWasActive,
-                            "quelle" to quelle,
-                        ),
+                        details =
+                            mapOf(
+                                "letzteDatenAt" to letzteDatenAt,
+                                "entdecktAt" to entdecktAt,
+                                "lueckeMinuten" to lueckeMinuten,
+                                "audioWarAktiv" to settingsManager.audioMonitoringWasActive,
+                                "quelle" to quelle,
+                            ),
                     )
 
                     settingsManager.speichereUnterbrechung(beginn = letzteDatenAt, ende = entdecktAt)
 
-                    val serviceIntent = Intent(context, AudioRecordingService::class.java).apply {
-                        putExtra(EXTRA_START_AUDIO_MONITORING, settingsManager.audioMonitoringWasActive)
-                    }
+                    val serviceIntent =
+                        Intent(context, AudioRecordingService::class.java).apply {
+                            putExtra(EXTRA_START_AUDIO_MONITORING, settingsManager.audioMonitoringWasActive)
+                        }
                     serviceStarter(context, serviceIntent)
                 } catch (t: Throwable) {
-                    startInFlight.set(false)
+                    synchronized(lock) {
+                        letzterStartVersuchAt = 0L
+                    }
                     throw t
                 }
             }
@@ -137,6 +174,9 @@ class AufzeichnungsFortsetzer(
     }
 
     internal fun resetStartInFlightForTesting() {
-        startInFlight.set(false)
+        synchronized(lock) {
+            letzterStartVersuchAt = 0L
+            nichtStartbarGemeldet = false
+        }
     }
 }

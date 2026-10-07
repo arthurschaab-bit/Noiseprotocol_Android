@@ -419,7 +419,7 @@ Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueErr
 eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
 zurückmelden statt selbst zu beheben.
 
-### F18 — Aufzeichnung nach unerwartetem Ende beim Öffnen fortsetzen (Bugfix 07.10.2026)
+### F19 — Aufzeichnung nach unerwartetem Ende beim Öffnen fortsetzen (Bugfix 07.10.2026)
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|

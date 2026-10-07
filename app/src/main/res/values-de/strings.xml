@@ -787,6 +787,5 @@
     <string name="cockpit_unterbrechung_text_einzeln_unbekannt">Die Aufzeichnung war bis %1$s unterbrochen (Beginn unbekannt) und läuft wieder.</string>
     <string name="cockpit_unterbrechung_eintrag">Unterbrochen von %1$s bis %2$s (läuft wieder)</string>
     <string name="cockpit_unterbrechung_eintrag_unbekannt">Unterbrochen bis %1$s (Beginn unbekannt, läuft wieder)</string>
-    <string name="cockpit_unterbrechung_beginn_unbekannt">Beginn unbekannt</string>
     <string name="btn_unterbrechung_bestaetigen">Verstanden</string>
 </resources>

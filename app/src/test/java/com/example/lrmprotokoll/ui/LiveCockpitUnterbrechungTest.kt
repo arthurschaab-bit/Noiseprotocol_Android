@@ -11,7 +11,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -31,8 +33,10 @@ import java.util.Locale
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LiveCockpitUnterbrechungTest {
+    @get:Rule(order = 0)
+    val zeitwaechter = ZeitwaechterRegel()
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var app: LaermprotokollApp
@@ -40,6 +44,11 @@ class LiveCockpitUnterbrechungTest {
     @Before
     fun aufbauen() {
         app = ApplicationProvider.getApplicationContext()
+        app.container.settingsManager.bestaetigeUnterbrechungen()
+    }
+
+    @After
+    fun abbauen() {
         app.container.settingsManager.bestaetigeUnterbrechungen()
     }
 
@@ -81,7 +90,8 @@ class LiveCockpitUnterbrechungTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("cockpit_unterbrechung_karte").assertDoesNotExist()
-        assertEquals(0, app.container.settingsManager.aktiveUnterbrechungen().size)
+        val verbleibendeUnterbrechungen = app.container.settingsManager.aktiveUnterbrechungen()
+        assertEquals(0, verbleibendeUnterbrechungen.size)
     }
 
     @Test
@@ -94,7 +104,8 @@ class LiveCockpitUnterbrechungTest {
         app.container.settingsManager.speichereUnterbrechung(beginn = beginn1, ende = ende1)
         app.container.settingsManager.speichereUnterbrechung(beginn = beginn2, ende = ende2)
 
-        assertEquals(2, app.container.settingsManager.aktiveUnterbrechungen().size)
+        val gespeicherteUnterbrechungen = app.container.settingsManager.aktiveUnterbrechungen()
+        assertEquals(2, gespeicherteUnterbrechungen.size)
 
         composeRule.setContent {
             LaermprotokollTheme(darkTheme = true) {
