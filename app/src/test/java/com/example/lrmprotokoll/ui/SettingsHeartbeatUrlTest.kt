@@ -13,6 +13,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -31,19 +33,35 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsHeartbeatUrlTest {
+    @get:Rule(order = 0)
+    val zeitwaechter = ZeitwaechterRegel()
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var settings: SettingsManager
+    private var vorherPro: Boolean = false
+    private var vorherAlarm: Boolean = false
+    private var vorherUrl: String = ""
 
     @Before
     fun setUp() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         settings = app.container.settingsManager
+        vorherPro = settings.isProMode
+        vorherAlarm = settings.alarmierungAktiv
+        vorherUrl = settings.heartbeatUrl
+
         settings.isProMode = true
         settings.alarmierungAktiv = true
         settings.heartbeatUrl = ""
+    }
+
+    @After
+    fun tearDown() {
+        settings.isProMode = vorherPro
+        settings.alarmierungAktiv = vorherAlarm
+        settings.heartbeatUrl = vorherUrl
     }
 
     private fun alarmKarteOeffnen() {
@@ -58,6 +76,16 @@ class SettingsHeartbeatUrlTest {
 
     @Test
     fun alarmkarteZeigtHeartbeatFeldUndProbePingKnopf() {
+        alarmKarteOeffnen()
+
+        feld().assertIsDisplayed()
+        composeRule.onNodeWithTag("btn_heartbeat_probe").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun alarmkarteZeigtHeartbeatFeldAuchImLiteModusUndOhneAlarmierung() {
+        settings.isProMode = false
+        settings.alarmierungAktiv = false
         alarmKarteOeffnen()
 
         feld().assertIsDisplayed()

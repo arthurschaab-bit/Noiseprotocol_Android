@@ -71,7 +71,10 @@ class HeartbeatPinger(
      * ("Heartbeat-Dienst antwortete mit HTTP 404"). Er stammt ausschliesslich aus den eigenen
      * Meldungen dieser Datei und enthaelt nie die URL.
      */
-    class ProbeErgebnis(val ergebnis: Ergebnis, val hinweis: String? = null)
+    class ProbeErgebnis(
+        val ergebnis: Ergebnis,
+        val hinweis: String? = null,
+    )
 
     /**
      * Probe-Ping aus den Einstellungen: bestaetigt dem Nutzer, dass die eingetragene URL beim
@@ -127,7 +130,7 @@ private suspend fun OkHttpClient.hole(url: String) =
                         fortsetzung.resumeWith(Result.success(Unit))
                     } else {
                         fortsetzung.resumeWithException(
-                            IOException("Heartbeat-Dienst antwortete mit HTTP ${it.code}")
+                            IOException("Heartbeat-Dienst antwortete mit HTTP ${it.code}"),
                         )
                     }
                 }
