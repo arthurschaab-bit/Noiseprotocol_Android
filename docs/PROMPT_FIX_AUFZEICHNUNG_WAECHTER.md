@@ -93,9 +93,26 @@ kannDienstInDenVordergrund(…))`. Läuft der Worker in einem frischen Prozess, 
   protokollieren. Zähler und Zeitfenster liegen in `SettingsManager`, nicht im Speicher, weil
   jeder Lauf ein neuer Prozess sein kann.
 
-### Schritt 3 — Fernmeldung (nur nach Owner-Entscheidung E1)
+### Schritt 3 — Fernmeldung per ntfy (Owner-Entscheidung E1)
 
-Siehe Abschnitt 5. Ohne Antwort des Owners bauen wir keine ntfy-Meldung.
+- Nur wenn ntfy eingerichtet ist (`settings.ntfyAktiv`, Topic gesetzt). Sonst nichts senden,
+  auch keinen Fehler melden.
+- Text je nach Fall:
+  - SDK ≤ 29, Neustart erfolgt: „Aufzeichnung war vom System beendet (letzte Daten 12:41) und
+    wurde neu gestartet.“
+  - SDK ≥ 30: „Aufzeichnung wurde vom System beendet (letzte Daten 12:41). Zum Fortsetzen die
+    App öffnen.“
+  - Schleifenschutz greift: „Neustart der Aufzeichnung wiederholt gescheitert – bitte am Gerät
+    prüfen.“
+- Niedrige Priorität, kein Alarmton. Ein Verbindungsalarm des Messgeräts bleibt davon
+  unterscheidbar.
+- **Weg:** `AlertChannel.send(Alert)` kennt nur `AlertReason`-Werte zum Verbindungszustand. Eine
+  neue `AlertReason` würde `AlarmCoordinator`, `AlertMessages` und eventuell die Tabelle `alerts`
+  berühren. Prüfe das. Ist es mehr als eine Enum-Zeile mit Text, nutze stattdessen eine schmale
+  eigene Methode für eine Textnachricht im Paket `alert/ntfy`. Sie verwendet denselben Server,
+  dasselbe Topic und dieselbe Header-Behandlung (`alsHeaderWert`) wie `NtfyAlertChannel`, aber
+  nicht dessen Alarmlogik. **Keine Schemaänderung.**
+- Ein Sendefehler wird protokolliert und blockiert nie den Neustart.
 
 ### Nicht Teil dieses Auftrags
 
@@ -119,8 +136,13 @@ Siehe Abschnitt 5. Ohne Antwort des Owners bauen wir keine ntfy-Meldung.
 6. Der Starter wirft eine Ausnahme → `Result.success()`, Eintrag mit Fehler, kein Absturz.
 7. `ACTION_STOP_SERVICE` storniert die Arbeit. Prüfen über `WorkManager.getWorkInfosForUniqueWork`
    mit `WorkManagerTestInitHelper`.
+8. ntfy eingerichtet (Fake bzw. `MockWebServer`):
+   - Fall SDK 29 → genau eine Nachricht mit „neu gestartet“;
+   - Fall SDK 34 → „Zum Fortsetzen die App öffnen“;
+   - ntfy nicht eingerichtet → keine Anfrage;
+   - Sendefehler → Neustart trotzdem ausgeführt.
 
-Die Tests 1, 2 und 7 müssen ohne deine Änderung rot sein. Zeig das im PR.
+Die Tests 1, 2, 7 und 8 müssen ohne deine Änderung rot sein. Zeig das im PR.
 
 ---
 
@@ -131,17 +153,15 @@ Die Tests 1, 2 und 7 müssen ohne deine Änderung rot sein. Zeig das im PR.
 - [ ] Ab SDK 30 kein stiller Fehlstart, stattdessen eine Benachrichtigung (Test 2).
 - [ ] Nie ein Neustart nach ausdrücklichem Stopp (Tests 4 und 7).
 - [ ] Kein Protokolleintrag im Normalfall, Schleifenschutz greift (Tests 3 und 5).
+- [ ] Bei eingerichtetem ntfy erfährt der Owner von jedem Eingriff, ohne Alarmton (Test 8).
 - [ ] Grenzen aus Abschnitt 1 in der KDoc und im PR.
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidungen (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidungen (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Zusätzlich per ntfy melden?** „Aufzeichnung war beendet, Neustart erfolgt“ an das
-  zweite Gerät.
-  **Empfehlung: ja, wenn ntfy eingerichtet ist**, über die vorhandene `AlertChannel`-Abstraktion.
-  Ein Neustart nach EMUI-Eingriff ist ein Ereignis, das der Owner kennen sollte. Ohne Freigabe:
-  weglassen.
-- **E2 — Schleifenschutz 3 pro Stunde?** **Empfehlung: ja.** So startet die App nach einer
+- **E1 — Zusätzlich per ntfy melden: ja, wenn ntfy eingerichtet ist** (Schritt 3). Ein Neustart
+  nach einem EMUI-Eingriff ist ein Ereignis, das der Owner kennen sollte.
+- **E2 — Schleifenschutz: höchstens 3 Neustarts pro Stunde.** So startet die App nach einer
   EMUI-Bereinigung neu, kämpft aber nicht endlos gegen EMUI an.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge, P30)

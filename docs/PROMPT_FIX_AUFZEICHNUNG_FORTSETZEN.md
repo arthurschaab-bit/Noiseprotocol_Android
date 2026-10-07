@@ -108,8 +108,20 @@ deshalb frei von UI- und Activity-Details.
 
 ### Schritt 4 — Den Nutzer informieren
 
-Die Unterbrechung muss sichtbar sein. In welcher Form, entscheidet der Owner (E1 in Abschnitt 5).
-Setz die Empfehlung erst nach seiner Antwort um.
+Die Unterbrechung wird als **Hinweiskarte im Cockpit** angezeigt (Owner-Entscheidung E1,
+Abschnitt 5):
+
+- Text sinngemäß: „Die Aufzeichnung war von 06.10. 12:41 bis 07.10. 06:52 unterbrochen und läuft
+  wieder.“ Der Beginn ist `letzteDatenAt` (ohne Wert: „Beginn unbekannt“), das Ende ist
+  `entdecktAt`.
+- Die Karte bleibt stehen, bis der Nutzer auf „Verstanden“ tippt
+  (`testTag("btn_unterbrechung_bestaetigen")`).
+  Sie übersteht also einen Neustart der App.
+- Speichern in `SettingsManager`: Beginn, Ende und „bestätigt“. Eine neue Unterbrechung
+  überschreibt eine bestätigte. Ist die alte noch unbestätigt, nennt die Karte beide, damit keine
+  Lücke verloren geht. Diese Werte sind keine Geheimnisse, also unverschlüsselte Einstellungen.
+- Ort: oben im Cockpit, im Stil der bestehenden Hinweise dort. Prüfe, welche Komponente in
+  `LiveCockpitCard.kt` bzw. auf dem Startbildschirm solche Hinweise schon rendert, und nutze sie.
 
 ### Nicht Teil dieses Auftrags
 
@@ -131,8 +143,12 @@ Setz die Empfehlung erst nach seiner Antwort um.
 4. Flags nicht gesetzt (ausdrücklich gestoppt) → kein Start, kein Eintrag.
 5. Dienst läuft (`laeuft = true`) → kein Start, kein Eintrag.
 6. Keine Mikrofonberechtigung und kein Messgerät → kein Start, Hinweis und Eintrag.
+7. Hinweiskarte (Compose):
+   - nach einer erkannten Unterbrechung sichtbar, mit Beginn und Ende;
+   - nach „Verstanden“ weg und auch nach erneutem Rendern weg;
+   - zwei unbestätigte Unterbrechungen → beide genannt.
 
-Die Tests 2, 3 und 6 müssen ohne deine Änderung rot sein. Zeig das im PR.
+Die Tests 2, 3, 6 und 7 müssen ohne deine Änderung rot sein. Zeig das im PR.
 
 ---
 
@@ -143,27 +159,23 @@ Die Tests 2, 3 und 6 müssen ohne deine Änderung rot sein. Zeig das im PR.
 - [ ] Eine ausdrücklich gestoppte Aufzeichnung wird nie wieder gestartet (Test 4).
 - [ ] Jede erkannte Unterbrechung steht mit Dauer im Diagnoseprotokoll und damit in jedem Bundle
       (Test 2).
-- [ ] Der Nutzer sieht die Unterbrechung in der vom Owner gewählten Form.
+- [ ] Der Nutzer sieht die Unterbrechung als Hinweiskarte, bis er sie bestätigt (Test 7).
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidungen (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidungen (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Wie wird die Unterbrechung angezeigt?**
-  - (a) Snackbar: „Aufzeichnung war von 12:41 bis 06:52 unterbrochen und läuft wieder.“
-  - (b) Hinweiskarte im Cockpit, die stehen bleibt, bis der Nutzer sie bestätigt. Gespeichert in
-    `SettingsManager`.
-
-  **Empfehlung: (b).** Eine Snackbar ist nach wenigen Sekunden weg, die Unterbrechung ist aber
-  für das Protokoll relevant.
-- **E2 — Ohne Rückfrage starten?** Laut Owner-Freigabe ja. Bestätige das im PR-Text, frag nicht
-  erneut.
+- **E1 — Anzeige der Unterbrechung: Hinweiskarte im Cockpit**, die stehen bleibt, bis der Nutzer
+  sie bestätigt. Gespeichert in `SettingsManager`. Verworfen wurde eine Snackbar: Sie ist nach
+  wenigen Sekunden weg, die Unterbrechung ist aber für das Protokoll relevant.
+- **E2 — Ohne Rückfrage starten: ja.** Die Aufzeichnung wird beim Öffnen automatisch fortgesetzt.
+  Frag nicht erneut.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge, P30)
 
 1. Aufzeichnung starten.
 2. Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“.
-3. App öffnen. Die Aufzeichnung läuft innerhalb weniger Sekunden wieder. Die Unterbrechung wird
-   angezeigt (E1).
+3. App öffnen. Die Aufzeichnung läuft innerhalb weniger Sekunden wieder. Im Cockpit steht die
+   Hinweiskarte mit Beginn und Ende der Unterbrechung. Sie bleibt, bis „Verstanden“ getippt wird.
 4. Diagnose-Screen: Ein Eintrag `RECORDING_ENDED_UNEXPECTEDLY` mit plausibler Dauer.
 5. Gegenprobe: Aufzeichnung in der App beenden, App schließen und wieder öffnen. Es startet
    **nichts**.

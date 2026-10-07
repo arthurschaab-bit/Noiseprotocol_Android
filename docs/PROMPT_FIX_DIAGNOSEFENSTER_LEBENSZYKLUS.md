@@ -79,10 +79,11 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 - `manifest.json` bzw. `checksums.sha256` kennen die neue Datei. Prüfe, ob Tests die Liste der
   Einträge festschreiben, und passe sie an.
 
-### Nicht Teil dieses Auftrags, siehe E2 und E3
+### Nicht Teil dieses Auftrags
 
-- Keine Änderung an der Ausführlichkeit der WAV-Breadcrumbs.
-- Keine Änderung an `EVENTS_MAX_PERIODISCH`.
+- Keine Änderung an der Ausführlichkeit der WAV-Breadcrumbs. Das ist ein eigener PR:
+  `PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md` (E2).
+- Keine Änderung an `EVENTS_MAX_PERIODISCH` (E3).
 
 ---
 
@@ -104,15 +105,16 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 - [ ] Der Todeszeitpunkt eines Prozesses lässt sich auf 15 min eingrenzen (Test 4).
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidungen (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidungen (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Speicherort:** Ringdatei (kein Schema) oder Room-Tabelle (Schema 26, Migration).
-  **Empfehlung: Ringdatei**, mit derselben Begründung wie bei den Breadcrumbs (Konzept 4.3): Sie
-  überlebt einen Absturz ohne Datenbank.
-- **E2 — WAV-Breadcrumbs verdichten?** Statt drei Einträgen je Aufnahme einer. Das verlängert das
-  Breadcrumb-Fenster etwa um das Dreifache. **Empfehlung: ja, aber als eigener kleiner PR.**
-- **E3 — `EVENTS_MAX_PERIODISCH` anheben?** Mehr Datenvolumen bei jedem täglichen Upload.
-  **Empfehlung: nein**, solange das Lebenszyklus-Protokoll die Ausfallfragen beantwortet.
+- **E1 — Speicherort: Ringdatei**, keine Room-Tabelle (sonst Schema 26 mit Migration). Die
+  Begründung ist dieselbe wie bei den Breadcrumbs (Konzept 4.3): Die Datei überlebt einen
+  Absturz ohne Datenbank.
+- **E2 — WAV-Breadcrumbs verdichten: ja, als eigener kleiner PR.** Statt drei Einträgen je
+  Aufnahme einer. Das verlängert das Breadcrumb-Fenster etwa um das Dreifache. Auftrag:
+  `PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md`.
+- **E3 — `EVENTS_MAX_PERIODISCH` bleibt bei 1 MB**, solange das Lebenszyklus-Protokoll die
+  Ausfallfragen beantwortet. Anheben würde jeden täglichen Upload vergrößern.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 

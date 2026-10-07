@@ -69,10 +69,15 @@ oder einen Zähler je Grund, damit Schritt 2 ihn kennt. Der Ausnahme-Zweig in `s
 
 ### Schritt 2 — Als Fehlercode melden
 
-- Gescheiterter Aufbau → `BLE_CONNECT_FAILED`.
-- Verbunden ohne erstes Frame → eigener Code, siehe E1.
-- Wie oft gemeldet wird, siehe E2. Bis zur Antwort des Owners gilt die Empfehlung **nicht** als
-  beschlossen.
+- Gescheiterter Aufbau, auch über den Ausnahme-Zweig → `BLE_CONNECT_FAILED`.
+- Verbunden ohne erstes Frame → **neuer Code `BLE_NO_FIRST_FRAME`** (Owner-Entscheidung E1). Er
+  steht in `DiagnosticCode.kt` neben `BLE_STREAM_STALLED` und hat eine KDoc wie die Nachbarn.
+- **Einmal je gescheiterter Runde** melden (Owner-Entscheidung E2), also an der Stelle, an der
+  `supervise()` nach `maxAttempts` `FAILED` setzt:
+  - je Grund, der in dieser Runde vorkam, eine Meldung, mit der Anzahl in den Details;
+  - danach die Zähler zurücksetzen;
+  - folgt vor `maxAttempts` doch noch ein Erfolg, wird nichts gemeldet. Die Textzeilen der
+    Einzelversuche stehen dann trotzdem im Protokoll.
 - Severity `WARN`, `component = "ConnectionSupervisor"`. Die Details enthalten Anzahl und Grund,
   aber keine Geräteadresse (Redaktion wie bei den bestehenden BLE-Meldungen).
 
@@ -88,48 +93,49 @@ oder einen Zähler je Grund, damit Schritt 2 ihn kennt. Der Ausnahme-Zweig in `s
 Vorhandene Supervisor-Tests suchen (`grep -rl ConnectionSupervisor app/src/test`) und das Muster
 übernehmen.
 
-1. Der Transport geht nach `connect` sofort auf `FAILED`:
+1. Der Transport geht nach `connect` jedes Mal sofort auf `FAILED`, bis `maxAttempts` erreicht
+   ist:
    - Text „Verbindungsaufbau gescheitert“;
    - **nicht** „Kein Frame“;
-   - `BLE_CONNECT_FAILED` gemeldet (Häufigkeit gemäß E2).
-2. Der Transport bleibt in `SUBSCRIBING`, kein Frame: Text „Kein Frame …“ und der Code aus E1.
-3. Eine Ausnahme aus `transport.connect` → `BLE_CONNECT_FAILED`.
-4. Backoff-Folge und `FAILED` nach `maxAttempts` sind unverändert. Die bestehenden Tests bleiben
+   - genau **eine** Meldung `BLE_CONNECT_FAILED` mit Anzahl `maxAttempts`.
+2. Der Transport bleibt in `SUBSCRIBING`, kein Frame, über eine ganze Runde: Text „Kein Frame …“
+   und genau eine Meldung `BLE_NO_FIRST_FRAME`.
+3. Eine Ausnahme aus `transport.connect` zählt in der Runde als gescheiterter Aufbau und landet
+   in der Meldung `BLE_CONNECT_FAILED`.
+4. Gemischte Runde (teils Aufbau gescheitert, teils kein Frame) → je eine Meldung pro Grund mit
+   den richtigen Anzahlen. Zweite Runde → wieder nur je eine.
+5. Drei Fehlversuche, dann Erfolg → keine Meldung.
+6. Backoff-Folge und `FAILED` nach `maxAttempts` sind unverändert. Die bestehenden Tests bleiben
    grün.
-5. `berechneHealthMetrics` mit solchen Ereignissen → `fehlerJeCode[BLE_CONNECT_FAILED] > 0` und
+7. `berechneHealthMetrics` mit solchen Ereignissen → `fehlerJeCode[BLE_CONNECT_FAILED] > 0` und
    `istUnveraendert() == false`.
 
-Die Tests 1, 3 und 5 müssen ohne deine Änderung rot sein. Zeig das im PR.
+Die Tests 1, 2, 3 und 7 müssen ohne deine Änderung rot sein. Zeig das im PR.
 
 ---
 
 ## 4 · Akzeptanzkriterien
 
 - [ ] Ein Gerät, das nie verbindet, erscheint in `fehlerJeCode` jedes Gesundheits-Bundles
-      (Test 5).
+      (Test 7).
 - [ ] Die Logmeldung sagt, was passiert ist: Aufbau gescheitert oder kein erstes Frame
       (Tests 1, 2).
+- [ ] Höchstens eine Meldung je Grund und gescheiterter Runde (Tests 4, 5).
 - [ ] Kein `ConnectionEvent` für nie zustande gekommene Verbindungen. Belege das mit einem `grep`
       im PR.
 - [ ] Prüfung gegen `CHECKLISTE_M6_SICHERHEITSREVIEW.md` Teil 2 im PR dokumentiert.
 - [ ] `assembleDebug lintDebug test` grün, keine neuen ktlint-Befunde. Ausgabe im PR.
 
-## 5 · Offene Entscheidungen (vor Umsetzung beim Owner klären, AGENTS.md §8a)
+## 5 · Owner-Entscheidungen (07.10.2026, „Empfehlungen freigeben“)
 
-- **E1 — Welcher Code für „verbunden, aber kein erstes Frame“?**
-  - (a) `BLE_STREAM_STALLED` mitbenutzen.
-  - (b) Neuer Code `BLE_NO_FIRST_FRAME`.
-
-  **Empfehlung: (b).** Stillstand heißt „lief und hörte auf“. Hier lief nie etwas, und die
-  Fehlerbilder unterscheiden sich (z. B. falsch gepinntes Gerät, siehe Kommentar in
-  `MeterScreen.kt` zum Bose-Lautsprecher).
-- **E2 — Wie oft melden?**
-  - (a) Bei jedem Versuch. Am 02.–04.10. wären das 244 Meldungen gewesen.
-  - (b) Einmal je gescheiterter Runde, also wenn nach `maxAttempts` `FAILED` gesetzt wird, mit
-    Anzahl je Grund in den Details.
-
-  **Empfehlung: (b).** Die Einzelversuche stehen schon als Textzeilen im Protokoll. Die Kennzahl
-  braucht nur „> 0“.
+- **E1 — Für „verbunden, aber kein erstes Frame“ gibt es den neuen Code `BLE_NO_FIRST_FRAME`.**
+  `BLE_STREAM_STALLED` wird nicht mitbenutzt. Stillstand heißt „lief und hörte auf“. Hier lief nie
+  etwas, und die Fehlerbilder unterscheiden sich, etwa bei einem falsch gepinnten Gerät (siehe
+  Kommentar in `MeterScreen.kt` zum Bose-Lautsprecher).
+- **E2 — Einmal je gescheiterter Runde melden**, also wenn nach `maxAttempts` `FAILED` gesetzt
+  wird, mit der Anzahl je Grund in den Details. Nicht bei jedem Versuch: Am 02.–04.10. wären das
+  244 Meldungen gewesen. Die Einzelversuche stehen ohnehin als Textzeilen im Protokoll, und die
+  Kennzahl braucht nur „> 0“.
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 

@@ -33,7 +33,7 @@ nicht „UTC“ dabeisteht. Die Zitate unten stammen wörtlich aus den Bundles.
 | H | Am 06.10. liefen schon vor dem Ausfall keine Hintergrundjobs (kein einziger Drive-Sync in 4 h Aufzeichnung) | mittel | `PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md` |
 | B | Datenbanksicherung: 25 Fehlschläge am 01./02.10., davon 16 × „Job was cancelled“ | mittel | wie H |
 | C | Gescheiterte Verbindungsaufbauten erscheinen in keiner Kennzahl, und die Logmeldung ist irreführend | niedrig | `PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md` |
-| I | Das Diagnosefenster eines Bundles reicht an einem Messtag nur rund 3 h zurück | niedrig | `PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md` |
+| I | Das Diagnosefenster eines Bundles reicht an einem Messtag nur rund 3 h zurück | niedrig | `PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md`, `PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md` |
 | A, E, F | Messgerät aus, Pixel-Speicherkills, alte OOMs | — | keiner, siehe Abschnitt 9 |
 
 ---
@@ -271,8 +271,9 @@ laufen, weil sie verschiedene Dateien berühren. Jeder Auftrag ist ein eigener D
 | 2 | 5 | `PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md` | mittel | 2 | neuer Worker, `AudioRecordingService.kt` (Planung) |
 | 2 | 6 | `PROMPT_FIX_KADENZWAECHTER.md` | mittel | 4 (gleiche Datei) | `ConnectionSupervisor.kt` (`cadenceWatcher`), `BleMeterTransport.kt` |
 | 2 | 7 | `PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md` | mittel, erst Untersuchung | — | `drive/`, `SupportBundleExporter.kt` |
-| 3 | 8 | `PROMPT_FIX_AUFZEICHNUNGSLUECKEN_SICHTBAR.md` | groß | Owner-Entscheidungen E1–E4 | `PegelAggregator.kt`, `DriveSyncCoordinator.kt`, `PegelverlaufChart.kt` |
+| 3 | 8 | `PROMPT_FIX_AUFZEICHNUNGSLUECKEN_SICHTBAR.md` | groß | — (E1–E4 entschieden) | `PegelAggregator.kt`, `DriveSyncCoordinator.kt`, `PegelverlaufChart.kt` |
 | 3 | 9 | `PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md` | mittel | sinnvoll nach 2, 3, 5 | `diagnose/`, `SupportBundleExporter.kt` |
+| 3 | 10 | `PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md` | klein | nach 3 und 5 (gleiche Datei) | `AudioRecordingService.kt` (WAV-Breadcrumbs) |
 
 **Warum diese Reihenfolge**
 
@@ -289,10 +290,32 @@ laufen, weil sie verschiedene Dateien berühren. Jeder Auftrag ist ein eigener D
   Sicherheitsrelevante BLE-Logik: Prüfung gegen `CHECKLISTE_M6_SICHERHEITSREVIEW.md`.
 - **7:** Erst instrumentieren, dann entscheiden. Klärt auch, ob 5 unter EMUI überhaupt laufen kann.
 - **8:** Der Wunsch des Owners, aber der größte Eingriff. Er ändert das Dateiformat aus Plan
-  8.4.2 und braucht vorher vier Entscheidungen.
+  8.4.2. Die vier Entscheidungen dazu hat der Owner am 07.10. getroffen (Abschnitt 12).
 - **9:** Verbessert die nächste Ausfallanalyse. Nimmt die Einträge aus 2, 3 und 5 auf, wenn diese
   schon gemergt sind.
+- **10:** Klein. Verlängert das Breadcrumb-Fenster etwa um das Dreifache. Er ändert
+  `AudioRecordingService.kt` an anderer Stelle als 3 und 5; um Konflikte zu vermeiden, kommt er
+  danach.
 
 **Für jeden Auftrag gilt:** Eine **andere** Sitzung, möglichst ein anderes Modell, prüft ihn mit
 `docs/PROMPT_REVIEW.md`. Ein Reviewer prüft nie die eigene Umsetzung (AGENTS.md §9). Die
 Gerätechecks trägt jeder Auftrag in `docs/CHECKLISTE_GERAETETEST.md` Teil F ein.
+
+---
+
+## 12 · Owner-Entscheidungen vom 07.10.2026
+
+Der Owner hat am 07.10.2026 alle Empfehlungen der Aufträge freigegeben („Empfehlungen
+freigeben“). Die Einzelheiten stehen jeweils in Abschnitt 5 des Auftrags.
+
+| Auftrag | Entscheidung |
+|---|---|
+| 1 Totmannschaltung | E1: kein Cockpit-Hinweis bei fehlender URL in diesem PR |
+| 2 Fortsetzen | E1: Hinweiskarte im Cockpit, bis „Verstanden“; E2: automatisch fortsetzen, ohne Rückfrage |
+| 4 Fehlversuche | E1: neuer Code `BLE_NO_FIRST_FRAME`; E2: eine Meldung je Grund und gescheiterter Runde |
+| 5 Wächter | E1: ntfy-Meldung, wenn eingerichtet; E2: höchstens 3 Neustarts pro Stunde |
+| 8 Lücken | E1: ganzer Tag 00:00:00–23:59:59; E2: `KEINE_AUFZEICHNUNG` aus den Sessions, kein Schema; E3: Tage ohne Daten ohne Datei; E4: graues, schraffiertes Band, nicht in PDF-Berichten |
+| 9 Lebenszyklus | E1: Ringdatei; E2: WAV-Breadcrumbs verdichten, als eigener Auftrag 10; E3: `EVENTS_MAX_PERIODISCH` bleibt 1 MB |
+
+**Noch offen:** E1 in Auftrag 7, die Datenbanksicherung. Dafür gab es noch keine Empfehlung, sie
+folgt erst nach der Messung.
