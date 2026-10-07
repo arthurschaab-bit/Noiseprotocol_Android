@@ -105,7 +105,7 @@ internal fun alsHeaderWert(text: String): String {
  * umgebende Coroutine abgebrochen wird. Ein haengender Alarmversand darf den Koordinator nicht
  * blockieren.
  */
-private suspend fun OkHttpClient.fuehreAus(request: Request) =
+internal suspend fun OkHttpClient.fuehreAus(request: Request) =
     suspendCancellableCoroutine { fortsetzung ->
         val call = newCall(request)
         fortsetzung.invokeOnCancellation { runCatching { call.cancel() } }

@@ -213,6 +213,37 @@ class SettingsManager(
         get() = prefs.getBoolean("audio_monitoring_was_active", false)
         set(value) = prefs.edit().putBoolean("audio_monitoring_was_active", value).apply()
 
+    // Schleifenschutz fuer den Aufzeichnungs-Waechter (E2 aus docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md):
+    // Hoechstens 3 Neustarts pro Stunde, damit die App nicht endlos gegen ein aggressives EMUI ankaempft.
+    var waechterNeustartCount: Int
+        get() = prefs.getInt("waechter_neustart_count", 0)
+        set(value) = prefs.edit().putInt("waechter_neustart_count", value).apply()
+
+    var waechterNeustartFensterStart: Long
+        get() = prefs.getLong("waechter_neustart_fenster_start", 0L)
+        set(value) = prefs.edit().putLong("waechter_neustart_fenster_start", value).apply()
+
+    fun kannWaechterNeuStarten(jetzt: Long, maxNeustartsProStunde: Int = 3): Boolean {
+        val fensterStart = waechterNeustartFensterStart
+        val stundeMs = 60 * 60 * 1000L
+        return if (jetzt - fensterStart >= stundeMs || fensterStart == 0L) {
+            true
+        } else {
+            waechterNeustartCount < maxNeustartsProStunde
+        }
+    }
+
+    fun registriereWaechterNeustart(jetzt: Long) {
+        val fensterStart = waechterNeustartFensterStart
+        val stundeMs = 60 * 60 * 1000L
+        if (jetzt - fensterStart >= stundeMs || fensterStart == 0L) {
+            waechterNeustartFensterStart = jetzt
+            waechterNeustartCount = 1
+        } else {
+            waechterNeustartCount += 1
+        }
+    }
+
     // ---------------------------------------------------------------- M5: Alarmierung
 
     var alarmierungAktiv: Boolean

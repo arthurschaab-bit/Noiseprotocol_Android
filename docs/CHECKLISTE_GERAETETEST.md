@@ -460,6 +460,17 @@ und fehlender Fehlercode in `health_metrics.json`.
 | Messgerät ausschalten, Aufzeichnung laufen lassen, bis `FAILED` erscheint (etwa 3 min) | Im Diagnose-Screen steht „Verbindungsaufbau gescheitert“, nicht „Kein Frame … nach Verbindungsaufbau“ | |
 | Im nächsten Gesundheits-Bundle `health_metrics.json` prüfen | Unter `fehlerJeCode` existiert ein Eintrag `BLE_CONNECT_FAILED` | |
 
+### F22 — Wächter-Job startet unerwartet beendete Aufzeichnung neu (07.10.2026, Befund G)
+
+Umgesetzt und mit Robolectric/WorkManager unit-getestet (`docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md`), aber
+**noch nicht auf echter Hardware gesehen**. Auslöser war Befund G (`docs/BEFUNDE_BUNDLES_2026-10-07.md`):
+Aufzeichnungen endeten nach Hintergrund-Beendigung durch EMUI ohne Wiederaufnahme.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung starten, Prozess töten ohne Zwangsbeenden (`adb shell run-as com.example.lrmprotokoll kill -9 $(adb shell pidof com.example.lrmprotokoll)`) | Spätestens nach etwa 20 min läuft die Aufzeichnung wieder; im Diagnose-Screen steht `RECORDING_ENDED_UNEXPECTEDLY` mit `quelle = waechter` (bei eingerichtetem ntfy trifft auch eine Push-Meldung ein). Läuft nach 30 min noch nichts: EMUI-Job-Unterdrückung (Befund H) prüfen | |
+| Gegenprobe mit „Beenden erzwingen“ über die Systemeinstellungen | Es startet nichts von selbst (zu erwarten: force-stop entfernt alle Jobs) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
