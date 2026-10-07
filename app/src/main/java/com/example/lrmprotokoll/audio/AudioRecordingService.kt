@@ -201,6 +201,7 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
 
     @Volatile private var letzterMeterFrame: com.example.lrmprotokoll.meter.MeterFrame? = null
+    private var stromReceiver: com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -320,6 +321,39 @@ class AudioRecordingService : LifecycleService() {
     private fun ensureDiagnosticLoggingStarted() {
         if (!settingsManager.diagnoseLoggingAktiv) return
         com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.plane(applicationContext)
+    }
+
+    private fun meldeStromEmpfaengerAn() {
+        if (stromReceiver != null) return
+        val receiver = com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger { eintrag ->
+            val container = (application as? LaermprotokollApp)?.container
+            container?.diagnosticLogger?.let { logger ->
+                serviceScope.launch {
+                    logger.protokolliere(eintrag)
+                }
+            }
+            if (::diagnosticsReporter.isInitialized) {
+                diagnosticsReporter.breadcrumb(
+                    category = "Power",
+                    message = eintrag,
+                    level = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.INFO,
+                )
+            }
+        }
+        stromReceiver = receiver
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            receiver,
+            android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    private fun meldeStromEmpfaengerAb() {
+        stromReceiver?.let {
+            runCatching { unregisterReceiver(it) }
+            stromReceiver = null
+        }
     }
 
     private fun updateRollingBuffer() {
@@ -456,6 +490,7 @@ class AudioRecordingService : LifecycleService() {
         ensureMeterMonitoringStarted()
         ensureDriveSyncStarted()
         ensureDiagnosticLoggingStarted()
+        meldeStromEmpfaengerAn()
         RetentionPlanung.plane(applicationContext)
         NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
         return START_STICKY
@@ -1463,6 +1498,7 @@ class AudioRecordingService : LifecycleService() {
         alarmCoordinator.stop()
         levelSampleCollector.stop()
         measurementRecorder.stop()
+        meldeStromEmpfaengerAb()
         serviceJob.cancel()
         super.onDestroy()
     }

@@ -419,6 +419,14 @@ Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueErr
 eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
 zurückmelden statt selbst zu beheben.
 
+### F18 — Stromversorgung und Akkustand protokollieren (07.10.2026, Befund G)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung an der Powerbank starten | Im Diagnose-Screen steht ein Ausgangseintrag mit „USB“ („Stromversorgung beim Start: USB, …“) | |
+| Kabel ziehen und wieder einstecken | Es erscheinen zwei Einträge („Stromversorgung: USB → keine, …“ und „Stromversorgung: keine → USB, …“) | |
+| Über Nacht laufen lassen | Im nächsten Bundle ist zu sehen, ob und wann die Powerbank abschaltet („Stromversorgung: USB → keine, Akku 100 %“) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
