@@ -47,6 +47,7 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.alert.ChannelId
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.backup.SicherungManager
 import com.example.lrmprotokoll.data.ReportConfigEntity
@@ -249,6 +250,8 @@ fun SettingsScreen(
     var entwarnungMeldung by remember { mutableStateOf(settings.entwarnungUeberMeldung) }
     var alarmTonAktiv by remember { mutableStateOf(settings.alarmTonAktiv) }
     var testErgebnis by remember { mutableStateOf<String?>(null) }
+    var heartbeatProbeErgebnis by remember { mutableStateOf<String?>(null) }
+    var heartbeatProbeLaeuft by remember { mutableStateOf(false) }
 
     // Drive Sync
     var googleAccountEmail by remember { mutableStateOf(settings.googleAccountEmail) }
@@ -1010,6 +1013,69 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(it, style = MaterialTheme.typography.bodySmall)
                     }
+                }
+
+                // Totmannschaltung (Plan 7.5, Befund J): immer sichtbar in der Alarmierungs-Karte,
+                // auch im Lite-Modus und bei deaktivierter Verbindungsabbruch-Alarmierung.
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(stringResource(R.string.settings_heartbeat_title), style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.settings_heartbeat_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                val heartbeatUrlGueltig = HeartbeatPinger.istGueltigeUrl(heartbeatUrl)
+                OutlinedTextField(
+                    value = heartbeatUrl,
+                    onValueChange = {
+                        heartbeatUrl = it
+                        // Ungültige Eingaben werden nicht gespeichert; leer heisst "aus".
+                        if (HeartbeatPinger.istGueltigeUrl(it)) settings.heartbeatUrl = it
+                    },
+                    label = { Text(stringResource(R.string.settings_heartbeat_url)) },
+                    singleLine = true,
+                    isError = !heartbeatUrlGueltig,
+                    supportingText = if (heartbeatUrlGueltig) {
+                        null
+                    } else {
+                        { Text(stringResource(R.string.settings_heartbeat_url_invalid)) }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.testTag("input_heartbeat_url").fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = {
+                        heartbeatProbeLaeuft = true
+                        heartbeatProbeErgebnis = null
+                        scope.launch {
+                            val probe = container.heartbeatPinger.probe()
+                            heartbeatProbeErgebnis = when (probe.ergebnis) {
+                                HeartbeatPinger.Ergebnis.GESENDET ->
+                                    context.getString(R.string.settings_heartbeat_probe_ok)
+                                HeartbeatPinger.Ergebnis.UEBERSPRUNGEN ->
+                                    context.getString(R.string.settings_heartbeat_probe_empty)
+                                HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN -> probe.hinweis
+                                    ?.let { context.getString(R.string.settings_heartbeat_probe_failed, it) }
+                                    ?: context.getString(R.string.settings_heartbeat_probe_failed_generic)
+                            }
+                            heartbeatProbeLaeuft = false
+                        }
+                    },
+                    enabled = !heartbeatProbeLaeuft,
+                    modifier = Modifier.testTag("btn_heartbeat_probe"),
+                ) {
+                    Text(stringResource(R.string.settings_heartbeat_probe))
+                }
+                heartbeatProbeErgebnis?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("text_heartbeat_probe_ergebnis"),
+                    )
                 }
             }
 

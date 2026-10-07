@@ -419,6 +419,18 @@ Zeigt das Bundle eine Vorprüfungsmeldung oder einen fachlichen Python-`ValueErr
 eigener, neuer Befund und **nicht** Teil dieses Fixes — bitte den Grund an Claude/Owner
 zurückmelden statt selbst zu beheben.
 
+### F18 — Totmannschaltung: Eingabefeld und Probe-Ping (Bugfix 07.10.2026)
+
+Umgesetzt und mit Robolectric/`MockWebServer` getestet (`docs/PROMPT_FIX_TOTMANNSCHALTUNG_EINGABE.md`),
+aber **noch nicht auf echter Hardware gesehen**. Das Eingabefeld für die Ping-URL fehlte seit dem
+UI-Umbau vom 21.08.2026 (Befund J in `docs/BEFUNDE_BUNDLES_2026-10-07.md`).
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Bei healthchecks.io einen Check anlegen (Periode 15 min, Kulanz 30 min) und die URL unter Einstellungen → Alarmierung → Totmannschaltung eintragen, „Probe-Ping senden“ drücken | Die App meldet „Probe-Ping angekommen“, bei healthchecks.io erscheint ein Ping | |
+| Aufzeichnung starten und 30 min warten | Die Pings kommen im 15-Minuten-Takt | |
+| App über Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“ stoppen | Nach spätestens etwa 45 min alarmiert healthchecks.io | |
+
 ### F21 — Gescheiterte Verbindungsaufbauten richtig benennen und als Fehlercode melden (Bugfix 07.10.2026)
 
 Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric

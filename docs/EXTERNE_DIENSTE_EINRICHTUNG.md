@@ -43,10 +43,11 @@ In *Project Settings → Alerts*:
 1. Bei [healthchecks.io](https://healthchecks.io/) oder eigenem Ping-Server anmelden.
 2. Neuen Check erstellen:
    - **Name:** `Lärmprotokoll Überwachung [Gerät/Instanz]`
-   - **Intervall:** Entsprechend Überwachungszyklus (z. B. 15 Minuten).
-   - **Karenzzeit (Grace Time):** z. B. 10–15 Minuten Puffer für Doze/Netzwerkwechsel.
+   - **Intervall:** 15 Minuten (der Takt von `HeartbeatWorker`, WorkManager erlaubt nicht weniger).
+   - **Karenzzeit (Grace Time):** 30 Minuten. Das ergibt ein Überwachungsfenster von 45 Minuten auf der Gegenseite (15 min Periode plus 30 min Kulanz, so steht es in der KDoc von `HeartbeatWorker`). Doze und JobScheduler verzögern den 15-Minuten-Takt auf dem P30. Eine kürzere Kulanz erzeugt Fehlalarme.
 3. Die eindeutige Ping-URL kopieren (`https://hc-ping.com/<uuid>`).
-4. **Wichtig:** Die Ping-URL enthält ein Cap-Token und ist ein Geheimnis. Sie gehört ausschließlich in die verschlüsselten App-Einstellungen (`EncryptedSharedPreferences`) und darf niemals in Logdateien, Sentry-Events oder Support-Paketen erscheinen.
+4. **URL in der App eintragen:** Einstellungen → „Alarmierung bei Verbindungsabbruch“ → Abschnitt „Totmannschaltung“ → Feld „Ping-URL“. Danach **„Probe-Ping senden“** drücken: Die App meldet „Probe-Ping angekommen“, und bei healthchecks.io erscheint ein Ping. Nur `https://`-Adressen werden gespeichert. Ein leeres Feld schaltet die Totmannschaltung aus.
+5. **Wichtig:** Die Ping-URL enthält ein Cap-Token und ist ein Geheimnis. Sie gehört ausschließlich in die verschlüsselten App-Einstellungen (`EncryptedSharedPreferences`) und darf niemals in Logdateien, Sentry-Events oder Support-Paketen erscheinen.
 
 ### 2.2 Benachrichtigungskanal
 - In Healthchecks.io einen E-Mail-Kanal (oder SMS/Webhook) hinterlegen.
