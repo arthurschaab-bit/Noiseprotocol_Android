@@ -386,6 +386,18 @@ class SupportBundleExporter(
         }
 
         runCatching {
+            val batteryIntent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            if (batteryIntent != null) {
+                val zustand = com.example.lrmprotokoll.diagnose.parseStromzustand(batteryIntent)
+                json.put("stromquelle", zustand.quelle.label)
+                json.put("akkuStatus", zustand.status.label)
+                if (!json.has("batteryPercent") && zustand.prozent != null) {
+                    json.put("batteryPercent", zustand.prozent)
+                }
+            }
+        }
+
+        runCatching {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             if (powerManager != null) {
                 json.put("batterieoptimierungIgnoriert", powerManager.isIgnoringBatteryOptimizations(context.packageName))

@@ -439,6 +439,14 @@ UI-Umbau vom 21.08.2026 (Befund J in `docs/BEFUNDE_BUNDLES_2026-10-07.md`).
 | Diagnose-Screen nach Wiederaufnahme prüfen | Ein Eintrag `RECORDING_ENDED_UNEXPECTEDLY` mit plausibler Dauer ist vorhanden | |
 | Gegenprobe: Aufzeichnung in der App beenden, App schließen und wieder öffnen | Es startet nichts | |
 
+### F20 — Stromversorgung und Akkustand protokollieren (07.10.2026, Befund G)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung an der Powerbank starten | Im Diagnose-Screen steht ein Ausgangseintrag mit „USB“ („Stromversorgung beim Start: USB, …“) | |
+| Kabel ziehen und wieder einstecken | Es erscheinen zwei Einträge („Stromversorgung: USB → keine, …“ und „Stromversorgung: keine → USB, …“) | |
+| Über Nacht laufen lassen | Im nächsten Bundle ist zu sehen, ob und wann die Powerbank abschaltet („Stromversorgung: USB → keine, Akku 100 %“) | |
+
 ### F21 — Gescheiterte Verbindungsaufbauten richtig benennen und als Fehlercode melden (Bugfix 07.10.2026)
 
 Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
