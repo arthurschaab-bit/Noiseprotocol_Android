@@ -431,6 +431,14 @@ UI-Umbau vom 21.08.2026 (Befund J in `docs/BEFUNDE_BUNDLES_2026-10-07.md`).
 | Aufzeichnung starten und 30 min warten | Die Pings kommen im 15-Minuten-Takt | |
 | App über Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“ stoppen | Nach spätestens etwa 45 min alarmiert healthchecks.io | |
 
+### F19 — Aufzeichnung nach unerwartetem Ende beim Öffnen fortsetzen (Bugfix 07.10.2026)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung starten, Einstellungen → Apps → Lärmprotokoll → „Beenden erzwingen“, App öffnen | Die Aufzeichnung läuft innerhalb weniger Sekunden wieder; im Cockpit steht die Hinweiskarte mit Beginn und Ende der Unterbrechung; sie bleibt, bis „Verstanden“ getippt wird | |
+| Diagnose-Screen nach Wiederaufnahme prüfen | Ein Eintrag `RECORDING_ENDED_UNEXPECTEDLY` mit plausibler Dauer ist vorhanden | |
+| Gegenprobe: Aufzeichnung in der App beenden, App schließen und wieder öffnen | Es startet nichts | |
+
 ### F21 — Gescheiterte Verbindungsaufbauten richtig benennen und als Fehlercode melden (Bugfix 07.10.2026)
 
 Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric

@@ -787,4 +787,10 @@
     <string name="meter_pair_confirm_text">The app binds to %1$s (%2$s) and will connect to this address only from now on.\n\nThe list shows every Bluetooth device in range, not just meters. A device that is not a sound level meter delivers no readings. The app then keeps retrying for about three minutes, reports “Failed” and starts a fresh attempt every 15 minutes.</string>
     <string name="meter_pair_confirm_action">Pair</string>
     <string name="meter_device_without_name">(unnamed)</string>
+    <string name="cockpit_unterbrechung_titel">Recording was interrupted</string>
+    <string name="cockpit_unterbrechung_text_einzeln">The recording was interrupted from %1$s to %2$s and is running again.</string>
+    <string name="cockpit_unterbrechung_text_einzeln_unbekannt">The recording was interrupted until %1$s (start unknown) and is running again.</string>
+    <string name="cockpit_unterbrechung_eintrag">Interrupted from %1$s to %2$s (running again)</string>
+    <string name="cockpit_unterbrechung_eintrag_unbekannt">Interrupted until %1$s (start unknown, running again)</string>
+    <string name="btn_unterbrechung_bestaetigen">Understood</string>
 </resources>

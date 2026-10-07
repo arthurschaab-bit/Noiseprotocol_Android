@@ -33,4 +33,11 @@ interface LevelSampleDao {
 
     @Query("SELECT COUNT(*) FROM level_samples")
     suspend fun anzahl(): Int
+
+    /**
+     * Ermittelt den Zeitstempel des letzten erfassten Messwerts (Befund G / PROMPT_FIX_AUFZEICHNUNG_FORTSETZEN.md).
+     * Nutzt den bestehenden Index index_level_samples_at.
+     */
+    @Query("SELECT MAX(at) FROM level_samples")
+    suspend fun maxAt(): Long?
 }
