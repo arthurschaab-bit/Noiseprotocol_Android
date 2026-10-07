@@ -24,6 +24,8 @@ import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.report.BerichtZeitraum
 import com.example.lrmprotokoll.report.ChaquopyReportRunner
+import com.example.lrmprotokoll.report.messtagGrenzen
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -38,6 +40,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.system.measureTimeMillis
 
@@ -400,4 +403,88 @@ class BerichtErstellenSheetTest {
                 .last { it.message == "High-End-Bericht nicht gestartet" }
         assertTrue(blocker.data["voraussetzungen"].toString().contains("ZEITRAUM"))
     }
+
+    @Test
+    fun grosserZeitraumZeigtWarnung() {
+        val start = LocalDate.now().minusDays(15)
+        val ende = LocalDate.now()
+        composeRule.setContent {
+            BerichtScreen(
+                onBack = {}, onOpenSettings = {}, initialHighEndRange = BerichtZeitraum(start, ende),
+            )
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("bericht_grosser_zeitraum_warnung").assertExists()
+    }
+
+    @Test
+    fun erzeugungAktivZeigtProgressUndHinweis() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val db = app.container.database
+        val datum = LocalDate.now()
+        val (von, bis) = messtagGrenzen(datum, ZoneId.systemDefault())
+
+        val jetzt = System.currentTimeMillis()
+        runBlocking(Dispatchers.IO) {
+            val sessionId = db.sessionDao().insert(
+                SessionEntity(
+                    startedAt = jetzt - 1_000, endedAt = jetzt + 1_000,
+                    deviceAddress = "AA:BB", deviceName = "PCE-323", weighting = "A",
+                    timeWeighting = "FAST",
+                ),
+            )
+            db.measurementDao().insertAll(
+                listOf(
+                    MeasurementEntity(
+                        sessionId = sessionId, timestamp = jetzt, levelDb = 55.0,
+                        weighting = "A", timeWeighting = "FAST", flags = 0,
+                    ),
+                ),
+            )
+            db.stammdatenVerlaufDao().insert(
+                StammdatenVerlaufEntity(
+                    erstelltAm = jetzt, geraetHersteller = "PCE", geraetTyp = "323",
+                    geraetGenauigkeitsklasse = "2", geraetSeriennummer = "SN1",
+                    geraetKalibrierung = "kalibriert", messort = "Musterort",
+                    mikrofonposition = "Fenster", mikrofonhoehe = "1m",
+                    entfernungZurQuelle = "5m", innenAussen = "Außen",
+                    fensterzustand = "", wetter = "trocken", datenqualitaetHinweis = "",
+                ),
+            )
+            db.reportConfigDao().speichere(ReportConfigEntity(gebietseinstufung = "WA"))
+        }
+
+        val runnerStarted = CompletableDeferred<Unit>()
+        val runnerRelease = CompletableDeferred<Unit>()
+        composeRule.setContent {
+            BerichtScreen(
+                onBack = {}, onOpenSettings = {}, initialHighEndRange = BerichtZeitraum(datum, datum),
+                highEndRunner = {
+                    runnerStarted.complete(Unit)
+                    runnerRelease.await()
+                    ChaquopyReportRunner.Ergebnis.Fehler("Test-Ende")
+                },
+            )
+        }
+        oeffneSheetUndWarteAufStartknopf()
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").assertIsEnabled()
+        composeRule.onNodeWithTag("btn_bericht_erstellen_start").performScrollTo().performClick()
+        runBlocking { runnerStarted.await() }
+
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.mainClock.advanceTimeBy(50)
+            composeRule.onNodeWithTag("bericht_erstellen_progress").assertExists()
+            composeRule.onNodeWithTag("bericht_erstellen_hinweis_aktiv").assertExists()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+
+        runnerRelease.complete(Unit)
+        composeRule.waitUntil(timeoutMillis = 15_000L) {
+            composeRule.waitForIdle()
+            composeRule.onAllNodesWithTag("bericht_erstellen_fehler").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
 }
+

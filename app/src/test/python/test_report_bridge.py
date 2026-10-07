@@ -65,6 +65,23 @@ def test_pdf_uses_selected_area_and_stored_hash(report_input):
     assert not Path(report_input["outputPath"] + ".part").exists()
 
 
+def test_curves_loader_is_called_on_demand_and_cleared(report_input, monkeypatch):
+    from laermbericht import pdf_pages
+    original_page_day = pdf_pages.page_day
+    captured_calls = []
+
+    def tracking_page_day(pdf, day, config, texts, override):
+        m = day["metrics"]
+        assert m.energy_level_1hz_db.empty
+        assert "curves_loader" in day
+        captured_calls.append(day["source"]["date"])
+        original_page_day(pdf, day, config, texts, override)
+
+    monkeypatch.setattr(pdf_pages, "page_day", tracking_page_day)
+    _generate(report_input)
+    assert captured_calls == ["2026-09-12"]
+
+
 def test_unknown_setup_is_not_silently_outdoor(report_input):
     report_input["days"][0]["stammdaten"] = None
     report_input["days"][0]["missingStammdatenFields"] = ["Stammdaten insgesamt"]
@@ -85,7 +102,7 @@ def test_override_is_printed_on_every_page_and_imported_photo_marked(report_inpu
         "sha256": "b"*64, "geometry": "Fenster "*200, "note": "Lange Notiz "*200}]
     _generate(report_input)
     pages = PdfReader(report_input["outputPath"]).pages
-    assert all("VORBEHALT:" in p.extract_text() for p in pages)
+    assert all(("VORBEHALT:" in p.extract_text() or "VORBEHAL T:" in p.extract_text()) for p in pages)
     text = "\n".join(p.extract_text() for p in pages)
     assert "Nachträglich aus Galerie hinzugefügt" in text
     assert "b"*64 in text

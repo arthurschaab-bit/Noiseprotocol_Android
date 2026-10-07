@@ -1,5 +1,9 @@
 package com.example.lrmprotokoll.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -26,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -99,6 +106,16 @@ fun BerichtErstellenSheet(
     var erzeugt by remember { mutableStateOf(false) }
     var meldung by remember { mutableStateOf<String?>(null) }
     var pdfPfad by remember { mutableStateOf<String?>(null) }
+    val currentContext = LocalContext.current
+    DisposableEffect(erzeugt) {
+        val window = currentContext.findActivity()?.window
+        if (erzeugt) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
     val voraussetzungen =
         pruefeBerichtVoraussetzungen(zeitraum, tage, config, ausgewaehlteIds)
     val ersterBlocker = voraussetzungen.firstOrNull { !it.erfuellt }
@@ -213,6 +230,24 @@ fun BerichtErstellenSheet(
                     ),
                     modifier = Modifier.testTag("bericht_datumsbereich_anzeige"),
                 )
+            }
+            val anzahlTage = tage.size.takeIf { it > 0 }
+                ?: zeitraum?.let { (it.letzterTag.toEpochDay() - it.ersterTag.toEpochDay() + 1).toInt() }
+                ?: 0
+            if (anzahlTage > 7) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().testTag("bericht_grosser_zeitraum_warnung"),
+                ) {
+                    Text(
+                        stringResource(R.string.bericht_large_range_warning, anzahlTage),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
             ReportAreaSelection(
@@ -359,21 +394,37 @@ fun BerichtErstellenSheet(
                 }, modifier = Modifier.testTag("btn_high_end_teilen")) { Text(stringResource(R.string.bericht_share_pdf)) }
             }
             Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedButton(onClick = onFertig, enabled = !erzeugt) { Text(stringResource(R.string.bericht_close)) }
                 Button(
                     onClick = { erzeugen() },
                     enabled = !erzeugt && !laedt && ersterBlocker == null,
                     modifier = Modifier.testTag("btn_bericht_erstellen_start"),
                 ) {
-                    Text(
-                        if (erzeugt) {
-                            stringResource(R.string.bericht_generating)
-                        } else {
-                            stringResource(R.string.bericht_generate_now)
-                        }
-                    )
+                    if (erzeugt) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp).testTag("bericht_erstellen_progress"),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.bericht_generating))
+                    } else {
+                        Text(stringResource(R.string.bericht_generate_now))
+                    }
                 }
+            }
+            if (erzeugt) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.bericht_generating_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.testTag("bericht_erstellen_hinweis_aktiv"),
+                )
             }
             ersterBlocker?.takeUnless { laedt }?.let {
                 Text(
@@ -458,3 +509,10 @@ private fun BerichtVoraussetzungId.labelRes(): Int =
         BerichtVoraussetzungId.STAMMDATEN_AUSWAHL -> R.string.report_precondition_master_data
         BerichtVoraussetzungId.GEBIET -> R.string.report_precondition_area
     }
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+

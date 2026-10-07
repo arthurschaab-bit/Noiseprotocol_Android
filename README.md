@@ -564,6 +564,17 @@ Releases werden über Git-Tags auf dem `main`-Branch ausgelöst:
 | [`docs/EXTERNE_DIENSTE_EINRICHTUNG.md`](docs/EXTERNE_DIENSTE_EINRICHTUNG.md) | Externe Dienste einrichten (Sentry, Google Drive, ntfy, Healthchecks.io) |
 | [`docs/PROMPT_RELEASE_PIPELINE.md`](docs/PROMPT_RELEASE_PIPELINE.md) | Release-Pipeline (umgesetzt) — signierte APKs über GitHub Releases via Tag `vX.Y.Z` |
 | [`docs/PROMPT_VERSIONSKENNUNG.md`](docs/PROMPT_VERSIONSKENNUNG.md) | **Auftrag Versionskennung (offen)** — `versionName`/`versionCode` für CI- und Debug-Builds aus PR-Nummer, CI-Laufnummer und Commit-Kürzel statt des festen „1.0 (1)"; APK-Dateiname, Anzeige in App und Audit-Zeile |
+| [`docs/BEFUNDE_BUNDLES_2026-10-07.md`](docs/BEFUNDE_BUNDLES_2026-10-07.md) | **Befunde aus den Support-Bundles vom 05.–07.10.2026 und dem Aufzeichnungsausfall am 06.10.** — Belege, Owner-Sofortmaßnahmen und die empfohlene Reihenfolge der zehn Aufträge darunter, dazu die Owner-Entscheidungen vom 07.10. |
+| [`docs/PROMPT_FIX_TOTMANNSCHALTUNG_EINGABE.md`](docs/PROMPT_FIX_TOTMANNSCHALTUNG_EINGABE.md) | Auftrag 1 (offen) — Eingabefeld für die Heartbeat-URL wiederherstellen (seit 21.08. verschwunden), Probe-Ping |
+| [`docs/PROMPT_FIX_AUFZEICHNUNG_FORTSETZEN.md`](docs/PROMPT_FIX_AUFZEICHNUNG_FORTSETZEN.md) | Auftrag 2 (offen) — unerwartet beendete Aufzeichnung beim Öffnen der App erkennen, protokollieren und fortsetzen |
+| [`docs/PROMPT_FIX_LADEZUSTAND_PROTOKOLLIEREN.md`](docs/PROMPT_FIX_LADEZUSTAND_PROTOKOLLIEREN.md) | Auftrag 3 (offen) — Wechsel der Stromversorgung und Akkustand ins Diagnoseprotokoll |
+| [`docs/PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md`](docs/PROMPT_FIX_VERBINDUNGSFEHLVERSUCHE_MELDEN.md) | Auftrag 4 (offen) — gescheiterte Verbindungsaufbauten richtig benennen und als Fehlercode melden |
+| [`docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md`](docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md) | Auftrag 5 (offen) — Wächter-Job startet eine getötete Aufzeichnung neu (P30), sonst Benachrichtigung |
+| [`docs/PROMPT_FIX_KADENZWAECHTER.md`](docs/PROMPT_FIX_KADENZWAECHTER.md) | Auftrag 6 (offen) — Kadenzwächter misst beim Sammeln statt bei der Ankunft und trennt gesunde Verbindungen |
+| [`docs/PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md`](docs/PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md) | Auftrag 7 (offen) — Untersuchung: warum Drive-Sync-Jobs nicht starten bzw. die Datenbanksicherung abgebrochen wird |
+| [`docs/PROMPT_FIX_AUFZEICHNUNGSLUECKEN_SICHTBAR.md`](docs/PROMPT_FIX_AUFZEICHNUNGSLUECKEN_SICHTBAR.md) | Auftrag 8 (offen, E1–E4 entschieden) — Aufzeichnungslücken in Tages-CSV und Pegelverlauf sichtbar machen |
+| [`docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md`](docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md) | Auftrag 9 (offen) — eigenes Lebenszyklus-Protokoll, das jeden Ausfall abdeckt, inklusive Erkennung eines Geräteneustarts |
+| [`docs/PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md`](docs/PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md) | Auftrag 10 (offen) — eine statt drei Diagnose-Spuren je WAV-Aufnahme, damit das Breadcrumb-Fenster länger reicht |
 | [`docs/TESTEN_EINES_PR.md`](docs/TESTEN_EINES_PR.md) | **Einen PR ausprobieren** — APK aus der CI, was der Emulator kann und was nicht |
 | [`docs/CHECKLISTE_GERAETETEST.md`](docs/CHECKLISTE_GERAETETEST.md) | **Checkliste für den Gerätetest** — M2, M3, M5 und die zwei offenen Messfragen |
 | [`docs/PROTOKOLL_PCE-323.md`](docs/PROTOKOLL_PCE-323.md) | **Das reale Geräteprotokoll aus M0** — verbindliche Quelle für M2 |

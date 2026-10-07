@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from datetime import date
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -139,73 +141,118 @@ def resample_to_one_hz(
         raise ValueError("Für den Messtag wurden keine Rohwerte übergeben.")
 
     zone = _load_time_zone(time_zone)
-    rows: list[dict[str, object]] = []
-    for sample in samples:
-        if isinstance(sample.timestamp_epoch_ms, bool) or not isinstance(
-            sample.timestamp_epoch_ms,
-            (int, np.integer),
-        ):
+    n = len(samples)
+
+    ts_raw = [0] * n
+    levels = np.empty(n, dtype=np.float64)
+    gaps = np.empty(n, dtype=bool)
+    session_ids = [None] * n
+
+    for i, sample in enumerate(samples):
+        t = sample.timestamp_epoch_ms
+        if type(t) is bool or not isinstance(t, (int, np.integer)):
             raise TypeError("Jeder Zeitstempel muss als Epoch-Millisekunde vorliegen.")
-        if not sample.is_gap and not np.isfinite(sample.level_db):
+        lvl = float(sample.level_db)
+        gap = bool(sample.is_gap)
+        if not gap and not math.isfinite(lvl):
             raise ValueError(
                 "Ein gültiger Rohwert muss einen endlichen Pegel enthalten."
             )
+        sid = sample.session_id
         try:
-            hash(sample.session_id)
+            hash(sid)
         except TypeError as error:
             raise ValueError(
                 "Die Session-ID eines Rohwerts muss hashbar sein."
             ) from error
-        timestamp = pd.Timestamp(
-            sample.timestamp_epoch_ms, unit="ms", tz="UTC"
-        ).tz_convert(zone)
-        if timestamp.date() != day:
-            continue
-        rows.append(
-            {
-                "timestamp": timestamp,
-                "level_db": float(sample.level_db),
-                "is_gap": bool(sample.is_gap),
-                "session_id": sample.session_id,
-            },
-        )
 
-    if not rows:
+        ts_raw[i] = int(t)
+        levels[i] = lvl
+        gaps[i] = gap
+        session_ids[i] = sid
+
+    ts_arr = np.array(ts_raw, dtype=np.int64)
+    dt_utc = pd.to_datetime(ts_arr, unit="ms", utc=True)
+    dt_zone = dt_utc.tz_convert(zone)
+
+    day_mask = dt_zone.date == day
+    if not np.any(day_mask):
         raise ValueError(
             f"Für den ausgewählten Messtag {day.isoformat()} liegen keine Rohwerte vor.",
         )
 
-    frame = pd.DataFrame(rows).sort_values("timestamp", kind="stable")
-    frame["second"] = frame["timestamp"].map(lambda value: value.tz_convert("UTC").floor("s").tz_convert(zone))
-    valid = frame.loc[~frame["is_gap"]].copy()
+    if not np.all(day_mask):
+        ts_arr = ts_arr[day_mask]
+        levels = levels[day_mask]
+        gaps = gaps[day_mask]
+        session_ids = [session_ids[i] for i, m in enumerate(day_mask) if m]
 
-    start = frame["second"].min()
-    end = frame["second"].max()
+    diff = np.diff(ts_arr)
+    if np.any(diff < 0):
+        sort_order = np.argsort(ts_arr, kind="stable")
+        ts_arr = ts_arr[sort_order]
+        levels = levels[sort_order]
+        gaps = gaps[sort_order]
+        session_ids = [session_ids[i] for i in sort_order]
+
+    second_ms = (ts_arr // 1000) * 1000
+    seconds = pd.to_datetime(second_ms, unit="ms", utc=True).tz_convert(zone)
+
+    start = seconds.min()
+    end = seconds.max()
     full_index = pd.date_range(start=start, end=end, freq="1s")
     energy_level = pd.Series(
         np.nan, index=full_index, dtype=float, name="energy_level_db"
     )
     peak_level = pd.Series(np.nan, index=full_index, dtype=float, name="peak_level_db")
 
-    if not valid.empty:
-        valid["energy"] = np.power(10.0, valid["level_db"] / 10.0)
-        energy_per_second = valid.groupby("second", sort=True)["energy"].mean()
-        peak_per_second = valid.groupby("second", sort=True)["level_db"].max()
+    valid_mask = ~gaps
+    if np.any(valid_mask):
+        valid_seconds = seconds[valid_mask]
+        valid_levels = levels[valid_mask]
+        valid_energy = np.power(10.0, valid_levels / 10.0)
+
+        df_valid = pd.DataFrame(
+            {
+                "second": valid_seconds,
+                "energy": valid_energy,
+                "level_db": valid_levels,
+            }
+        )
+        energy_per_second = df_valid.groupby("second", sort=True)["energy"].mean()
+        peak_per_second = df_valid.groupby("second", sort=True)["level_db"].max()
         energy_level.loc[energy_per_second.index] = 10.0 * np.log10(energy_per_second)
         peak_level.loc[peak_per_second.index] = peak_per_second
 
+    df_sessions = pd.DataFrame(
+        {
+            "session_id": session_ids,
+            "second": seconds,
+        }
+    )
+    session_agg = df_sessions.groupby("session_id", sort=False)["second"].agg(
+        ["min", "max"]
+    )
     sessions = tuple(
-        sorted(
-            (
-                group["timestamp"].min().tz_convert("UTC").floor("s").tz_convert(zone),
-                group["timestamp"].max().tz_convert("UTC").floor("s").tz_convert(zone),
-            )
-            for _, group in frame.groupby("session_id", sort=False)
-        ),
+        sorted((row["min"], row["max"]) for _, row in session_agg.iterrows())
     )
     return SecondGrid(
         energy_level_db=energy_level, peak_level_db=peak_level, sessions=sessions
     )
+
+
+def compute_day_curves(
+    samples: Sequence[Sample],
+    day: date,
+    time_zone: str,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Erzeugt die drei 1-Hz-Zeitreihen für das Tagesdiagramm on-demand."""
+    grid = resample_to_one_hz(samples, day, time_zone)
+    levels = grid.energy_level_db
+    peaks = grid.peak_level_db
+    energy = np.power(10.0, levels / 10.0)
+    laeq_1min = 10.0 * np.log10(energy.rolling(60, min_periods=20).mean())
+    return levels, peaks, laeq_1min
 
 
 def calculate_rating_level(
@@ -325,6 +372,7 @@ def calculate_day_metrics(
     config: DayConfig,
     *,
     is_indoor: bool,
+    include_series: bool = True,
 ) -> DayMetrics:
     """Portiert den datenfreien Teil von ``compute_day`` (Referenzzeilen 646-822)."""
 
@@ -512,9 +560,9 @@ def calculate_day_metrics(
         laeq_day_label=day_label,
         coverage_supplement_text=supplement,
         measurement_period_text=measurement_period_text,
-        energy_level_1hz_db=levels,
-        peak_level_1hz_db=peaks,
-        laeq_1min_db=laeq_1min,
+        energy_level_1hz_db=levels if include_series else pd.Series(dtype=float),
+        peak_level_1hz_db=peaks if include_series else pd.Series(dtype=float),
+        laeq_1min_db=laeq_1min if include_series else pd.Series(dtype=float),
         sessions=grid.sessions,
     )
 
