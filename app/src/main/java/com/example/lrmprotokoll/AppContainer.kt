@@ -97,7 +97,7 @@ class AppContainer(
      * Ein gemeinsamer Client fuer ntfy und Heartbeat: OkHttp haelt darin seinen Verbindungs- und
      * Threadpool. Zwei Instanzen waeren zwei Pools fuer insgesamt ein paar Anfragen pro Stunde.
      */
-    private val httpClient: OkHttpClient by lazy { OkHttpClient() }
+    val httpClient: OkHttpClient by lazy { OkHttpClient() }
 
     val heartbeatPinger: HeartbeatPinger by lazy { HeartbeatPinger(settingsManager, httpClient) }
 

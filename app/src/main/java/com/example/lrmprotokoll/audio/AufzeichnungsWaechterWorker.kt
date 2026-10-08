@@ -69,7 +69,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
         val sdkInt = sdkIntOverride ?: Build.VERSION.SDK_INT
         val starter = serviceStarter ?: { ctx, intent -> ContextCompat.startForegroundService(ctx, intent) }
         val notifier = notifierOverride ?: AufzeichnungsWaechterNotifier(applicationContext)
-        val client = okHttpClientOverride ?: OkHttpClient()
+        val client = okHttpClientOverride ?: container?.httpClient ?: OkHttpClient()
 
         val laeuft = dienstLaeuftProvider?.invoke() ?: AudioRecordingService.laeuft.value
         val kannInVordergrund =
@@ -83,26 +83,35 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
             )
 
         when (lage) {
-            AufzeichnungsLage.LAEUFT,
-            AufzeichnungsLage.AUS,
-            -> {
-                // Nichts tun, nichts protokollieren (kein Spam alle 15 Minuten)
+            AufzeichnungsLage.LAEUFT -> {
+                settings.aufzeichnungNichtStartbarGemeldet = false
+                settings.waechterLetzterGemeldeterAusfallAt = -1L
+                return Result.success()
+            }
+
+            AufzeichnungsLage.AUS -> {
+                settings.aufzeichnungNichtStartbarGemeldet = false
+                settings.waechterLetzterGemeldeterAusfallAt = -1L
                 return Result.success()
             }
 
             AufzeichnungsLage.SOLL_ABER_NICHT_STARTBAR -> {
-                reporter.report(
-                    code = DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION,
-                    component = "AufzeichnungsWaechter",
-                    operation = "doWork",
-                    severity = DiagnosticSeverity.WARN,
-                    message = "Aufzeichnung soll laufen, kann aber nicht gestartet werden: weder Mikrofonberechtigung noch gekoppeltes Messgeraet",
-                    details = mapOf("quelle" to "waechter"),
-                )
+                if (!settings.aufzeichnungNichtStartbarGemeldet) {
+                    settings.aufzeichnungNichtStartbarGemeldet = true
+                    reporter.report(
+                        code = DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION,
+                        component = "AufzeichnungsWaechter",
+                        operation = "doWork",
+                        severity = DiagnosticSeverity.WARN,
+                        message = "Aufzeichnung soll laufen, kann aber nicht gestartet werden: weder Mikrofonberechtigung noch gekoppeltes Messgeraet",
+                        details = mapOf("quelle" to "waechter"),
+                    )
+                }
                 return Result.success()
             }
 
             AufzeichnungsLage.SOLL_LAEUFT_NICHT -> {
+                settings.aufzeichnungNichtStartbarGemeldet = false
                 val jetzt = zeitProvider()
                 val letzteDatenAt = runCatching { dao?.maxAt() }.getOrNull()
                 val lueckeMinuten =
@@ -112,23 +121,34 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                         0L
                     }
 
-                reporter.report(
-                    code = DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY,
-                    component = "AufzeichnungsWaechter",
-                    operation = "doWork",
-                    severity = DiagnosticSeverity.WARN,
-                    message = "Aufzeichnung unerwartet beendet (Waechter)",
-                    details =
-                        mapOf(
-                            "letzteDatenAt" to letzteDatenAt,
-                            "entdecktAt" to jetzt,
-                            "lueckeMinuten" to lueckeMinuten,
-                            "audioWarAktiv" to settings.audioMonitoringWasActive,
-                            "quelle" to "waechter",
-                        ),
-                )
+                val bereitsGemeldet = (letzteDatenAt != null && letzteDatenAt == settings.waechterLetzterGemeldeterAusfallAt)
+                val darfStarten = settings.kannWaechterNeuStarten(jetzt)
 
-                settings.speichereUnterbrechung(beginn = letzteDatenAt, ende = jetzt)
+                if (bereitsGemeldet) {
+                    // Verhindert Push-/Diagnose-Spam alle 15 Minuten ab SDK 30 oder bei aktivem Schleifenschutz
+                    if (sdkInt >= 30 || !darfStarten) {
+                        return Result.success()
+                    }
+                } else {
+                    settings.waechterLetzterGemeldeterAusfallAt = letzteDatenAt ?: jetzt
+                    reporter.report(
+                        code = DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY,
+                        component = "AufzeichnungsWaechter",
+                        operation = "doWork",
+                        severity = DiagnosticSeverity.WARN,
+                        message = "Aufzeichnung unerwartet beendet (Waechter)",
+                        details =
+                            mapOf(
+                                "letzteDatenAt" to letzteDatenAt,
+                                "entdecktAt" to jetzt,
+                                "lueckeMinuten" to lueckeMinuten,
+                                "audioWarAktiv" to settings.audioMonitoringWasActive,
+                                "quelle" to "waechter",
+                            ),
+                    )
+
+                    settings.speichereUnterbrechung(beginn = letzteDatenAt, ende = jetzt)
+                }
 
                 val zeitText =
                     if (letzteDatenAt != null) {
@@ -141,7 +161,6 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                         "unbekannt"
                     }
 
-                val darfStarten = settings.kannWaechterNeuStarten(jetzt)
                 if (!darfStarten) {
                     // Schleifenschutz greift (E2: max. 3 Neustarts pro Stunde)
                     notifier.benachrichtigeZumFortsetzen(
@@ -175,6 +194,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
 
                 if (sdkInt <= 29) {
                     settings.registriereWaechterNeustart(jetzt)
+                    var neustartErfolgreich = false
                     try {
                         val serviceIntent =
                             Intent(applicationContext, AudioRecordingService::class.java).apply {
@@ -182,6 +202,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                             }
                         starter(applicationContext, serviceIntent)
                         reporter.breadcrumb("AufzeichnungsWaechter", "Aufzeichnungsdienst erfolgreich neu gestartet")
+                        neustartErfolgreich = true
                     } catch (e: Throwable) {
                         reporter.report(
                             code = DiagnosticCode.AUDIO_FOREGROUND_SERVICE_FAILED,
@@ -193,19 +214,36 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                         )
                     }
 
-                    sendeNtfyWaechterMeldung(
-                        settings = settings,
-                        nachricht = "Aufzeichnung war vom System beendet (letzte Daten $zeitText) und wurde neu gestartet.",
-                        client = client,
-                    ).onFailure { e ->
-                        reporter.report(
-                            code = DiagnosticCode.ALERT_NTFY_FAILED,
-                            component = "AufzeichnungsWaechter",
-                            operation = "ntfyNeustart",
-                            severity = DiagnosticSeverity.WARN,
-                            cause = e,
-                            message = "ntfy-Fernmeldung nach Neustart fehlgeschlagen",
-                        )
+                    if (neustartErfolgreich) {
+                        sendeNtfyWaechterMeldung(
+                            settings = settings,
+                            nachricht = "Aufzeichnung war vom System beendet (letzte Daten $zeitText) und wurde neu gestartet.",
+                            client = client,
+                        ).onFailure { e ->
+                            reporter.report(
+                                code = DiagnosticCode.ALERT_NTFY_FAILED,
+                                component = "AufzeichnungsWaechter",
+                                operation = "ntfyNeustart",
+                                severity = DiagnosticSeverity.WARN,
+                                cause = e,
+                                message = "ntfy-Fernmeldung nach Neustart fehlgeschlagen",
+                            )
+                        }
+                    } else {
+                        sendeNtfyWaechterMeldung(
+                            settings = settings,
+                            nachricht = "Aufzeichnung war vom System beendet (letzte Daten $zeitText); Neustart fehlgeschlagen.",
+                            client = client,
+                        ).onFailure { e ->
+                            reporter.report(
+                                code = DiagnosticCode.ALERT_NTFY_FAILED,
+                                component = "AufzeichnungsWaechter",
+                                operation = "ntfyStarterFehler",
+                                severity = DiagnosticSeverity.WARN,
+                                cause = e,
+                                message = "ntfy-Fernmeldung nach gescheitertem Neustart fehlgeschlagen",
+                            )
+                        }
                     }
                 } else {
                     val benachrichtigt = notifier.benachrichtigeZumFortsetzen()

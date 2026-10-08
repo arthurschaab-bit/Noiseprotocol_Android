@@ -45,21 +45,19 @@ class NtfyAlertChannel(
             settings.ntfyServer.isNotBlank()
 
     override suspend fun send(alert: Alert): Result<Unit> {
-        val server = settings.ntfyServer.trimEnd('/')
         val topic = settings.ntfyTopic
         if (topic.isBlank()) {
             return Result.failure(IllegalStateException("Kein ntfy-Topic eingerichtet"))
         }
 
-        val request = Request.Builder()
-            .url("$server/$topic")
-            .post(alert.message.toRequestBody(TEXT_UTF8))
-            .header("Title", alsHeaderWert(AlertMessages.titel(alert.kind)))
-            .header("Priority", prioritaet(alert))
-            .header("Tags", tags(alert))
-            .build()
-
-        return runCatching { client.fuehreAus(request) }
+        return sendeNtfyNachricht(
+            settings = settings,
+            text = alert.message,
+            titel = AlertMessages.titel(alert.kind),
+            prioritaet = prioritaet(alert),
+            tags = tags(alert),
+            client = client,
+        )
     }
 
     /**
@@ -91,6 +89,34 @@ class NtfyAlertChannel(
  * der eigentliche Text steht ohnehin im Rumpf, der als UTF-8 uebertragen wird. Ein Fehlerfall,
  * der die Zustellung kostet, waere hier deutlich schlimmer als ein haesslicher Titel.
  */
+/**
+ * Gemeinsame Hilfsmethode fuer den ntfy-Versand (Plan 7.4, Welle 2). Prüft [SettingsManager.ntfyAktiv]
+ * und baut den Request einheitlich auf.
+ */
+internal suspend fun sendeNtfyNachricht(
+    settings: SettingsManager,
+    text: String,
+    titel: String,
+    prioritaet: String,
+    tags: String,
+    client: OkHttpClient,
+): Result<Unit> {
+    if (!settings.ntfyAktiv) return Result.success(Unit)
+    val server = settings.ntfyServer.trimEnd('/')
+    val topic = settings.ntfyTopic
+    if (server.isBlank() || topic.isBlank()) return Result.success(Unit)
+
+    val request = Request.Builder()
+        .url("$server/$topic")
+        .post(text.toRequestBody(TEXT_UTF8))
+        .header("Title", alsHeaderWert(titel))
+        .header("Priority", prioritaet)
+        .header("Tags", tags)
+        .build()
+
+    return runCatching { client.fuehreAus(request) }
+}
+
 internal fun alsHeaderWert(text: String): String {
     if (text.all { it.code in 32..126 }) return text
     val base64 = android.util.Base64.encodeToString(

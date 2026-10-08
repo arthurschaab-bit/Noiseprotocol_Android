@@ -468,7 +468,7 @@ Aufzeichnungen endeten nach Hintergrund-Beendigung durch EMUI ohne Wiederaufnahm
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Aufzeichnung starten, Prozess töten ohne Zwangsbeenden (`adb shell run-as com.example.lrmprotokoll kill -9 $(adb shell pidof com.example.lrmprotokoll)`) | Spätestens nach etwa 20 min läuft die Aufzeichnung wieder; im Diagnose-Screen steht `RECORDING_ENDED_UNEXPECTEDLY` mit `quelle = waechter` (bei eingerichtetem ntfy trifft auch eine Push-Meldung ein). Läuft nach 30 min noch nichts: EMUI-Job-Unterdrückung (Befund H) prüfen | |
+| Aufzeichnung starten, Prozess gezielt beenden (`adb shell am crash com.example.lrmprotokoll` oder `adb shell "pid=\$(pidof com.example.lrmprotokoll) && run-as com.example.lrmprotokoll kill -9 \$pid"`) | Startet AOSP den Dienst wegen `START_STICKY` binnen weniger Sekunden neu, greift der OS-Neustart (kein `quelle = waechter`). Greift der OS-Neustart nicht (wie bei EMUI-Speicherbereinigung nach längerer Inaktivität beobachtet): Spätestens nach ca. 20 min läuft die Aufzeichnung durch den Wächter wieder; im Diagnose-Screen steht `RECORDING_ENDED_UNEXPECTEDLY` mit `quelle = waechter` (bei eingerichtetem ntfy trifft auch die Push-Meldung ein). Läuft nach 30 min noch nichts: EMUI-Job-Unterdrückung (Befund H) prüfen | |
 | Gegenprobe mit „Beenden erzwingen“ über die Systemeinstellungen | Es startet nichts von selbst (zu erwarten: force-stop entfernt alle Jobs) | |
 
 ---

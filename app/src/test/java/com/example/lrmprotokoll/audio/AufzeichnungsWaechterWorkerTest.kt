@@ -332,6 +332,7 @@ class AufzeichnungsWaechterWorkerTest {
             server.enqueue(MockResponse().setResponseCode(200))
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
             settingsManager.ntfyAktiv = true
             settingsManager.ntfyServer = server.url("/").toString()
             settingsManager.ntfyTopic = "waechter-test"
@@ -360,6 +361,7 @@ class AufzeichnungsWaechterWorkerTest {
             server.enqueue(MockResponse().setResponseCode(200))
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
             settingsManager.ntfyAktiv = true
             settingsManager.ntfyServer = server.url("/").toString()
             settingsManager.ntfyTopic = "waechter-test"
@@ -387,6 +389,7 @@ class AufzeichnungsWaechterWorkerTest {
         try {
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
             settingsManager.ntfyAktiv = false
             settingsManager.ntfyServer = server.url("/").toString()
             settingsManager.ntfyTopic = "waechter-test"
@@ -412,6 +415,7 @@ class AufzeichnungsWaechterWorkerTest {
             server.enqueue(MockResponse().setResponseCode(500))
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
             settingsManager.ntfyAktiv = true
             settingsManager.ntfyServer = server.url("/").toString()
             settingsManager.ntfyTopic = "waechter-test"
@@ -426,5 +430,151 @@ class AufzeichnungsWaechterWorkerTest {
         } finally {
             server.shutdown()
         }
+    }
+
+    /**
+     * Review ID 4214700154: Hauptschalter alarmierungAktiv deaktiviert -> kein ntfy-Versand durch Waechter.
+     */
+    @Test
+    fun testNtfyIgnoriertWennAlarmierungHauptschalterAus() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            settingsManager.monitoringWasActive = true
+            settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = false
+            settingsManager.ntfyAktiv = true
+            settingsManager.ntfyServer = server.url("/").toString()
+            settingsManager.ntfyTopic = "waechter-test"
+
+            val worker = erstelleWorker(sdkInt = 29, okHttpClient = OkHttpClient())
+            val ergebnis = worker.doWork()
+
+            assertTrue(ergebnis is Result.Success)
+            assertEquals(0, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    /**
+     * Review ID 4214699784: Wenn Starter Ausnahme wirft, meldet ntfy Fehler statt Erfolgsmeldung.
+     */
+    @Test
+    fun testNtfyMeldetFehlschlagWennStarterAusnahmeWirft() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().setResponseCode(200))
+            settingsManager.monitoringWasActive = true
+            settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.ntfyAktiv = true
+            settingsManager.ntfyServer = server.url("/").toString()
+            settingsManager.ntfyTopic = "waechter-test"
+            serviceStarterException = IllegalStateException("ForegroundServiceStartNotAllowedException")
+
+            val worker = erstelleWorker(sdkInt = 29, okHttpClient = OkHttpClient())
+            val ergebnis = worker.doWork()
+
+            assertTrue(ergebnis is Result.Success)
+            assertEquals(1, server.requestCount)
+            val request = server.takeRequest()
+            val text = request.body.readUtf8()
+            assertTrue("Nachricht muss Fehlschlag erwaehnen: $text", text.contains("Neustart fehlgeschlagen"))
+            assertFalse("Nachricht darf keinen Starterfolg melden: $text", text.contains("wurde neu gestartet"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    /**
+     * Review ID 4214699505: Spam-Schutz SDK >= 30: Wiederholte Laeufe beim selben Ausfallzeitpunkt
+     * erzeugen keine doppelten Benachrichtigungen, Pushes oder Diagnose-Eintraege.
+     */
+    @Test
+    fun testSdk34SpamSchutzSendetNurEinmaligeBenachrichtigungUndNtfyFuerGleichenAusfall() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().setResponseCode(200))
+            settingsManager.monitoringWasActive = true
+            settingsManager.audioMonitoringWasActive = true
+            settingsManager.alarmierungAktiv = true
+            settingsManager.ntfyAktiv = true
+            settingsManager.ntfyServer = server.url("/").toString()
+            settingsManager.ntfyTopic = "waechter-test"
+            fakeDao.maxAtWert = 800_000L
+
+            val worker1 = erstelleWorker(sdkInt = 34, okHttpClient = OkHttpClient())
+            val ergebnis1 = worker1.doWork()
+            assertTrue(ergebnis1 is Result.Success)
+            assertEquals(1, fakeNotifier.benachrichtigungen.size)
+            assertEquals(1, server.requestCount)
+            assertEquals(1, fakeReporter.events.count { it.code == DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY })
+
+            // Zweiter Lauf 15 Minuten spaeter bei unveraendertem Ausfall (keine neuen Daten)
+            val worker2 = erstelleWorker(sdkInt = 34, okHttpClient = OkHttpClient())
+            val ergebnis2 = worker2.doWork()
+            assertTrue(ergebnis2 is Result.Success)
+            assertEquals("Keine zweite Benachrichtigung", 1, fakeNotifier.benachrichtigungen.size)
+            assertEquals("Kein zweiter ntfy-Push", 1, server.requestCount)
+            assertEquals("Kein zweiter RECORDING_ENDED_UNEXPECTEDLY-Eintrag", 1, fakeReporter.events.count { it.code == DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY })
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    /**
+     * Review ID 4214699909: SOLL_ABER_NICHT_STARTBAR meldet PERMISSION_REVOKED_DURING_OPERATION nur einmalig.
+     */
+    @Test
+    fun testSollAberNichtStartbarMeldetNurEinmalPermissionRevoked() = runTest {
+        settingsManager.monitoringWasActive = true
+        settingsManager.audioMonitoringWasActive = true
+
+        val worker1 = erstelleWorker(sdkInt = 29, kannInVordergrund = false)
+        val ergebnis1 = worker1.doWork()
+        assertTrue(ergebnis1 is Result.Success)
+        assertEquals(1, fakeReporter.events.count { it.code == DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION })
+
+        // Zweiter Lauf 15 min spaeter
+        val worker2 = erstelleWorker(sdkInt = 29, kannInVordergrund = false)
+        val ergebnis2 = worker2.doWork()
+        assertTrue(ergebnis2 is Result.Success)
+        assertEquals("Darf nicht alle 15 Minuten erneut gemeldet werden", 1, fakeReporter.events.count { it.code == DiagnosticCode.PERMISSION_REVOKED_DURING_OPERATION })
+    }
+
+    /**
+     * Review ID 4214700727: Bei Zeitzurueckstellung (jetzt < fensterStart) wird das Fenster resettet.
+     */
+    @Test
+    fun testSchleifenschutzUhrRueckwaertsResettetFenster() {
+        val basisZeit = 1_000_000L
+        settingsManager.registriereWaechterNeustart(basisZeit)
+        settingsManager.registriereWaechterNeustart(basisZeit + 10_000L)
+        settingsManager.registriereWaechterNeustart(basisZeit + 20_000L)
+        assertFalse("Nach 3 Neustarts darf kein weiterer innerhalb der Stunde erlaubt sein", settingsManager.kannWaechterNeuStarten(basisZeit + 30_000L))
+
+        // Uhr wird um 10 Minuten zurueckgestellt
+        val rueckwaertsZeit = basisZeit - 600_000L
+        assertTrue("Bei Uhr rueckwaerts muss Schleifenschutz-Fenster zurueckgesetzt werden", settingsManager.kannWaechterNeuStarten(rueckwaertsZeit))
+    }
+
+    /**
+     * Review ID 4214699655: speichereUnterbrechung aktualisiert Ende eines bestehenden Eintrags statt Duplikate.
+     */
+    @Test
+    fun testSpeichereUnterbrechungAktualisiertEndeBestehenderEintraegeStattDuplikate() {
+        settingsManager.speichereUnterbrechung(beginn = 100L, ende = 200L)
+        val unterbrechungen1 = settingsManager.aktiveUnterbrechungen()
+        assertEquals(1, unterbrechungen1.size)
+        assertEquals(200L, unterbrechungen1.first().ende)
+
+        // Weiterer Wächterlauf verlängert die bestehende Lücke
+        settingsManager.speichereUnterbrechung(beginn = 100L, ende = 300L)
+        val unterbrechungen2 = settingsManager.aktiveUnterbrechungen()
+        assertEquals("Darf kein Duplikat anhaengen", 1, unterbrechungen2.size)
+        assertEquals(300L, unterbrechungen2.first().ende)
     }
 }
