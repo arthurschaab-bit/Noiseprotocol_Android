@@ -10,9 +10,11 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.util.Log
+import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.meter.BoundDevice
 import com.example.lrmprotokoll.meter.ConnectionState
 import com.example.lrmprotokoll.meter.FrameQuality
+import com.example.lrmprotokoll.meter.InstantSource
 import com.example.lrmprotokoll.meter.MeterCommand
 import com.example.lrmprotokoll.meter.MeterFrame
 import com.example.lrmprotokoll.meter.MeterTransport
@@ -48,6 +50,7 @@ private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b3
 @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_CONNECT vor jedem Zugriff
 class BleMeterTransport(
     private val context: Context,
+    private val now: InstantSource = InstantSource.System,
 ) : MeterTransport {
 
     private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -62,11 +65,14 @@ class BleMeterTransport(
     private val _frameQuality = MutableStateFlow(FrameQuality())
     override val frameQuality: StateFlow<FrameQuality> = _frameQuality.asStateFlow()
 
-    private val decoder = Pce323FrameDecoder()
+    private val decoder = Pce323FrameDecoder(now)
     private val gattQueue = GattQueue()
     private var gatt: BluetoothGatt? = null
     private var connecting: CompletableDeferred<Boolean>? = null
     private var validFrameCount = 0L
+    private var droppedFrameCount = 0L
+    private var debugNotificationCount = 0
+    private var debugFrameCount = 0
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -98,6 +104,9 @@ class BleMeterTransport(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "MTU ausgehandelt: $mtu, status=$status")
+            }
             gattQueue.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
@@ -122,6 +131,9 @@ class BleMeterTransport(
         decoder.reset()
         gattQueue.reset()
         validFrameCount = 0
+        droppedFrameCount = 0
+        debugNotificationCount = 0
+        debugFrameCount = 0
         _frameQuality.value = FrameQuality()
 
         _state.value = ConnectionState.CONNECTING
@@ -193,8 +205,17 @@ class BleMeterTransport(
     }
 
     private fun onNotify(raw: ByteArray) {
-        val decoded = decoder.feed(raw)
+        val arrival = now.now()
+        if (BuildConfig.DEBUG && debugNotificationCount < 200) {
+            Log.d(TAG, "Notification #$debugNotificationCount: ${raw.size} Bytes, t=$arrival")
+            debugNotificationCount++
+        }
+        val decoded = decoder.feed(raw, arrival)
         for (frame in decoded) {
+            if (BuildConfig.DEBUG && debugFrameCount < 200) {
+                Log.d(TAG, "Frame #$debugFrameCount: receivedAt=${frame.receivedAt}, level=${frame.level}")
+                debugFrameCount++
+            }
             validFrameCount++
             _state.value = ConnectionState.STREAMING
             _lastFrameAt.value = frame.receivedAt
@@ -202,14 +223,18 @@ class BleMeterTransport(
             // Byte-Stroms bei. Mehrere Frames aus einem feed() entstehen nach einer
             // Resynchronisation oder bei zusammengefassten Notifications - nebenlaeufige
             // Coroutinen koennten sie vertauscht in den SharedFlow schreiben.
-            _frames.tryEmit(frame)
+            val emitted = _frames.tryEmit(frame)
+            if (!emitted) {
+                droppedFrameCount++
+                Log.w(TAG, "Frame-Puffer voll (64 Elemente), Frame verworfen (gesamt verworfen: $droppedFrameCount)")
+            }
         }
         // Jede Notification aktualisiert die Kennzahl, nicht nur solche mit validem Frame -
         // sonst wuerde eine Serie reiner Decode-Fehler (kein einziges valides Frame) den
         // Supervisor nie erreichen (Plan Abschnitt 5.5).
         _frameQuality.value = FrameQuality(
-            totalFrames = validFrameCount + decoder.decodeErrors,
-            errorFrames = decoder.decodeErrors.toLong(),
+            totalFrames = validFrameCount + decoder.decodeErrors + droppedFrameCount,
+            errorFrames = decoder.decodeErrors.toLong() + droppedFrameCount,
         )
     }
 

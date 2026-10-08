@@ -36,7 +36,9 @@ private const val LARGE_JUMP_THRESHOLD_DB = 40.0
  * erst [decode] - dort wird ein unerkannter Wert bewusst zu `null`, nie zu einem geratenen
  * Default.
  */
-class Pce323FrameDecoder {
+class Pce323FrameDecoder(
+    private val now: InstantSource = InstantSource.System,
+) {
 
     private val buffer = ArrayDeque<Byte>()
 
@@ -63,7 +65,7 @@ class Pce323FrameDecoder {
         decodeErrors = 0
     }
 
-    fun feed(bytes: ByteArray): List<MeterFrame> {
+    fun feed(bytes: ByteArray, arrival: Instant = now.now()): List<MeterFrame> {
         buffer.addAll(bytes.toList())
         val frames = mutableListOf<MeterFrame>()
 
@@ -93,7 +95,7 @@ class Pce323FrameDecoder {
             }
 
             repeat(Pce323Profile.FRAME_SIZE) { buffer.removeFirst() }
-            val frame = decode(candidate)
+            val frame = decode(candidate, arrival)
             if (frame == null) {
                 decodeErrors++
             } else {
@@ -152,7 +154,7 @@ class Pce323FrameDecoder {
         return true
     }
 
-    private fun decode(raw: ByteArray): MeterFrame? {
+    private fun decode(raw: ByteArray, arrival: Instant): MeterFrame? {
         val o = Pce323Profile.LEVEL_OFFSET
         val bits = ((raw[o].toInt() and 0xFF) shl 24) or
             ((raw[o + 1].toInt() and 0xFF) shl 16) or
@@ -183,7 +185,7 @@ class Pce323FrameDecoder {
             range = decodeRange(raw[Pce323Profile.RANGE_BYTE_OFFSET]),
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.now(),
+            receivedAt = arrival,
             largeJump = largeJump,
             modeAssumptionConfirmed = Pce323Profile.MODE_ASSUMPTION_CONFIRMED,
         )

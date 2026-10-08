@@ -25,6 +25,9 @@ class FakeMeterTransport(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob()),
     private val frameRateHz: Double = 2.0,
     private val baseLevel: Double = 55.0,
+    private val now: InstantSource = InstantSource.System,
+    private val framesPerTick: Int = 1,
+    private val autoEmit: Boolean = true,
 ) : MeterTransport {
 
     private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -57,6 +60,8 @@ class FakeMeterTransport(
         throwOnConnect = enabled
     }
 
+    private var lastEmittedEpochMs: Long = 0L
+
     override suspend fun connect(device: BoundDevice) {
         if (throwOnConnect) {
             throw IllegalStateException("Simulierter Verbindungsfehler (simulateConnectException)")
@@ -67,11 +72,14 @@ class FakeMeterTransport(
         // ueber einen Reconnect hinweg fortleben.
         validFrameCount = 0
         errorFrameCount = 0
+        lastEmittedEpochMs = 0L
         _frameQuality.value = FrameQuality()
         _state.value = ConnectionState.CONNECTING
         _state.value = ConnectionState.DISCOVERING
         _state.value = ConnectionState.SUBSCRIBING
-        startEmitting()
+        if (autoEmit) {
+            startEmitting()
+        }
     }
 
     override suspend fun disconnect() {
@@ -113,6 +121,7 @@ class FakeMeterTransport(
      */
     suspend fun emitFrame(frame: MeterFrame) {
         validFrameCount++
+        _state.value = ConnectionState.STREAMING
         _lastFrameAt.value = frame.receivedAt
         _frames.emit(frame)
         _frameQuality.value = FrameQuality(validFrameCount + errorFrameCount, errorFrameCount)
@@ -127,9 +136,16 @@ class FakeMeterTransport(
         timeWeighting: TimeWeighting? = TimeWeighting.FAST,
         range: MeasurementRange? = MeasurementRange.RANGE_30_130,
         modeAssumptionConfirmed: Boolean = true,
+        receivedAt: Instant? = null,
     ) {
-        val nowMs = System.currentTimeMillis().coerceAtLeast(lastEmittedEpochMs + 1)
-        lastEmittedEpochMs = nowMs
+        val finalReceivedAt = if (receivedAt != null) {
+            lastEmittedEpochMs = maxOf(lastEmittedEpochMs, receivedAt.toEpochMilli())
+            receivedAt
+        } else {
+            val nowMs = now.now().toEpochMilli().coerceAtLeast(lastEmittedEpochMs + 1)
+            lastEmittedEpochMs = nowMs
+            Instant.ofEpochMilli(nowMs)
+        }
         val frame = MeterFrame(
             level = level,
             weighting = weighting,
@@ -137,7 +153,7 @@ class FakeMeterTransport(
             range = range,
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.ofEpochMilli(nowMs),
+            receivedAt = finalReceivedAt,
             modeAssumptionConfirmed = modeAssumptionConfirmed,
         )
         emitFrame(frame)
@@ -164,10 +180,15 @@ class FakeMeterTransport(
                     if (corruptFrames) {
                         errorFrameCount++
                     } else {
-                        val frame = nextFrame()
-                        validFrameCount++
-                        _lastFrameAt.value = frame.receivedAt
-                        _frames.emit(frame)
+                        val arrivalMs = now.now().toEpochMilli().coerceAtLeast(lastEmittedEpochMs + 1)
+                        lastEmittedEpochMs = arrivalMs
+                        val arrival = Instant.ofEpochMilli(arrivalMs)
+                        repeat(framesPerTick) {
+                            val frame = nextFrame(arrival)
+                            validFrameCount++
+                            _lastFrameAt.value = frame.receivedAt
+                            _frames.emit(frame)
+                        }
                     }
                     _frameQuality.value = FrameQuality(validFrameCount + errorFrameCount, errorFrameCount)
                 }
@@ -181,11 +202,7 @@ class FakeMeterTransport(
         emitJob = null
     }
 
-    private var lastEmittedEpochMs: Long = 0L
-
-    private fun nextFrame(): MeterFrame {
-        val nowMs = System.currentTimeMillis().coerceAtLeast(lastEmittedEpochMs + 1)
-        lastEmittedEpochMs = nowMs
+    private fun nextFrame(arrival: Instant = now.now()): MeterFrame {
         val level = baseLevel + Random.nextDouble(-3.0, 3.0)
         // Spiegelt das reale BleMeterTransport-Verhalten: Bewertung, Zeitbewertung, Bereich
         // und Hold-Status sind beim echten Geraet unbekannt (siehe MeterFrame-Doc), der Fake
@@ -197,7 +214,7 @@ class FakeMeterTransport(
             range = null,
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.ofEpochMilli(nowMs),
+            receivedAt = arrival,
         )
     }
 }

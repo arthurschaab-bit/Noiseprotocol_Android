@@ -471,6 +471,18 @@ Aufzeichnungen endeten nach Hintergrund-Beendigung durch EMUI ohne Wiederaufnahm
 | Aufzeichnung starten, Prozess gezielt beenden (`adb shell am crash com.example.lrmprotokoll` oder `adb shell "pid=\$(pidof com.example.lrmprotokoll) && run-as com.example.lrmprotokoll kill -9 \$pid"`) | Startet AOSP den Dienst wegen `START_STICKY` binnen weniger Sekunden neu, greift der OS-Neustart (kein `quelle = waechter`). Greift der OS-Neustart nicht (wie bei EMUI-Speicherbereinigung nach längerer Inaktivität beobachtet): Spätestens nach ca. 20 min läuft die Aufzeichnung durch den Wächter wieder; im Diagnose-Screen steht `RECORDING_ENDED_UNEXPECTEDLY` mit `quelle = waechter` (bei eingerichtetem ntfy trifft auch die Push-Meldung ein). Läuft nach 30 min noch nichts: EMUI-Job-Unterdrückung (Befund H) prüfen | |
 | Gegenprobe mit „Beenden erzwingen“ über die Systemeinstellungen | Es startet nichts von selbst (zu erwarten: force-stop entfernt alle Jobs) | |
 
+### F23 — Kadenzwächter: Keine Fehlalarme durch Sammler- oder Notification-Bündelung (Bugfix 08.10.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_KADENZWAECHTER.md`), aber **noch nicht auf echter Hardware
+gesehen**. Auslöser war Befund D (`docs/BEFUNDE_BUNDLES_2026-10-07.md`): Unnötige Trennungen
+und `DEGRADED: Framekadenz …` durch Frame-Abstände von 0–27 ms (Notification-Bündelung) oder
+Dispatcher-Verzögerungen beim Sammeln.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Einen Tag mit verbundenem PCE-323 aufzeichnen | Im nächsten Bundle: `DEGRADED: Framekadenz` kommt höchstens noch vereinzelt vor, nicht mehr bei fast jeder Trennung (Vergleichswert vor Fix: 5 von 6 Trennungen am 01.–05.10.) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

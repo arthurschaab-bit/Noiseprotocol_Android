@@ -48,6 +48,22 @@ private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 private const val MIN_CADENCE_VIOLATIONS = 2
 
 /**
+ * Schwellenwert in Millisekunden, bis zu dem aufeinanderfolgende Frames als Teil derselben
+ * BLE-Notification oder desselben Bluetooth-Paketbuendels gewertet werden (Befund D: 0-27 ms
+ * in realen Support-Bundles beobachtet). Liegt sicher unterhalb abweichender Kadenz-Takte
+ * wie 150 ms (10 Hz = 100 ms) und dem erwarteten 515-ms-Takt.
+ */
+private const val SAME_ARRIVAL_THRESHOLD_MS = 50L
+
+/**
+ * Maximale Anzahl von Frames, die in einem legitimen BLE-Notification-Buendel auftreten
+ * koennen (PCE-323 Frame-Groesse 23 Bytes; maximal 2 Frames je BLE-Event/Notification).
+ * Mehr als 2 Frames innerhalb von 50 ms gelten als verdaechtige Frame-Flut bzw.
+ * Injektions-Angriff und loesen einen Kadenz-Verstoss aus.
+ */
+private const val MAX_FRAMES_PER_BURST = 2
+
+/**
  * Treibt den Verbindungs-Zustandsautomaten aus Plan Abschnitt 5.1 ueber die reine
  * [MeterTransport]-Schnittstelle - kennt NICHT [com.example.lrmprotokoll.meter.ble.BleMeterTransport],
  * nur so bleibt sie vollstaendig gegen [FakeMeterTransport] testbar (PROMPT_M3 Aufgabe 1).
@@ -452,6 +468,7 @@ class ConnectionSupervisor(
 
     private suspend fun monitorStreamingSession(): StreamEndReason = coroutineScope {
         val done = CompletableDeferred<StreamEndReason>()
+        val sessionStartedAt = now.now()
 
         val disconnectWatcher = launch {
             transport.state.first { it == ConnectionState.DISCONNECTED || it == ConnectionState.FAILED }
@@ -529,23 +546,65 @@ class ConnectionSupervisor(
             done.complete(StreamEndReason.ADAPTER_OFF)
         }
 
-        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung): misst die Zeit zwischen
-        // zwei Frame-Ankuenften ueber [now] statt ueber die im Frame mitgelieferte Zeit - wie
-        // errorRateWatcher oben, damit die Pruefung synchron zur injizierten Uhr laeuft und in
-        // Tests ueber advanceTimeBy steuerbar ist, unabhaengig davon, welche Zeit der Transport
-        // selbst in lastFrameAt eintraegt.
+        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung, Befund D): misst die Zeit
+        // zwischen zwei Frame-Ankuenften anhand des echten Empfangszeitpunkts [MeterFrame.receivedAt]
+        // aus [transport.frames] statt beim asynchronen Sammeln ueber [now.now()] (verhinderte
+        // bisher Fehlalarme bei Dispatcher-Verzoegerungen).
+        // Frames derselben BLE-Notification bzw. desselben BLE-Paketbuendels (Deltas <=
+        // SAME_ARRIVAL_THRESHOLD_MS, real 0..27 ms) zaehlen als eine Ankunft und werden fuer
+        // die Taktermittlung uebersprungen (maximal [MAX_FRAMES_PER_BURST] Frames je Buendel).
         val cadenceWatcher = expectedFramePeriod?.let { erwartet ->
             launch {
                 var vorherigeAnkunft: Instant? = null
                 var abweichungenInFolge = 0
-                transport.lastFrameAt.collect { letzter ->
-                    if (letzter == null) return@collect
-                    val ankunft = now.now()
+                var burstCount = 1
+                transport.frames.collect { frame ->
+                    // Verhindert, dass nach einem Reconnect alte gecachte Frames (z.B. replay=1)
+                    // aus der vorherigen Session gemessen werden (Review Befund ID 4215377938).
+                    if (frame.receivedAt < sessionStartedAt) return@collect
+
+                    val ankunft = frame.receivedAt
                     val vorherige = vorherigeAnkunft
-                    vorherigeAnkunft = ankunft
-                    if (vorherige == null) return@collect
+                    if (vorherige == null) {
+                        vorherigeAnkunft = ankunft
+                        burstCount = 1
+                        return@collect
+                    }
 
                     val deltaMillis = Duration.between(vorherige, ankunft).toMillis()
+                    if (deltaMillis in 0..SAME_ARRIVAL_THRESHOLD_MS) {
+                        burstCount++
+                        if (burstCount <= MAX_FRAMES_PER_BURST) {
+                            // Gehoert zur selben Notification / zum selben BLE-Paketbuendel (Befund D).
+                            // Zaehlt als dieselbe Ankunft und wird fuer die Taktberechnung uebersprungen.
+                            return@collect
+                        }
+                        // Mehr als MAX_FRAMES_PER_BURST innerhalb von 50 ms: Verdaechtige
+                        // Frame-Flut / Injektions-Angriff -> als Kadenz-Verstoss werten!
+                        abweichungenInFolge++
+                        if (abweichungenInFolge >= MIN_CADENCE_VIOLATIONS) {
+                            Log.w(
+                                TAG,
+                                "Framekadenz: Ueberzaehlige Frames im Buendel ($burstCount > $MAX_FRAMES_PER_BURST) - moeglicher Spoofing-Verdacht",
+                            )
+                            val msg = "DEGRADED: Framekadenz: Ueberzaehlige Frames im Buendel ($burstCount > $MAX_FRAMES_PER_BURST)"
+                            setOverride(ConnectionState.DEGRADED)
+                            diagnosticLogger?.protokolliere(msg)
+                            diagnosticsReporter?.report(
+                                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BLE_CADENCE_INVALID,
+                                component = "ConnectionSupervisor",
+                                operation = "cadenceWatcher",
+                                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                message = msg,
+                            )
+                            transport.disconnect()
+                            done.complete(StreamEndReason.LOST)
+                        }
+                        return@collect
+                    }
+
+                    vorherigeAnkunft = ankunft
+                    burstCount = 1
                     val minMillis = (erwartet.toMillis() * (1 - cadenceTolerance)).toLong()
                     val maxMillis = (erwartet.toMillis() * (1 + cadenceTolerance)).toLong()
                     if (deltaMillis < minMillis || deltaMillis > maxMillis) {
@@ -564,7 +623,7 @@ class ConnectionSupervisor(
                                 component = "ConnectionSupervisor",
                                 operation = "cadenceWatcher",
                                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
-                                message = msg
+                                message = msg,
                             )
                             transport.disconnect()
                             done.complete(StreamEndReason.LOST)
