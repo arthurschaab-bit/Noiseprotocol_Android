@@ -502,7 +502,7 @@ nur 1 h 43 min abdeckte.
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Nach einem Messtag ein Support-Bundle erzeugen | `breadcrumbs.jsonl` reicht im Bundle etwa dreimal so weit zurück wie bisher (Vergleich: 1 h 43 min am 06.10.); pro WAV-Aufnahme gibt es genau einen Breadcrumb (`WAV-Aufnahme gespeichert`) mit allen Metadaten (Dauer, Bytes, Pegel, KI, Room-ID) statt drei separater Spuren | |
+| Nach einem Messtag ein Support-Bundle erzeugen | `breadcrumbs.jsonl` reicht im Bundle spürbar weiter zurück als bisher (Vergleich: 1 h 43 min am 06.10.) – Schätzung grob das 1,5- bis 2-Fache, nicht das Dreifache: Die Ringdatei ist nach Bytes begrenzt (2 × 256 KB), und der eine zusammengefasste Eintrag ist mit rund 20 Feldern fast so groß wie die drei alten zusammen; pro WAV-Aufnahme gibt es genau einen Breadcrumb (`WAV-Aufnahme gespeichert`) mit allen Metadaten (Dauer, Bytes, Pegel, KI, Room-ID) statt drei separater Spuren | |
 
 ### F26 — Lebenszyklus-Protokoll für Prozess- und Dienstereignisse (08.10.2026, Befund I)
 

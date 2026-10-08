@@ -51,7 +51,9 @@ class WavAufnahmeBreadcrumbTest {
                 meterConnected = true,
             )
 
-            val breadcrumbsVorher = app.container.diagnosticsReporter.recentBreadcrumbs(200).size
+            // Menge statt Anzahl: Die Historie haelt nur die letzten 100 Eintraege - ist sie voll, bleibt
+            // die Anzahl gleich und drop(vorher) wuerde die neuen Eintraege verwerfen.
+            val breadcrumbsVorher = app.container.diagnosticsReporter.recentBreadcrumbs(200).toSet()
 
             service.starteWavAufnahme(
                 initialAmplitude = 1500.0,
@@ -62,7 +64,7 @@ class WavAufnahmeBreadcrumbTest {
 
             val neueBreadcrumbs = app.container.diagnosticsReporter
                 .recentBreadcrumbs(200)
-                .drop(breadcrumbsVorher)
+                .filter { it !in breadcrumbsVorher }
                 .filter { it.category == "AudioService" }
 
             // Akzeptanzkriterium 1: Genau EIN Breadcrumb je Aufnahme
@@ -120,7 +122,9 @@ class WavAufnahmeBreadcrumbTest {
                 meterConnected = false,
             )
 
-            val breadcrumbsVorher = app.container.diagnosticsReporter.recentBreadcrumbs(200).size
+            // Menge statt Anzahl: Die Historie haelt nur die letzten 100 Eintraege - ist sie voll, bleibt
+            // die Anzahl gleich und drop(vorher) wuerde die neuen Eintraege verwerfen.
+            val breadcrumbsVorher = app.container.diagnosticsReporter.recentBreadcrumbs(200).toSet()
 
             service.starteWavAufnahme(
                 initialAmplitude = 1200.0,
@@ -131,7 +135,7 @@ class WavAufnahmeBreadcrumbTest {
 
             val neueBreadcrumbs = app.container.diagnosticsReporter
                 .recentBreadcrumbs(200)
-                .drop(breadcrumbsVorher)
+                .filter { it !in breadcrumbsVorher }
                 .filter { it.category == "AudioService" }
 
             // Akzeptanzkriterium 2: Fehlerpfad ohne NoiseRecord erzeugt genau einen Breadcrumb mit Fehlerkennzeichen
