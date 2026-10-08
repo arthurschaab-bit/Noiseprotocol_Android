@@ -38,8 +38,10 @@ class SettingsManager(
     private val prefs: SharedPreferences = context.getSharedPreferences("noise_settings", Context.MODE_PRIVATE)
 
     private companion object {
-        /** Eigene Konstante, weil [istBestandsinstallation] denselben Schluessel ausnehmen muss. */
+        /** Eigene Konstanten, weil [istBestandsinstallation] dieselben Schluessel ausnehmen muss. */
         const val SCHLUESSEL_ONBOARDING = "onboarding_completed"
+        const val SCHLUESSEL_LETZTER_PROZESS_START_AT = "letzter_prozess_start_at"
+        const val SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED = "letzter_prozess_start_elapsed_realtime"
     }
 
     /**
@@ -622,6 +624,19 @@ class SettingsManager(
         set(value) = prefs.edit().putLong("letzter_verarbeiteter_prozess_exit_zeitstempel", value).apply()
 
     /**
+     * Zeitstempel (Wallclock Millis) und Uptime (elapsedRealtime Millis) des letzten Prozessstarts
+     * (docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md Schritt 1). Dient zur Erkennung von
+     * Geraeteneustarts zwischen zwei Prozesslaeufen.
+     */
+    var letzterProzessStartAt: Long
+        get() = prefs.getLong(SCHLUESSEL_LETZTER_PROZESS_START_AT, 0L)
+        set(value) = prefs.edit().putLong(SCHLUESSEL_LETZTER_PROZESS_START_AT, value).apply()
+
+    var letzterProzessStartElapsedRealtime: Long
+        get() = prefs.getLong(SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED, 0L)
+        set(value) = prefs.edit().putLong(SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED, value).apply()
+
+    /**
      * Snapshot der unverschluesselten Einstellungen fuer das Support-Bundle (M12 Schritt 4,
      * `state/settings.json`). Enthaelt STRUKTURELL keine Geheimnisse: ntfyTopic/ntfyServer/
      * heartbeatUrl liegen in [securePrefs], nicht in [prefs] - dieser Snapshot sieht sie gar
@@ -725,11 +740,19 @@ class SettingsManager(
      *
      * Grenzfall, bewusst so: Wer die App installiert, nichts einstellt und keine Messung startet,
      * gilt beim naechsten Start weiterhin als neu und sieht die Einfuehrung. Das ist richtig - er
-     * hat sie ja noch nicht gesehen.
+     * hat sie ja noch nicht gesehen. Ebenso wenig machen die beim allerersten Start in
+     * [com.example.lrmprotokoll.LaermprotokollApp.onCreate] automatisch gesetzten Lebenszyklus-
+     * Zeitstempel ([SCHLUESSEL_LETZTER_PROZESS_START_AT], [SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED])
+     * eine frische Installation zur Bestandsinstallation.
      */
     private fun istBestandsinstallation(): Boolean {
         val vorhandeneSchluessel = runCatching { prefs.all.keys }.getOrNull() ?: return true
-        return vorhandeneSchluessel.any { it != SCHLUESSEL_ONBOARDING }
+        val ausgenommeneSchluessel = setOf(
+            SCHLUESSEL_ONBOARDING,
+            SCHLUESSEL_LETZTER_PROZESS_START_AT,
+            SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED,
+        )
+        return vorhandeneSchluessel.any { it !in ausgenommeneSchluessel }
     }
 
     // ---------------------------------------------------------------- F2: Filter-Zustand Persistenz (M10)

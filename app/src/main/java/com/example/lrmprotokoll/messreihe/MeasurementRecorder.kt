@@ -66,10 +66,13 @@ class MeasurementRecorder(
      * [ConnectionEventEntity]/[Ausfallband].
      */
     private val mikrofonAktiv: Flow<Boolean>? = null,
+    private val lebenszeichenIntervall: Duration = Duration.ofMinutes(15),
+    private val onLebenszeichen: ((Long) -> Unit)? = null,
 ) {
 
     private val pufferMutex = Mutex()
     private val puffer = mutableListOf<MeasurementEntity>()
+    private var letztesLebenszeichenAt: Long = 0L
 
     /**
      * Serialisiert alles, was Sessions eroeffnet oder schliesst.
@@ -169,7 +172,10 @@ class MeasurementRecorder(
                 launch {
                     while (isActive) {
                         delay(flushInterval.toMillis())
-                        pufferMutex.withLock { flushOhneSperre() }
+                        pufferMutex.withLock {
+                            flushOhneSperre()
+                            pruefeLebenszeichen()
+                        }
                     }
                 }
             }
@@ -223,6 +229,7 @@ class MeasurementRecorder(
                     )
                 )
                 aktiveSessionIstMikrofon = true
+                letztesLebenszeichenAt = now.now().toEpochMilli()
             }
             warMikrofonJeAktiv = false
             zuletztMikrofonImAusfall = false
@@ -230,7 +237,10 @@ class MeasurementRecorder(
                 launch {
                     while (isActive) {
                         delay(flushInterval.toMillis())
-                        pufferMutex.withLock { flushOhneSperre() }
+                        pufferMutex.withLock {
+                            flushOhneSperre()
+                            pruefeLebenszeichen()
+                        }
                     }
                 }
                 mikrofonAktiv?.let { fluss -> launch { fluss.collect { onMikrofonZustand(it) } } }
@@ -320,6 +330,7 @@ class MeasurementRecorder(
                 ),
                 bestehenderMessvorgangId = messvorgangId,
             )
+            letztesLebenszeichenAt = now.now().toEpochMilli()
         }
     }
 
@@ -334,6 +345,7 @@ class MeasurementRecorder(
         val id = aktiveSessionId ?: return
         aktiveSessionIstMikrofon = false
         aktiveSessionId = null
+        letztesLebenszeichenAt = 0L
         // Erst den Puffer wegschreiben, dann den Flush-Job beenden - sonst gehen die letzten
         // Sekunden der Mikrofonmessung verloren.
         pufferMutex.withLock { flushOhneSperre() }
@@ -410,6 +422,7 @@ class MeasurementRecorder(
         val warMikrofon = aktiveSessionIstMikrofon
         aktiveSessionId = null
         aktiveSessionIstMikrofon = false
+        letztesLebenszeichenAt = 0L
         if (sessionId == null) return
 
         // Eine Mikrofon-Session hat keinen Frame-Kontext (weighting/timeWeighting/range bleiben
@@ -484,6 +497,25 @@ class MeasurementRecorder(
         puffer.clear()
         runCatching { measurementDao.insertAll(zuSchreiben) }
             .onFailure { Log.w(TAG, "Konnte ${zuSchreiben.size} Messwerte nicht schreiben", it) }
+    }
+
+    private suspend fun pruefeLebenszeichen() {
+        val sessionId = sessionMutex.withLock { aktiveSessionId } ?: return
+        val jetzt = now.now().toEpochMilli()
+        if (letztesLebenszeichenAt == 0L) {
+            letztesLebenszeichenAt = jetzt
+            return
+        }
+        if (jetzt - letztesLebenszeichenAt >= lebenszeichenIntervall.toMillis()) {
+            letztesLebenszeichenAt = jetzt
+            onLebenszeichen?.invoke(jetzt)
+        }
+    }
+
+    internal suspend fun pruefeLebenszeichenManuell() {
+        pufferMutex.withLock {
+            pruefeLebenszeichen()
+        }
     }
 
     private suspend fun onState(zustand: ConnectionState) {

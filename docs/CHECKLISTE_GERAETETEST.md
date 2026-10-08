@@ -504,6 +504,17 @@ nur 1 h 43 min abdeckte.
 |---|---|---|
 | Nach einem Messtag ein Support-Bundle erzeugen | `breadcrumbs.jsonl` reicht im Bundle etwa dreimal so weit zurück wie bisher (Vergleich: 1 h 43 min am 06.10.); pro WAV-Aufnahme gibt es genau einen Breadcrumb (`WAV-Aufnahme gespeichert`) mit allen Metadaten (Dauer, Bytes, Pegel, KI, Room-ID) statt drei separater Spuren | |
 
+### F26 — Lebenszyklus-Protokoll für Prozess- und Dienstereignisse (08.10.2026, Befund I)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md`), aber
+**noch nicht auf echter Hardware gesehen**. Auslöser war Befund I (`docs/BEFUNDE_BUNDLES_2026-10-07.md`):
+Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen sich nicht untersuchen.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Handy neu starten, App öffnen, Bundle erzeugen | `log/lebenszyklus.jsonl` enthält den Eintrag „Gerät wurde neu gestartet“ | |
+| Einen Tag aufzeichnen | Das Protokoll reicht im Bundle trotzdem bis zum Vortag zurück | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

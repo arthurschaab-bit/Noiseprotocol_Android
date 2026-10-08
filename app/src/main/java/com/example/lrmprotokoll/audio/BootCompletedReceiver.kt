@@ -20,7 +20,16 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
         val container = (context.applicationContext as LaermprotokollApp).container
         val settings = container.settingsManager
-        if (!settings.monitoringWasActive) return
+        if (!settings.monitoringWasActive) {
+            container.lebenszyklusRingFile.protokolliere(
+                ereignis = "BOOT_COMPLETED empfangen",
+                details = mapOf(
+                    "gestartet" to false,
+                    "monitoringWasActive" to false,
+                ),
+            )
+            return
+        }
 
         // F-35: Zwischen dem letzten Lauf und dem Neustart kann die Mikrofonberechtigung entzogen
         // und das Messgeraet entkoppelt worden sein. Dann bekaeme der Dienst keinen erlaubten
@@ -32,8 +41,25 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 "Ueberwachung nach Neustart nicht wieder aufgenommen: weder Mikrofonberechtigung " +
                     "noch gekoppeltes Messgeraet",
             )
+            container.lebenszyklusRingFile.protokolliere(
+                ereignis = "BOOT_COMPLETED empfangen",
+                details = mapOf(
+                    "gestartet" to false,
+                    "monitoringWasActive" to true,
+                    "grund" to "keine_vordergrund_berechtigung",
+                ),
+            )
             return
         }
+
+        container.lebenszyklusRingFile.protokolliere(
+            ereignis = "BOOT_COMPLETED empfangen",
+            details = mapOf(
+                "gestartet" to true,
+                "monitoringWasActive" to true,
+                "audioMonitoringWasActive" to settings.audioMonitoringWasActive,
+            ),
+        )
 
         val serviceIntent = Intent(context, AudioRecordingService::class.java).apply {
             putExtra(EXTRA_START_AUDIO_MONITORING, settings.audioMonitoringWasActive)

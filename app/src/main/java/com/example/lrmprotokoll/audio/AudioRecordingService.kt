@@ -199,6 +199,7 @@ class AudioRecordingService : LifecycleService() {
 
     private lateinit var measurementRecorder: com.example.lrmprotokoll.messreihe.MeasurementRecorder
     private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
+    private lateinit var lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 
     @Volatile private var letzterMeterFrame: com.example.lrmprotokoll.meter.MeterFrame? = null
     private var stromReceiver: com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger? = null
@@ -215,6 +216,7 @@ class AudioRecordingService : LifecycleService() {
         classifier = NoiseClassifier(applicationContext)
         measurementRecorder = container.measurementRecorder
         videoTonMitschnitt = container.videoTonMitschnitt
+        lebenszyklusRingFile = container.lebenszyklusRingFile
 
         diagnosticsReporter.breadcrumb(
             "AudioService",
@@ -326,15 +328,30 @@ class AudioRecordingService : LifecycleService() {
     private fun meldeStromEmpfaengerAn() {
         if (stromReceiver != null) return
         val receiver =
-            com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger { eintrag ->
-                if (::diagnosticsReporter.isInitialized) {
-                    diagnosticsReporter.breadcrumb(
-                        category = "Power",
-                        message = eintrag,
-                        level = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.INFO,
-                    )
-                }
-            }
+            com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger(
+                onEintrag = { eintrag ->
+                    if (::diagnosticsReporter.isInitialized) {
+                        diagnosticsReporter.breadcrumb(
+                            category = "Power",
+                            message = eintrag,
+                            level = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.INFO,
+                        )
+                    }
+                },
+                onZustand = { text, zustand ->
+                    if (::lebenszyklusRingFile.isInitialized) {
+                        lebenszyklusRingFile.protokolliere(
+                            ereignis = "Wechsel der Stromversorgung",
+                            details = mapOf(
+                                "quelle" to zustand.quelle.label,
+                                "status" to zustand.status.label,
+                                "prozent" to zustand.prozent,
+                                "text" to text,
+                            ),
+                        )
+                    }
+                },
+            )
         stromReceiver = receiver
         androidx.core.content.ContextCompat.registerReceiver(
             this,
@@ -387,6 +404,15 @@ class AudioRecordingService : LifecycleService() {
 
         if (action == ACTION_STOP_SERVICE || action == "STOP_SERVICE") {
             expliziterServiceStopAngefordert = true
+            if (::lebenszyklusRingFile.isInitialized) {
+                lebenszyklusRingFile.protokolliere(
+                    ereignis = "Dienst ausdrücklich gestoppt",
+                    details = mapOf(
+                        "action" to action,
+                        "audioMonitoringWasActive" to settingsManager.audioMonitoringWasActive,
+                    ),
+                )
+            }
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "Expliziter Messungs-/Service-Stop angefordert",
@@ -443,6 +469,16 @@ class AudioRecordingService : LifecycleService() {
             updateNotification(connectionSupervisor.state.value)
             NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
             return START_STICKY
+        }
+
+        if (::lebenszyklusRingFile.isInitialized) {
+            lebenszyklusRingFile.protokolliere(
+                ereignis = "Dienst gestartet",
+                details = mapOf(
+                    "action" to (action ?: "<null>"),
+                    "audioMonitoringWasActive" to audioWarVorherAktiv,
+                ),
+            )
         }
 
         expliziterServiceStopAngefordert = false
@@ -1455,6 +1491,15 @@ class AudioRecordingService : LifecycleService() {
     override fun onDestroy() {
         val audioWarErwartet = settingsManager.audioMonitoringWasActive
         val wav = activeWavRecorder
+        if (::lebenszyklusRingFile.isInitialized) {
+            lebenszyklusRingFile.protokolliere(
+                ereignis = "Dienst onDestroy",
+                details = mapOf(
+                    "audioMonitoringWasActive" to audioWarErwartet,
+                    "expliziterStop" to expliziterServiceStopAngefordert,
+                ),
+            )
+        }
         diagnosticsReporter.breadcrumb(
             "AudioService",
             "AudioRecordingService wird beendet",

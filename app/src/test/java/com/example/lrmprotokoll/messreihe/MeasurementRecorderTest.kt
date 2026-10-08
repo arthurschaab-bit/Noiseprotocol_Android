@@ -927,4 +927,66 @@ class MeasurementRecorderTest {
         assertNotNull("Session muss existieren", session)
         assertNull("Mikrofon-Session darf nicht als verwaist vorzeitig beendet werden", session?.endedAt)
     }
+
+    /**
+     * Test 4 aus docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md Abschnitt 3:
+     * Lebenszeichen hoechstens alle 15 min und nur bei laufender Aufzeichnung.
+     */
+    @Test
+    fun lebenszeichenHoechstensAlle15MinUndNurBeiLaufenderAufzeichnung() = runTest(UnconfinedTestDispatcher()) {
+        val lebenszeichen = mutableListOf<Long>()
+        val recorder = MeasurementRecorder(
+            states = zustaende,
+            frames = frames,
+            sessionDao = sessionDao,
+            measurementDao = measurementDao,
+            connectionEventDao = connectionEventDao,
+            scope = backgroundScope,
+            now = uhr,
+            flushInterval = Duration.ofSeconds(5),
+            lebenszeichenIntervall = Duration.ofMinutes(15),
+            onLebenszeichen = { zeitpunkt -> lebenszeichen.add(zeitpunkt) },
+        )
+
+        // 1. Vor Beginn der Messung: keine Lebenszeichen, auch wenn Zeit vergeht
+        uhr.vor(Duration.ofMinutes(30))
+        recorder.pruefeLebenszeichenManuell()
+        assertTrue("Ohne laufende Messung darf kein Lebenszeichen erzeugt werden", lebenszeichen.isEmpty())
+
+        // 2. Mikrofon-Aufzeichnung starten
+        recorder.starteMikrofonMessung()
+        recorder.pruefeLebenszeichenManuell()
+        assertTrue("Direkt beim Start darf noch kein Lebenszeichen getriggert werden", lebenszeichen.isEmpty())
+
+        // 14 Minuten spaeter: Intervall (15 min) noch nicht erreicht
+        uhr.vor(Duration.ofMinutes(14))
+        recorder.pruefeLebenszeichenManuell()
+        assertEquals("Nach 14 Minuten darf noch kein Lebenszeichen gefeuert haben", 0, lebenszeichen.size)
+
+        // 1 Minute spaeter (genau 15 Minuten seit Start): 1. Lebenszeichen!
+        uhr.vor(Duration.ofMinutes(1))
+        recorder.pruefeLebenszeichenManuell()
+        assertEquals("Nach 15 Minuten muss genau 1 Lebenszeichen vorliegen", 1, lebenszeichen.size)
+        assertEquals(uhr.now().toEpochMilli(), lebenszeichen[0])
+
+        // Nochmal 14 Minuten spaeter: noch kein 2. Lebenszeichen
+        uhr.vor(Duration.ofMinutes(14))
+        recorder.pruefeLebenszeichenManuell()
+        assertEquals("Nach weiteren 14 Minuten darf noch kein 2. Lebenszeichen gefeuert haben", 1, lebenszeichen.size)
+
+        // Nochmal 1 Minute spaeter (30 Minuten seit Start): 2. Lebenszeichen!
+        uhr.vor(Duration.ofMinutes(1))
+        recorder.pruefeLebenszeichenManuell()
+        assertEquals("Nach 30 Minuten muessen genau 2 Lebenszeichen vorliegen", 2, lebenszeichen.size)
+        assertEquals(uhr.now().toEpochMilli(), lebenszeichen[1])
+
+        // 3. Aufzeichnung stoppen
+        recorder.stop()
+
+        // Nach dem Stop: auch nach weiteren 30 Minuten keine neuen Lebenszeichen
+        uhr.vor(Duration.ofMinutes(30))
+        recorder.pruefeLebenszeichenManuell()
+        assertEquals("Nach Stop duerfen keine weiteren Lebenszeichen mehr erzeugt werden", 2, lebenszeichen.size)
+    }
 }
+

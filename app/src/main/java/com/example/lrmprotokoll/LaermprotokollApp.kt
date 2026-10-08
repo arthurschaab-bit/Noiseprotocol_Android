@@ -65,6 +65,11 @@ class LaermprotokollApp : Application() {
         // Aufgabe 5 (Konzept 4.3): die Ringdatei wird genau einmal beim Start beschnitten,
         // falls sie durch einen frueheren Fehler die Obergrenze ueberschreitet.
         container.breadcrumbRingFile.beimStartBeschneiden()
+        container.lebenszyklusRingFile.beimStartBeschneiden()
+        com.example.lrmprotokoll.diagnose.LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = container.settingsManager,
+            lebenszyklusRingFile = container.lebenszyklusRingFile,
+        )
         // M12 Schritt 3 (Konzept 6): die Auswertung liegt jetzt in ProcessExitCollector, nicht
         // mehr inline hier - Verhalten bleibt sonst gleich (Breadcrumb + Report bei CRASH/ANR),
         // zusaetzlich jetzt ALLE neuen Eintraege statt nur dem letzten, plus ANR-Thread-Dump und

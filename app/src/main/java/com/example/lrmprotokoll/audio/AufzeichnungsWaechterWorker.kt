@@ -55,6 +55,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
     private val settingsManagerOverride: com.example.lrmprotokoll.data.SettingsManager? = null,
     private val levelSampleDaoOverride: com.example.lrmprotokoll.data.LevelSampleDao? = null,
     private val diagnosticsReporterOverride: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
+    private val lebenszyklusRingFileOverride: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile? = null,
 ) : CoroutineWorker(context, parameter) {
 
     override suspend fun doWork(): Result {
@@ -64,6 +65,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
         val dao = levelSampleDaoOverride ?: container?.database?.levelSampleDao()
         val reporter = diagnosticsReporterOverride ?: container?.diagnosticsReporter
             ?: com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(sinks = emptyList())
+        val ringFile = lebenszyklusRingFileOverride ?: container?.lebenszyklusRingFile
 
         val zeitProvider = zeitProviderOverride ?: { System.currentTimeMillis() }
         val sdkInt = sdkIntOverride ?: Build.VERSION.SDK_INT
@@ -145,6 +147,17 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                                 "audioWarAktiv" to settings.audioMonitoringWasActive,
                                 "quelle" to "waechter",
                             ),
+                    )
+
+                    ringFile?.protokolliere(
+                        ereignis = "Unerwartetes Ende erkannt",
+                        details =
+                            mapOf(
+                                "letzteDatenAt" to letzteDatenAt,
+                                "lueckeMinuten" to lueckeMinuten,
+                                "quelle" to "waechter",
+                            ),
+                        timestampMillis = jetzt,
                     )
 
                     settings.speichereUnterbrechung(beginn = letzteDatenAt, ende = jetzt)
