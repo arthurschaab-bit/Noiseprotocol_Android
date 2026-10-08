@@ -399,6 +399,7 @@ class AudioRecordingService : LifecycleService() {
             settingsManager.monitoringWasActive = false
             settingsManager.audioMonitoringWasActive = false
             HeartbeatPlanung.stoppe(applicationContext)
+            AufzeichnungsWaechterPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.drive.DriveSyncPlanung.stoppe(applicationContext)
             com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupPlanung.stoppe(applicationContext)
             isRunning = false
@@ -487,6 +488,7 @@ class AudioRecordingService : LifecycleService() {
         ensureDiagnosticLoggingStarted()
         meldeStromEmpfaengerAn()
         RetentionPlanung.plane(applicationContext)
+        AufzeichnungsWaechterPlanung.plane(applicationContext)
         NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
         return START_STICKY
     }

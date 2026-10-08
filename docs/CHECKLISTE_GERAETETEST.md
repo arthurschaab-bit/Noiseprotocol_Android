@@ -460,6 +460,17 @@ und fehlender Fehlercode in `health_metrics.json`.
 | Messgerät ausschalten, Aufzeichnung laufen lassen, bis `FAILED` erscheint (etwa 3 min) | Im Diagnose-Screen steht „Verbindungsaufbau gescheitert“, nicht „Kein Frame … nach Verbindungsaufbau“ | |
 | Im nächsten Gesundheits-Bundle `health_metrics.json` prüfen | Unter `fehlerJeCode` existiert ein Eintrag `BLE_CONNECT_FAILED` | |
 
+### F22 — Wächter-Job startet unerwartet beendete Aufzeichnung neu (07.10.2026, Befund G)
+
+Umgesetzt und mit Robolectric/WorkManager unit-getestet (`docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md`), aber
+**noch nicht auf echter Hardware gesehen**. Auslöser war Befund G (`docs/BEFUNDE_BUNDLES_2026-10-07.md`):
+Aufzeichnungen endeten nach Hintergrund-Beendigung durch EMUI ohne Wiederaufnahme.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung starten, Prozess gezielt beenden (`adb shell am crash com.example.lrmprotokoll` oder `adb shell "pid=\$(pidof com.example.lrmprotokoll) && run-as com.example.lrmprotokoll kill -9 \$pid"`) | Startet AOSP den Dienst wegen `START_STICKY` binnen weniger Sekunden neu, greift der OS-Neustart (kein `quelle = waechter`). Greift der OS-Neustart nicht (wie bei EMUI-Speicherbereinigung nach längerer Inaktivität beobachtet): Spätestens nach ca. 20 min läuft die Aufzeichnung durch den Wächter wieder; im Diagnose-Screen steht `RECORDING_ENDED_UNEXPECTEDLY` mit `quelle = waechter` (bei eingerichtetem ntfy trifft auch die Push-Meldung ein). Läuft nach 30 min noch nichts: EMUI-Job-Unterdrückung (Befund H) prüfen | |
+| Gegenprobe mit „Beenden erzwingen“ über die Systemeinstellungen | Es startet nichts von selbst (zu erwarten: force-stop entfernt alle Jobs) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

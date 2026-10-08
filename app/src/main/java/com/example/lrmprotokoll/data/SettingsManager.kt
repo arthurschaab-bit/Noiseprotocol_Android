@@ -213,6 +213,48 @@ class SettingsManager(
         get() = prefs.getBoolean("audio_monitoring_was_active", false)
         set(value) = prefs.edit().putBoolean("audio_monitoring_was_active", value).apply()
 
+    // Schleifenschutz fuer den Aufzeichnungs-Waechter (E2 aus docs/PROMPT_FIX_AUFZEICHNUNG_WAECHTER.md):
+    // Hoechstens 3 Neustarts pro Stunde, damit die App nicht endlos gegen ein aggressives EMUI ankaempft.
+    var waechterNeustartCount: Int
+        get() = prefs.getInt("waechter_neustart_count", 0)
+        set(value) = prefs.edit().putInt("waechter_neustart_count", value).apply()
+
+    var waechterNeustartFensterStart: Long
+        get() = prefs.getLong("waechter_neustart_fenster_start", 0L)
+        set(value) = prefs.edit().putLong("waechter_neustart_fenster_start", value).apply()
+
+    fun kannWaechterNeuStarten(jetzt: Long, maxNeustartsProStunde: Int = 3): Boolean {
+        val fensterStart = waechterNeustartFensterStart
+        val stundeMs = 60 * 60 * 1000L
+        return if (jetzt - fensterStart >= stundeMs || fensterStart == 0L || jetzt < fensterStart) {
+            true
+        } else {
+            waechterNeustartCount < maxNeustartsProStunde
+        }
+    }
+
+    fun registriereWaechterNeustart(jetzt: Long) {
+        val fensterStart = waechterNeustartFensterStart
+        val stundeMs = 60 * 60 * 1000L
+        if (jetzt - fensterStart >= stundeMs || fensterStart == 0L || jetzt < fensterStart) {
+            waechterNeustartFensterStart = jetzt
+            waechterNeustartCount = 1
+        } else {
+            waechterNeustartCount += 1
+        }
+    }
+
+    // Verhindert Diagnose-Spam alle 15 Minuten, wenn die Aufzeichnung gewuenscht, aber ohne Berechtigungen ist
+    var aufzeichnungNichtStartbarGemeldet: Boolean
+        get() = prefs.getBoolean("aufzeichnung_nicht_startbar_gemeldet", false)
+        set(value) = prefs.edit().putBoolean("aufzeichnung_nicht_startbar_gemeldet", value).apply()
+
+    // Speichert den Beginn der letzten gemeldeten Unterbrechung, um Push-/Benachrichtigungs-Spam
+    // ab SDK 30 und bei aktivem Schleifenschutz zu verhindern.
+    var waechterLetzterGemeldeterAusfallAt: Long
+        get() = prefs.getLong("waechter_letzter_gemeldeter_ausfall_at", -1L)
+        set(value) = prefs.edit().putLong("waechter_letzter_gemeldeter_ausfall_at", value).apply()
+
     // ---------------------------------------------------------------- M5: Alarmierung
 
     var alarmierungAktiv: Boolean
@@ -854,7 +896,14 @@ class SettingsManager(
         } else {
             deserialisiereUnterbrechungen(prefs.getString("unterbrechung_eintraege", null))
         }
-        val neueListe = bestehende + AufzeichnungsUnterbrechung(beginn = beginn, ende = ende)
+        val existiertSchon = bestehende.any { it.beginn == beginn }
+        val neueListe = if (existiertSchon) {
+            bestehende.map {
+                if (it.beginn == beginn) it.copy(ende = maxOf(it.ende, ende)) else it
+            }
+        } else {
+            bestehende + AufzeichnungsUnterbrechung(beginn = beginn, ende = ende)
+        }
         val raw = serialisiereUnterbrechungen(neueListe)
         prefs.edit()
             .putString("unterbrechung_eintraege", raw)
