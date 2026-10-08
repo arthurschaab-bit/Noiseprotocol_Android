@@ -778,75 +778,151 @@ class ConnectionSupervisorTest {
 
     /**
      * Welle 2, Auftrag 6 (Befund D): Bei Notification-Buendelung (z.B. MTU-Chunking / mehrere
-     * Frames in einer Notification bzw. schnellen Folge <= 50ms) darf kein DEGRADED ausgeloest
-     * werden, wenn die Ankuenfte der Buendel im 515ms-Takt liegen.
+     * Frames in einer Notification bzw. schnellen Folge <= 50ms mit Deltas von z.B. 5ms) darf
+     * kein DEGRADED ausgeloest werden, wenn die Ankuenfte der Buendel im 515ms-Takt liegen.
+     * Auf dem alten Code fuehrten die 5ms-Deltas zu sub-257ms-Abweichungen und loesten
+     * faelschlich DEGRADED aus (Vorher rot).
      */
     @Test
-    fun zweiFramesJeNotificationIm515msTaktLoestKeinDegradedAus() =
-        runTest {
-            val transport = newTransport(frameRateHz = 1000.0 / 515.0, framesPerTick = 2)
-            val supervisor = newSupervisor(
-                transport,
-                expectedFramePeriod = Duration.ofMillis(515),
-                cadenceTolerance = 0.5,
-            )
-            val states = observeStates(supervisor)
+    fun zweiFramesJeNotificationIm515msTaktLoestKeinDegradedAus() = runTest {
+        val transport = FakeMeterTransport(
+            scope = backgroundScope,
+            autoEmit = false,
+            now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+        )
+        val supervisor = newSupervisor(
+            transport,
+            expectedFramePeriod = Duration.ofMillis(515),
+            cadenceTolerance = 0.5,
+        )
+        val states = observeStates(supervisor)
 
-            supervisor.start(device)
-            runCurrent()
-            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        supervisor.start(device)
+        runCurrent()
 
-            advanceTimeBy(5_000)
-            runCurrent()
+        // Buendel 1 bei t=0ms und t=5ms
+        transport.emitFrame(receivedAt = Instant.EPOCH)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
 
-            assertFalse(
-                "Zwei Frames je Notification haetten kein DEGRADED ausloesen duerfen, war $states",
-                states.contains(ConnectionState.DEGRADED),
-            )
-            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
-        }
+        advanceTimeBy(5)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(5))
+        runCurrent()
+
+        // Buendel 2 bei t=515ms und t=520ms
+        advanceTimeBy(510)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(515))
+        runCurrent()
+
+        advanceTimeBy(5)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(520))
+        runCurrent()
+
+        // Buendel 3 bei t=1030ms und t=1035ms
+        advanceTimeBy(510)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(1030))
+        runCurrent()
+
+        advanceTimeBy(5)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(1035))
+        runCurrent()
+
+        assertFalse(
+            "Buendel-Frames mit 5ms Delta durften kein DEGRADED ausloesen, war $states",
+            states.contains(ConnectionState.DEGRADED),
+        )
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+    }
 
     /**
      * Welle 2, Auftrag 6 (Befund D): Wenn die Coroutine-Abholung/Dispatcher kuenstlich verzoegert
      * ist, aber die Frames mit puenktlichen Zeitstempeln (receivedAt) vorliegen, darf kein
      * Fehlalarm ausgeloest werden.
+     * Auf dem alten Code nahm cadenceWatcher now.now() beim Sammeln; bei verzoegerter Abholung
+     * entstanden dadurch falsche Messabstaende (z.B. 900 ms und 10 ms), die zu DEGRADED fuehrten (Vorher rot).
      */
     @Test
-    fun verzoegerterSammlerFuehrtNichtZuFehlalarm() =
-        runTest {
-            val transport = FakeMeterTransport(
-                scope = backgroundScope,
-                autoEmit = false,
-                now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
-            )
-            val supervisor = newSupervisor(
-                transport,
-                expectedFramePeriod = Duration.ofMillis(515),
-                cadenceTolerance = 0.5,
-            )
-            val states = observeStates(supervisor)
+    fun verzoegerterSammlerFuehrtNichtZuFehlalarm() = runTest {
+        val transport = FakeMeterTransport(
+            scope = backgroundScope,
+            autoEmit = false,
+            now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+        )
+        val supervisor = newSupervisor(
+            transport,
+            expectedFramePeriod = Duration.ofMillis(515),
+            cadenceTolerance = 0.5,
+        )
+        val states = observeStates(supervisor)
 
-            supervisor.start(device)
-            runCurrent()
+        supervisor.start(device)
+        runCurrent()
 
-            // Erstes Frame bei t=0
-            transport.emitFrame(receivedAt = Instant.EPOCH)
-            runCurrent()
-            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        // Erstes Frame bei t=0
+        transport.emitFrame(receivedAt = Instant.EPOCH)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
 
-            // Zeit vergeht im Test um 1200ms (Dispatcher/CPU war blockiert), aber die
-            // eintreffenden Frames haben Zeitstempel im 515ms-Takt (t=515ms und t=1030ms):
-            advanceTimeBy(1_200)
-            transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(515))
-            transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(1030))
-            runCurrent()
+        // Transport hat Frames mit echten Zeitstempeln im 515ms-Takt empfangen:
+        // Frame 2: receivedAt = 515ms
+        // Frame 3: receivedAt = 1030ms
+        // Der Sammler/Dispatcher lief jedoch verzoegert erst bei t = 900ms und 910ms:
+        advanceTimeBy(900)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(515))
+        runCurrent()
 
-            assertFalse(
-                "Puenktliche Frame-Zeitstempel trotz verzoegerter Abholung duerfen kein DEGRADED ausloesen, war $states",
-                states.contains(ConnectionState.DEGRADED),
-            )
-            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
-        }
+        advanceTimeBy(10)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(1030))
+        runCurrent()
+
+        assertFalse(
+            "Puenktliche Frame-Zeitstempel trotz verzoegerter Abholung duerfen kein DEGRADED ausloesen, war $states",
+            states.contains(ConnectionState.DEGRADED),
+        )
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+    }
+
+    /**
+     * Review ID 4215375857: Spoofing-Schutz gegen Injektionsangriffe. Ein Angreifer, der den
+     * 515ms-Takt einhaelt, aber innerhalb von 50ms mehrere gefaelschte Zusatzframes einspeist
+     * (uebersteigt MAX_FRAMES_PER_BURST), muss als Kadenzverletzung erkannt und getrennt werden.
+     */
+    @Test
+    fun injizierteZusatzframesInnerhalb50msLoestDegradedAus() = runTest {
+        val transport = FakeMeterTransport(
+            scope = backgroundScope,
+            autoEmit = false,
+            now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+        )
+        val supervisor = newSupervisor(
+            transport,
+            expectedFramePeriod = Duration.ofMillis(515),
+            cadenceTolerance = 0.5,
+        )
+        val states = observeStates(supervisor)
+
+        supervisor.start(device)
+        runCurrent()
+
+        // Beat 1 bei t=0
+        transport.emitFrame(receivedAt = Instant.EPOCH)
+        runCurrent()
+        assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+        // Beat 2 bei t=515ms mit Injektion von Zusatzframes innerhalb von 50ms:
+        advanceTimeBy(515)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(515)) // Frame 1 (Beat)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(520)) // Frame 2 (legitimes Buendel)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(525)) // Frame 3 (injected, burstCount=3 > 2 -> Verstoß 1)
+        transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(530)) // Frame 4 (injected, delta=5ms < 257ms -> Verstoß 2)
+        runCurrent()
+
+        assertTrue(
+            "Ueberzaehlige Frames innerhalb 50ms muessen als Kadenzangriff erkannt werden und DEGRADED ausloesen, war $states",
+            states.contains(ConnectionState.DEGRADED),
+        )
+        assertNoSpuriousDisconnectAroundDegraded(states)
+    }
 
     /**
      * Welle 2, Auftrag 6: Spoofing-Erkennung. Frames dauerhaft alle 150ms (< 257ms)
