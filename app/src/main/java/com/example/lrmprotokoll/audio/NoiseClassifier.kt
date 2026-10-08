@@ -419,7 +419,7 @@ class NoiseClassifier(private val context: Context) : SoundClassifier, RohdatenC
             // Nachtrag zu Etappe 1.4: bestaetigt im Support-Bundle-Export, dass pro Aufnahme
             // tatsaechlich ein Rohdaten-Bauplan entsteht (Frame-Anzahl > 0, Modellversion
             // gesetzt) - unabhaengig davon, ob AudioRecordingService ihn erfolgreich in Room
-            // persistiert (das bestaetigt die separate "NoiseRecord gespeichert"-Breadcrumb).
+            // persistiert (das bestaetigt die zusammengefasste "WAV-Aufnahme gespeichert"-Breadcrumb).
             container.diagnosticsReporter.breadcrumb(
                 "AI",
                 "Rohdaten-Bauplan erstellt (frames=${frames.size}, hopMs=$frameHopMs, topKlassen=${topKategorien.size})",

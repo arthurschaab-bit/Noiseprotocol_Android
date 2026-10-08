@@ -493,6 +493,17 @@ Ausbleibende Sync-Zyklen und abgebrochene Datenbanksicherungen.
 |---|---|---|
 | Nach einem Messtag ein Support-Bundle erzeugen | `state/runtime.json` zeigt die Arbeiten (`arbeiten` / `hintergrundJobs`) mit Zustand (`state`, `runAttemptCount`, `stopReason`, `netztyp`); im Diagnoseprotokoll stehen „angefordert“ (`Drive-Sync sofort angefordert`) und „gestartet“ (`Drive-Sync-Zyklus gestartet`) nebeneinander | |
 
+### F25 — WAV-Breadcrumbs verdichten (08.10.2026, Befund I)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_FIX_WAV_BREADCRUMBS_VERDICHTEN.md`), aber
+**noch nicht auf echter Hardware gesehen**. Auslöser war Befund I (`docs/BEFUNDE_BUNDLES_2026-10-07.md`):
+1.552 von 1.557 Breadcrumbs stammten von `AudioService` (3 je WAV-Aufnahme), wodurch die Ringdatei
+nur 1 h 43 min abdeckte.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach einem Messtag ein Support-Bundle erzeugen | `breadcrumbs.jsonl` reicht im Bundle etwa dreimal so weit zurück wie bisher (Vergleich: 1 h 43 min am 06.10.); pro WAV-Aufnahme gibt es genau einen Breadcrumb (`WAV-Aufnahme gespeichert`) mit allen Metadaten (Dauer, Bytes, Pegel, KI, Room-ID) statt drei separater Spuren | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

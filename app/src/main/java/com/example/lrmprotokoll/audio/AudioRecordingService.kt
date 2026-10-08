@@ -1209,7 +1209,8 @@ class AudioRecordingService : LifecycleService() {
 
     private var audioMonitoringRestartZustand = AudioMonitoringRestartZustand()
 
-    private suspend fun starteWavAufnahme(
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun starteWavAufnahme(
         initialAmplitude: Double,
         dbValue: Double,
         auswertung: com.example.lrmprotokoll.messreihe.MeterTriggerSource.Auswertung,
@@ -1243,6 +1244,7 @@ class AudioRecordingService : LifecycleService() {
             return
         }
 
+        val preRollBytes = totalDataLen
         val recorder = ActiveWavRecorder(
             file = file,
             outputStream = fos,
@@ -1255,19 +1257,6 @@ class AudioRecordingService : LifecycleService() {
             totalDataLen = totalDataLen,
         )
         activeWavRecorder = recorder
-        diagnosticsReporter.breadcrumb(
-            "AudioService",
-            "WAV-Aufnahme gestartet",
-            data = mapOf(
-                "fileName" to fileName,
-                "path" to file.absolutePath,
-                "sampleRate" to sampleRate,
-                "zielDauerMs" to durationMs,
-                "preRollBytes" to totalDataLen,
-                "meterConnected" to auswertung.meterConnected,
-                "pegelDb" to auswertung.pegel,
-            ),
-        )
 
         val startWait = System.currentTimeMillis()
         while (System.currentTimeMillis() - startWait < durationMs && isRunning && _audioAufnahmeAktiv.value) {
@@ -1291,19 +1280,6 @@ class AudioRecordingService : LifecycleService() {
             )
         }
 
-        diagnosticsReporter.breadcrumb(
-            "AudioService",
-            "WAV-Aufnahme beendet",
-            data = mapOf(
-                "fileName" to fileName,
-                "dauerMs" to actualDurationMs,
-                "zielDauerMs" to durationMs,
-                "dataBytes" to recorder.totalDataLen,
-                "fileBytes" to file.length(),
-                "unterbrochen" to interrupted,
-                "audioIstAktiv" to _audioAufnahmeAktiv.value,
-            ),
-        )
         if (interrupted) {
             diagnosticsReporter.report(
                 code = com.example.lrmprotokoll.diagnose.DiagnosticCode.AUDIO_WAV_INTERRUPTED,
@@ -1371,17 +1347,28 @@ class AudioRecordingService : LifecycleService() {
             }
             diagnosticsReporter.breadcrumb(
                 "AudioService",
-                "NoiseRecord gespeichert (KI=$detected, Rohdaten=$rohdatenGespeichert)",
+                "WAV-Aufnahme gespeichert",
                 data = mapOf(
-                    "recordId" to neueId,
                     "fileName" to fileName,
+                    "path" to file.absolutePath,
+                    "sampleRate" to sampleRate,
+                    "zielDauerMs" to durationMs,
+                    "dauerMs" to actualDurationMs,
+                    "preRollBytes" to preRollBytes,
+                    "dataBytes" to recorder.totalDataLen,
                     "fileBytes" to file.length(),
+                    "unterbrochen" to interrupted,
+                    "audioIstAktiv" to _audioAufnahmeAktiv.value,
+                    "meterConnected" to auswertung.meterConnected,
+                    "pegelDb" to auswertung.pegel,
+                    "recordId" to neueId,
                     "detectedLabel" to detected,
                     "rohdatenGespeichert" to rohdatenGespeichert,
                     "aufnahmeQuelle" to aktiveAufnahmequelle,
                     "abtastrate" to aktiveAbtastrate,
                     "kanalzahl" to aktiveKanalzahl,
                     "agcAktiv" to aktiveAgcAktiv,
+                    "gespeichert" to true,
                 ),
             )
         } catch (e: Throwable) {
@@ -1393,6 +1380,33 @@ class AudioRecordingService : LifecycleService() {
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
                 cause = e,
                 details = mapOf("fileName" to fileName, "fileBytes" to file.length()),
+            )
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "WAV-Aufnahme nicht gespeichert",
+                data = mapOf(
+                    "fileName" to fileName,
+                    "path" to file.absolutePath,
+                    "sampleRate" to sampleRate,
+                    "zielDauerMs" to durationMs,
+                    "dauerMs" to actualDurationMs,
+                    "preRollBytes" to preRollBytes,
+                    "dataBytes" to recorder.totalDataLen,
+                    "fileBytes" to file.length(),
+                    "unterbrochen" to interrupted,
+                    "audioIstAktiv" to _audioAufnahmeAktiv.value,
+                    "meterConnected" to auswertung.meterConnected,
+                    "pegelDb" to auswertung.pegel,
+                    "recordId" to null,
+                    "detectedLabel" to detected,
+                    "rohdatenGespeichert" to false,
+                    "aufnahmeQuelle" to aktiveAufnahmequelle,
+                    "abtastrate" to aktiveAbtastrate,
+                    "kanalzahl" to aktiveKanalzahl,
+                    "agcAktiv" to aktiveAgcAktiv,
+                    "gespeichert" to false,
+                    "fehler" to (e.message ?: e.javaClass.simpleName),
+                ),
             )
         }
 
