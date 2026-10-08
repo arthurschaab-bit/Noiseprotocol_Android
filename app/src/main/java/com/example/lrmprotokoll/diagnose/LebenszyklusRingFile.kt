@@ -16,13 +16,18 @@ private const val DATEINAME_A = "lebenszyklus_a.jsonl"
 private const val DATEINAME_B = "lebenszyklus_b.jsonl"
 
 /**
- * Absturzfeste, groessenbegrenzte Ablage fuer Lebenszyklus-Ereignisse (Prozessstart,
+ * Groessenbegrenzte Ablage fuer Lebenszyklus-Ereignisse (Prozessstart,
  * Geraeteneustart, Dienststart/-ende, Stromversorgungswechsel, Waechter-Ereignisse,
  * Lebenszeichen).
  *
  * Entspricht Befund I und Auftrag 9 (Welle 3, docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md):
  * Zwei Dateien a [DATEI_OBERGRENZE_BYTES] (64 KB) im Wechsel. Da Lebenszyklus-Ereignisse selten
  * sind, reicht dieser Speicher ueber viele Wochen zurueck.
+ *
+ * Geschrieben wird asynchron auf einem eigenen Thread (kein Datei-I/O auf dem Hauptthread). Was
+ * die Datei erreicht hat, ueberlebt einen Absturz; ein Eintrag, der in den letzten Millisekunden
+ * vor einem harten Prozessende (Low-Memory-Killer, `kill -9`) noch in der Warteschlange stand,
+ * kann dagegen fehlen.
  */
 class LebenszyklusRingFile(
     verzeichnis: File,
@@ -42,7 +47,14 @@ class LebenszyklusRingFile(
         if (!existiertA && !existiertB) return dateiA
         if (existiertA && !existiertB) return dateiA
         if (!existiertA && existiertB) return dateiB
-        return if (dateiB.lastModified() >= dateiA.lastModified()) dateiB else dateiA
+        val aenderungA = dateiA.lastModified()
+        val aenderungB = dateiB.lastModified()
+        if (aenderungA != aenderungB) return if (aenderungB > aenderungA) dateiB else dateiA
+        // Gleichstand innerhalb der mtime-Aufloesung des Dateisystems (oft 1-2 s): Eine Rotation
+        // fiel in dieselbe Sekunde wie der letzte Eintrag der vollen Datei. Aktiv ist dann die
+        // kleinere - in die frisch geleerte wurde zuletzt geschrieben. Die volle zu waehlen
+        // hiesse, beim naechsten Eintrag die andere (mit den neuesten Eintraegen) zu leeren.
+        return if (dateiB.length() <= dateiA.length()) dateiB else dateiA
     }
 
     /**
@@ -176,8 +188,14 @@ data class LebenszyklusEintrag(
 )
 
 /**
- * Bewertet den Start des aktuellen App-Prozesses und erkennt anhand der Geraete-Uptime
- * (`elapsedRealtimeMs`), ob das Geraet seit dem letzten Lauf neu gestartet wurde.
+ * Bewertet den Start des aktuellen App-Prozesses und erkennt, ob das Geraet seit dem letzten
+ * Lauf neu gestartet wurde.
+ *
+ * Massgeblich ist `Settings.Global.BOOT_COUNT` ([bootCount], ab API 24, also auf jedem
+ * unterstuetzten Geraet). Der fruehere Vergleich "Uptime kleiner als der Wanduhr-Abstand zum
+ * letzten Start" meldete nach einem Vorstellen der Uhr (Netzzeit, Nutzer) Neustarts, die es nie
+ * gab. Ist BOOT_COUNT unbekannt, bleibt nur der uhrunabhaengige Rest: Die Uptime ist kleiner als
+ * beim letzten Start.
  */
 object LebenszyklusProzessUeberwachung {
     fun auswerten(
@@ -187,21 +205,28 @@ object LebenszyklusProzessUeberwachung {
         elapsedRealtimeMs: Long = android.os.SystemClock.elapsedRealtime(),
         versionCode: Long = com.example.lrmprotokoll.BuildConfig.VERSION_CODE.toLong(),
         jetztMs: Long = System.currentTimeMillis(),
+        bootCount: Int? = null,
     ) {
         val vorherigerStartAt = settingsManager.letzterProzessStartAt
         val vorherigerElapsedRealtime = settingsManager.letzterProzessStartElapsedRealtime
+        val vorherigerBootCount = settingsManager.letzterProzessStartBootCount
 
         if (vorherigerStartAt > 0L) {
             val abstand = jetztMs - vorherigerStartAt
-            // Wenn elapsedRealtime kleiner ist als der Zeitabstand seit dem letzten Start
-            // (oder kleiner als der vorherige elapsedRealtime-Stand), erfolgte zwischenzeitlich ein Reboot.
-            if (abstand > 0L && (elapsedRealtimeMs < abstand || elapsedRealtimeMs < vorherigerElapsedRealtime)) {
+            val neugestartet =
+                if (bootCount != null && bootCount >= 0 && vorherigerBootCount >= 0) {
+                    bootCount != vorherigerBootCount
+                } else {
+                    elapsedRealtimeMs < vorherigerElapsedRealtime
+                }
+            if (neugestartet) {
                 lebenszyklusRingFile.protokolliere(
                     ereignis = "Gerät wurde neu gestartet",
                     details = mapOf(
                         "elapsedRealtimeMs" to elapsedRealtimeMs,
                         "abstandLetzterStartMs" to abstand,
                         "vorherigerStartAt" to vorherigerStartAt,
+                        "bootCount" to bootCount,
                     ),
                     timestampMillis = jetztMs,
                 )
@@ -220,5 +245,6 @@ object LebenszyklusProzessUeberwachung {
 
         settingsManager.letzterProzessStartAt = jetztMs
         settingsManager.letzterProzessStartElapsedRealtime = elapsedRealtimeMs
+        if (bootCount != null && bootCount >= 0) settingsManager.letzterProzessStartBootCount = bootCount
     }
 }

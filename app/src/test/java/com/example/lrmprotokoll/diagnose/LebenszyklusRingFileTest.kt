@@ -207,4 +207,98 @@ class LebenszyklusRingFileTest {
             dateiA.length() <= LebenszyklusRingFile.DATEI_OBERGRENZE_BYTES,
         )
     }
+
+    /**
+     * Review-Befund zu PR #266: Ein Vorstellen der Wanduhr (Netzzeit) ohne Neustart liess den
+     * Wanduhr-Abstand groesser werden als die Uptime und meldete einen Neustart, den es nie gab.
+     */
+    @Test
+    fun vorgestellteUhrOhneNeustartMeldetKeinenNeustart() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = SettingsManager(context)
+        val ring = LebenszyklusRingFile(verzeichnis)
+        val stunde = 3_600_000L
+
+        LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = settings,
+            lebenszyklusRingFile = ring,
+            elapsedRealtimeMs = 60_000L, // 1 min nach dem Boot, Uhr geht noch 1 h nach
+            jetztMs = 10 * stunde,
+            bootCount = 7,
+        )
+        // 2 h spaeter laut Uptime, aber die Uhr wurde inzwischen um 1 h vorgestellt: 3 h Abstand.
+        LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = settings,
+            lebenszyklusRingFile = ring,
+            elapsedRealtimeMs = 60_000L + 2 * stunde,
+            jetztMs = 13 * stunde,
+            bootCount = 7,
+        )
+        // Ohne BOOT_COUNT (Fallback) ebenso kein Fehlalarm.
+        LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = settings,
+            lebenszyklusRingFile = ring,
+            elapsedRealtimeMs = 60_000L + 2 * stunde + 1_000L,
+            jetztMs = 20 * stunde,
+            bootCount = null,
+        )
+        ring.wartenBisFertig()
+
+        assertFalse(ring.lesen().any { it.ereignis == "Gerät wurde neu gestartet" })
+    }
+
+    @Test
+    fun geaenderterBootCountMeldetNeustartAuchBeiGroessererUptime() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = SettingsManager(context)
+        val ring = LebenszyklusRingFile(verzeichnis)
+
+        LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = settings,
+            lebenszyklusRingFile = ring,
+            elapsedRealtimeMs = 60_000L,
+            jetztMs = 1_000_000L,
+            bootCount = 7,
+        )
+        // Neustart, und die App startet erst 10 min nach dem Boot: Uptime groesser als zuvor.
+        LebenszyklusProzessUeberwachung.auswerten(
+            settingsManager = settings,
+            lebenszyklusRingFile = ring,
+            elapsedRealtimeMs = 600_000L,
+            jetztMs = 5_000_000L,
+            bootCount = 8,
+        )
+        ring.wartenBisFertig()
+
+        val neustart = ring.lesen().filter { it.ereignis == "Gerät wurde neu gestartet" }
+        assertEquals(1, neustart.size)
+        assertEquals(8, (neustart[0].details["bootCount"] as Number).toInt())
+        assertEquals(8, settings.letzterProzessStartBootCount)
+    }
+
+    /**
+     * Review-Befund zu PR #266: Fiel die Rotation in dieselbe mtime-Sekunde wie der letzte Eintrag
+     * der vollen Datei, waehlte ein neuer Prozess die volle Datei und leerte beim naechsten
+     * Eintrag die andere - mit den neuesten Eintraegen darin.
+     */
+    @Test
+    fun gleicheAenderungszeitWaehltDieFrischRotierteDatei() {
+        val dateiA = File(verzeichnis, "lebenszyklus_a.jsonl")
+        val dateiB = File(verzeichnis, "lebenszyklus_b.jsonl")
+        val alteZeile = "{\"timestamp\": 1, \"ereignis\": \"Alt\", \"details\": {}}\n"
+        val voll = alteZeile.repeat((LebenszyklusRingFile.DATEI_OBERGRENZE_BYTES / alteZeile.length).toInt())
+        dateiB.writeText(voll, StandardCharsets.UTF_8)
+        dateiA.writeText("{\"timestamp\": 2, \"ereignis\": \"Neu\", \"details\": {}}\n", StandardCharsets.UTF_8)
+        val gleicheZeit = 1_700_000_000_000L
+        dateiA.setLastModified(gleicheZeit)
+        dateiB.setLastModified(gleicheZeit)
+
+        val ring = LebenszyklusRingFile(verzeichnis)
+        ring.protokolliere(ereignis = "Danach", timestampMillis = 3L)
+        ring.wartenBisFertig()
+
+        val ereignisse = ring.lesen().map { it.ereignis }
+        assertTrue("Der neueste Eintrag vor dem Neustart darf nicht verloren gehen", "Neu" in ereignisse)
+        assertTrue("Danach" in ereignisse)
+    }
 }
