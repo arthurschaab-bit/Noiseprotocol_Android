@@ -483,6 +483,16 @@ Dispatcher-Verzögerungen beim Sammeln.
 |---|---|---|
 | Einen Tag mit verbundenem PCE-323 aufzeichnen | Im nächsten Bundle: `DEGRADED: Framekadenz` kommt höchstens noch vereinzelt vor, nicht mehr bei fast jeder Trennung (Vergleichswert vor Fix: 5 von 6 Trennungen am 01.–05.10.) | |
 
+### F24 — Hintergrundjobs & Drive-Sync Untersuchung (08.10.2026, Befunde H und B)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md`), aber
+**noch nicht auf echter Hardware gesehen**. Auslöser waren Befunde H und B (`docs/BEFUNDE_BUNDLES_2026-10-07.md`):
+Ausbleibende Sync-Zyklen und abgebrochene Datenbanksicherungen.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach einem Messtag ein Support-Bundle erzeugen | `state/runtime.json` zeigt die Arbeiten (`arbeiten` / `hintergrundJobs`) mit Zustand (`state`, `runAttemptCount`, `stopReason`, `netztyp`); im Diagnoseprotokoll stehen „angefordert“ (`Drive-Sync sofort angefordert`) und „gestartet“ (`Drive-Sync-Zyklus gestartet`) nebeneinander | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

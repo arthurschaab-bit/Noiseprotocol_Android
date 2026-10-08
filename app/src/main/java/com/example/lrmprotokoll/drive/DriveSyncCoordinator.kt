@@ -268,7 +268,7 @@ class DriveSyncCoordinator(
         // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
         ladeFotosHoch(ordnerId)
         ladeVideosHoch(ordnerId)
-        ladeDatenbankSicherungHoch(ordnerId)
+        ladeDatenbankSicherungHoch(ordnerId, jetzt)
 
         if (settings.driveUploadWav) {
             val wavRecords = noiseDao.getAlleAktiven()
@@ -866,7 +866,7 @@ class DriveSyncCoordinator(
      * mehr nur als INFO-Breadcrumb - genau dieser stille Breadcrumb-Pfad war der Grund, warum die
      * 95 gescheiterten Sicherungsversuche vom 16.-23.09.2026 niemandem aufgefallen sind.
      */
-    private suspend fun ladeDatenbankSicherungHoch(ordnerId: String) {
+    private suspend fun ladeDatenbankSicherungHoch(ordnerId: String, zyklusStart: Instant) {
         if (!settings.datenbankSicherungDriveUpload) return
         val quelle = datenbankSicherungQuelle ?: return
 
@@ -876,7 +876,12 @@ class DriveSyncCoordinator(
         }
         settings.datenbankSicherungLastAttemptAt = now.now().toEpochMilli()
 
-        val tempDatei = runCatching { quelle() }.getOrElse { fehler ->
+        val tempDatei = try {
+            quelle()
+        } catch (e: java.util.concurrent.CancellationException) {
+            throw e
+        } catch (fehler: Throwable) {
+            val dauerMs = Duration.between(zyklusStart, now.now()).toMillis()
             diagnosticsReporter?.report(
                 code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
                 component = "DriveSyncCoordinator",
@@ -884,6 +889,10 @@ class DriveSyncCoordinator(
                 severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
                 cause = fehler,
                 message = fehler.message,
+                details = mapOf(
+                    "dauerMs" to dauerMs,
+                    "dateigroesseBytes" to -1L,
+                ),
             )
             return
         }
@@ -894,6 +903,8 @@ class DriveSyncCoordinator(
                     diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${tempDatei.length()} Bytes)")
                 }
                 .onFailure { fehler ->
+                    if (fehler is java.util.concurrent.CancellationException) throw fehler
+                    val dauerMs = Duration.between(zyklusStart, now.now()).toMillis()
                     diagnosticsReporter?.report(
                         code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
                         component = "DriveSyncCoordinator",
@@ -901,8 +912,14 @@ class DriveSyncCoordinator(
                         severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
                         cause = fehler,
                         message = fehler.message,
+                        details = mapOf(
+                            "dauerMs" to dauerMs,
+                            "dateigroesseBytes" to tempDatei.length(),
+                        ),
                     )
                 }
+        } catch (e: java.util.concurrent.CancellationException) {
+            throw e
         } finally {
             tempDatei.delete()
         }

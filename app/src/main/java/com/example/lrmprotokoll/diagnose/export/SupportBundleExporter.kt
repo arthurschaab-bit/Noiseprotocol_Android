@@ -81,6 +81,18 @@ private const val BREADCRUMBS_MAX = 512L * 1024
 private const val ZIP_BUDGET_ABSTURZ = 10L * 1024 * 1024
 private const val ZIP_BUDGET_PERIODISCH = 2L * 1024 * 1024
 
+private val BEKANNTE_EINDEUTIGE_ARBEITEN = listOf(
+    "aufzeichnungs_waechter",
+    "retention",
+    "support_bundle_health",
+    "support_bundle_upload",
+    "support_bundle_upload_fallback",
+    "diagnostic_log_cleanup",
+    "drive_sync",
+    "drive_sync_immediate",
+    "heartbeat",
+)
+
 /**
  * Erzeugt Support-Bundles (ZIP-Archive) fuer Diagnose und Support-Faelle (M12 Schritt 4, Konzept
  * Abschnitt 4.4 & 4.5 - behebt Luecke L7).
@@ -114,6 +126,9 @@ class SupportBundleExporter(
      */
     private val berechtigungExistiertProvider: (String) -> Boolean = { name ->
         runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
+    },
+    private val workManagerProvider: () -> androidx.work.WorkManager? = {
+        runCatching { androidx.work.WorkManager.getInstance(context) }.getOrNull()
     },
 ) {
 
@@ -432,6 +447,37 @@ class SupportBundleExporter(
 
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
         json.put("aufnahmeAktiv", runCatching { aufnahmeAktivProvider() }.getOrDefault(false))
+
+        runCatching {
+            val workManager = workManagerProvider()
+            if (workManager != null) {
+                val arbeiten = JSONArray()
+                for (name in BEKANNTE_EINDEUTIGE_ARBEITEN) {
+                    val workInfos = runCatching {
+                        workManager.getWorkInfosForUniqueWork(name).get()
+                    }.getOrNull()
+                    workInfos?.forEach { info ->
+                        val obj = JSONObject().apply {
+                            put("name", name)
+                            put("state", info.state.name)
+                            put("runAttemptCount", info.runAttemptCount)
+                            if (info.nextScheduleTimeMillis > 0 && info.nextScheduleTimeMillis != Long.MAX_VALUE) {
+                                put("nextScheduleTimeMillis", info.nextScheduleTimeMillis)
+                            }
+                            put("stopReason", info.stopReason)
+                            val netztyp = info.constraints.requiredNetworkType.name
+                            put("netztyp", netztyp)
+                            put("bedingungen", JSONObject().apply {
+                                put("netztyp", netztyp)
+                            })
+                        }
+                        arbeiten.put(obj)
+                    }
+                }
+                json.put("arbeiten", arbeiten)
+                json.put("hintergrundJobs", arbeiten)
+            }
+        }
 
         return json.toString(2)
     }

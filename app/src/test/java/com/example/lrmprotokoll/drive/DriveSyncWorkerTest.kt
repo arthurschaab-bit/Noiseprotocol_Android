@@ -329,6 +329,67 @@ class DriveSyncWorkerTest {
             WorkManagerTestInitHelper.closeWorkDatabase()
         }
     }
+
+    /**
+     * PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md Teil 1 Anforderung 2:
+     * starteSofort() zweimal in 10 min -> genau ein Breadcrumb.
+     */
+    @Test
+    fun starteSofortZweimalIn10MinutenErzeugtGenauEinenBreadcrumb() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        try {
+            val app = context.applicationContext as com.example.lrmprotokoll.LaermprotokollApp
+            val reporter = app.container.diagnosticsReporter
+            DriveSyncPlanung.resetDrosselung()
+
+            DriveSyncPlanung.starteSofort(context)
+            DriveSyncPlanung.starteSofort(context)
+
+            val breadcrumbs = reporter.recentBreadcrumbs().filter {
+                it.category == "DriveSync" && it.message == "Drive-Sync sofort angefordert"
+            }
+            assertEquals("starteSofort() zweimal innerhalb von 10 Minuten darf nur einen Breadcrumb schreiben", 1, breadcrumbs.size)
+        } finally {
+            DriveSyncPlanung.resetDrosselung()
+            WorkManagerTestInitHelper.closeWorkDatabase()
+        }
+    }
+
+    /**
+     * PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md Teil 1 Anforderung 3:
+     * Ein abgebrochener Worker -> Breadcrumb mit Laufzeit, und die CancellationException wird weitergeworfen.
+     */
+    @Test
+    fun abgebrochenerWorkerSchreibtBreadcrumbMitLaufzeitUndWirftCancellationException() = runTest {
+        val app = context.applicationContext as com.example.lrmprotokoll.LaermprotokollApp
+        val reporter = app.container.diagnosticsReporter
+        val coordinator = DriveSyncCoordinator(
+            driveApi = driveApi,
+            levelSampleDao = FakeLevelSampleDao(),
+            dailyFileDao = FakeDailyFileDao(),
+            noiseDao = FakeNoiseDao(),
+            settings = settings,
+            now = uhr,
+            zone = zone,
+            diagnosticsReporter = reporter,
+            datenbankSicherungQuelle = {
+                throw kotlinx.coroutines.CancellationException("Worker abgebrochen")
+            },
+        )
+        settings.datenbankSicherungDriveUpload = true
+        val worker = bauWorker(coordinator)
+
+        org.junit.Assert.assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                worker.doWork()
+            }
+        }
+
+        val breadcrumbs = reporter.recentBreadcrumbs().filter {
+            it.category == "DriveSync" && it.message.contains("abgebrochen nach")
+        }
+        assertTrue("Abbruch muss als Breadcrumb mit Laufzeit protokolliert werden", breadcrumbs.isNotEmpty())
+    }
 }
 
 /** Muss mit der privaten `"${WORK_NAME}_immediate"`-Konstante in [DriveSyncPlanung] uebereinstimmen. */
