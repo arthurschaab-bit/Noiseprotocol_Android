@@ -73,8 +73,16 @@ class ConnectionSupervisorTest {
 
     private val device = BoundDevice(address = "AA:BB:CC:DD:EE:FF", name = "PCE-323")
 
-    private fun TestScope.newTransport(frameRateHz: Double = 2.0): FakeMeterTransport =
-        FakeMeterTransport(scope = backgroundScope, frameRateHz = frameRateHz)
+    private fun TestScope.newTransport(
+        frameRateHz: Double = 2.0,
+        framesPerTick: Int = 1,
+    ): FakeMeterTransport =
+        FakeMeterTransport(
+            scope = backgroundScope,
+            frameRateHz = frameRateHz,
+            now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+            framesPerTick = framesPerTick,
+        )
 
     private class FakeDiagnosticLogDao : DiagnosticLogDao {
         val zeilen = mutableListOf<DiagnosticLogEntity>()
@@ -767,6 +775,137 @@ class ConnectionSupervisorTest {
             states.contains(ConnectionState.DEGRADED)
         )
     }
+
+    /**
+     * Welle 2, Auftrag 6 (Befund D): Bei Notification-Buendelung (z.B. MTU-Chunking / mehrere
+     * Frames in einer Notification bzw. schnellen Folge <= 50ms) darf kein DEGRADED ausgeloest
+     * werden, wenn die Ankuenfte der Buendel im 515ms-Takt liegen.
+     */
+    @Test
+    fun zweiFramesJeNotificationIm515msTaktLoestKeinDegradedAus() =
+        runTest {
+            val transport = newTransport(frameRateHz = 1000.0 / 515.0, framesPerTick = 2)
+            val supervisor = newSupervisor(
+                transport,
+                expectedFramePeriod = Duration.ofMillis(515),
+                cadenceTolerance = 0.5,
+            )
+            val states = observeStates(supervisor)
+
+            supervisor.start(device)
+            runCurrent()
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            assertFalse(
+                "Zwei Frames je Notification haetten kein DEGRADED ausloesen duerfen, war $states",
+                states.contains(ConnectionState.DEGRADED),
+            )
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        }
+
+    /**
+     * Welle 2, Auftrag 6 (Befund D): Wenn die Coroutine-Abholung/Dispatcher kuenstlich verzoegert
+     * ist, aber die Frames mit puenktlichen Zeitstempeln (receivedAt) vorliegen, darf kein
+     * Fehlalarm ausgeloest werden.
+     */
+    @Test
+    fun verzoegerterSammlerFuehrtNichtZuFehlalarm() =
+        runTest {
+            val transport = FakeMeterTransport(
+                scope = backgroundScope,
+                autoEmit = false,
+                now = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) },
+            )
+            val supervisor = newSupervisor(
+                transport,
+                expectedFramePeriod = Duration.ofMillis(515),
+                cadenceTolerance = 0.5,
+            )
+            val states = observeStates(supervisor)
+
+            supervisor.start(device)
+            runCurrent()
+
+            // Erstes Frame bei t=0
+            transport.emitFrame(receivedAt = Instant.EPOCH)
+            runCurrent()
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+            // Zeit vergeht im Test um 1200ms (Dispatcher/CPU war blockiert), aber die
+            // eintreffenden Frames haben Zeitstempel im 515ms-Takt (t=515ms und t=1030ms):
+            advanceTimeBy(1_200)
+            transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(515))
+            transport.emitFrame(receivedAt = Instant.EPOCH.plusMillis(1030))
+            runCurrent()
+
+            assertFalse(
+                "Puenktliche Frame-Zeitstempel trotz verzoegerter Abholung duerfen kein DEGRADED ausloesen, war $states",
+                states.contains(ConnectionState.DEGRADED),
+            )
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+        }
+
+    /**
+     * Welle 2, Auftrag 6: Spoofing-Erkennung. Frames dauerhaft alle 150ms (< 257ms)
+     * muessen nach MIN_CADENCE_VIOLATIONS weiterhin DEGRADED und Trennung ausloesen.
+     */
+    @Test
+    fun kadenzDauerhaft150msLoestDegradedUndTrennungAus() =
+        runTest {
+            val transport = newTransport(frameRateHz = 1000.0 / 150.0)
+            val supervisor = newSupervisor(
+                transport,
+                expectedFramePeriod = Duration.ofMillis(515),
+                cadenceTolerance = 0.5,
+            )
+            val states = observeStates(supervisor)
+
+            supervisor.start(device)
+            runCurrent()
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+            advanceTimeBy(600)
+            runCurrent()
+
+            assertTrue(
+                "Dauerhafte 150ms-Kadenz haette DEGRADED ausloesen muessen, war $states",
+                states.contains(ConnectionState.DEGRADED),
+            )
+            assertNoSpuriousDisconnectAroundDegraded(states)
+        }
+
+    /**
+     * Welle 2, Auftrag 6: Spoofing-Erkennung. Frames dauerhaft alle 1.200ms (> 772ms)
+     * muessen nach MIN_CADENCE_VIOLATIONS weiterhin DEGRADED und Trennung ausloesen.
+     */
+    @Test
+    fun kadenzDauerhaft1200msLoestDegradedUndTrennungAus() =
+        runTest {
+            val transport = newTransport(frameRateHz = 1000.0 / 1200.0)
+            val supervisor = newSupervisor(
+                transport,
+                expectedFramePeriod = Duration.ofMillis(515),
+                cadenceTolerance = 0.5,
+                staleAfter = Duration.ofSeconds(10),
+            )
+            val states = observeStates(supervisor)
+
+            supervisor.start(device)
+            runCurrent()
+            assertEquals(ConnectionState.STREAMING, supervisor.state.value)
+
+            advanceTimeBy(3_600)
+            runCurrent()
+
+            assertTrue(
+                "Dauerhafte 1200ms-Kadenz haette DEGRADED ausloesen muessen, war $states",
+                states.contains(ConnectionState.DEGRADED),
+            )
+            assertNoSpuriousDisconnectAroundDegraded(states)
+        }
 
     /**
      * Owner-Auftrag: "mehr Debuginformationen ... bzgl der Bluetooth Verbindungs Robustheit".

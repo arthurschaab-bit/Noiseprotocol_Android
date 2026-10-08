@@ -48,6 +48,14 @@ private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 private const val MIN_CADENCE_VIOLATIONS = 2
 
 /**
+ * Schwellenwert in Millisekunden, bis zu dem aufeinanderfolgende Frames als Teil derselben
+ * BLE-Notification oder desselben Bluetooth-Paketbuendels gewertet werden (Befund D: 0-27 ms
+ * in realen Support-Bundles beobachtet). Liegt sicher unterhalb abweichender Kadenz-Takte
+ * wie 150 ms (10 Hz = 100 ms) und dem erwarteten 515-ms-Takt.
+ */
+private const val SAME_ARRIVAL_THRESHOLD_MS = 50L
+
+/**
  * Treibt den Verbindungs-Zustandsautomaten aus Plan Abschnitt 5.1 ueber die reine
  * [MeterTransport]-Schnittstelle - kennt NICHT [com.example.lrmprotokoll.meter.ble.BleMeterTransport],
  * nur so bleibt sie vollstaendig gegen [FakeMeterTransport] testbar (PROMPT_M3 Aufgabe 1).
@@ -529,23 +537,33 @@ class ConnectionSupervisor(
             done.complete(StreamEndReason.ADAPTER_OFF)
         }
 
-        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung): misst die Zeit zwischen
-        // zwei Frame-Ankuenften ueber [now] statt ueber die im Frame mitgelieferte Zeit - wie
-        // errorRateWatcher oben, damit die Pruefung synchron zur injizierten Uhr laeuft und in
-        // Tests ueber advanceTimeBy steuerbar ist, unabhaengig davon, welche Zeit der Transport
-        // selbst in lastFrameAt eintraegt.
+        // Kadenz-Watcher (Plan Abschnitt 6, Stream-Plausibilisierung, Befund D): misst die Zeit
+        // zwischen zwei Frame-Ankuenften anhand des echten Empfangszeitpunkts [MeterFrame.receivedAt]
+        // aus [transport.frames] statt beim asynchronen Sammeln ueber [now.now()] (verhinderte
+        // bisher Fehlalarme bei Dispatcher-Verzoegerungen).
+        // Frames derselben BLE-Notification bzw. desselben BLE-Paketbuendels (Deltas <=
+        // SAME_ARRIVAL_THRESHOLD_MS, real 0..27 ms) zaehlen als eine Ankunft und werden fuer
+        // die Taktermittlung uebersprungen.
         val cadenceWatcher = expectedFramePeriod?.let { erwartet ->
             launch {
                 var vorherigeAnkunft: Instant? = null
                 var abweichungenInFolge = 0
-                transport.lastFrameAt.collect { letzter ->
-                    if (letzter == null) return@collect
-                    val ankunft = now.now()
+                transport.frames.collect { frame ->
+                    val ankunft = frame.receivedAt
                     val vorherige = vorherigeAnkunft
-                    vorherigeAnkunft = ankunft
-                    if (vorherige == null) return@collect
+                    if (vorherige == null) {
+                        vorherigeAnkunft = ankunft
+                        return@collect
+                    }
 
                     val deltaMillis = Duration.between(vorherige, ankunft).toMillis()
+                    if (deltaMillis in 0..SAME_ARRIVAL_THRESHOLD_MS) {
+                        // Gehoert zur selben Notification / zum selben BLE-Paketbuendel (Befund D).
+                        // Zaehlt als dieselbe Ankunft und wird fuer die Taktberechnung uebersprungen.
+                        return@collect
+                    }
+
+                    vorherigeAnkunft = ankunft
                     val minMillis = (erwartet.toMillis() * (1 - cadenceTolerance)).toLong()
                     val maxMillis = (erwartet.toMillis() * (1 + cadenceTolerance)).toLong()
                     if (deltaMillis < minMillis || deltaMillis > maxMillis) {

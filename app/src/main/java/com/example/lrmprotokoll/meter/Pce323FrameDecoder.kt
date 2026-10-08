@@ -36,7 +36,9 @@ private const val LARGE_JUMP_THRESHOLD_DB = 40.0
  * erst [decode] - dort wird ein unerkannter Wert bewusst zu `null`, nie zu einem geratenen
  * Default.
  */
-class Pce323FrameDecoder {
+class Pce323FrameDecoder(
+    private val now: InstantSource = InstantSource.System,
+) {
 
     private val buffer = ArrayDeque<Byte>()
 
@@ -183,7 +185,7 @@ class Pce323FrameDecoder {
             range = decodeRange(raw[Pce323Profile.RANGE_BYTE_OFFSET]),
             holdMax = null,
             holdMin = null,
-            receivedAt = Instant.now(),
+            receivedAt = now.now(),
             largeJump = largeJump,
             modeAssumptionConfirmed = Pce323Profile.MODE_ASSUMPTION_CONFIRMED,
         )

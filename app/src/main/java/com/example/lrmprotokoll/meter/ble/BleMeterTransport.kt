@@ -48,6 +48,7 @@ private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b3
 @SuppressLint("MissingPermission") // Aufrufer (UI) prueft BLUETOOTH_CONNECT vor jedem Zugriff
 class BleMeterTransport(
     private val context: Context,
+    private val now: com.example.lrmprotokoll.meter.InstantSource = com.example.lrmprotokoll.meter.InstantSource.System,
 ) : MeterTransport {
 
     private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -62,11 +63,12 @@ class BleMeterTransport(
     private val _frameQuality = MutableStateFlow(FrameQuality())
     override val frameQuality: StateFlow<FrameQuality> = _frameQuality.asStateFlow()
 
-    private val decoder = Pce323FrameDecoder()
+    private val decoder = Pce323FrameDecoder(now)
     private val gattQueue = GattQueue()
     private var gatt: BluetoothGatt? = null
     private var connecting: CompletableDeferred<Boolean>? = null
     private var validFrameCount = 0L
+    private var debugFrameCount = 0
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -98,6 +100,9 @@ class BleMeterTransport(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (com.example.lrmprotokoll.BuildConfig.DEBUG) {
+                Log.d(TAG, "MTU ausgehandelt: $mtu, status=$status")
+            }
             gattQueue.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
@@ -122,6 +127,7 @@ class BleMeterTransport(
         decoder.reset()
         gattQueue.reset()
         validFrameCount = 0
+        debugFrameCount = 0
         _frameQuality.value = FrameQuality()
 
         _state.value = ConnectionState.CONNECTING
@@ -193,8 +199,15 @@ class BleMeterTransport(
     }
 
     private fun onNotify(raw: ByteArray) {
+        if (com.example.lrmprotokoll.BuildConfig.DEBUG && debugFrameCount < 200) {
+            Log.d(TAG, "Notification #${debugFrameCount}: ${raw.size} Bytes, t=${System.currentTimeMillis()}")
+        }
         val decoded = decoder.feed(raw)
         for (frame in decoded) {
+            if (com.example.lrmprotokoll.BuildConfig.DEBUG && debugFrameCount < 200) {
+                Log.d(TAG, "Frame #${debugFrameCount}: receivedAt=${frame.receivedAt}, level=${frame.level}")
+                debugFrameCount++
+            }
             validFrameCount++
             _state.value = ConnectionState.STREAMING
             _lastFrameAt.value = frame.receivedAt

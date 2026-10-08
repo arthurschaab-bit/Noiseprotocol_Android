@@ -460,6 +460,18 @@ und fehlender Fehlercode in `health_metrics.json`.
 | Messgerät ausschalten, Aufzeichnung laufen lassen, bis `FAILED` erscheint (etwa 3 min) | Im Diagnose-Screen steht „Verbindungsaufbau gescheitert“, nicht „Kein Frame … nach Verbindungsaufbau“ | |
 | Im nächsten Gesundheits-Bundle `health_metrics.json` prüfen | Unter `fehlerJeCode` existiert ein Eintrag `BLE_CONNECT_FAILED` | |
 
+### F23 — Kadenzwächter: Keine Fehlalarme durch Sammler- oder Notification-Bündelung (Bugfix 08.10.2026)
+
+Wie bei den übrigen Punkten in Teil F: umgesetzt und mit handgeschriebenen Fakes/Robolectric
+unit-getestet (`docs/PROMPT_FIX_KADENZWAECHTER.md`), aber **noch nicht auf echter Hardware
+gesehen**. Auslöser war Befund D (`docs/BEFUNDE_BUNDLES_2026-10-07.md`): Unnötige Trennungen
+und `DEGRADED: Framekadenz …` durch Frame-Abstände von 0–27 ms (Notification-Bündelung) oder
+Dispatcher-Verzögerungen beim Sammeln.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Einen Tag mit verbundenem PCE-323 aufzeichnen | Im nächsten Bundle: `DEGRADED: Framekadenz` kommt höchstens noch vereinzelt vor, nicht mehr bei fast jeder Trennung (Vergleichswert vor Fix: 5 von 6 Trennungen am 01.–05.10.) | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
