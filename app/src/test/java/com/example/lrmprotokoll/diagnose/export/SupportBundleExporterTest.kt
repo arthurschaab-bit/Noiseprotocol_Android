@@ -553,4 +553,55 @@ class SupportBundleExporterTest {
         }
         traces.deleteRecursively()
     }
+
+    /**
+     * PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md Teil 1 Anforderung 1:
+     * runtime.json enthaelt fuer jede geplante eindeutige Arbeit Name und Zustand.
+     */
+    @Test
+    fun runtimeJsonEnthaeltWorkManagerArbeitenMitZustand() = runTest {
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        try {
+            val anfrage = androidx.work.OneTimeWorkRequestBuilder<androidx.work.Worker>()
+                .setConstraints(
+                    androidx.work.Constraints.Builder()
+                        .setRequiredNetworkType(androidx.work.NetworkType.UNMETERED)
+                        .build(),
+                )
+                .build()
+            androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                "drive_sync_immediate",
+                androidx.work.ExistingWorkPolicy.KEEP,
+                anfrage,
+            )
+
+            val zipFile = exporter(FakeDiagnosticLogDao(emptyList())).createBundle(
+                BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"),
+            )
+
+            ZipFile(zipFile).use { zip ->
+                val entry = zip.getEntry("state/runtime.json")
+                assertNotNull("state/runtime.json muss existieren", entry)
+                val json = org.json.JSONObject(zip.getInputStream(entry).bufferedReader().readText())
+                assertTrue("runtime.json muss hintergrundJobs enthalten", json.has("hintergrundJobs"))
+                val jobs = json.getJSONArray("hintergrundJobs")
+                assertTrue("Mindestens ein Job muss enthalten sein", jobs.length() > 0)
+                var gefunden = false
+                for (i in 0 until jobs.length()) {
+                    val job = jobs.getJSONObject(i)
+                    if (job.getString("name") == "drive_sync_immediate") {
+                        gefunden = true
+                        assertTrue("state muss vorhanden sein", job.has("state"))
+                        assertTrue("runAttemptCount muss vorhanden sein", job.has("runAttemptCount"))
+                        assertTrue("stopReason muss vorhanden sein", job.has("stopReason"))
+                        assertEquals("UNMETERED", job.getString("netztyp"))
+                    }
+                }
+                assertTrue("drive_sync_immediate muss in hintergrundJobs gefunden werden", gefunden)
+            }
+        } finally {
+            androidx.work.testing.WorkManagerTestInitHelper.closeWorkDatabase()
+        }
+    }
 }
+

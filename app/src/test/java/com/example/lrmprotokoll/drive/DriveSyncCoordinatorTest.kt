@@ -1925,4 +1925,85 @@ class DriveSyncCoordinatorTest {
                 )
             }
         }
+
+    /**
+     * PROMPT_UNTERSUCHUNG_HINTERGRUNDJOBS_DRIVE.md Teil 1 Anforderung 4:
+     * Bei Abbruch (CancellationException) waehrend des Bauens oder Hochladens
+     * der Datenbanksicherung darf KEIN BACKUP_CREATE_FAILED gemeldet werden,
+     * und der Abbruch muss als CancellationException weitergereicht werden.
+     */
+    @Test
+    fun abbruchBeimBauenDerSicherungMeldetKeinBackupCreateFailedUndReichtAbbruchWeiter() =
+        runTest {
+            settings.datenbankSicherungDriveUpload = true
+            val diagnoseContext =
+                com.example.lrmprotokoll.diagnose.DiagnosticContext(appVersion = "1.0", buildType = "debug")
+            val reporter =
+                com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(initialContext = diagnoseContext)
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                    diagnosticsReporter = reporter,
+                    datenbankSicherungQuelle = {
+                        throw kotlinx.coroutines.CancellationException("Simulierter Worker-Abbruch")
+                    },
+                )
+
+            org.junit.Assert.assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    koordinator.syncEinenZyklus()
+                }
+            }
+
+            val gemeldet =
+                reporter.recentEvents().filter {
+                    it.code == com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED
+                }
+            assertTrue("Bei Abbruch darf kein BACKUP_CREATE_FAILED gemeldet werden", gemeldet.isEmpty())
+        }
+
+    @Test
+    fun abbruchBeimHochladenDerSicherungMeldetKeinBackupCreateFailedUndReichtAbbruchWeiter() =
+        runTest {
+            settings.datenbankSicherungDriveUpload = true
+            val diagnoseContext =
+                com.example.lrmprotokoll.diagnose.DiagnosticContext(appVersion = "1.0", buildType = "debug")
+            val reporter =
+                com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter(initialContext = diagnoseContext)
+            driveApi.resumableNeuanlagenErgebnis =
+                Result.failure(kotlinx.coroutines.CancellationException("Upload abgebrochen"))
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                    diagnosticsReporter = reporter,
+                    datenbankSicherungQuelle = {
+                        tempSicherungsDatei()
+                    },
+                )
+
+            org.junit.Assert.assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    koordinator.syncEinenZyklus()
+                }
+            }
+
+            val gemeldet =
+                reporter.recentEvents().filter {
+                    it.code == com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED
+                }
+            assertTrue("Bei Abbruch im Upload darf kein BACKUP_CREATE_FAILED gemeldet werden", gemeldet.isEmpty())
+        }
 }
+

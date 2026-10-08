@@ -40,64 +40,86 @@ class DriveSyncWorker @JvmOverloads constructor(
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
         val coordinator = coordinatorOverride ?: container.driveSyncCoordinator
+        val startZeit = System.currentTimeMillis()
         container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync-Zyklus gestartet")
         val retryTyp = inputData.getString(RETRY_TYP)
-        val ergebnis = if (retryTyp == null) {
-            coordinator.syncEinenZyklus()
-        } else {
-            val typ = runCatching { UploadDateiTyp.valueOf(retryTyp) }.getOrNull() ?: return Result.failure()
-            val kennung = inputData.getString(RETRY_KENNUNG) ?: return Result.failure()
-            coordinator.wiederholeDatei(UploadDateiZiel(typ, kennung))
-        }
-        return when (ergebnis) {
-            is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> {
-                container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync erfolgreich: ${ergebnis.zeilen} Zeilen")
-                DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
-                Result.success()
+        try {
+            val ergebnis = if (retryTyp == null) {
+                coordinator.syncEinenZyklus()
+            } else {
+                val typ = runCatching { UploadDateiTyp.valueOf(retryTyp) }.getOrNull() ?: return Result.failure()
+                val kennung = inputData.getString(RETRY_KENNUNG) ?: return Result.failure()
+                coordinator.wiederholeDatei(UploadDateiZiel(typ, kennung))
             }
-            is DriveSyncCoordinator.SyncErgebnis.KeineAenderung,
-            is DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet,
-            is DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet,
-            is DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> {
-                DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
-                Result.success()
-            }
+            return when (ergebnis) {
+                is DriveSyncCoordinator.SyncErgebnis.Erfolgreich -> {
+                    container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync erfolgreich: ${ergebnis.zeilen} Zeilen")
+                    DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
+                    Result.success()
+                }
+                is DriveSyncCoordinator.SyncErgebnis.KeineAenderung,
+                is DriveSyncCoordinator.SyncErgebnis.SyncAusgeschaltet,
+                is DriveSyncCoordinator.SyncErgebnis.KeinOrdnerEingerichtet,
+                is DriveSyncCoordinator.SyncErgebnis.OrdnerBlockiert -> {
+                    DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
+                    Result.success()
+                }
 
-            is DriveSyncCoordinator.SyncErgebnis.OrdnerNichtGefunden -> {
-                container.diagnosticsReporter.report(
-                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_FOLDER_NOT_FOUND,
-                    component = "DriveSyncWorker",
-                    operation = "doWork",
-                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
-                    message = "Drive-Ordner nicht gefunden (HTTP ${ergebnis.httpCode})",
-                    details = mapOf("httpCode" to (ergebnis.httpCode ?: -1))
-                )
-                DriveSyncNotifier(applicationContext).ordnerNichtGefunden()
-                Result.failure()
-            }
+                is DriveSyncCoordinator.SyncErgebnis.OrdnerNichtGefunden -> {
+                    container.diagnosticsReporter.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_FOLDER_NOT_FOUND,
+                        component = "DriveSyncWorker",
+                        operation = "doWork",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        message = "Drive-Ordner nicht gefunden (HTTP ${ergebnis.httpCode})",
+                        details = mapOf("httpCode" to (ergebnis.httpCode ?: -1))
+                    )
+                    DriveSyncNotifier(applicationContext).ordnerNichtGefunden()
+                    Result.failure()
+                }
 
-            // Plan 8.4.6: kein Netz / 403 Quota -> Result.retry() mit WorkManager-Backoff.
-            // 401 wird hier NICHT gesondert behandelt: der AccessTokenProvider fordert vor
-            // jedem Zyklus ohnehin frisch an (siehe AccessTokenProvider-KDoc), ein 401 loest
-            // sich damit im naechsten Zyklus von selbst, wenn die Zustimmung noch besteht. Bleibt
-            // es bestehen, greift wie bei jedem anderen Fehlschlag die Warnung nach n Zyklen.
-            is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen -> {
-                container.diagnosticsReporter.report(
-                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_SYNC_FAILED,
-                    component = "DriveSyncWorker",
-                    operation = "doWork",
-                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
-                    message = "Drive-Sync fehlgeschlagen: ${ergebnis.grund} (HTTP ${ergebnis.httpCode})",
-                    details = mapOf("grund" to ergebnis.grund, "httpCode" to (ergebnis.httpCode ?: -1))
-                )
-                DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
-                if (ergebnis.wiederholbar) Result.retry() else Result.failure()
+                // Plan 8.4.6: kein Netz / 403 Quota -> Result.retry() mit WorkManager-Backoff.
+                // 401 wird hier NICHT gesondert behandelt: der AccessTokenProvider fordert vor
+                // jedem Zyklus ohnehin frisch an (siehe AccessTokenProvider-KDoc), ein 401 loest
+                // sich damit im naechsten Zyklus von selbst, wenn die Zustimmung noch besteht. Bleibt
+                // es bestehen, greift wie bei jedem anderen Fehlschlag die Warnung nach n Zyklen.
+                is DriveSyncCoordinator.SyncErgebnis.Fehlgeschlagen -> {
+                    container.diagnosticsReporter.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_SYNC_FAILED,
+                        component = "DriveSyncWorker",
+                        operation = "doWork",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        message = "Drive-Sync fehlgeschlagen: ${ergebnis.grund} (HTTP ${ergebnis.httpCode})",
+                        details = mapOf("grund" to ergebnis.grund, "httpCode" to (ergebnis.httpCode ?: -1))
+                    )
+                    DriveSyncNotifier(applicationContext).pruefeUndBenachrichtige(container.settingsManager)
+                    if (ergebnis.wiederholbar) Result.retry() else Result.failure()
+                }
             }
+        } catch (e: java.util.concurrent.CancellationException) {
+            val laufzeitMs = System.currentTimeMillis() - startZeit
+            val reason = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                runCatching { stopReason }.getOrDefault(-1)
+            } else {
+                -1
+            }
+            container.diagnosticsReporter.breadcrumb(
+                "DriveSync",
+                "Drive-Sync-Worker abgebrochen nach ${laufzeitMs}ms (stopReason=$reason)"
+            )
+            throw e
         }
     }
 }
 
 object DriveSyncPlanung {
+
+    private var letzterSofortstartBreadcrumbEpochMs: Long = 0L
+
+    @androidx.annotation.VisibleForTesting
+    internal fun resetDrosselung() {
+        letzterSofortstartBreadcrumbEpochMs = 0L
+    }
 
     /** Wartet auf das erlaubte Netz und synchronisiert nur die ausgewaehlte Datei. */
     fun starteDateiErneut(context: Context, ziel: UploadDateiZiel): Boolean {
@@ -166,6 +188,11 @@ object DriveSyncPlanung {
      */
     fun starteSofort(context: Context) {
         val app = context.applicationContext as? LaermprotokollApp
+        val jetztMs = System.currentTimeMillis()
+        if (letzterSofortstartBreadcrumbEpochMs == 0L || jetztMs - letzterSofortstartBreadcrumbEpochMs >= 10 * 60 * 1000L || jetztMs < letzterSofortstartBreadcrumbEpochMs) {
+            letzterSofortstartBreadcrumbEpochMs = jetztMs
+            app?.container?.diagnosticsReporter?.breadcrumb("DriveSync", "Drive-Sync sofort angefordert")
+        }
         val wlanOnly = app?.container?.settingsManager?.driveWlanOnly ?: false
         val einschraenkungen = Constraints.Builder()
             .setRequiredNetworkType(if (wlanOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)

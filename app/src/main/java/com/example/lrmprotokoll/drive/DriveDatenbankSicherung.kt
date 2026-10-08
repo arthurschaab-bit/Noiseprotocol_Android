@@ -57,6 +57,8 @@ object DriveDatenbankSicherung {
                 client.dateiHochladenResumable(BACKUP_DATEINAME, ordnerId, datei, BACKUP_MIME_TYPE).getOrThrow()
             }
             Unit
+        }.onFailure { fehler ->
+            if (fehler is java.util.concurrent.CancellationException) throw fehler
         }
 
     /**
