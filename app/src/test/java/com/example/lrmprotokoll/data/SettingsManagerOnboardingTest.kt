@@ -85,4 +85,16 @@ class SettingsManagerOnboardingTest {
 
         assertFalse(settings().onboardingCompleted)
     }
+
+    @Test
+    fun lebenszyklusStartZeitstempelAlleinMachenNochKeineBestandsinstallation() {
+        // Beim ersten App-Start schreibt LebenszyklusProzessUeberwachung die Startzeitstempel
+        // in die Praeferenzen. Das allein darf eine frische Installation nicht zur
+        // Bestandsinstallation machen.
+        val settings = settings()
+        settings.letzterProzessStartAt = 1_000_000L
+        settings.letzterProzessStartElapsedRealtime = 5_000L
+
+        assertFalse(settings.onboardingCompleted)
+    }
 }

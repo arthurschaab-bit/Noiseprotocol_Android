@@ -167,6 +167,11 @@ class AppContainer(
         com.example.lrmprotokoll.diagnose.BreadcrumbRingFile(context.applicationContext.filesDir)
     }
 
+    /** Auftrag 9 (docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md): Lebenszyklus-Protokoll fuer Prozess- und Dienstereignisse. */
+    val lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile by lazy {
+        com.example.lrmprotokoll.diagnose.LebenszyklusRingFile(context.applicationContext.filesDir)
+    }
+
     /** M12 Schritt 3 (Konzept 4, behebt Luecke L5): vollstaendige ExitInfo-Auswertung. */
     val processExitSource: com.example.lrmprotokoll.diagnose.ProcessExitSource by lazy {
         com.example.lrmprotokoll.diagnose.SystemProcessExitSource(context.applicationContext)
@@ -203,6 +208,7 @@ class AppContainer(
             reporter = diagnosticsReporter,
             diagnosticLogDao = database.diagnosticLogDao(),
             breadcrumbRingFile = breadcrumbRingFile,
+            lebenszyklusRingFile = lebenszyklusRingFile,
             settingsManager = settingsManager,
             database = database,
             traceVerzeichnis = java.io.File(context.applicationContext.filesDir, "process_exit_traces"),
@@ -393,6 +399,16 @@ class AppContainer(
             // eine reine Mikrofon-Session ueberhaupt Ausfallbaender/eine ehrliche
             // Datenverfuegbarkeit statt strukturell immer 100%.
             mikrofonAktiv = com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv,
+            onLebenszeichen = { zeitstempel ->
+                lebenszyklusRingFile.protokolliere(
+                    ereignis = "Lebenszeichen",
+                    details = mapOf(
+                        "status" to "lebt",
+                        "uhrzeit" to java.time.format.DateTimeFormatter.ISO_INSTANT.format(java.time.Instant.ofEpochMilli(zeitstempel)),
+                    ),
+                    timestampMillis = zeitstempel,
+                )
+            },
         )
     }
 
@@ -426,6 +442,7 @@ class AppContainer(
             settingsManager = settingsManager,
             levelSampleDao = database.levelSampleDao(),
             diagnosticsReporter = diagnosticsReporter,
+            lebenszyklusRingFile = lebenszyklusRingFile,
         )
     }
 

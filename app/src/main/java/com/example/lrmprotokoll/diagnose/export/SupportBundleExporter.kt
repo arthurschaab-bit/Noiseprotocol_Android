@@ -15,6 +15,7 @@ import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
+import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
@@ -111,6 +112,7 @@ class SupportBundleExporter(
     private val reporter: DiagnosticsReporter,
     private val diagnosticLogDao: DiagnosticLogDao,
     private val breadcrumbRingFile: BreadcrumbRingFile,
+    private val lebenszyklusRingFile: LebenszyklusRingFile = LebenszyklusRingFile(context.filesDir),
     private val settingsManager: SettingsManager,
     private val database: AppDatabase,
     private val traceVerzeichnis: File,
@@ -220,6 +222,7 @@ class SupportBundleExporter(
 
             // log/
             schreibeEintrag("log/logcat.txt") { out -> schreibeLogcat(out, kontext, logcatMax) }
+            schreibeEintrag("log/lebenszyklus.jsonl") { out -> schreibeLebenszyklus(out) }
             schreibeEintrag("log/breadcrumbs.jsonl") { out -> schreibeBreadcrumbs(out) }
             schreibeEintrag("log/events.jsonl") { out -> schreibeEventsSeitenweise(out, eventsMax) }
 
@@ -338,6 +341,20 @@ class SupportBundleExporter(
             if (geschrieben + zeile.size > BREADCRUMBS_MAX) break
             out.write(zeile)
             geschrieben += zeile.size
+        }
+    }
+
+    private fun schreibeLebenszyklus(out: OutputStream) {
+        for (eintrag in lebenszyklusRingFile.lesen()) {
+            val json = JSONObject()
+            json.put("timestamp", eintrag.timestampMillis)
+            json.put("isoTime", DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(eintrag.timestampMillis)))
+            json.put("ereignis", DiagnosticRedactor.redactString(eintrag.ereignis))
+            val detailsObj = JSONObject()
+            DiagnosticRedactor.redactMap(eintrag.details).forEach { (k, v) -> detailsObj.put(k, v ?: JSONObject.NULL) }
+            json.put("details", detailsObj)
+            val zeile = (json.toString() + "\n").toByteArray(StandardCharsets.UTF_8)
+            out.write(zeile)
         }
     }
 

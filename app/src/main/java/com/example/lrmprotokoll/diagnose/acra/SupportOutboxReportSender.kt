@@ -54,12 +54,14 @@ class SupportOutboxReportSender : ReportSender {
         val database = AppDatabase.getDatabase(context)
         val settingsManager = SettingsManager(context)
         val ringFile = BreadcrumbRingFile(context.filesDir)
+        val lebenszyklusRingFile = com.example.lrmprotokoll.diagnose.LebenszyklusRingFile(context.filesDir)
         val reporter = CompositeDiagnosticsReporter(sinks = emptyList(), ringFile = ringFile)
         val exporter = SupportBundleExporter(
             context = context,
             reporter = reporter,
             diagnosticLogDao = database.diagnosticLogDao(),
             breadcrumbRingFile = ringFile,
+            lebenszyklusRingFile = lebenszyklusRingFile,
             settingsManager = settingsManager,
             database = database,
             traceVerzeichnis = File(context.filesDir, "process_exit_traces"),

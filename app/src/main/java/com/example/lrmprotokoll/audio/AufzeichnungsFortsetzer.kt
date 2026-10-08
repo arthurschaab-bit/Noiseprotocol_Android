@@ -27,6 +27,7 @@ class AufzeichnungsFortsetzer(
     private val settingsManager: SettingsManager,
     private val levelSampleDao: LevelSampleDao,
     private val diagnosticsReporter: DiagnosticsReporter,
+    private val lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile? = null,
     private val dienstLaeuftProvider: () -> Boolean = { AudioRecordingService.laeuft.value },
     private val kannInVordergrundProvider: () -> Boolean = { kannDienstInDenVordergrund(context, settingsManager) },
     private val serviceStarter: (Context, Intent) -> Unit = { ctx, intent -> ContextCompat.startForegroundService(ctx, intent) },
@@ -142,6 +143,17 @@ class AufzeichnungsFortsetzer(
                                 "audioWarAktiv" to settingsManager.audioMonitoringWasActive,
                                 "quelle" to quelle,
                             ),
+                    )
+
+                    lebenszyklusRingFile?.protokolliere(
+                        ereignis = "Unerwartetes Ende erkannt",
+                        details =
+                            mapOf(
+                                "letzteDatenAt" to letzteDatenAt,
+                                "lueckeMinuten" to lueckeMinuten,
+                                "quelle" to quelle,
+                            ),
+                        timestampMillis = entdecktAt,
                     )
 
                     settingsManager.speichereUnterbrechung(beginn = letzteDatenAt, ende = entdecktAt)

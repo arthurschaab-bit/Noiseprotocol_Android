@@ -47,7 +47,11 @@ fun parseStromzustand(intent: Intent): Stromzustand {
  */
 class StromversorgungEmpfaenger(
     private val onEintrag: (String) -> Unit,
+    private val onZustand: ((String, Stromzustand) -> Unit)?,
 ) : BroadcastReceiver() {
+    constructor(
+        onEintrag: (String) -> Unit,
+    ) : this(onEintrag, null)
 
     internal var letzterZustand: Stromzustand? = null
 
@@ -61,6 +65,7 @@ class StromversorgungEmpfaenger(
 
         if (eintrag != null) {
             onEintrag(eintrag)
+            onZustand?.invoke(eintrag, jetzt)
         }
     }
 }

@@ -6,6 +6,7 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
+import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
@@ -66,6 +67,7 @@ class SupportBundleExporterTest {
             initialContext = DiagnosticContext(appVersion = "1.0", buildType = "debug"),
         ),
         ringFile: BreadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+        lebenszyklusRingFile: LebenszyklusRingFile = container.lebenszyklusRingFile,
         traceVerzeichnis: File = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}"),
         // Default identisch zum Produktionsstandard in SupportBundleExporter selbst - bestehende
         // Aufrufer dieser Hilfsfunktion bleiben dadurch unveraendert (echter, Robolectric-
@@ -79,6 +81,7 @@ class SupportBundleExporterTest {
         reporter = reporter,
         diagnosticLogDao = dao,
         breadcrumbRingFile = ringFile,
+        lebenszyklusRingFile = lebenszyklusRingFile,
         settingsManager = container.settingsManager,
         database = container.database,
         traceVerzeichnis = traceVerzeichnis,
@@ -113,6 +116,7 @@ class SupportBundleExporterTest {
             assertTrue(entries.contains("manifest.json"))
             assertTrue(entries.contains("log/events.jsonl"))
             assertTrue(entries.contains("log/breadcrumbs.jsonl"))
+            assertTrue(entries.contains("log/lebenszyklus.jsonl"))
             assertTrue(entries.contains("log/logcat.txt"))
             assertTrue(entries.contains("state/runtime.json"))
             assertTrue(entries.contains("state/settings.json"))
@@ -550,8 +554,52 @@ class SupportBundleExporterTest {
             assertArrayEquals(tombstone, zip.getInputStream(zip.getEntry("crash/native_tombstone.pb")).readBytes())
             val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
             assertTrue(manifest.contains("\"kuerzungsstufe\": 2"))
+            assertNotNull("log/lebenszyklus.jsonl muss auch bei Kuerzungsstufe 2 enthalten sein", zip.getEntry("log/lebenszyklus.jsonl"))
         }
         traces.deleteRecursively()
+    }
+
+    /**
+     * Test 3 aus docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md Abschnitt 3:
+     * Das Bundle enthaelt log/lebenszyklus.jsonl auch bei Kuerzungsstufe 2.
+     */
+    @Test
+    fun bundleEnthaeltLebenszyklusJsonlAuchBeiKuerzungsstufe2() = runTest {
+        val zufall = java.util.Random(42)
+        val anrTrace = ByteArray(4 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val tombstone = ByteArray(8 * 1024 * 1024).also { zufall.nextBytes(it) }
+        val traces = File(context.filesDir, "process_exit_traces_test_${System.nanoTime()}").apply { mkdirs() }
+        File(traces, ANR_TRACE_DATEINAME).writeBytes(anrTrace)
+        File(traces, NATIVE_TOMBSTONE_DATEINAME).writeBytes(tombstone)
+
+        val ringVerzeichnis = File(context.cacheDir, "lebens_test_${System.nanoTime()}").apply { mkdirs() }
+        val lebenszyklusRing = LebenszyklusRingFile(ringVerzeichnis)
+        lebenszyklusRing.protokolliere("Prozessstart", mapOf("pid" to 1234))
+        lebenszyklusRing.wartenBisFertig()
+
+        val exporter = SupportBundleExporter(
+            context = context,
+            reporter = CompositeDiagnosticsReporter(sinks = emptyList()),
+            diagnosticLogDao = FakeDiagnosticLogDao(emptyList()),
+            breadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+            lebenszyklusRingFile = lebenszyklusRing,
+            settingsManager = container.settingsManager,
+            database = container.database,
+            traceVerzeichnis = traces,
+        )
+
+        val zipFile = exporter.createBundle(BundleKontext(typ = BundleTyp.ABSTURZ, ausloeser = "Test"))
+
+        ZipFile(zipFile).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()
+            assertTrue("Kuerzungsstufe 2 muss erreicht sein", manifest.contains("\"kuerzungsstufe\": 2"))
+            val eintrag = zip.getEntry("log/lebenszyklus.jsonl")
+            assertNotNull("log/lebenszyklus.jsonl muss bei Kuerzungsstufe 2 enthalten sein", eintrag)
+            val inhalt = zip.getInputStream(eintrag).bufferedReader().readText()
+            assertTrue(inhalt.contains("Prozessstart"))
+        }
+        traces.deleteRecursively()
+        ringVerzeichnis.deleteRecursively()
     }
 
     /**
