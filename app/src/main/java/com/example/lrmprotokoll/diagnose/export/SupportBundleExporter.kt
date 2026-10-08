@@ -15,10 +15,10 @@ import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ANR_WATCHDOG_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
-import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
+import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import java.io.File
@@ -82,6 +82,9 @@ private const val BREADCRUMBS_MAX = 512L * 1024
 private const val ZIP_BUDGET_ABSTURZ = 10L * 1024 * 1024
 private const val ZIP_BUDGET_PERIODISCH = 2L * 1024 * 1024
 
+// Obergrenze je WorkManager-Abfrage in runtime.json (siehe buildRuntimeJson).
+private const val WORK_INFO_TIMEOUT_SEKUNDEN = 2L
+
 private val BEKANNTE_EINDEUTIGE_ARBEITEN = listOf(
     "aufzeichnungs_waechter",
     "retention",
@@ -112,7 +115,9 @@ class SupportBundleExporter(
     private val reporter: DiagnosticsReporter,
     private val diagnosticLogDao: DiagnosticLogDao,
     private val breadcrumbRingFile: BreadcrumbRingFile,
-    private val lebenszyklusRingFile: LebenszyklusRingFile = LebenszyklusRingFile(context.filesDir),
+    // Ohne Default: Eine zweite Instanz haette einen eigenen Executor und wuerde dieselben Dateien
+    // unabgestimmt mit AppContainer.lebenszyklusRingFile rotieren (wie breadcrumbRingFile).
+    private val lebenszyklusRingFile: LebenszyklusRingFile,
     private val settingsManager: SettingsManager,
     private val database: AppDatabase,
     private val traceVerzeichnis: File,
@@ -157,7 +162,8 @@ class SupportBundleExporter(
 
         val istPeriodisch = kontext.typ == BundleTyp.PERIODISCH
         val zipBudget = if (istPeriodisch) ZIP_BUDGET_PERIODISCH else ZIP_BUDGET_ABSTURZ
-        // Kuerzungsreihenfolge (Konzept 4.5): zuerst events.jsonl, dann zusaetzlich logcat.txt,
+        // Kuerzungsreihenfolge (Konzept 4.5): zuerst events.jsonl, dann zusaetzlich logcat.txt.
+        // log/lebenszyklus.jsonl (hoechstens 2 x 64 KB) bleibt auf jeder Stufe vollstaendig, und
         // crash/ wird nie gekuerzt - dafuer existiert das Bundle (Owner-Entscheidung O-7: das
         // Budget ist fuer Absturz-Bundles damit ein Richtwert, keine harte Grenze).
         val eventsMax = if (kuerzungsstufe >= 1) 0L else if (istPeriodisch) EVENTS_MAX_PERIODISCH else EVENTS_MAX_ABSTURZ
@@ -165,7 +171,7 @@ class SupportBundleExporter(
 
         val fehler = mutableListOf<String>()
         if (kuerzungsstufe > 0) {
-            fehler.add("Budget ueberschritten - gekuerzt auf Stufe $kuerzungsstufe (0=alles, 1=ohne events.jsonl, 2=zusaetzlich ohne logcat.txt)")
+            fehler.add("Budget ueberschritten - gekuerzt auf Stufe $kuerzungsstufe (0=alles, 1=ohne events.jsonl, 2=zusaetzlich ohne logcat.txt; lebenszyklus.jsonl und crash/ immer vollstaendig)")
         }
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
@@ -349,9 +355,10 @@ class SupportBundleExporter(
             val json = JSONObject()
             json.put("timestamp", eintrag.timestampMillis)
             json.put("isoTime", DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(eintrag.timestampMillis)))
-            json.put("ereignis", DiagnosticRedactor.redactString(eintrag.ereignis))
+            // Bereits beim Schreiben geschwaerzt (LebenszyklusRingFile.anhaengen) - kein zweiter Durchlauf.
+            json.put("ereignis", eintrag.ereignis)
             val detailsObj = JSONObject()
-            DiagnosticRedactor.redactMap(eintrag.details).forEach { (k, v) -> detailsObj.put(k, v ?: JSONObject.NULL) }
+            eintrag.details.forEach { (k, v) -> detailsObj.put(k, v ?: JSONObject.NULL) }
             json.put("details", detailsObj)
             val zeile = (json.toString() + "\n").toByteArray(StandardCharsets.UTF_8)
             out.write(zeile)
@@ -468,31 +475,66 @@ class SupportBundleExporter(
         runCatching {
             val workManager = workManagerProvider()
             if (workManager != null) {
-                val arbeiten = JSONArray()
-                for (name in BEKANNTE_EINDEUTIGE_ARBEITEN) {
-                    val workInfos = runCatching {
-                        workManager.getWorkInfosForUniqueWork(name).get()
-                    }.getOrNull()
-                    workInfos?.forEach { info ->
-                        val obj = JSONObject().apply {
+                val hintergrundJobs = JSONArray()
+                val gemeldeteIds = mutableSetOf<java.util.UUID>()
+                // Laeuft auch beim ANR-/Absturz-Bundle: haengt WorkManager (DB, Executor), darf das
+                // Bundle trotzdem nicht ohne Grenze warten. Nach dem ersten Timeout keine weiteren
+                // Abfragen - die naechste wuerde genauso haengen.
+                var unvollstaendig = false
+
+                fun <T> abfragen(future: java.util.concurrent.Future<T>): T? {
+                    if (unvollstaendig) return null
+                    return try {
+                        future.get(WORK_INFO_TIMEOUT_SEKUNDEN, java.util.concurrent.TimeUnit.SECONDS)
+                    } catch (e: java.util.concurrent.TimeoutException) {
+                        unvollstaendig = true
+                        null
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
+                fun melde(
+                    name: String,
+                    info: androidx.work.WorkInfo,
+                ) {
+                    gemeldeteIds += info.id
+                    hintergrundJobs.put(
+                        JSONObject().apply {
                             put("name", name)
                             put("state", info.state.name)
                             put("runAttemptCount", info.runAttemptCount)
                             if (info.nextScheduleTimeMillis > 0 && info.nextScheduleTimeMillis != Long.MAX_VALUE) {
                                 put("nextScheduleTimeMillis", info.nextScheduleTimeMillis)
                             }
-                            put("stopReason", info.stopReason)
-                            val netztyp = info.constraints.requiredNetworkType.name
-                            put("netztyp", netztyp)
-                            put("bedingungen", JSONObject().apply {
-                                put("netztyp", netztyp)
-                            })
-                        }
-                        arbeiten.put(obj)
-                    }
+                            // Stoppgruende liefert das System erst ab Android 12 (wie in DriveSyncWorker).
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                put("stopReason", info.stopReason)
+                            }
+                            put("netztyp", info.constraints.requiredNetworkType.name)
+                        },
+                    )
                 }
-                json.put("arbeiten", arbeiten)
-                json.put("hintergrundJobs", arbeiten)
+                for (name in BEKANNTE_EINDEUTIGE_ARBEITEN) {
+                    abfragen(workManager.getWorkInfosForUniqueWork(name))?.forEach { melde(name, it) }
+                }
+                // Dynamisch benannte Arbeiten (drive_sync_retry_<typ>_<kennung>, video-mux-<id>) und
+                // kuenftige Worker, die in der Liste oben fehlen: alle noch offenen Arbeiten, benannt
+                // nach der Worker-Klasse (WorkManager setzt deren Namen automatisch als Tag).
+                abfragen(
+                    workManager.getWorkInfos(
+                        androidx.work.WorkQuery.fromStates(
+                            androidx.work.WorkInfo.State.ENQUEUED,
+                            androidx.work.WorkInfo.State.RUNNING,
+                            androidx.work.WorkInfo.State.BLOCKED,
+                        ),
+                    ),
+                )?.filter { it.id !in gemeldeteIds }?.forEach { info ->
+                    val klasse = info.tags.firstOrNull { it.contains('.') }?.substringAfterLast('.') ?: "unbekannt"
+                    melde(klasse, info)
+                }
+                json.put("hintergrundJobs", hintergrundJobs)
+                if (unvollstaendig) json.put("hintergrundJobsUnvollstaendig", true)
             }
         }
 

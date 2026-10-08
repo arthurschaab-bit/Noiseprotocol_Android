@@ -491,7 +491,7 @@ Ausbleibende Sync-Zyklen und abgebrochene Datenbanksicherungen.
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Nach einem Messtag ein Support-Bundle erzeugen | `state/runtime.json` zeigt die Arbeiten (`arbeiten` / `hintergrundJobs`) mit Zustand (`state`, `runAttemptCount`, `stopReason`, `netztyp`); im Diagnoseprotokoll stehen „angefordert“ (`Drive-Sync sofort angefordert`) und „gestartet“ (`Drive-Sync-Zyklus gestartet`) nebeneinander | |
+| Nach einem Messtag ein Support-Bundle erzeugen | `state/runtime.json` zeigt die Arbeiten (`hintergrundJobs`) mit Zustand (`state`, `runAttemptCount`, `netztyp`; `stopReason` erst ab Android 12, auf dem P30 also nicht); im Diagnoseprotokoll stehen „angefordert“ (`Drive-Sync sofort angefordert`) und „gestartet“ (`Drive-Sync-Zyklus gestartet`) nebeneinander | |
 
 ### F25 — WAV-Breadcrumbs verdichten (08.10.2026, Befund I)
 
