@@ -558,7 +558,10 @@ class GoogleDriveApiClient(
         val token = tokenProvider.holeToken().getOrElse {
             return Result.failure(DriveApiException("Kein Zugriffstoken verfügbar", cause = it))
         }
+        // Ein Abbruch (WorkManager stoppt den Worker) ist kein Fehlschlag der Anfrage: weiterreichen,
+        // sonst laufen die Upload-Schleifen der Aufrufer nach dem Stopp einfach weiter.
         return runCatching { block(token) }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
     }
 
     /**

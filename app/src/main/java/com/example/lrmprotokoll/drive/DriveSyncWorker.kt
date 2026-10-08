@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.lrmprotokoll.LaermprotokollApp
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -114,11 +115,13 @@ class DriveSyncWorker @JvmOverloads constructor(
 
 object DriveSyncPlanung {
 
-    private var letzterSofortstartBreadcrumbEpochMs: Long = 0L
+    // Atomar statt einfachem var: starteSofort() kommt aus Dienst, Worker und UI zugleich, und
+    // ein Pruefen-dann-Setzen liesse zwei gleichzeitige Aufrufe beide durch die Drossel.
+    private val letzterSofortstartBreadcrumbEpochMs = AtomicLong(0L)
 
     @androidx.annotation.VisibleForTesting
     internal fun resetDrosselung() {
-        letzterSofortstartBreadcrumbEpochMs = 0L
+        letzterSofortstartBreadcrumbEpochMs.set(0L)
     }
 
     /** Wartet auf das erlaubte Netz und synchronisiert nur die ausgewaehlte Datei. */
@@ -189,8 +192,9 @@ object DriveSyncPlanung {
     fun starteSofort(context: Context) {
         val app = context.applicationContext as? LaermprotokollApp
         val jetztMs = System.currentTimeMillis()
-        if (letzterSofortstartBreadcrumbEpochMs == 0L || jetztMs - letzterSofortstartBreadcrumbEpochMs >= 10 * 60 * 1000L || jetztMs < letzterSofortstartBreadcrumbEpochMs) {
-            letzterSofortstartBreadcrumbEpochMs = jetztMs
+        val letzter = letzterSofortstartBreadcrumbEpochMs.get()
+        val faellig = letzter == 0L || jetztMs - letzter >= 10 * 60 * 1000L || jetztMs < letzter
+        if (faellig && letzterSofortstartBreadcrumbEpochMs.compareAndSet(letzter, jetztMs)) {
             app?.container?.diagnosticsReporter?.breadcrumb("DriveSync", "Drive-Sync sofort angefordert")
         }
         val wlanOnly = app?.container?.settingsManager?.driveWlanOnly ?: false
