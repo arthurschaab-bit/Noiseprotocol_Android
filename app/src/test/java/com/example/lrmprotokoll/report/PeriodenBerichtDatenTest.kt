@@ -1,15 +1,19 @@
 package com.example.lrmprotokoll.report
 
+import android.content.Context
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.ConnectionEventEntity
 import com.example.lrmprotokoll.data.ConnectionEventType
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -29,8 +33,20 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class PeriodenBerichtDatenTest {
 
-    private val db
-        get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.database
+    private lateinit var db: AppDatabase
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
 
     @Test
     fun fasstMesswerteUndSessionsUeberDenZeitraumZusammen() = runBlocking {

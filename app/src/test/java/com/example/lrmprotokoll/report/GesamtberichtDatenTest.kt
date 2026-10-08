@@ -1,12 +1,16 @@
 package com.example.lrmprotokoll.report
 
+import android.content.Context
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,8 +28,20 @@ import java.time.ZonedDateTime
 @Config(sdk = [34])
 class GesamtberichtDatenTest {
 
-    private val db
-        get() = ApplicationProvider.getApplicationContext<LaermprotokollApp>().container.database
+    private lateinit var db: AppDatabase
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
 
     private val zone = ZoneId.of("Europe/Berlin")
 
