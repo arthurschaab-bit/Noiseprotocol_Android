@@ -99,6 +99,10 @@ class AnrWatchdogCoordinatorTest {
                 reporter = exporterReporter,
                 diagnosticLogDao = LeeresDiagnosticLogDao,
                 breadcrumbRingFile = BreadcrumbRingFile(File(context.cacheDir, "ring_${System.nanoTime()}").apply { mkdirs() }),
+                lebenszyklusRingFile =
+                    com.example.lrmprotokoll.diagnose.LebenszyklusRingFile(
+                        File(context.cacheDir, "lebenszyklus_${System.nanoTime()}").apply { mkdirs() },
+                    ),
                 settingsManager = container.settingsManager,
                 database = container.database,
                 traceVerzeichnis = verzeichnis,

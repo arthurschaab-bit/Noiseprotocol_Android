@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.diagnose.export
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.testing.WorkManagerTestInitHelper
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -641,7 +643,12 @@ class SupportBundleExporterTest {
                         gefunden = true
                         assertTrue("state muss vorhanden sein", job.has("state"))
                         assertTrue("runAttemptCount muss vorhanden sein", job.has("runAttemptCount"))
-                        assertTrue("stopReason muss vorhanden sein", job.has("stopReason"))
+                        // Stoppgruende gibt es erst ab Android 12 - darunter bleibt das Feld weg.
+                        assertEquals(
+                            "stopReason nur ab Android 12",
+                            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S,
+                            job.has("stopReason"),
+                        )
                         assertEquals("UNMETERED", job.getString("netztyp"))
                     }
                 }
@@ -651,5 +658,48 @@ class SupportBundleExporterTest {
             androidx.work.testing.WorkManagerTestInitHelper.closeWorkDatabase()
         }
     }
-}
 
+    /**
+     * Review-Befund zu PR #264: Dynamisch benannte Arbeiten (drive_sync_retry_*, video-mux-*)
+     * standen in keiner festen Namensliste und fehlten deshalb im Bundle.
+     */
+    @Test
+    fun runtimeJsonEnthaeltAuchDynamischBenannteArbeitenGenauEinmal() =
+        runTest {
+            WorkManagerTestInitHelper.initializeTestWorkManager(context)
+            try {
+                val workManager = androidx.work.WorkManager.getInstance(context)
+
+                // Unerfuellte Netzbedingung haelt beide Arbeiten auf ENQUEUED - ohne sie liefe der
+                // Test-WorkManager sie sofort (und scheiterte, Worker ist abstrakt).
+                val nurWlan = androidx.work.Constraints(requiredNetworkType = androidx.work.NetworkType.UNMETERED)
+                val keep = androidx.work.ExistingWorkPolicy.KEEP
+                for (name in listOf("drive_sync_retry_WAV_42", "drive_sync_immediate")) {
+                    val anfrage =
+                        androidx.work
+                            .OneTimeWorkRequestBuilder<androidx.work.Worker>()
+                            .setConstraints(nurWlan)
+                            .build()
+                    workManager.enqueueUniqueWork(name, keep, anfrage)
+                }
+
+                val bundleExporter = exporter(FakeDiagnosticLogDao(emptyList()))
+                val zipFile = bundleExporter.createBundle(BundleKontext(typ = BundleTyp.MANUELL, ausloeser = "Test"))
+
+                ZipFile(zipFile).use { zip ->
+                    val text = zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText()
+                    val json = org.json.JSONObject(text)
+                    val jobs = json.getJSONArray("hintergrundJobs")
+                    val namen = List(jobs.length()) { jobs.getJSONObject(it).getString("name") }
+                    assertEquals(
+                        "Bekannte Arbeit unter ihrem Namen, dynamische unter der Worker-Klasse, keine doppelt",
+                        listOf("Worker", "drive_sync_immediate"),
+                        namen.sorted(),
+                    )
+                    assertFalse("Doppelter Schluessel 'arbeiten' entfaellt", json.has("arbeiten"))
+                }
+            } finally {
+                WorkManagerTestInitHelper.closeWorkDatabase()
+            }
+        }
+}

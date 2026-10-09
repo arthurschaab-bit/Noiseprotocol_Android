@@ -471,19 +471,21 @@ class AudioRecordingService : LifecycleService() {
             return START_STICKY
         }
 
-        if (::lebenszyklusRingFile.isInitialized) {
-            lebenszyklusRingFile.protokolliere(
-                ereignis = "Dienst gestartet",
-                details = mapOf(
-                    "action" to (action ?: "<null>"),
-                    "audioMonitoringWasActive" to audioWarVorherAktiv,
-                ),
-            )
-        }
-
         expliziterServiceStopAngefordert = false
         if (!isForegroundActive) {
             val gestartet = startForegroundService()
+            // Erst NACH dem Versuch protokollieren - sonst stuende ein gescheiterter Start als
+            // "Dienst gestartet" im Lebenszyklus-Protokoll. Wiederholte Startbefehle an einen
+            // bereits laufenden Dienst (isForegroundActive) erzeugen keinen Eintrag.
+            if (::lebenszyklusRingFile.isInitialized) {
+                lebenszyklusRingFile.protokolliere(
+                    ereignis = if (gestartet) "Dienst gestartet" else "Dienststart gescheitert",
+                    details = mapOf(
+                        "action" to (action ?: "<null>"),
+                        "audioMonitoringWasActive" to audioWarVorherAktiv,
+                    ),
+                )
+            }
             if (!gestartet) {
                 isForegroundActive = false
                 _laeuft.value = false
@@ -1276,6 +1278,19 @@ class AudioRecordingService : LifecycleService() {
                 cause = e,
                 details = mapOf("fileName" to fileName, "path" to file.absolutePath),
             )
+            // Auch dieser Pfad endet ohne NoiseRecord und bekommt deshalb seine eine Zusammenfassung.
+            diagnosticsReporter.breadcrumb(
+                "AudioService",
+                "WAV-Aufnahme nicht gespeichert",
+                data = mapOf(
+                    "fileName" to fileName,
+                    "path" to file.absolutePath,
+                    "sampleRate" to sampleRate,
+                    "zielDauerMs" to durationMs,
+                    "gespeichert" to false,
+                    "fehler" to (e.message ?: e.javaClass.simpleName),
+                ),
+            )
             isRecordingActive.set(false)
             return
         }
@@ -1315,6 +1330,10 @@ class AudioRecordingService : LifecycleService() {
                 details = mapOf("fileName" to fileName, "dataBytes" to recorder.totalDataLen),
             )
         }
+        // Zustand beim Ende der Aufnahme, nicht erst nach Online-Klassifikation und DB-Schreiben -
+        // sonst zeigte z. B. ein waehrenddessen gestopptes Monitoring audioIstAktiv=false.
+        val audioIstAktivBeimEnde = _audioAufnahmeAktiv.value
+        val fileBytes = file.length()
 
         if (interrupted) {
             diagnosticsReporter.report(
@@ -1344,33 +1363,101 @@ class AudioRecordingService : LifecycleService() {
         } else null
         val detected = ergebnis?.label
 
-        try {
-            val database = (application as LaermprotokollApp).container.database
-            triggerWachhund.ereignisGespeichert(timestamp)
-            stillerAusfallHinweis = null
-            val neueId = database.noiseDao().insert(
-                NoiseRecord(
-                    timestamp = timestamp,
-                    amplitude = recorder.maxAmplitude,
-                    dbValue = dbValue,
-                    filePath = file.absolutePath,
-                    detectedLabel = detected,
-                    calibratedDbA = auswertung.calibratedDbA,
-                    meterWeighting = auswertung.meterWeighting,
-                    meterConnected = auswertung.meterConnected,
-                    isQuietHour = isQuiet,
-                    aufnahmeQuelle = aktiveAufnahmequelle,
-                    abtastrate = aktiveAbtastrate,
-                    kanalzahl = aktiveKanalzahl,
-                    agcAktiv = aktiveAgcAktiv,
-                ),
-            )
+        fun zusammenfassung(
+            neueId: Long?,
+            rohdatenGespeichert: Boolean,
+            fehler: String?,
+        ) = mapOf(
+            "fileName" to fileName,
+            "path" to file.absolutePath,
+            "sampleRate" to sampleRate,
+            "zielDauerMs" to durationMs,
+            "dauerMs" to actualDurationMs,
+            "preRollBytes" to preRollBytes,
+            "dataBytes" to recorder.totalDataLen,
+            "fileBytes" to fileBytes,
+            "unterbrochen" to interrupted,
+            "audioIstAktiv" to audioIstAktivBeimEnde,
+            "meterConnected" to auswertung.meterConnected,
+            "pegelDb" to auswertung.pegel,
+            "recordId" to neueId,
+            "detectedLabel" to detected,
+            "rohdatenGespeichert" to rohdatenGespeichert,
+            "aufnahmeQuelle" to aktiveAufnahmequelle,
+            "abtastrate" to aktiveAbtastrate,
+            "kanalzahl" to aktiveKanalzahl,
+            "agcAktiv" to aktiveAgcAktiv,
+            "gespeichert" to (neueId != null),
+        ) + (if (fehler != null) mapOf("fehler" to fehler) else emptyMap())
+
+        triggerWachhund.ereignisGespeichert(timestamp)
+        stillerAusfallHinweis = null
+        // Nur das insert() steht im try: Ein Fehler NACH dem Speichern (Rohdaten, Breadcrumb)
+        // darf eine gespeicherte Aufnahme nicht als "nicht gespeichert" protokollieren.
+        val neueId =
+            try {
+                (application as LaermprotokollApp).container.database.noiseDao().insert(
+                    NoiseRecord(
+                        timestamp = timestamp,
+                        amplitude = recorder.maxAmplitude,
+                        dbValue = dbValue,
+                        filePath = file.absolutePath,
+                        detectedLabel = detected,
+                        calibratedDbA = auswertung.calibratedDbA,
+                        meterWeighting = auswertung.meterWeighting,
+                        meterConnected = auswertung.meterConnected,
+                        isQuietHour = isQuiet,
+                        aufnahmeQuelle = aktiveAufnahmequelle,
+                        abtastrate = aktiveAbtastrate,
+                        kanalzahl = aktiveKanalzahl,
+                        agcAktiv = aktiveAgcAktiv,
+                    ),
+                )
+            } catch (e: Throwable) {
+                // Dienst wird beendet (serviceJob.cancel()): Ob Room die Zeile noch geschrieben hat,
+                // ist offen - also kein DB_WRITE_FAILED und kein "nicht gespeichert". Nur wenn UNSERE
+                // Coroutine wirklich abgebrochen ist: Room meldet z. B. eine geschlossene Datenbank
+                // ebenfalls als CancellationException, und das ist ein echter Schreibfehler.
+                if (e is kotlinx.coroutines.CancellationException && !currentCoroutineContext().isActive) {
+                    diagnosticsReporter.breadcrumb(
+                        "AudioService",
+                        "WAV-Aufnahme beim Beenden des Dienstes abgebrochen",
+                        data = zusammenfassung(neueId = null, rohdatenGespeichert = false, fehler = null) +
+                            mapOf("gespeichert" to "unbekannt"),
+                    )
+                    isRecordingActive.set(false)
+                    throw e
+                }
+                Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
+                diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DB_WRITE_FAILED,
+                    component = "AudioRecordingService",
+                    operation = "starteWavAufnahme.noiseRecord",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                    cause = e,
+                    details = mapOf("fileName" to fileName, "fileBytes" to fileBytes),
+                )
+                diagnosticsReporter.breadcrumb(
+                    "AudioService",
+                    "WAV-Aufnahme nicht gespeichert",
+                    data = zusammenfassung(
+                        neueId = null,
+                        rohdatenGespeichert = false,
+                        fehler = e.message ?: e.javaClass.simpleName,
+                    ),
+                )
+                null
+            }
+
+        if (neueId != null) {
             var rohdatenGespeichert = false
             if (ergebnis != null) {
                 try {
-                    database.klassifikationsRohdatenDao().insert(ergebnis.rohdaten.mitRecordId(neueId))
+                    val rohdatenDao = (application as LaermprotokollApp).container.database.klassifikationsRohdatenDao()
+                    rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(neueId))
                     rohdatenGespeichert = true
                 } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException && !currentCoroutineContext().isActive) throw e
                     diagnosticsReporter.report(
                         code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DB_WRITE_FAILED,
                         component = "AudioRecordingService",
@@ -1384,65 +1471,7 @@ class AudioRecordingService : LifecycleService() {
             diagnosticsReporter.breadcrumb(
                 "AudioService",
                 "WAV-Aufnahme gespeichert",
-                data = mapOf(
-                    "fileName" to fileName,
-                    "path" to file.absolutePath,
-                    "sampleRate" to sampleRate,
-                    "zielDauerMs" to durationMs,
-                    "dauerMs" to actualDurationMs,
-                    "preRollBytes" to preRollBytes,
-                    "dataBytes" to recorder.totalDataLen,
-                    "fileBytes" to file.length(),
-                    "unterbrochen" to interrupted,
-                    "audioIstAktiv" to _audioAufnahmeAktiv.value,
-                    "meterConnected" to auswertung.meterConnected,
-                    "pegelDb" to auswertung.pegel,
-                    "recordId" to neueId,
-                    "detectedLabel" to detected,
-                    "rohdatenGespeichert" to rohdatenGespeichert,
-                    "aufnahmeQuelle" to aktiveAufnahmequelle,
-                    "abtastrate" to aktiveAbtastrate,
-                    "kanalzahl" to aktiveKanalzahl,
-                    "agcAktiv" to aktiveAgcAktiv,
-                    "gespeichert" to true,
-                ),
-            )
-        } catch (e: Throwable) {
-            Log.e("AudioRecordingService", "Fehler beim Speichern des NoiseRecord in DB", e)
-            diagnosticsReporter.report(
-                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DB_WRITE_FAILED,
-                component = "AudioRecordingService",
-                operation = "starteWavAufnahme.noiseRecord",
-                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
-                cause = e,
-                details = mapOf("fileName" to fileName, "fileBytes" to file.length()),
-            )
-            diagnosticsReporter.breadcrumb(
-                "AudioService",
-                "WAV-Aufnahme nicht gespeichert",
-                data = mapOf(
-                    "fileName" to fileName,
-                    "path" to file.absolutePath,
-                    "sampleRate" to sampleRate,
-                    "zielDauerMs" to durationMs,
-                    "dauerMs" to actualDurationMs,
-                    "preRollBytes" to preRollBytes,
-                    "dataBytes" to recorder.totalDataLen,
-                    "fileBytes" to file.length(),
-                    "unterbrochen" to interrupted,
-                    "audioIstAktiv" to _audioAufnahmeAktiv.value,
-                    "meterConnected" to auswertung.meterConnected,
-                    "pegelDb" to auswertung.pegel,
-                    "recordId" to null,
-                    "detectedLabel" to detected,
-                    "rohdatenGespeichert" to false,
-                    "aufnahmeQuelle" to aktiveAufnahmequelle,
-                    "abtastrate" to aktiveAbtastrate,
-                    "kanalzahl" to aktiveKanalzahl,
-                    "agcAktiv" to aktiveAgcAktiv,
-                    "gespeichert" to false,
-                    "fehler" to (e.message ?: e.javaClass.simpleName),
-                ),
+                data = zusammenfassung(neueId = neueId, rohdatenGespeichert = rohdatenGespeichert, fehler = null),
             )
         }
 

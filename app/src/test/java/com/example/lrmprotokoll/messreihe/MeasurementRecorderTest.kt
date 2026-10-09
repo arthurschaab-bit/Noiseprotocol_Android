@@ -18,6 +18,7 @@ import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -36,7 +37,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MeasurementRecorderTest {
 
-    private class FakeSessionDao : SessionDao {
+    private open class FakeSessionDao : SessionDao {
         val zeilen = mutableMapOf<Long, SessionEntity>()
         private var naechsteId = 1L
         override suspend fun insert(session: SessionEntity): Long {
@@ -988,5 +989,45 @@ class MeasurementRecorderTest {
         recorder.pruefeLebenszeichenManuell()
         assertEquals("Nach Stop duerfen keine weiteren Lebenszeichen mehr erzeugt werden", 2, lebenszeichen.size)
     }
-}
 
+    /**
+     * Review-Befund zu PR #266: pruefeLebenszeichen() nahm sessionMutex, waehrend die
+     * Flush-Schleife pufferMutex hielt - eroeffneMessgeraetSession() nimmt die Sperren in
+     * umgekehrter Reihenfolge (sessionMutex, dann pufferMutex in beendeMikrofonSession).
+     * Hier wird genau diese Verschraenkung erzwungen: Der Quellenwechsel haelt sessionMutex und
+     * steht im sessionDao.byId(), waehrenddessen laeuft die Lebenszeichen-Pruefung.
+     */
+    @Test
+    fun lebenszeichenPruefungVerklemmtSichNichtMitDemQuellenwechsel() =
+        runTest(UnconfinedTestDispatcher()) {
+            val tor = kotlinx.coroutines.CompletableDeferred<Unit>()
+            var torAktiv = false
+            val sessions =
+                object : FakeSessionDao() {
+                    override suspend fun byId(id: Long): SessionEntity? {
+                        if (torAktiv) {
+                            torAktiv = false
+                            tor.await()
+                        }
+                        return super.byId(id)
+                    }
+                }
+            val recorder = recorderMit(sessions, measurementDao)
+            recorder.starteMikrofonMessung()
+            runCurrent()
+            val mikrofonSessionId = recorder.laufendeSessionId
+
+            torAktiv = true
+            recorder.start(device)
+            zustaende.value = ConnectionState.STREAMING // haelt jetzt sessionMutex, wartet im byId()
+            runCurrent()
+            val pruefung = backgroundScope.launch { recorder.pruefeLebenszeichenManuell() } // nimmt pufferMutex
+            runCurrent()
+            tor.complete(Unit) // Quellenwechsel will jetzt pufferMutex
+            runCurrent()
+
+            assertTrue("Lebenszeichen-Pruefung und Quellenwechsel duerfen sich nicht verklemmen", pruefung.isCompleted)
+            assertNotNull("Der Quellenwechsel muss die Mikrofon-Session schliessen", sessions.zeilen[mikrofonSessionId]?.endedAt)
+            assertEquals(2, sessions.zeilen.size)
+        }
+}

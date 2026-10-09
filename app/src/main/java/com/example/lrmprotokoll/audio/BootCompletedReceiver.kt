@@ -24,7 +24,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
             container.lebenszyklusRingFile.protokolliere(
                 ereignis = "BOOT_COMPLETED empfangen",
                 details = mapOf(
-                    "gestartet" to false,
+                    "startAngefordert" to false,
                     "monitoringWasActive" to false,
                 ),
             )
@@ -44,7 +44,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
             container.lebenszyklusRingFile.protokolliere(
                 ereignis = "BOOT_COMPLETED empfangen",
                 details = mapOf(
-                    "gestartet" to false,
+                    "startAngefordert" to false,
                     "monitoringWasActive" to true,
                     "grund" to "keine_vordergrund_berechtigung",
                 ),
@@ -52,18 +52,21 @@ class BootCompletedReceiver : BroadcastReceiver() {
             return
         }
 
-        container.lebenszyklusRingFile.protokolliere(
-            ereignis = "BOOT_COMPLETED empfangen",
-            details = mapOf(
-                "gestartet" to true,
-                "monitoringWasActive" to true,
-                "audioMonitoringWasActive" to settings.audioMonitoringWasActive,
-            ),
-        )
-
+        // "startAngefordert" statt "gestartet": Ob der Dienst wirklich in den Vordergrund kam,
+        // protokolliert er selbst ("Dienst gestartet" / "Dienststart gescheitert").
         val serviceIntent = Intent(context, AudioRecordingService::class.java).apply {
             putExtra(EXTRA_START_AUDIO_MONITORING, settings.audioMonitoringWasActive)
         }
-        ContextCompat.startForegroundService(context, serviceIntent)
+        val fehler = runCatching { ContextCompat.startForegroundService(context, serviceIntent) }.exceptionOrNull()
+        container.lebenszyklusRingFile.protokolliere(
+            ereignis = "BOOT_COMPLETED empfangen",
+            details = mapOf(
+                "startAngefordert" to (fehler == null),
+                "monitoringWasActive" to true,
+                "audioMonitoringWasActive" to settings.audioMonitoringWasActive,
+            ) + (if (fehler != null) mapOf("fehler" to (fehler.message ?: fehler.javaClass.simpleName)) else emptyMap()),
+        )
+        // Verhalten wie zuvor: Der Fehler wird nur protokolliert, nicht verschluckt.
+        if (fehler != null) throw fehler
     }
 }
