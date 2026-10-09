@@ -322,6 +322,7 @@ ist hier der Hauptverdächtige. Daher verbindlich:
   | `log/logcat.txt` | 8 MB | 512 KB |
   | `log/events.jsonl` | 16 MB | 1 MB |
   | `log/breadcrumbs.jsonl` | 512 KB (Ringdatei-Obergrenze) | 512 KB |
+  | `log/lebenszyklus.jsonl` | 128 KB (2 × 64 KB Ringdatei), nie gekürzt | 128 KB, nie gekürzt |
   | `crash/anr_trace.txt` | 4 MB | — |
   | `crash/native_tombstone.pb` | 8 MB | — |
   | `crash/anr_watchdog.txt` | 256 KB | — |
@@ -330,7 +331,9 @@ ist hier der Hauptverdächtige. Daher verbindlich:
   Wird eine Grenze erreicht, wird abgeschnitten und eine Abschlusszeile vermerkt, wie viel fehlt.
   Textinhalte komprimieren im ZIP typisch um Faktor 8 bis 15 — die unkomprimierten Grenzen sind
   deshalb bewusst großzügiger als das ZIP-Budget. Reißt das fertige ZIP das Budget dennoch, wird
-  in dieser Reihenfolge gekürzt: `events.jsonl`, dann `logcat.txt`. `crash/` wird **nie**
+  in dieser Reihenfolge gekürzt: `events.jsonl`, dann `logcat.txt`. `log/lebenszyklus.jsonl`
+  bleibt auf jeder Stufe vollständig (docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md, Schritt 2).
+  `crash/` wird **nie**
   gekürzt (Owner-Entscheidung O-7, 23.09.2026, Abschnitt 8a) — der Absturzteil ist das, wofür
   das Bundle existiert, und ein abgeschnittenes Tombstone-Protobuf wäre unlesbar. Das ZIP-Budget
   ist für Absturz-Bundles damit ein Richtwert, keine harte Grenze: liegt allein `crash/` darüber

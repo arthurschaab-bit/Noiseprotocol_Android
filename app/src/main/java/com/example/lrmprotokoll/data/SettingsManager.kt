@@ -42,6 +42,7 @@ class SettingsManager(
         const val SCHLUESSEL_ONBOARDING = "onboarding_completed"
         const val SCHLUESSEL_LETZTER_PROZESS_START_AT = "letzter_prozess_start_at"
         const val SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED = "letzter_prozess_start_elapsed_realtime"
+        const val SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT = "letzter_prozess_start_boot_count"
     }
 
     /**
@@ -636,6 +637,11 @@ class SettingsManager(
         get() = prefs.getLong(SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED, 0L)
         set(value) = prefs.edit().putLong(SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED, value).apply()
 
+    /** `Settings.Global.BOOT_COUNT` beim letzten Prozessstart, -1 = unbekannt. */
+    var letzterProzessStartBootCount: Int
+        get() = prefs.getInt(SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT, -1)
+        set(value) = prefs.edit().putInt(SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT, value).apply()
+
     /**
      * Snapshot der unverschluesselten Einstellungen fuer das Support-Bundle (M12 Schritt 4,
      * `state/settings.json`). Enthaelt STRUKTURELL keine Geheimnisse: ntfyTopic/ntfyServer/
@@ -742,8 +748,8 @@ class SettingsManager(
      * gilt beim naechsten Start weiterhin als neu und sieht die Einfuehrung. Das ist richtig - er
      * hat sie ja noch nicht gesehen. Ebenso wenig machen die beim allerersten Start in
      * [com.example.lrmprotokoll.LaermprotokollApp.onCreate] automatisch gesetzten Lebenszyklus-
-     * Zeitstempel ([SCHLUESSEL_LETZTER_PROZESS_START_AT], [SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED])
-     * eine frische Installation zur Bestandsinstallation.
+     * Zeitstempel ([SCHLUESSEL_LETZTER_PROZESS_START_AT], [SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED],
+     * [SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT]) eine frische Installation zur Bestandsinstallation.
      */
     private fun istBestandsinstallation(): Boolean {
         val vorhandeneSchluessel = runCatching { prefs.all.keys }.getOrNull() ?: return true
@@ -751,6 +757,7 @@ class SettingsManager(
             SCHLUESSEL_ONBOARDING,
             SCHLUESSEL_LETZTER_PROZESS_START_AT,
             SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED,
+            SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT,
         )
         return vorhandeneSchluessel.any { it !in ausgenommeneSchluessel }
     }

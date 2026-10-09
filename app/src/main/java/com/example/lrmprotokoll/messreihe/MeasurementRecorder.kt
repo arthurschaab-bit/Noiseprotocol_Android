@@ -72,7 +72,9 @@ class MeasurementRecorder(
 
     private val pufferMutex = Mutex()
     private val puffer = mutableListOf<MeasurementEntity>()
-    private var letztesLebenszeichenAt: Long = 0L
+
+    // Volatile: stop() setzt es ohne Sperre zurueck, die Flush-Schleife liest es auf einem IO-Thread.
+    @Volatile private var letztesLebenszeichenAt: Long = 0L
 
     /**
      * Serialisiert alles, was Sessions eroeffnet oder schliesst.
@@ -500,7 +502,10 @@ class MeasurementRecorder(
     }
 
     private suspend fun pruefeLebenszeichen() {
-        val sessionId = sessionMutex.withLock { aktiveSessionId } ?: return
+        // Bewusst OHNE sessionMutex (wie [mikrofonPegel]): Der Aufrufer haelt bereits pufferMutex,
+        // und eroeffneMessgeraetSession() nimmt die Sperren in umgekehrter Reihenfolge
+        // (sessionMutex, dann pufferMutex) - beides zusammen konnte sich gegenseitig blockieren.
+        if (aktiveSessionId == null) return
         val jetzt = now.now().toEpochMilli()
         if (letztesLebenszeichenAt == 0L) {
             letztesLebenszeichenAt = jetzt

@@ -2111,5 +2111,32 @@ class DriveSyncCoordinatorTest {
                 grenzZeile.contains(QUELLE_KEINE_AUFZEICHNUNG),
             )
         }
-}
 
+    /**
+     * Review-Befund zu PR #264: Das `runCatching` je Tag in holeVersaeumteTageNach schluckte
+     * auch einen Abbruch - die Schleife lief nach dem Worker-Stopp ueber alle 29 Tage weiter.
+     */
+    @Test
+    fun abbruchBeimNachholenVersaeumterTageBrichtDenZyklusAbStattWeiterzulaufen() =
+        runTest {
+            var abfragen = 0
+            noiseDao =
+                object : FakeNoiseDao() {
+                    override suspend fun zwischenZeitpunkt(
+                        von: Long,
+                        bis: Long,
+                    ): List<NoiseRecord> {
+                        abfragen++
+                        throw kotlinx.coroutines.CancellationException("Simulierter Worker-Abbruch")
+                    }
+                }
+            val koordinator = baueKoordinator()
+
+            org.junit.Assert.assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    koordinator.syncEinenZyklus()
+                }
+            }
+            assertEquals("Nach dem Abbruch darf kein weiterer Tag abgefragt werden", 1, abfragen)
+        }
+}

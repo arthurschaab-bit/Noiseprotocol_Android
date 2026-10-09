@@ -30,6 +30,13 @@ private const val MIME_TYPE = "text/csv; charset=utf-8"
 private val DATENBANK_SICHERUNG_MIN_INTERVALL: Duration = Duration.ofMinutes(30)
 
 /**
+ * Reicht einen Abbruch (WorkManager stoppt den Worker) weiter, statt ihn in einem `runCatching`
+ * wie einen gewoehnlichen Fehlschlag zu schlucken - sonst liefe z. B. der 29-Tage-Nachholsync
+ * nach dem Stopp einfach weiter.
+ */
+private fun <T> Result<T>.abbruchWeiterreichen(): Result<T> = onFailure { if (it is CancellationException) throw it }
+
+/**
  * Ein einzelner Sync-Zyklus (Plan Abschnitt 8.4) - die eigentliche Entscheidungslogik, getrennt
  * vom [DriveSyncWorker], der nur noch WorkManager-Glue ist. So bleibt sie ohne WorkManager und
  * ohne echtes Netz testbar, wie [com.example.lrmprotokoll.alert.AlarmCoordinator] fuer M5.
@@ -245,6 +252,7 @@ class DriveSyncCoordinator(
         // runCatching wie bei holeVersaeumteTageNach: ein Fehlschlag hier darf weder den
         // Nachholsync noch den Sync fuer heute verhindern.
         runCatching { levelSampleDao.loescheVor(jetzt.minus(Duration.ofDays(30)).toEpochMilli()) }
+            .abbruchWeiterreichen()
             .onFailure { Log.w(TAG, "Puffer-Bereinigung (loescheVor) fehlgeschlagen: ${it.message}") }
 
         val ereignisse = noiseDao.zwischenZeitpunkt(von.toEpochMilli(), jetzt.toEpochMilli())
@@ -535,7 +543,7 @@ class DriveSyncCoordinator(
                         "Versäumten Tag nachgeholt: $tagesSchluessel (${zeilen.size} Zeilen)",
                     )
                 }.getOrThrow()
-            }.onFailure { fehler ->
+            }.abbruchWeiterreichen().onFailure { fehler ->
                 Log.w(TAG, "Nachholen von $tagesSchluessel fehlgeschlagen: ${fehler.message}")
             }
         }
@@ -723,7 +731,7 @@ class DriveSyncCoordinator(
         val dao = dokumentationsFotoDao ?: return false
 
         val offene = if (nurFotoId == null) {
-            runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+            runCatching { dao.nichtHochgeladene() }.abbruchWeiterreichen().getOrDefault(emptyList())
         } else {
             val foto = dao.byId(nurFotoId) ?: return false
             if (foto.driveFileId != null) return true
@@ -762,6 +770,7 @@ class DriveSyncCoordinator(
             }
             if (vorhanden != null) {
                 runCatching { dao.setzeDriveFileId(foto.id, vorhanden.id) }
+                    .abbruchWeiterreichen()
                     .onFailure { erfolgreich = false }
                 continue
             }
@@ -774,6 +783,7 @@ class DriveSyncCoordinator(
             driveApi.dateiAnlegen(name, ziel, inhalt, "image/jpeg", gzip = false)
                 .onSuccess { fileId ->
                     runCatching { dao.setzeDriveFileId(foto.id, fileId) }
+                        .abbruchWeiterreichen()
                         .onFailure { erfolgreich = false }
                     diagnosticsReporter?.breadcrumb("DriveSync", "Foto erfolgreich hochgeladen: $name")
                 }
@@ -806,7 +816,7 @@ class DriveSyncCoordinator(
         val dao = beweisVideoDao ?: return false
 
         val offene = if (nurVideoId == null) {
-            runCatching { dao.nichtHochgeladene() }.getOrDefault(emptyList())
+            runCatching { dao.nichtHochgeladene() }.abbruchWeiterreichen().getOrDefault(emptyList())
         } else {
             val video = dao.byId(nurVideoId) ?: return false
             if (video.driveFileId != null) return true
@@ -837,6 +847,7 @@ class DriveSyncCoordinator(
             }
             if (vorhanden != null) {
                 runCatching { dao.setzeDriveFileId(video.id, vorhanden.id) }
+                    .abbruchWeiterreichen()
                     .onFailure { erfolgreich = false }
                 continue
             }
@@ -867,6 +878,7 @@ class DriveSyncCoordinator(
                     // spaeteren Lauf dazu verleiten, eine abgeschlossene Sitzung abzufragen.
                     dao.setzeUploadFortschritt(video.id, null, datei.length())
                 }
+                    .abbruchWeiterreichen()
                     .onFailure { erfolgreich = false }
             }.onFailure {
                 erfolgreich = false
@@ -933,7 +945,6 @@ class DriveSyncCoordinator(
                     diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${tempDatei.length()} Bytes)")
                 }
                 .onFailure { fehler ->
-                    if (fehler is java.util.concurrent.CancellationException) throw fehler
                     val dauerMs = Duration.between(zyklusStart, now.now()).toMillis()
                     diagnosticsReporter?.report(
                         code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
@@ -948,8 +959,6 @@ class DriveSyncCoordinator(
                         ),
                     )
                 }
-        } catch (e: java.util.concurrent.CancellationException) {
-            throw e
         } finally {
             tempDatei.delete()
         }

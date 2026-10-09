@@ -3,6 +3,7 @@ package com.example.lrmprotokoll
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.acra.AcraConfig
@@ -69,6 +70,7 @@ class LaermprotokollApp : Application() {
         com.example.lrmprotokoll.diagnose.LebenszyklusProzessUeberwachung.auswerten(
             settingsManager = container.settingsManager,
             lebenszyklusRingFile = container.lebenszyklusRingFile,
+            bootCount = runCatching { Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull(),
         )
         // M12 Schritt 3 (Konzept 6): die Auswertung liegt jetzt in ProcessExitCollector, nicht
         // mehr inline hier - Verhalten bleibt sonst gleich (Breadcrumb + Report bei CRASH/ANR),
