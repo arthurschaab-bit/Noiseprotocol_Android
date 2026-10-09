@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.messreihe.Zeitraum
 import com.example.lrmprotokoll.ui.theme.statusColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,6 +65,7 @@ fun PegelverlaufChart(
     height: Dp = 180.dp,
     isLive: Boolean = false,
     enableZoom: Boolean = true,
+    aufzeichnungsLuecken: List<Zeitraum> = emptyList(),
 ) {
     if (spalten.isEmpty()) {
         Box(
@@ -97,6 +100,8 @@ fun PegelverlaufChart(
     val thresholdColor = statusColors.error
     val leqColor = statusColors.connected
     val outageColor = statusColors.outageBand
+    val noRecordingBgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val noRecordingHatchColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
     val eventPinCenterColor = MaterialTheme.colorScheme.surface
 
     // contentDescription (PROMPT_M9_UX.md Aufgabe 4): das Canvas zeichnet nur Pixel, ein
@@ -111,12 +116,13 @@ fun PegelverlaufChart(
         aktuellerPegel, mittelwert, hoechsterPegel, ausfallbaender.size,
     )
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .semantics { contentDescription = chartBeschreibung }
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height)
+                .semantics { contentDescription = chartBeschreibung },
+        ) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -237,6 +243,37 @@ fun PegelverlaufChart(
                         topLeft = Offset(xStart, 0f),
                         size = Size(rectWidth, plotHeight)
                     )
+                }
+            }
+
+            // 3b. Aufzeichnungslücken (graue, schraffierte Bänder - E4)
+            aufzeichnungsLuecken.forEach { luecke ->
+                val vonSek = ((luecke.von - sessionStart) / 1000).coerceIn(0, gesamtSekunden)
+                val bisSek = ((luecke.bis - sessionStart) / 1000).coerceIn(0, gesamtSekunden)
+                val xStart = x(vonSek).coerceIn(yAxisWidth, size.width)
+                val xEnd = x(bisSek).coerceIn(yAxisWidth, size.width)
+                val rectWidth = (xEnd - xStart)
+
+                if (rectWidth > 0f) {
+                    drawRect(
+                        color = noRecordingBgColor,
+                        topLeft = Offset(xStart, 0f),
+                        size = Size(rectWidth, plotHeight),
+                    )
+                    clipRect(left = xStart, top = 0f, right = xEnd, bottom = plotHeight) {
+                        val strokeWidth = 1.5f.dp.toPx()
+                        val step = 10.dp.toPx()
+                        var cur = xStart - plotHeight
+                        while (cur < xEnd) {
+                            drawLine(
+                                color = noRecordingHatchColor,
+                                start = Offset(cur, plotHeight),
+                                end = Offset(cur + plotHeight, 0f),
+                                strokeWidth = strokeWidth,
+                            )
+                            cur += step
+                        }
+                    }
                 }
             }
 
@@ -418,8 +455,73 @@ fun PegelverlaufChart(
                         text = "%.1fx Reset".format(Locale.US, scaleX),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+    }
+
+    if (ausfallbaender.isNotEmpty() || aufzeichnungsLuecken.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (ausfallbaender.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 14.dp, height = 10.dp)
+                                .background(outageColor, RoundedCornerShape(2.dp)),
+                        )
+                        Text(
+                            text = stringResource(com.example.lrmprotokoll.R.string.chart_legend_connection_outage),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (aufzeichnungsLuecken.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Canvas(
+                            modifier = Modifier.size(width = 14.dp, height = 10.dp),
+                        ) {
+                            drawRect(
+                                color = noRecordingBgColor,
+                                topLeft = Offset.Zero,
+                                size = size,
+                            )
+                            clipRect(0f, 0f, size.width, size.height) {
+                                val strokeWidth = 1.dp.toPx()
+                                val step = 4.dp.toPx()
+                                var cur = -size.height
+                                while (cur < size.width) {
+                                    drawLine(
+                                        color = noRecordingHatchColor,
+                                        start = Offset(cur, size.height),
+                                        end = Offset(cur + size.height, 0f),
+                                        strokeWidth = strokeWidth,
+                                    )
+                                    cur += step
+                                }
+                            }
+                        }
+                        Text(
+                            text = stringResource(com.example.lrmprotokoll.R.string.chart_legend_no_recording),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

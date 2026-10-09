@@ -151,6 +151,7 @@ fun LiveCockpitCard(
     var aggregate by remember { mutableStateOf<List<MinuteAggregateEntity>>(emptyList()) }
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
     var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
+    var aufzeichnungsLuecken by remember { mutableStateOf<List<Zeitraum>>(emptyList()) }
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
@@ -785,6 +786,22 @@ fun LiveCockpitCard(
                         s.startedAt
                     }
 
+                    LaunchedEffect(
+                        s.id,
+                        chartStart,
+                        sessionEndeFuerChart,
+                    ) {
+                        if (chartStart < sessionEndeFuerChart) {
+                            val sessions =
+                                withContext(Dispatchers.IO) {
+                                    db.sessionDao().zwischen(chartStart, sessionEndeFuerChart)
+                                }
+                            aufzeichnungsLuecken = aufzeichnungsLuecken(sessions, chartStart, sessionEndeFuerChart)
+                        } else {
+                            aufzeichnungsLuecken = emptyList()
+                        }
+                    }
+
                     val chartSpalten = remember(messwerte, aggregate, chartStart, sessionEndeFuerChart) {
                         val filteredMesswerte = if (chartStart > s.startedAt) messwerte.filter { it.timestamp in chartStart..sessionEndeFuerChart } else messwerte
                         val filteredAggregate = if (chartStart > s.startedAt) aggregate.filter { it.minuteStart in chartStart..sessionEndeFuerChart } else aggregate
@@ -815,7 +832,8 @@ fun LiveCockpitCard(
                         thresholdDb = schwelle.toDouble(),
                         laeqDb = kennwerte?.leqDb,
                         isLive = dienstAktiv,
-                        height = 260.dp
+                        height = 260.dp,
+                        aufzeichnungsLuecken = aufzeichnungsLuecken,
                     )
                 } else {
                     Box(
