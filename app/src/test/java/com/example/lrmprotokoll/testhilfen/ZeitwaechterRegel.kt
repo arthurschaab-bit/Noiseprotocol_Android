@@ -50,6 +50,16 @@ import java.util.concurrent.TimeUnit
  * an den XML-Bericht, der erst beim Abschluss der Aufgabe entsteht. Schneidet `Test.timeout` die
  * Aufgabe ab, ist die Diagnose weg. [DIAGNOSEDATEI] entsteht dagegen sofort und liegt unter
  * `app/build/`, das der CI-Schritt "Upload test reports" mit hochlaedt.
+ *
+ * **Was beschaeftigt ist, nicht nur dass.** Ein einzelner Stack zeigt nur die Schleife
+ * (`isIdleNow` -> `advanceTimeByFrame`), nicht, wer die Frames anfordert. Deshalb zusaetzlich rund
+ * 5 s Stichproben des Main-Threads, verdichtet auf App- und Compose-Rahmen. In einer Sonde mit
+ * einer `withFrameNanos`-Endlosschleife zeigte das den Lambda der Schleife und
+ * `Recomposer.performRecompose`. Ein Snapshot-Apply-/Schreib-Beobachter wurde ebenfalls versucht und
+ * meldete in derselben Sonde **nichts** - er ist deshalb nicht enthalten.
+ *
+ * `rememberInfiniteTransition` allein haengt dagegen **nicht**: dieselbe Sonde mit einer
+ * Endlosanimation wurde idle (Composes Testumgebung behandelt Endlosanimationen selbst).
  */
 class ZeitwaechterRegel(
     private val grenzeSekunden: Long = 50,
@@ -101,6 +111,7 @@ class ZeitwaechterRegel(
                 zeilen.appendLine("\t... ${stack.size - GEZEIGTE_RAHMEN} weitere Rahmen")
             }
         }
+        haengeStichprobenAn(zeilen)
         zeilen.appendLine("=== ZEITWAECHTER Ende ===")
 
         System.err.print(zeilen)
@@ -112,8 +123,58 @@ class ZeitwaechterRegel(
         }
     }
 
+    /**
+     * Nimmt [STICHPROBEN] Stacks des Robolectric-Main-Threads im Abstand von [STICHPROBEN_ABSTAND_MS]
+     * auf und zaehlt, in wie vielen davon ein App-Rahmen oder ein Compose-Animationsrahmen steckt.
+     * Ein einzelner Schnappschuss trifft fast immer nur die Schleife selbst.
+     */
+    private fun haengeStichprobenAn(zeilen: StringBuilder) {
+        val mainThread = Thread.getAllStackTraces().keys.firstOrNull { it.name.startsWith("SDK ") && it.state == Thread.State.RUNNABLE }
+        zeilen.appendLine()
+        if (mainThread == null) {
+            zeilen.appendLine("--- Stichproben: kein laufender \"SDK <n> Main Thread\" gefunden ---")
+            return
+        }
+        val treffer = HashMap<String, Int>()
+        repeat(STICHPROBEN) {
+            mainThread.stackTrace
+                .map { "${it.className}.${it.methodName}" }
+                .filter(::istAussagekraeftig)
+                .distinct()
+                .forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
+            Thread.sleep(STICHPROBEN_ABSTAND_MS)
+        }
+        zeilen.appendLine("--- Stichproben \"${mainThread.name}\": $STICHPROBEN x alle $STICHPROBEN_ABSTAND_MS ms, Treffer je Rahmen ---")
+        if (treffer.isEmpty()) zeilen.appendLine("\t(kein App- oder Animationsrahmen getroffen)")
+        treffer.entries.sortedByDescending { it.value }.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) ->
+            zeilen.appendLine("\t$anzahl  $rahmen")
+        }
+    }
+
+    /** App- oder Compose-Rahmen, aber weder die Regel selbst noch der Testrumpf. */
+    private fun istAussagekraeftig(rahmen: String): Boolean {
+        if (INTERESSANTE_RAHMEN.none { rahmen.startsWith(it) }) return false
+        if (AUSGENOMMENE_RAHMEN.any { rahmen.startsWith(it) }) return false
+        return !rahmen.substringBeforeLast('.').endsWith("Test")
+    }
+
     private companion object {
         const val GEZEIGTE_RAHMEN = 25
+        const val STICHPROBEN = 100
+        const val STICHPROBEN_ABSTAND_MS = 50L
+        const val GEZEIGTE_STICHPROBEN_RAHMEN = 30
+
+        /** App-Code und die Compose-Teile, die Frames anfordern koennen. */
+        val INTERESSANTE_RAHMEN =
+            listOf(
+                "com.example.lrmprotokoll.",
+                "androidx.compose.animation.",
+                "androidx.compose.material3.",
+                "androidx.compose.runtime.Recomposer",
+            )
+
+        /** Immer im Stack und damit ohne Aussage: die Regel selbst. */
+        val AUSGENOMMENE_RAHMEN = listOf("com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel")
 
         /**
          * Relativ zum Arbeitsverzeichnis der Testaufgabe, das Gradle auf das Modulverzeichnis
