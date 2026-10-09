@@ -36,6 +36,7 @@ data class ProtokollEreignis(
 
 const val QUELLE_GEMISCHT = "GEMISCHT"
 const val QUELLE_KEINE_VERBINDUNG = "KEINE_VERBINDUNG"
+const val QUELLE_KEINE_AUFZEICHNUNG = "KEINE_AUFZEICHNUNG"
 
 /**
  * Verdichtet Rohpegelwerte zu Zeitfenstern fuer den Drive-Sync (Plan Abschnitt 8.4). Rein,
@@ -93,6 +94,7 @@ object PegelAggregator {
         von: Instant,
         bis: Instant,
         fensterDauer: Duration,
+        aufzeichnungsLuecken: List<com.example.lrmprotokoll.messreihe.Zeitraum> = emptyList(),
     ): List<AggregatZeile> {
         require(fensterDauer > Duration.ZERO) { "fensterDauer muss positiv sein" }
         require(!bis.isBefore(von)) { "bis darf nicht vor von liegen" }
@@ -103,41 +105,33 @@ object PegelAggregator {
 
         val vonMillis = von.toEpochMilli()
         val fensterMillis = fensterDauer.toMillis()
+        val bisMillis = bis.toEpochMilli()
 
-        val minTs = minOf(
-            samples.minOfOrNull { it.at } ?: Long.MAX_VALUE,
-            ereignisse.minOfOrNull { it.at.toEpochMilli() } ?: Long.MAX_VALUE
-        )
-        val maxTs = maxOf(
-            samples.maxOfOrNull { it.at } ?: Long.MIN_VALUE,
-            ereignisse.maxOfOrNull { it.at.toEpochMilli() } ?: Long.MIN_VALUE
-        )
+        // E1: Ein abgeschlossener Tag wird vollständig von 00:00:00 bis 23:59:59 gefüllt.
+        // Der laufende Tag wird bis zum letzten vollständigen Fenster vor dem Sync gefüllt.
+        val anzahlVollerFenster = (bisMillis - vonMillis).floorDiv(fensterMillis)
+        if (anzahlVollerFenster <= 0) {
+            return emptyList()
+        }
 
-        // Auf Fenster ausrichten und auf [von, bis] begrenzen - VON-RELATIV (Nachbesserung
-        // 24.09.2026, siehe KDoc oben), nicht auf dem absoluten Epoch-Raster: startIndex/
-        // endIndexExklusiv sind die von-relativen Fenster-Indizes von minTs/maxTs, dieselben
-        // Indizes, unter denen die Rohwerte unten gruppiert werden.
-        // coerceAtLeast(0): dieselbe Absicherung, die vorher das `maxOf(vonMillis, ...)` an
-        // effektiverStartMillis leistete - Rohwerte VOR [von] (sollte bei den bestehenden
-        // Aufrufern nie vorkommen, siehe deren eigene [von,bis)-Datenbankabfragen) duerfen
-        // effektiverStartMillis nicht unter [von] druecken.
-        val startIndex = (minTs - vonMillis).floorDiv(fensterMillis).coerceAtLeast(0)
-        val endIndexExklusiv = (maxTs - vonMillis).floorDiv(fensterMillis) + 1
-        val effektiverStartMillis = vonMillis + startIndex * fensterMillis
-        val effektivesEndeMillis = minOf(bis.toEpochMilli(), vonMillis + endIndexExklusiv * fensterMillis)
+        val effektiverStartMillis = vonMillis
+        val effektivesEndeMillis = vonMillis + anzahlVollerFenster * fensterMillis
 
         val samplesNachFenster = samples.groupBy { (it.at - vonMillis).floorDiv(fensterMillis) }
         val ereignisseNachFenster = ereignisse.groupBy { (it.at.toEpochMilli() - vonMillis).floorDiv(fensterMillis) }
 
-        val zeilen = mutableListOf<AggregatZeile>()
+        val zeilen = ArrayList<AggregatZeile>(anzahlVollerFenster.toInt())
         var fensterStart = Instant.ofEpochMilli(effektiverStartMillis)
         val fensterEnde = Instant.ofEpochMilli(effektivesEndeMillis)
-        var index = startIndex
+        var index = 0L
 
         while (fensterStart.isBefore(fensterEnde)) {
             val inDiesemFenster = samplesNachFenster[index].orEmpty()
             val ereignisseHier = ereignisseNachFenster[index].orEmpty()
-            zeilen += bildeZeile(inDiesemFenster, ereignisseHier, fensterStart)
+            val fensterStartMs = fensterStart.toEpochMilli()
+            val istAufzeichnungsLuecke = aufzeichnungsLuecken.any { it.von <= fensterStartMs && fensterStartMs < it.bis }
+            val quelleFuerLeeresFenster = if (istAufzeichnungsLuecke) QUELLE_KEINE_AUFZEICHNUNG else QUELLE_KEINE_VERBINDUNG
+            zeilen += bildeZeile(inDiesemFenster, ereignisseHier, fensterStart, quelleFuerLeeresFenster)
             fensterStart = fensterStart.plusMillis(fensterMillis)
             index++
         }
@@ -148,6 +142,7 @@ object PegelAggregator {
         samples: List<LevelSampleEntity>,
         ereignisse: List<ProtokollEreignis>,
         fensterStart: Instant,
+        quelleFuerLeeresFenster: String = QUELLE_KEINE_VERBINDUNG,
     ): AggregatZeile {
         if (samples.isEmpty()) {
             val erstEreignis = ereignisse.firstOrNull()
@@ -161,7 +156,7 @@ object PegelAggregator {
                 zeitbewertung = null,
                 messbereich = null,
                 samples = 0,
-                quelle = QUELLE_KEINE_VERBINDUNG,
+                quelle = quelleFuerLeeresFenster,
                 ereignis = ereignisse.isNotEmpty(),
                 klassifikation = erstEreignis?.klassifikation,
                 notes = erstEreignis?.notes,

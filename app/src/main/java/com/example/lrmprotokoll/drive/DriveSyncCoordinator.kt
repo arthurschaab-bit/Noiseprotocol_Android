@@ -66,6 +66,7 @@ class DriveSyncCoordinator(
      * [ladeDatenbankSicherungHoch] - sie gehoert nur diesem einen Versuch.
      */
     private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
+    private val sessionDao: com.example.lrmprotokoll.data.SessionDao? = null,
 ) {
 
     /**
@@ -630,10 +631,29 @@ class DriveSyncCoordinator(
         if (!bis.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
 
         val fensterSekunden = fensterDauer.seconds.coerceAtLeast(1)
+        val fensterMillis = fensterDauer.toMillis()
         // 30 Minuten (1800s) statt 60 Minuten (3600s), um SQLite-CursorWindow-Ueberlaeufe (2-MB-Grenze
         // bei 10-Hz-Samples, ~36.000 Zeilen/h) zuverlaessig zu verhindern (Befund 4 aus docs/BEFUNDE_SUPPORT_BUNDLES_2026-10-02.md).
         val vielfaches = Math.round(1800.0 / fensterSekunden).coerceAtLeast(1)
         val abschnittDauer = fensterDauer.multipliedBy(vielfaches)
+
+        val anzahlVollerFensterGesamt = (bis.toEpochMilli() - von.toEpochMilli()).floorDiv(fensterMillis)
+        val effektivesEnde = von.plusMillis(anzahlVollerFensterGesamt * fensterMillis)
+        if (!effektivesEnde.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
+
+        val sessions = sessionDao?.zwischen(von.toEpochMilli(), bis.toEpochMilli()).orEmpty()
+        val luecken = if (sessionDao != null) {
+            com.example.lrmprotokoll.messreihe.aufzeichnungsLuecken(sessions, von.toEpochMilli(), bis.toEpochMilli())
+        } else {
+            emptyList()
+        }
+
+        fun erzeugeLueckenZeile(fensterStart: Instant): AggregatZeile {
+            val ms = fensterStart.toEpochMilli()
+            val istLuecke = luecken.any { it.von <= ms && ms < it.bis }
+            val quelle = if (istLuecke) QUELLE_KEINE_AUFZEICHNUNG else QUELLE_KEINE_VERBINDUNG
+            return AggregatZeile(fensterStart = fensterStart, quelle = quelle)
+        }
 
         val zeilen = mutableListOf<AggregatZeile>()
         var hatteRohwerte = false
@@ -650,19 +670,15 @@ class DriveSyncCoordinator(
 
             if (abschnittSamples.isNotEmpty() || abschnittEreignisse.isNotEmpty()) {
                 val abschnittZeilen = PegelAggregator.aggregiere(
-                    abschnittSamples, abschnittEreignisse, abschnittVon, abschnittBis, fensterDauer,
+                    abschnittSamples, abschnittEreignisse, abschnittVon, abschnittBis, fensterDauer, luecken,
                 )
                 if (abschnittZeilen.isNotEmpty()) {
                     val ersteZeile = abschnittZeilen.first()
-                    letztesFensterEnde?.let { ende ->
-                        // Luecke zwischen dem letzten Abschnitt mit Daten und diesem hier -
-                        // beide liegen innerhalb des Gesamt-Datenumfangs, muss also wie bei
-                        // einem einzigen aggregiere()-Aufruf als KEINE_VERBINDUNG erscheinen.
-                        var lueckenFenster = ende
-                        while (lueckenFenster.isBefore(ersteZeile.fensterStart)) {
-                            zeilen += AggregatZeile(fensterStart = lueckenFenster)
-                            lueckenFenster = lueckenFenster.plus(fensterDauer)
-                        }
+                    val lueckenStart = letztesFensterEnde ?: von
+                    var lueckenFenster = lueckenStart
+                    while (lueckenFenster.isBefore(ersteZeile.fensterStart)) {
+                        zeilen += erzeugeLueckenZeile(lueckenFenster)
+                        lueckenFenster = lueckenFenster.plus(fensterDauer)
                     }
                     zeilen += abschnittZeilen
                     letztesFensterEnde = abschnittZeilen.last().fensterStart.plus(fensterDauer)
@@ -670,6 +686,20 @@ class DriveSyncCoordinator(
             }
             abschnittVon = abschnittBis
         }
+
+        if (!hatteRohwerte) {
+            return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
+        }
+
+        // Luecke nach dem letzten Abschnitt bis zum effektiven Ende des Gesamtrahmens (E1)
+        letztesFensterEnde?.let { ende ->
+            var lueckenFenster = ende
+            while (lueckenFenster.isBefore(effektivesEnde)) {
+                zeilen += erzeugeLueckenZeile(lueckenFenster)
+                lueckenFenster = lueckenFenster.plus(fensterDauer)
+            }
+        }
+
         return AbschnittsAggregation(zeilen, hatteRohwerte)
     }
 

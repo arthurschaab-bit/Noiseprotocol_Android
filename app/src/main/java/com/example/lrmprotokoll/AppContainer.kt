@@ -316,6 +316,7 @@ class AppContainer(
             dailyFileDao = database.driveDailyFileDao(),
             noiseDao = database.noiseDao(),
             settings = settingsManager,
+            sessionDao = database.sessionDao(),
             dokumentationsFotoDao = database.dokumentationsFotoDao(),
             beweisVideoDao = database.beweisVideoDao(),
             diagnosticsReporter = diagnosticsReporter,
