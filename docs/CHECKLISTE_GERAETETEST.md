@@ -521,6 +521,16 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 |---|---|---|
 | Aufzeichnung kurz beenden, nach 10 min wieder starten | Im Cockpit-Verlauf erscheint ein graues Band „Keine Aufzeichnung“; nach dem nächsten Drive-Sync enthält die Tages-CSV diese 10 min als `KEINE_AUFZEICHNUNG`. Die Datei des Vortags reicht bis 23:59:59 | |
 
+### F28 — WAV-ZIPs streamend statt im Speicher (10.10.2026, Befund 1)
+
+Umgesetzt und mit Robolectric unit-getestet, aber **noch nicht auf echter Hardware gesehen**. Auslöser
+war Befund 1 (`docs/BEFUNDE_BUNDLES_2026-10-10.md`): Stunden-ZIPs bis ~138 MB wurden im RAM gebaut und
+führten am 07.10. zu 16 × `OutOfMemoryError` und einem Absturz.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Einen Tag mit vielen Ereignissen (mehrere hundert WAVs pro Stunde) aufzeichnen, danach Bundle erzeugen | Kein `DRIVE_UPLOAD_FAILED … OutOfMemoryError` bei `ladeWavZipsHoch`, kein Absturz im Crash-Puffer; die Stunden-ZIPs liegen vollständig in Drive | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

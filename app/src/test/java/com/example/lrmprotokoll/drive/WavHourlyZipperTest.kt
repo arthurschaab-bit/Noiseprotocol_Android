@@ -65,7 +65,9 @@ class WavHourlyZipperTest {
         assertTrue(p2.isClosedHour)
 
         // Inhalt prüfen
-        val zip2In = ZipInputStream(ByteArrayInputStream(p2.zipBytes))
+        val zipDatei = tempFolder.newFile("p2.zip")
+        assertTrue(p2.schreibeZipNach(zipDatei))
+        val zip2In = ZipInputStream(ByteArrayInputStream(zipDatei.readBytes()))
         val entry1 = zip2In.nextEntry
         assertNotNull(entry1)
         assertEquals("rec_0810.wav", entry1!!.name)
@@ -82,5 +84,26 @@ class WavHourlyZipperTest {
         )
         val zips = WavHourlyZipper.packeStundenZips(records, Instant.now(), zone)
         assertTrue(zips.isEmpty())
+    }
+
+    @Test
+    fun schreibeZipNachMeldetFehlschlagWennZielNichtBeschreibbarIst() {
+        val wav = tempFolder.newFile("rec.wav")
+        wav.writeBytes(byteArrayOf(1, 2, 3))
+        val jetzt = Instant.parse("2026-08-24T07:30:00Z")
+        val records =
+            listOf(
+                NoiseRecord(
+                    id = 1,
+                    timestamp = jetzt.toEpochMilli(),
+                    amplitude = 0.0,
+                    dbValue = 60.0,
+                    filePath = wav.absolutePath,
+                ),
+            )
+        val paket = WavHourlyZipper.packeStundenZips(records, jetzt, zone).single()
+
+        // Ein Verzeichnis als Ziel laesst sich nicht als Datei oeffnen.
+        assertFalse(paket.schreibeZipNach(tempFolder.newFolder("kein_dateiziel")))
     }
 }
