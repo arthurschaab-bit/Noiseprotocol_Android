@@ -82,7 +82,7 @@ class DatenbankVollsicherungWorker
                     .hochladen(driveApiOverride ?: container.driveApiClient, ordnerId, vollsicherung.datei)
                     .fold(
                         onSuccess = {
-                            settings.merkeVollsicherung(vollsicherung.vollsicherungId, vollsicherung.stand)
+                            settings.merkeVollsicherung(vollsicherung.vollsicherungId, vollsicherung.stand, ordnerId)
                             settings.datenbankSicherungLastSuccessAt = System.currentTimeMillis()
                             container.diagnosticsReporter.breadcrumb(
                                 "DriveSync",
@@ -164,13 +164,23 @@ object DatenbankVollsicherungPlanung {
                     .setConstraints(nurWlan)
                     .build()
             workManager.enqueueUniquePeriodicWork(NACHT_WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, nacht)
-            if (!vollsicherungVorhanden) {
-                val erst =
-                    OneTimeWorkRequestBuilder<DatenbankVollsicherungWorker>()
-                        .setConstraints(nurWlan)
-                        .build()
-                workManager.enqueueUniqueWork(ERST_WORK_NAME, ExistingWorkPolicy.KEEP, erst)
-            }
+            if (!vollsicherungVorhanden) planeErstsicherung(context)
+        } catch (e: Throwable) {
+            Log.w("VollsicherungPlanung", "WorkManager konnte nicht aufgerufen werden", e)
+        }
+    }
+
+    /**
+     * Einmalige Vollsicherung, sobald WLAN da ist - wenn es für den aktuellen Drive-Ordner noch
+     * keine gibt (erster Start, Ordnerwechsel). `KEEP`: mehrfaches Anfordern plant nur eine.
+     */
+    fun planeErstsicherung(context: Context) {
+        try {
+            val erst =
+                OneTimeWorkRequestBuilder<DatenbankVollsicherungWorker>()
+                    .setConstraints(nurWlan)
+                    .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(ERST_WORK_NAME, ExistingWorkPolicy.KEEP, erst)
         } catch (e: Throwable) {
             Log.w("VollsicherungPlanung", "WorkManager konnte nicht aufgerufen werden", e)
         }

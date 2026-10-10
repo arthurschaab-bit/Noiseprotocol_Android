@@ -107,4 +107,69 @@ class SicherungsDatenbankTest {
 
         assertEquals(listOf("4"), zeilen(voll, "SELECT COUNT(*) FROM measurements"))
     }
+
+    /** Schema wie in Room: Rohdaten haengen per Fremdschluessel mit ON DELETE CASCADE an der Aufnahme. */
+    private fun baueLiveMitFremdschluessel(): File {
+        val datei = File(tempFolder.root, "live_fk.db")
+        oeffne(datei).use { db ->
+            db.enableWriteAheadLogging()
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.execSQL("CREATE TABLE noise_records (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, label TEXT)")
+            db.execSQL(
+                "CREATE TABLE klassifikations_rohdaten (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "recordId INTEGER NOT NULL, topKlassen TEXT NOT NULL, " +
+                    "FOREIGN KEY(recordId) REFERENCES noise_records(id) ON DELETE CASCADE)",
+            )
+            db.execSQL("INSERT INTO noise_records (id, label) VALUES (7, 'a')")
+            db.execSQL("INSERT INTO klassifikations_rohdaten (recordId, topKlassen) VALUES (7, 'x')")
+        }
+        return datei
+    }
+
+    /**
+     * Review zu #274 (P1): Die Teilsicherung liest alle Tabellen in einer aufgeschobenen
+     * Transaktion, also aus einem WAL-Schnappschuss. Gleichzeitiges Schreiben laesst sich hier
+     * nicht pruefen - Robolectrics SQLite blockiert schon bei einem einzelnen WAL-Leser jeden
+     * Schreiber (auf Geraeten nicht). Geprueft wird deshalb die zweite Sicherung dahinter: Kommt
+     * dennoch eine Teilsicherung mit Rohdaten ohne ihre Aufnahme an, entfernt das Einspielen sie,
+     * statt einen widerspruechlichen Stand als erfolgreich zu melden.
+     */
+    @Test
+    fun widerspruechlicheTeilsicherungHinterlaesstKeineVerwaistenRohdaten() {
+        val live = baueLiveMitFremdschluessel()
+        val voll = File(tempFolder.root, "voll_fk.db").also { live.copyTo(it) }
+        val stand = SicherungsDatenbank.entferneRohwerteUndErmittleStand(voll)
+        val teil = File(tempFolder.root, "teil_fk.db")
+        SicherungsDatenbank.baueTeilsicherung(live, teil, stand)
+        // So saehe ein Export aus, der Aufnahme 8 nicht, ihre Rohdaten aber schon gesehen hat.
+        oeffne(teil).use { it.execSQL("INSERT INTO klassifikations_rohdaten (id, recordId, topKlassen) VALUES (99, 8, 'neu')") }
+
+        SicherungsDatenbank.spieleTeilsicherungEin(voll, teil)
+
+        assertEquals(listOf("0"), zeilen(voll, "SELECT COUNT(*) FROM klassifikations_rohdaten WHERE recordId = 8"))
+        assertEquals(emptyList<String>(), zeilen(voll, "PRAGMA foreign_key_check"))
+    }
+
+    /**
+     * Review zu #274 (P2): Eine vollgesicherte Aufnahme wird danach endgueltig geloescht. Nach
+     * Voll- plus Teilsicherung duerfen ihre Rohdaten aus der Vollsicherung nicht verwaist
+     * zurueckbleiben.
+     */
+    @Test
+    fun geloeschteVollgesicherteAufnahmeHinterlaesstKeineVerwaistenRohdaten() {
+        val live = baueLiveMitFremdschluessel()
+        val voll = File(tempFolder.root, "voll_fk.db").also { live.copyTo(it) }
+        val stand = SicherungsDatenbank.entferneRohwerteUndErmittleStand(voll)
+        oeffne(live).use { db ->
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.execSQL("DELETE FROM noise_records WHERE id = 7")
+        }
+        val teil = File(tempFolder.root, "teil_fk.db")
+        SicherungsDatenbank.baueTeilsicherung(live, teil, stand)
+
+        SicherungsDatenbank.spieleTeilsicherungEin(voll, teil)
+
+        assertEquals(listOf("0"), zeilen(voll, "SELECT COUNT(*) FROM klassifikations_rohdaten"))
+        assertEquals(emptyList<String>(), zeilen(voll, "PRAGMA foreign_key_check"))
+    }
 }

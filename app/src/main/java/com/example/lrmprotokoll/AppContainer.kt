@@ -326,11 +326,18 @@ class AppContainer(
                 // dann gibt es noch nichts, worauf sie aufsetzen koennte. Die Datei liegt im
                 // cacheDir; der Koordinator loescht sie nach dem Upload-Versuch,
                 // baueTeilsicherung() raeumt bei einem Fehlschlag beim Bauen selbst auf.
-                settingsManager.vollsicherungStand?.let { (vollsicherungId, stand) ->
+                // Fehlt die Basis fuer den aktuellen Ordner (erster Start, Ordnerwechsel), wird
+                // die Vollsicherung sofort eingeplant statt erst in der naechsten Nacht.
+                val basis = settingsManager.vollsicherungStand
+                if (basis == null) {
+                    com.example.lrmprotokoll.drive.DatenbankVollsicherungPlanung
+                        .planeErstsicherung(context.applicationContext)
+                    null
+                } else {
                     com.example.lrmprotokoll.backup.SicherungManager.baueTeilsicherung(
                         context.applicationContext,
-                        vollsicherungId,
-                        stand,
+                        basis.first,
+                        basis.second,
                     )
                 }
             },

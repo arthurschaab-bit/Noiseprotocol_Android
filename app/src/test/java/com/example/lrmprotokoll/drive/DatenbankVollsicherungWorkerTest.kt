@@ -152,6 +152,17 @@ class DatenbankVollsicherungWorkerTest {
             assertFalse(sicherung.datei.exists())
         }
 
+    /** Review zu #274: Nach einem Ordnerwechsel liegt die Basis im alten Ordner - sie gilt nicht mehr. */
+    @Test
+    fun ordnerwechselMachtDenStandUngueltig() =
+        runTest {
+            bauWorker(gebauteSicherung(), FakeDrive(kotlin.Result.success("datei-id"))).doWork()
+
+            app.container.settingsManager.driveFolderId = "anderer-ordner"
+
+            assertNull(app.container.settingsManager.vollsicherungStand)
+        }
+
     @Test
     fun fehlgeschlagenerUploadMerktKeinenStand() =
         runTest {

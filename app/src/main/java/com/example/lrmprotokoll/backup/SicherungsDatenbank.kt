@@ -26,6 +26,9 @@ object SicherungsDatenbank {
     /** Interne Tabellen von SQLite/Android/Room - gehören nie in eine Teilsicherung. */
     private val INTERNE_TABELLEN = setOf("android_metadata", "room_master_table", "sqlite_sequence")
 
+    /** Geloeschte Eltern koennen Kinder von Kindern verwaisen lassen - daher mehrere Durchlaeufe. */
+    private const val MAX_VERWAIST_DURCHLAEUFE = 10
+
     /** Stand einer Vollsicherung: ab welchen IDs eine Teilsicherung Zuwachs mitnehmen muss. */
     data class Stand(
         val basisMesswertId: Long,
@@ -53,25 +56,49 @@ object SicherungsDatenbank {
         quelle: File,
         ziel: File,
         stand: Stand,
+        nachTabelle: (String) -> Unit = {},
     ) {
         ziel.delete()
         oeffne(ziel).use { db ->
             db.execSQL("ATTACH DATABASE ? AS live", arrayOf(quelle.absolutePath))
             try {
-                for (tabelle in tabellen(db, "live")) {
-                    if (tabelle == ROHWERT_TABELLE || tabelle in INTERNE_TABELLEN) continue
-                    val bedingung =
-                        when (tabelle) {
-                            MESSWERTE -> " WHERE id > ${stand.basisMesswertId}"
-                            ROHDATEN -> " WHERE id > ${stand.basisRohdatenId}"
-                            else -> ""
-                        }
-                    db.execSQL("CREATE TABLE main.`$tabelle` AS SELECT * FROM live.`$tabelle`$bedingung")
+                // Review zu #274 (P1): alle Tabellen aus EINEM Lesestand. Eine aufgeschobene
+                // (DEFERRED) Transaktion haelt ab dem ersten Lesen den WAL-Schnappschuss der
+                // laufenden Datenbank, ohne deren Schreiber zu sperren - Room schreibt weiter, die
+                // Kopie sieht davon nichts. Ohne sie konnte zwischen zwei Tabellen eine neue
+                // Aufnahme samt Rohdaten entstehen: Rohdaten in der Kopie, Aufnahme nicht.
+                // Bewusst ueber rawQuery statt beginTransaction(): Android startet dort immer
+                // EXCLUSIVE/IMMEDIATE, und das sperrte den Schreiber der angehaengten Datenbank.
+                fuehreAus(db, "BEGIN DEFERRED")
+                try {
+                    for (tabelle in tabellen(db, "live")) {
+                        if (tabelle == ROHWERT_TABELLE || tabelle in INTERNE_TABELLEN) continue
+                        val bedingung =
+                            when (tabelle) {
+                                MESSWERTE -> " WHERE id > ${stand.basisMesswertId}"
+                                ROHDATEN -> " WHERE id > ${stand.basisRohdatenId}"
+                                else -> ""
+                            }
+                        db.execSQL("CREATE TABLE main.`$tabelle` AS SELECT * FROM live.`$tabelle`$bedingung")
+                        nachTabelle(tabelle)
+                    }
+                    fuehreAus(db, "COMMIT")
+                } catch (e: Throwable) {
+                    runCatching { fuehreAus(db, "ROLLBACK") }
+                    throw e
                 }
             } finally {
                 db.execSQL("DETACH DATABASE live")
             }
         }
+    }
+
+    /** Fuehrt eine Steueranweisung aus, an Androids Transaktionsverwaltung vorbei (siehe oben). */
+    private fun fuehreAus(
+        db: SQLiteDatabase,
+        sql: String,
+    ) {
+        db.rawQuery(sql, null).use { it.count }
     }
 
     /**
@@ -114,12 +141,32 @@ object SicherungsDatenbank {
                             }
                         }
                     }
+                    // Review zu #274 (P2): Was seit der Vollsicherung geloescht wurde, steht in der
+                    // Teilsicherung nicht mehr - etwa eine endgueltig geloeschte Aufnahme, deren
+                    // Rohdaten die laufende Datenbank per ON DELETE CASCADE entfernt hat. Ihre
+                    // Kinder aus der Vollsicherung waeren sonst verwaist. Dasselbe, was CASCADE im
+                    // laufenden Betrieb getan hat: jede Zeile mit verletztem Fremdschluessel weg.
+                    entferneVerwaisteZeilen(db)
                     db.setTransactionSuccessful()
                 } finally {
                     db.endTransaction()
                 }
             } finally {
                 db.execSQL("DETACH DATABASE teil")
+            }
+        }
+    }
+
+    /** Loescht jede Zeile, die `PRAGMA foreign_key_check` meldet, bis keine mehr uebrig ist. */
+    private fun entferneVerwaisteZeilen(db: SQLiteDatabase) {
+        repeat(MAX_VERWAIST_DURCHLAEUFE) {
+            val verwaist =
+                db.rawQuery("PRAGMA main.foreign_key_check", null).use { c ->
+                    buildList { while (c.moveToNext()) add(c.getString(0) to c.getLong(1)) }
+                }
+            if (verwaist.isEmpty()) return
+            for ((tabelle, rowid) in verwaist) {
+                db.execSQL("DELETE FROM main.`$tabelle` WHERE rowid = ?", arrayOf<Any>(rowid))
             }
         }
     }

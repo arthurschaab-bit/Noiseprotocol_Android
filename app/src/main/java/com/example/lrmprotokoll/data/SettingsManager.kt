@@ -547,11 +547,16 @@ class SettingsManager(
      * ihr Stand (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md). Die Teilsicherungen bauen darauf auf;
      * ohne Vollsicherung gibt es keine Teilsicherung. Erst NACH dem erfolgreichen Upload gesetzt,
      * damit eine Teilsicherung nie auf einer Vollsicherung aufsetzt, die in Drive fehlt.
+     *
+     * An den Drive-Ordner gebunden (Review zu #274): Nach einem Ordnerwechsel liegt die
+     * Vollsicherung im alten Ordner - der Stand gilt dann als nicht vorhanden, bis im neuen eine
+     * Vollsicherung gelungen ist. Sonst landeten im neuen Ordner Teilsicherungen ohne ihre Basis.
      */
     val vollsicherungStand: Pair<Long, com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand>?
         get() {
             val id = prefs.getLong("vollsicherung_id", 0L)
             if (id == 0L) return null
+            if (prefs.getString("vollsicherung_ordner_id", null) != driveFolderId) return null
             return id to
                 com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand(
                     basisMesswertId = prefs.getLong("vollsicherung_basis_messwert_id", 0L),
@@ -562,10 +567,12 @@ class SettingsManager(
     fun merkeVollsicherung(
         id: Long,
         stand: com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand,
+        ordnerId: String,
     ) {
         prefs
             .edit()
             .putLong("vollsicherung_id", id)
+            .putString("vollsicherung_ordner_id", ordnerId)
             .putLong("vollsicherung_basis_messwert_id", stand.basisMesswertId)
             .putLong("vollsicherung_basis_rohdaten_id", stand.basisRohdatenId)
             .commit()

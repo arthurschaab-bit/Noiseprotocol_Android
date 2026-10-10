@@ -180,13 +180,11 @@ object SicherungManager {
 
             // Vollsicherung fuer Drive (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md): `level_samples`
             // wird in einer KOPIE geleert, nie in der laufenden Datenbank.
-            val kopie =
-                if (ohneRohwerte) {
-                    File.createTempFile("sicherung_kopie_", ".db", context.cacheDir).also { dbDatei.copyTo(it, overwrite = true) }
-                } else {
-                    null
-                }
+            // Review zu #274: erst anlegen, dann INNERHALB des try kopieren - ein Fehler beim
+            // Kopieren liess die halb gefuellte Kopie sonst im cacheDir liegen.
+            val kopie = if (ohneRohwerte) File.createTempFile("sicherung_kopie_", ".db", context.cacheDir) else null
             try {
+                kopie?.let { dbDatei.copyTo(it, overwrite = true) }
                 val stand = kopie?.let { SicherungsDatenbank.entferneRohwerteUndErmittleStand(it) }
                 val manifest =
                     buildManifest().apply {
