@@ -2,6 +2,7 @@ package com.example.lrmprotokoll.drive
 
 import com.example.lrmprotokoll.data.LevelSampleEntity
 import com.example.lrmprotokoll.data.LevelSource
+import com.example.lrmprotokoll.messreihe.Zeitraum
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.log10
@@ -94,7 +95,7 @@ object PegelAggregator {
         von: Instant,
         bis: Instant,
         fensterDauer: Duration,
-        aufzeichnungsLuecken: List<com.example.lrmprotokoll.messreihe.Zeitraum> = emptyList(),
+        aufzeichnungsLuecken: List<Zeitraum> = emptyList(),
     ): List<AggregatZeile> {
         require(fensterDauer > Duration.ZERO) { "fensterDauer muss positiv sein" }
         require(!bis.isBefore(von)) { "bis darf nicht vor von liegen" }
@@ -107,20 +108,41 @@ object PegelAggregator {
         val fensterMillis = fensterDauer.toMillis()
         val bisMillis = bis.toEpochMilli()
 
+        val relevanteSamples = samples.filter { it.at in vonMillis until bisMillis }
+        val relevanteEreignisse = ereignisse.filter { it.at.toEpochMilli() in vonMillis until bisMillis }
+        val maxTs = maxOf(
+            relevanteSamples.maxOfOrNull { it.at } ?: Long.MIN_VALUE,
+            relevanteEreignisse.maxOfOrNull { it.at.toEpochMilli() } ?: Long.MIN_VALUE,
+        )
+        val datenEndIndexExklusiv = if (relevanteSamples.isNotEmpty() || relevanteEreignisse.isNotEmpty()) {
+            ((maxTs - vonMillis).floorDiv(fensterMillis) + 1).coerceAtLeast(0)
+        } else {
+            0L
+        }
+
         // E1: Ein abgeschlossener Tag wird vollständig von 00:00:00 bis 23:59:59 gefüllt.
         // Der laufende Tag wird bis zum letzten vollständigen Fenster vor dem Sync gefüllt.
-        val anzahlVollerFenster = (bisMillis - vonMillis).floorDiv(fensterMillis)
-        if (anzahlVollerFenster <= 0) {
+        // Rohwerte und Ereignisse in Teilfenstern dürfen niemals stillschweigend verworfen werden.
+        val vollerFensterCount = (bisMillis - vonMillis).floorDiv(fensterMillis)
+        val istAbgeschlossenerTag = (bisMillis - vonMillis) >= 86_400_000L
+        val tagEndeIndex = if (istAbgeschlossenerTag) {
+            ((bisMillis - vonMillis - 1).floorDiv(fensterMillis) + 1).coerceAtLeast(0)
+        } else {
+            vollerFensterCount
+        }
+
+        val anzahlFenster = maxOf(vollerFensterCount, datenEndIndexExklusiv, tagEndeIndex)
+        if (anzahlFenster <= 0) {
             return emptyList()
         }
 
         val effektiverStartMillis = vonMillis
-        val effektivesEndeMillis = vonMillis + anzahlVollerFenster * fensterMillis
+        val effektivesEndeMillis = vonMillis + anzahlFenster * fensterMillis
 
         val samplesNachFenster = samples.groupBy { (it.at - vonMillis).floorDiv(fensterMillis) }
         val ereignisseNachFenster = ereignisse.groupBy { (it.at.toEpochMilli() - vonMillis).floorDiv(fensterMillis) }
 
-        val zeilen = ArrayList<AggregatZeile>(anzahlVollerFenster.toInt())
+        val zeilen = ArrayList<AggregatZeile>(anzahlFenster.toInt())
         var fensterStart = Instant.ofEpochMilli(effektiverStartMillis)
         val fensterEnde = Instant.ofEpochMilli(effektivesEndeMillis)
         var index = 0L

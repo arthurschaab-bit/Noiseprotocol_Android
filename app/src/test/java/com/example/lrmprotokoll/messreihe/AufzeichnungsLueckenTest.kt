@@ -65,7 +65,7 @@ class AufzeichnungsLueckenTest {
             session(id = 2L, startedAt = 5000L, endedAt = null),
         )
 
-        val luecken = aufzeichnungsLuecken(sessions, von, bis)
+        val luecken = aufzeichnungsLuecken(sessions, von, bis, aktiveOffeneSessionId = 2L)
 
         assertEquals(
             listOf(
@@ -87,13 +87,34 @@ class AufzeichnungsLueckenTest {
             session(id = 2L, startedAt = 10_000L, endedAt = null),
         )
 
-        val luecken = aufzeichnungsLuecken(sessions, von, bis)
+        val luecken = aufzeichnungsLuecken(sessions, von, bis, aktiveOffeneSessionId = 2L)
 
         // Nur Session 2 gilt als aktive offene bis bis (10_000..20_000).
         // Session 1 ohne endedAt wird ignoriert, damit sie keine riesige Lücke überdeckt.
         assertEquals(
             listOf(
                 Zeitraum(von = 0L, bis = 10_000L),
+            ),
+            luecken,
+        )
+    }
+
+    @Test
+    fun `historische verwaiste Session ohne aktiveOffeneSessionId gilt nicht als aktiv bis bis`() {
+        val von = 0L
+        val bis = 86_400_000L // z. B. ganzer vergangener Tag
+        // Session verwaist (App-Absturz um 08:00, nie beendet, kein aktiver Dienst mehr):
+        val sessions = listOf(
+            session(id = 1L, startedAt = 28_800_000L, endedAt = null),
+        )
+
+        // Keine aktive Session angegeben (da Dienst nicht laeuft bzw. historischer Tag):
+        val luecken = aufzeichnungsLuecken(sessions, von, bis, aktiveOffeneSessionId = null)
+
+        // Die verwaiste Session wird nicht bis Tagesende verlaengert; der gesamte Tag bleibt Luecke:
+        assertEquals(
+            listOf(
+                Zeitraum(von = 0L, bis = 86_400_000L),
             ),
             luecken,
         )

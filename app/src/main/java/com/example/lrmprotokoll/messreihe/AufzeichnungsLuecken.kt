@@ -33,13 +33,15 @@ fun aufzeichnungsLuecken(
     sessions: List<SessionEntity>,
     von: Long,
     bis: Long,
+    aktiveOffeneSessionId: Long? = null,
 ): List<Zeitraum> {
     if (bis <= von) return emptyList()
 
-    val aktiveOffene =
-        sessions
-            .filter { it.endedAt == null }
-            .maxByOrNull { it.startedAt }
+    val aktiveOffene = if (aktiveOffeneSessionId != null) {
+        sessions.find { it.id == aktiveOffeneSessionId && it.endedAt == null }
+    } else {
+        null
+    }
 
     val sessionIntervalle =
         sessions.mapNotNull { session ->

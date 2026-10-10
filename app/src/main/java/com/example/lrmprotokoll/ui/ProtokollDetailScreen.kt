@@ -196,18 +196,23 @@ fun ProtokollDetailScreen(
         session?.id,
         session?.startedAt,
         session?.endedAt,
-        if (session?.endedAt == null) jetzt else 0L,
     ) {
         val s = session ?: return@LaunchedEffect
-        val ende = s.endedAt ?: jetzt
-        if (s.startedAt < ende) {
-            val sessions =
-                withContext(Dispatchers.IO) {
-                    container.database.sessionDao().zwischen(s.startedAt, ende)
-                }
-            aufzeichnungsLuecken = aufzeichnungsLuecken(sessions, s.startedAt, ende)
+        val sessions = withContext(Dispatchers.IO) {
+            if (s.messvorgangId != 0L) {
+                container.database.sessionDao().fuerMessvorgang(s.messvorgangId)
+            } else {
+                listOf(s)
+            }
+        }
+        val start = sessions.minOfOrNull { it.startedAt } ?: s.startedAt
+        val ende = sessions.maxOfOrNull { it.endedAt ?: Long.MIN_VALUE }?.takeIf { it > Long.MIN_VALUE }
+            ?: (s.endedAt ?: System.currentTimeMillis())
+        val offeneId = sessions.firstOrNull { it.endedAt == null }?.id
+        aufzeichnungsLuecken = if (sessions.size > 1 && start < ende) {
+            aufzeichnungsLuecken(sessions, start, ende, offeneId)
         } else {
-            aufzeichnungsLuecken = emptyList()
+            emptyList()
         }
     }
 

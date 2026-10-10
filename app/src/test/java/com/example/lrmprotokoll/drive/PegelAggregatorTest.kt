@@ -475,4 +475,32 @@ class PegelAggregatorTest {
         assertEquals(48.0, zeilen[2].laeqDb!!, 0.0001)
         assertEquals(LevelSource.PCE_323, zeilen[2].quelle)
     }
+
+    @Test
+    fun rohwerteInNichtVollstaendigemSchlussfensterWerdenNichtVerworfen() {
+        val tagStart = Instant.parse("2026-10-06T00:00:00Z")
+        val tagEnde = Instant.parse("2026-10-07T00:00:00Z") // 86.400s
+        // 86.400 / 7 = 12.342 Rest 6. Letztes Fenster beginnt bei 86.394s.
+        val sampleAmTagesende = LevelSampleEntity(
+            at = tagStart.plusSeconds(86_398).toEpochMilli(),
+            levelDb = 62.0,
+            source = LevelSource.PCE_323,
+        )
+
+        val zeilen =
+            PegelAggregator.aggregiere(
+                samples = listOf(sampleAmTagesende),
+                ereignisse = emptyList(),
+                von = tagStart,
+                bis = tagEnde,
+                fensterDauer = Duration.ofSeconds(7),
+            )
+
+        // 12.343 Fenster (0..12.342) muessen entstehen; das letzte Fenster darf nicht abgeschnitten werden
+        assertEquals(12_343, zeilen.size)
+        val letzteZeile = zeilen.last()
+        assertEquals(tagStart.plusSeconds(86_394), letzteZeile.fensterStart)
+        assertEquals(1, letzteZeile.samples)
+        assertEquals(62.0, letzteZeile.laeqDb!!, 0.0001)
+    }
 }

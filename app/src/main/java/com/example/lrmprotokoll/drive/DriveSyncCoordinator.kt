@@ -1,12 +1,16 @@
 package com.example.lrmprotokoll.drive
 
 import android.util.Log
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.DriveDailyFileDao
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.LevelSampleDao
 import com.example.lrmprotokoll.data.NoiseDao
+import com.example.lrmprotokoll.data.SessionDao
 import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.messreihe.Zeitraum
+import com.example.lrmprotokoll.messreihe.aufzeichnungsLuecken
 import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.meter.InstantSource
 import kotlinx.coroutines.CancellationException
@@ -73,7 +77,7 @@ class DriveSyncCoordinator(
      * [ladeDatenbankSicherungHoch] - sie gehoert nur diesem einen Versuch.
      */
     private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
-    private val sessionDao: com.example.lrmprotokoll.data.SessionDao? = null,
+    private val sessionDao: SessionDao? = null,
 ) {
 
     /**
@@ -189,8 +193,8 @@ class DriveSyncCoordinator(
         val abschnitte = aggregiereInAbschnitten(
             von, bis, ereignisse, Duration.ofSeconds(settings.driveAggregationSekunden.toLong()),
         )
-        if (!abschnitte.hatteRohwerte || abschnitte.zeilen.isEmpty()) {
-            return SyncErgebnis.Fehlgeschlagen("Rohdaten für diesen Tag fehlen", null, wiederholbar = false)
+        if ((!abschnitte.hatteRohwerte && ereignisse.isEmpty()) || abschnitte.zeilen.isEmpty()) {
+            return SyncErgebnis.Fehlgeschlagen("Messdaten für diesen Tag fehlen", null, wiederholbar = false)
         }
         val registry = dailyFileDao.byDate(datum)
         val zielordner = ordnerbaum.ordnerFuer(ordnerId, datum, DriveKategorie.SCHALLMESSUNG).getOrThrow()
@@ -415,14 +419,28 @@ class DriveSyncCoordinator(
             return SyncErgebnis.KeineAenderung
         }
 
-        if (registry != null && registry.state == DriveSyncState.SYNCED && registry.lastRowCount == zeilen.size) {
+        val messungAktiv = AudioRecordingService.laeuft.value ||
+            sessionDao?.offeneSession() != null
+        val hatNeueMessdatenSeitLetztemSync = registry != null && zeilen.any {
+            (it.samples > 0 || it.ereignis) && it.fensterStart.toEpochMilli() >= registry.lastSyncedAt
+        }
+        val nurInaktiveLueckenZeilenHinzugekommen = registry != null &&
+            sessionDao != null &&
+            !messungAktiv &&
+            zeilen.size > registry.lastRowCount &&
+            zeilen.subList(registry.lastRowCount, zeilen.size).all { it.quelle == QUELLE_KEINE_AUFZEICHNUNG } &&
+            !hatNeueMessdatenSeitLetztemSync
+
+        if (registry != null && registry.state == DriveSyncState.SYNCED &&
+            (registry.lastRowCount == zeilen.size || nurInaktiveLueckenZeilenHinzugekommen)
+        ) {
             if (zipPackagesUploadedCount > 0) {
                 settings.driveSyncFehlschlaegeInFolge = 0
                 settings.driveSyncLastSuccessAt = jetzt.toEpochMilli()
                 settings.driveSyncLastMessage = "${zeilen.size} Zeilen & $zipPackagesUploadedCount ZIP(s) synchronisiert"
                 return SyncErgebnis.Erfolgreich(zeilen.size)
             }
-            settings.driveSyncLastMessage = "Aktuell (${zeilen.size} Zeilen synchronisiert)"
+            settings.driveSyncLastMessage = "Aktuell (${registry.lastRowCount} Zeilen synchronisiert)"
             return SyncErgebnis.KeineAenderung
         }
 
@@ -517,7 +535,7 @@ class DriveSyncCoordinator(
                 val fensterDauer = Duration.ofSeconds(settings.driveAggregationSekunden.toLong())
                 // OOM-Bugfix Schritt 4: stueckweise statt als eine ~290.000-Zeilen-Liste laden.
                 val abschnitte = aggregiereInAbschnitten(tagVon, tagBis, ereignisse, fensterDauer)
-                if (!abschnitte.hatteRohwerte) return@runCatching // wie zuvor: keine Rohwerte -> nichts zu tun
+                if (!abschnitte.hatteRohwerte && ereignisse.isEmpty()) return@runCatching // wie zuvor: keine Daten -> nichts zu tun
 
                 val zeilen = abschnitte.zeilen
                 if (zeilen.isEmpty()) return@runCatching
@@ -561,24 +579,16 @@ class DriveSyncCoordinator(
      * [fensterDauer], ab [von] gerechnet, damit keine Fenstergrenze mitten in einen Abschnitt
      * faellt.
      *
-     * **Warum nicht einfach [PegelAggregator.aggregiere] separat je Abschnitt aufrufen und die
-     * Ergebnislisten aneinanderhaengen?** Dessen eigentliche Fensterberechnung (`bildeZeile`) ist
-     * rein lokal - das Ergebnis EINES Fensters haengt nur von den Samples/Ereignissen in genau
-     * diesem Fenster ab, keine gleitenden Mittel, kein Uebertrag zwischen Fenstern IM WERT. Aber
-     * `aggregiere()` trimmt Fuehrungs- und Schlusszeilen OHNE jegliche Daten auf den EIGENEN
-     * Datenumfang des jeweiligen Aufrufs (Test `leereZeitenVorUndNachMessungWerdenNichtAls
-     * LeereZeilenErzeugt`: eine Messung nur von Minute 10-12 erzeugt bei `bis=3600s` KEINE 60
-     * Zeilen, nur die eine mit echten Daten). Luecken DAZWISCHEN, innerhalb des Datenumfangs,
-     * werden dagegen als KEINE_VERBINDUNG-Zeilen gefuellt (Test
-     * `fensterOhneSampleWirdAlsLueckeAusgegebenNichtAusgelassen`). Ruft man das isoliert pro
-     * Abschnitt auf, gilt "eigener Datenumfang" ploetzlich pro ABSCHNITT statt pro ganzem Tag -
-     * eine Bluetooth-Aussetzer-Luecke, die eine Abschnittsgrenze beruehrt oder einen ganzen
-     * Abschnitt fuellt, wuerde dabei faelschlich verschluckt statt als KEINE_VERBINDUNG zu
-     * erscheinen. Deshalb ueberbrueckt diese Funktion fehlende Fenster ZWISCHEN zwei Abschnitten
-     * mit echten Zeilen explizit selbst, mit demselben "keine Daten"-Wert, den [AggregatZeile]s
-     * eigene Default-Parameter ohnehin fuer ein leeres Fenster liefern wuerden (siehe dessen
-     * Feld-Dokumentation) - keine Neuimplementierung der (privaten) `bildeZeile()`-Logik, nur
-     * deren dokumentiertes Leerfenster-Ergebnis als Literal.
+     * **Aufbau der Tages-CSV (nach Owner-Entscheidung E1 / Schritt 2):**
+     * Ein abgeschlossener Tag wird vollstaendig von 00:00:00 bis 23:59:59 gefuellt (Test
+     * [com.example.lrmprotokoll.drive.PegelAggregatorTest],
+     * `abgeschlossenerTagBeginntUmMitternachtUndEndetUm23Uhr59AuchWennMessungNurKurzLief`), der
+     * laufende Tag bis zum letzten vollstaendigen Fenster vor dem Sync. Luecken ausserhalb jeder
+     * Session tragen [QUELLE_KEINE_AUFZEICHNUNG], Luecken innerhalb einer Session bleiben
+     * [QUELLE_KEINE_VERBINDUNG]. Fehlen Abschnitte vor dem ersten Datenpunkt, zwischen zwei
+     * Abschnitten oder bis zum [effektivesEnde] des Zeitraums, erzeugt diese Funktion die
+     * entsprechenden Luecken-Zeilen. Ein Tag ganz ohne Rohwerte und Ereignisse erzeugt keine
+     * Zeilen (E3).
      *
      * **Zweite Abhaengigkeit von Werten ausserhalb des Fensters - urspruenglich hier nur
      * umgangen, seit der Nachbesserung vom 24.09.2026 an der Wurzel behoben:**
@@ -645,13 +655,23 @@ class DriveSyncCoordinator(
         val vielfaches = Math.round(1800.0 / fensterSekunden).coerceAtLeast(1)
         val abschnittDauer = fensterDauer.multipliedBy(vielfaches)
 
-        val anzahlVollerFensterGesamt = (bis.toEpochMilli() - von.toEpochMilli()).floorDiv(fensterMillis)
-        val effektivesEnde = von.plusMillis(anzahlVollerFensterGesamt * fensterMillis)
+        val istAbgeschlossenerTag = (bis.toEpochMilli() - von.toEpochMilli()) >= 86_400_000L
+        val anzahlFensterGesamt = if (istAbgeschlossenerTag) {
+            ((bis.toEpochMilli() - von.toEpochMilli() - 1).floorDiv(fensterMillis) + 1).coerceAtLeast(0)
+        } else {
+            (bis.toEpochMilli() - von.toEpochMilli()).floorDiv(fensterMillis)
+        }
+        val effektivesEnde = von.plusMillis(anzahlFensterGesamt * fensterMillis)
         if (!effektivesEnde.isAfter(von)) return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
 
         val sessions = sessionDao?.zwischen(von.toEpochMilli(), bis.toEpochMilli()).orEmpty()
+        val aktiveOffeneId = if (AudioRecordingService.laeuft.value) {
+            sessionDao?.offeneSession()?.id
+        } else {
+            null
+        }
         val luecken = if (sessionDao != null) {
-            com.example.lrmprotokoll.messreihe.aufzeichnungsLuecken(sessions, von.toEpochMilli(), bis.toEpochMilli())
+            aufzeichnungsLuecken(sessions, von.toEpochMilli(), bis.toEpochMilli(), aktiveOffeneId)
         } else {
             emptyList()
         }
@@ -665,6 +685,7 @@ class DriveSyncCoordinator(
 
         val zeilen = mutableListOf<AggregatZeile>()
         var hatteRohwerte = false
+        var hatteEreignisse = false
         var letztesFensterEnde: Instant? = null
         var abschnittVon = von
 
@@ -675,6 +696,7 @@ class DriveSyncCoordinator(
             val abschnittEreignisse = ereignisse.filter {
                 !it.at.isBefore(abschnittVon) && it.at.isBefore(abschnittBis)
             }
+            if (abschnittEreignisse.isNotEmpty()) hatteEreignisse = true
 
             if (abschnittSamples.isNotEmpty() || abschnittEreignisse.isNotEmpty()) {
                 val abschnittZeilen = PegelAggregator.aggregiere(
@@ -695,7 +717,7 @@ class DriveSyncCoordinator(
             abschnittVon = abschnittBis
         }
 
-        if (!hatteRohwerte) {
+        if (!hatteRohwerte && !hatteEreignisse) {
             return AbschnittsAggregation(emptyList(), hatteRohwerte = false)
         }
 

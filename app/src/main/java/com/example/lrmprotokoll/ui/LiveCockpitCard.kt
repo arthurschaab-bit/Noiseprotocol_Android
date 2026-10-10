@@ -152,6 +152,7 @@ fun LiveCockpitCard(
     var kennwerte by remember { mutableStateOf<AkustischeKennwerte.Kennwerte?>(null) }
     var ausfallbaender by remember { mutableStateOf<List<Ausfallband>>(emptyList()) }
     var aufzeichnungsLuecken by remember { mutableStateOf<List<Zeitraum>>(emptyList()) }
+    var fensterSessions by remember { mutableStateOf<List<SessionEntity>>(emptyList()) }
     var jetzt by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     var showMarkNoiseEventSheet by remember { mutableStateOf(false) }
@@ -780,23 +781,30 @@ fun LiveCockpitCard(
                 val s = letzteSession
                 if (s != null && (messwerte.isNotEmpty() || aggregate.isNotEmpty())) {
                     val sessionEndeFuerChart = if (dienstAktiv) jetzt else (s.endedAt ?: jetzt)
-                    val chartStart = if (dienstAktiv && (sessionEndeFuerChart - s.startedAt) > LIVE_FENSTER_MS) {
+                    val fruehesterStart = fensterSessions.minOfOrNull { it.startedAt } ?: s.startedAt
+                    val chartStart = if (dienstAktiv && (sessionEndeFuerChart - fruehesterStart) > LIVE_FENSTER_MS) {
                         sessionEndeFuerChart - LIVE_FENSTER_MS
                     } else {
-                        s.startedAt
+                        fruehesterStart
                     }
 
                     LaunchedEffect(
                         s.id,
-                        chartStart,
-                        sessionEndeFuerChart,
+                        offeneSession?.id,
+                        s.endedAt,
+                        dienstAktiv,
                     ) {
-                        if (chartStart < sessionEndeFuerChart) {
-                            val sessions =
-                                withContext(Dispatchers.IO) {
-                                    db.sessionDao().zwischen(chartStart, sessionEndeFuerChart)
-                                }
-                            aufzeichnungsLuecken = aufzeichnungsLuecken(sessions, chartStart, sessionEndeFuerChart)
+                        val basisEnde = if (dienstAktiv) System.currentTimeMillis() else (s.endedAt ?: System.currentTimeMillis())
+                        val basisStart = maxOf(0L, basisEnde - LIVE_FENSTER_MS)
+                        val sessions = withContext(Dispatchers.IO) {
+                            db.sessionDao().zwischen(basisStart, basisEnde)
+                        }
+                        fensterSessions = sessions
+                        if (sessions.isNotEmpty()) {
+                            val fStart = sessions.minOf { it.startedAt }
+                            val cStart = maxOf(basisStart, fStart)
+                            val offeneId = offeneSession?.id
+                            aufzeichnungsLuecken = aufzeichnungsLuecken(sessions, cStart, basisEnde, offeneId)
                         } else {
                             aufzeichnungsLuecken = emptyList()
                         }
