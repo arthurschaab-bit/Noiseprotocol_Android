@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.testhilfen
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -74,6 +75,82 @@ class ZeitwaechterRegelTest {
         assertTrue(geworfen!!.message!!.contains("der eigentliche Fehler"))
     }
 
+    /**
+     * Review zu PR #269: Die Stacks muessen in der Datei stehen, BEVOR die Stichproben fertig
+     * sind - sonst ginge bei einem Abbruch in den Stichproben-Sekunden alles verloren.
+     */
+    @Test
+    fun stacksStehenSchonWaehrendDerStichprobenInDerDatei() {
+        var zwischenstand = ""
+        fuehreAus(ZeitwaechterRegel(grenzeSekunden = 1)) {
+            Thread.sleep(1_600)
+            zwischenstand = File(DIAGNOSEDATEI).takeIf { it.isFile }?.readText().orEmpty()
+            Thread.sleep(400)
+        }
+
+        assertTrue("Stacks fehlen waehrend der Stichproben: $zwischenstand", zwischenstand.contains("\tat "))
+        assertFalse("Stichproben duerfen da noch nicht fertig sein", zwischenstand.contains("=== ZEITWAECHTER Ende ==="))
+    }
+
+    /**
+     * Review zu PR #269: Endet der Test, waehrend die Stichproben laufen, muessen sie sofort
+     * aufhoeren - sonst landen die Rahmen des naechsten Tests in dieser Zaehlung. Ohne Abbruch
+     * dauerte dieser Lauf 1 s Grenze + 5 s Stichproben.
+     */
+    @Test
+    fun stichprobenEndenMitDemTest() {
+        val start = System.nanoTime()
+        val ausgabe = fuehreAus(ZeitwaechterRegel(grenzeSekunden = 1)) { Thread.sleep(1_500) }
+        val dauerMs = (System.nanoTime() - start) / 1_000_000
+
+        assertTrue("Stichproben liefen nach dem Testende weiter: $dauerMs ms", dauerMs < 3_000)
+        assertTrue("Abschluss fehlt: $ausgabe", ausgabe.contains("=== ZEITWAECHTER Ende ==="))
+    }
+
+    /**
+     * Review zu PR #269: Gesampelt wird der Testthread selbst (unter Robolectric der
+     * "SDK <n> Main Thread"), nicht ein per Momentaufnahme `RUNNABLE` gesuchter Thread - der
+     * hier schlafende Testthread waere dabei gar nicht gefunden worden.
+     */
+    @Test
+    fun dieStichprobenTreffenDenTestthread() {
+        val ausgabe = fuehreAus(ZeitwaechterRegel(grenzeSekunden = 1)) { schlafeErkennbar() }
+
+        assertTrue("Kein Stichprobenblock: $ausgabe", ausgabe.contains("--- Stichproben \""))
+        assertTrue("Rahmen des Testthreads nicht getroffen: $ausgabe", ausgabe.contains("schlafeErkennbar"))
+    }
+
+    @Test
+    fun zaehleRahmenZaehltJeStackEinmalUndFiltert() {
+        fun rahmen(
+            klasse: String,
+            methode: String,
+        ) = StackTraceElement(klasse, methode, null, -1)
+
+        val stack =
+            arrayOf(
+                rahmen("java.lang.Thread", "sleep"),
+                rahmen("com.example.lrmprotokoll.ui.MeterScreenKt", "MeterScreen"),
+                rahmen("com.example.lrmprotokoll.ui.MeterScreenKt", "MeterScreen"),
+                rahmen("androidx.compose.foundation.lazy.LazyListKt", "LazyColumn"),
+                rahmen("androidx.compose.ui.platform.AndroidComposeView", "measureAndLayout"),
+                rahmen("com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel", "gibDiagnoseAus"),
+                rahmen("androidx.compose.ui.test.junit4.AndroidComposeTestRule", "waitForIdle"),
+                rahmen("com.example.lrmprotokoll.ui.MeterScreenComposeTest", "einTest"),
+            )
+
+        val treffer = zaehleRahmen(listOf(stack, stack)).toMap()
+
+        assertEquals(
+            mapOf(
+                "com.example.lrmprotokoll.ui.MeterScreenKt.MeterScreen" to 2,
+                "androidx.compose.foundation.lazy.LazyListKt.LazyColumn" to 2,
+                "androidx.compose.ui.platform.AndroidComposeView.measureAndLayout" to 2,
+            ),
+            treffer,
+        )
+    }
+
     private companion object {
         /** Derselbe Pfad, den [ZeitwaechterRegel] schreibt - relativ zum Modulverzeichnis. */
         const val DIAGNOSEDATEI = "build/zeitwaechter-diagnose.txt"
@@ -100,3 +177,9 @@ class ZeitwaechterRegelTest {
         return puffer.toString()
     }
 }
+
+/**
+ * Auf Dateiebene, nicht in der Testklasse: Rahmen aus Klassen, deren Name auf `Test` endet, filtert
+ * die Regel als Testrumpf heraus. Hier soll der Rahmen gerade sichtbar sein.
+ */
+private fun schlafeErkennbar() = Thread.sleep(1_800)

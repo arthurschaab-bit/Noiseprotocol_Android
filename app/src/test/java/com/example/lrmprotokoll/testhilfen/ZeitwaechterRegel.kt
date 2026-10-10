@@ -75,7 +75,7 @@ class ZeitwaechterRegel(
                 val beobachter =
                     Thread {
                         if (fertig.await(grenzeSekunden, TimeUnit.SECONDS)) return@Thread
-                        gibDiagnoseAus(description, testThread)
+                        gibDiagnoseAus(description, testThread, fertig)
                     }
                 beobachter.isDaemon = true
                 beobachter.name = "Zeitwaechter"
@@ -84,6 +84,10 @@ class ZeitwaechterRegel(
                     base.evaluate()
                 } finally {
                     fertig.countDown()
+                    // Die Stichproben brechen mit dem Testende ab, schreiben aber noch ihren Block.
+                    // Kurz darauf warten, damit die Diagnose vollstaendig ist, bevor der naechste
+                    // Test im selben Prozess beginnt.
+                    beobachter.join(ABSCHLUSS_WARTEZEIT_MS)
                 }
             }
         }
@@ -91,6 +95,7 @@ class ZeitwaechterRegel(
     private fun gibDiagnoseAus(
         description: Description,
         testThread: Thread,
+        fertig: CountDownLatch,
     ) {
         val zeilen = StringBuilder()
         zeilen.appendLine()
@@ -111,70 +116,93 @@ class ZeitwaechterRegel(
                 zeilen.appendLine("\t... ${stack.size - GEZEIGTE_RAHMEN} weitere Rahmen")
             }
         }
-        haengeStichprobenAn(zeilen)
-        zeilen.appendLine("=== ZEITWAECHTER Ende ===")
+        // Die Stacks sofort wegschreiben, nicht erst nach den Stichproben: endet der Lauf in den
+        // folgenden Sekunden (Espresso-Abbruch bei 60 s, Test.timeout), bleibt wenigstens das.
+        schreibe(zeilen.toString())
 
-        System.err.print(zeilen)
+        val stichproben = StringBuilder()
+        haengeStichprobenAn(stichproben, testThread, fertig)
+        stichproben.appendLine("=== ZEITWAECHTER Ende ===")
+        schreibe(stichproben.toString())
+    }
+
+    private fun schreibe(text: String) {
+        System.err.print(text)
         System.err.flush()
         runCatching {
             val datei = File(DIAGNOSEDATEI)
             datei.parentFile?.mkdirs()
-            datei.appendText(zeilen.toString())
+            datei.appendText(text)
         }
     }
 
     /**
-     * Nimmt [STICHPROBEN] Stacks des Robolectric-Main-Threads im Abstand von [STICHPROBEN_ABSTAND_MS]
-     * auf und zaehlt, in wie vielen davon ein App-Rahmen oder ein Compose-Animationsrahmen steckt.
-     * Ein einzelner Schnappschuss trifft fast immer nur die Schleife selbst.
+     * Nimmt bis zu [STICHPROBEN] Stacks des Testthreads im Abstand von [STICHPROBEN_ABSTAND_MS] auf
+     * und zaehlt, in wie vielen davon ein App- oder Compose-Rahmen steckt. Ein einzelner
+     * Schnappschuss trifft fast immer nur die Schleife selbst.
+     *
+     * Der Testthread IST unter Robolectric der "SDK <n> Main Thread", auf dem die Schleife
+     * leerdreht (siehe die CI-Diagnosen). Er wird direkt genommen statt per Name und Zustand
+     * gesucht: eine Momentaufnahme `RUNNABLE` verpasst ihn, wenn er gerade kurz wartet.
+     *
+     * Endet der Test waehrend der Stichproben, bricht die Schleife ab - sonst flossen die Rahmen
+     * des naechsten Tests im selben Prozess in diese Zaehlung ein.
      */
-    private fun haengeStichprobenAn(zeilen: StringBuilder) {
-        val mainThread = Thread.getAllStackTraces().keys.firstOrNull { it.name.startsWith("SDK ") && it.state == Thread.State.RUNNABLE }
+    private fun haengeStichprobenAn(
+        zeilen: StringBuilder,
+        testThread: Thread,
+        fertig: CountDownLatch,
+    ) {
+        val stacks = mutableListOf<Array<StackTraceElement>>()
+        for (i in 0 until STICHPROBEN) {
+            if (fertig.count == 0L) break
+            stacks += testThread.stackTrace
+            if (fertig.await(STICHPROBEN_ABSTAND_MS, TimeUnit.MILLISECONDS)) break
+        }
         zeilen.appendLine()
-        if (mainThread == null) {
-            zeilen.appendLine("--- Stichproben: kein laufender \"SDK <n> Main Thread\" gefunden ---")
-            return
-        }
-        val treffer = HashMap<String, Int>()
-        repeat(STICHPROBEN) {
-            mainThread.stackTrace
-                .map { "${it.className}.${it.methodName}" }
-                .filter(::istAussagekraeftig)
-                .distinct()
-                .forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
-            Thread.sleep(STICHPROBEN_ABSTAND_MS)
-        }
-        zeilen.appendLine("--- Stichproben \"${mainThread.name}\": $STICHPROBEN x alle $STICHPROBEN_ABSTAND_MS ms, Treffer je Rahmen ---")
-        if (treffer.isEmpty()) zeilen.appendLine("\t(kein App- oder Animationsrahmen getroffen)")
-        treffer.entries.sortedByDescending { it.value }.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) ->
-            zeilen.appendLine("\t$anzahl  $rahmen")
-        }
+        zeilen.appendLine(
+            "--- Stichproben \"${testThread.name}\": ${stacks.size} x alle $STICHPROBEN_ABSTAND_MS ms, Treffer je Rahmen ---",
+        )
+        // App-Rahmen getrennt und zuerst: sie sind der eigentliche Hinweis, und die vielen
+        // Layout-/Mess-Rahmen aus androidx.compose.ui verdraengten sie sonst aus der Liste.
+        val (app, compose) = zaehleRahmen(stacks).partition { it.first.startsWith(APP_PAKET) }
+        zeilen.appendLine("App-Rahmen:")
+        if (app.isEmpty()) zeilen.appendLine("\t(keiner getroffen)")
+        app.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) -> zeilen.appendLine("\t$anzahl  $rahmen") }
+        zeilen.appendLine("Compose-Rahmen:")
+        if (compose.isEmpty()) zeilen.appendLine("\t(keiner getroffen)")
+        compose.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) -> zeilen.appendLine("\t$anzahl  $rahmen") }
     }
 
-    /** App- oder Compose-Rahmen, aber weder die Regel selbst noch der Testrumpf. */
-    private fun istAussagekraeftig(rahmen: String): Boolean {
-        if (INTERESSANTE_RAHMEN.none { rahmen.startsWith(it) }) return false
-        if (AUSGENOMMENE_RAHMEN.any { rahmen.startsWith(it) }) return false
-        return !rahmen.substringBeforeLast('.').endsWith("Test")
-    }
-
-    private companion object {
-        const val GEZEIGTE_RAHMEN = 25
+    internal companion object {
+        private const val GEZEIGTE_RAHMEN = 25
         const val STICHPROBEN = 100
         const val STICHPROBEN_ABSTAND_MS = 50L
         const val GEZEIGTE_STICHPROBEN_RAHMEN = 30
+        const val ABSCHLUSS_WARTEZEIT_MS = 1_000L
+
+        const val APP_PAKET = "com.example.lrmprotokoll."
 
         /** App-Code und die Compose-Teile, die Frames anfordern koennen. */
         val INTERESSANTE_RAHMEN =
             listOf(
-                "com.example.lrmprotokoll.",
+                APP_PAKET,
                 "androidx.compose.animation.",
+                "androidx.compose.foundation.",
                 "androidx.compose.material3.",
                 "androidx.compose.runtime.Recomposer",
+                "androidx.compose.ui.",
             )
 
-        /** Immer im Stack und damit ohne Aussage: die Regel selbst. */
-        val AUSGENOMMENE_RAHMEN = listOf("com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel")
+        /**
+         * Immer im Stack und damit ohne Aussage: die Regel selbst und Composes Testumgebung. Letztere
+         * stand in einer Sonde in 100 von 100 Stichproben und verdraengte die eigentlichen Rahmen.
+         */
+        val AUSGENOMMENE_RAHMEN =
+            listOf(
+                "com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel",
+                "androidx.compose.ui.test.",
+            )
 
         /**
          * Relativ zum Arbeitsverzeichnis der Testaufgabe, das Gradle auf das Modulverzeichnis
@@ -182,4 +210,28 @@ class ZeitwaechterRegel(
          */
         const val DIAGNOSEDATEI = "build/zeitwaechter-diagnose.txt"
     }
+}
+
+/**
+ * Zaehlt je Rahmen (`Klasse.methode`), in wie vielen der [stacks] er vorkommt - jeder Stack zaehlt
+ * einen Rahmen hoechstens einmal. Beruecksichtigt nur [istAussagekraeftig]e Rahmen, haeufigste
+ * zuerst.
+ */
+internal fun zaehleRahmen(stacks: List<Array<StackTraceElement>>): List<Pair<String, Int>> {
+    val treffer = HashMap<String, Int>()
+    for (stack in stacks) {
+        stack
+            .map { "${it.className}.${it.methodName}" }
+            .filter(::istAussagekraeftig)
+            .distinct()
+            .forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
+    }
+    return treffer.entries.sortedByDescending { it.value }.map { it.key to it.value }
+}
+
+/** App- oder Compose-Rahmen, aber weder die Regel selbst noch der Testrumpf. */
+internal fun istAussagekraeftig(rahmen: String): Boolean {
+    if (ZeitwaechterRegel.INTERESSANTE_RAHMEN.none { rahmen.startsWith(it) }) return false
+    if (ZeitwaechterRegel.AUSGENOMMENE_RAHMEN.any { rahmen.startsWith(it) }) return false
+    return !rahmen.substringBeforeLast('.').endsWith("Test")
 }
