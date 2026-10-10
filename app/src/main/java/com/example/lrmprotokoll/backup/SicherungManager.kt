@@ -24,6 +24,11 @@ import org.json.JSONObject
 private const val MANIFEST_ENTRY = "manifest.json"
 private const val DATENBANK_ENTRY = "noise_database"
 private const val EINSTELLUNGEN_ENTRY = "settings.json"
+private const val TEIL_DATENBANK_ENTRY = "teil_database"
+
+/** Art einer Sicherung im Manifest (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md). */
+internal const val ART_VOLL = "VOLL"
+internal const val ART_TEIL = "TEIL"
 
 /** Erhöhen, wenn sich [buildEinstellungenJson]/[wendeEinstellungenAn] inkompatibel ändern. */
 internal const val SICHERUNG_FORMAT_VERSION = 1
@@ -54,6 +59,17 @@ internal fun schatzeBenoetigtenSpeicherplatz(dbGroesse: Long): Long {
 }
 
 data class SicherungsErgebnis(val erfolg: Boolean, val nachricht: String)
+
+/**
+ * Eine gebaute Vollsicherung für Drive: die Datei plus das, was eine spätere Teilsicherung über
+ * sie wissen muss - ihre Kennung ([vollsicherungId], im Manifest beider Dateien) und ab welchen
+ * IDs der Zuwachs beginnt ([stand]).
+ */
+data class Vollsicherung(
+    val datei: File,
+    val vollsicherungId: Long,
+    val stand: SicherungsDatenbank.Stand,
+)
 
 /**
  * Zu wenig freier Speicherplatz im Zielverzeichnis, um die Sicherungs-ZIP verlustfrei zu
@@ -139,33 +155,130 @@ object SicherungManager {
         settings: SettingsManager,
         ziel: File,
         freierPlatzErmitteln: (File) -> Long = { it.usableSpace },
-    ) {
+        ohneRohwerte: Boolean = false,
+        vollsicherungId: Long = System.currentTimeMillis(),
+    ): SicherungsDatenbank.Stand? =
         withContext(Dispatchers.IO) {
             val dbDatei = checkpointeDatenbankDatei(context)
+            val schemaVersion =
+                AppDatabase
+                    .getDatabase(context)
+                    .openHelper
+                    .writableDatabase
+                    .version
 
             // Vorab prüfen, BEVOR ueberhaupt etwas geschrieben wird (Schritt 1) - eine zu spaete
-            // Pruefung liesse eine halb geschriebene Zieldatei zurueck.
-            val benoetigterPlatz = schatzeBenoetigtenSpeicherplatz(dbDatei.length())
+            // Pruefung liesse eine halb geschriebene Zieldatei zurueck. Ohne Rohwerte kommt eine
+            // volle Kopie der Datenbank dazu, aus der sie entfernt werden.
+            val benoetigterPlatz =
+                schatzeBenoetigtenSpeicherplatz(dbDatei.length()) + if (ohneRohwerte) dbDatei.length() else 0L
             val zielVerzeichnis = ziel.absoluteFile.parentFile ?: ziel.absoluteFile
             val freierPlatz = freierPlatzErmitteln(zielVerzeichnis)
             if (freierPlatz < benoetigterPlatz) {
                 throw UnzureichenderSpeicherplatzException(freierPlatz, benoetigterPlatz)
             }
 
-            ziel.parentFile?.mkdirs()
-            ZipOutputStream(FileOutputStream(ziel).buffered()).use { zos ->
-                schreibeEintrag(zos, MANIFEST_ENTRY, buildManifest().toString(2).toByteArray(Charsets.UTF_8))
-                schreibeEintrag(
-                    zos,
-                    EINSTELLUNGEN_ENTRY,
-                    buildEinstellungenJson(settings).toString(2).toByteArray(Charsets.UTF_8),
-                )
-                zos.putNextEntry(ZipEntry(DATENBANK_ENTRY))
-                FileInputStream(dbDatei).use { it.copyTo(zos) }
-                zos.closeEntry()
+            // Vollsicherung fuer Drive (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md): `level_samples`
+            // wird in einer KOPIE geleert, nie in der laufenden Datenbank.
+            val kopie =
+                if (ohneRohwerte) {
+                    File.createTempFile("sicherung_kopie_", ".db", context.cacheDir).also { dbDatei.copyTo(it, overwrite = true) }
+                } else {
+                    null
+                }
+            try {
+                val stand = kopie?.let { SicherungsDatenbank.entferneRohwerteUndErmittleStand(it) }
+                val manifest =
+                    buildManifest().apply {
+                        put("art", ART_VOLL)
+                        put("schemaVersion", schemaVersion)
+                        put("vollsicherungId", vollsicherungId)
+                        put("ohneRohwerte", ohneRohwerte)
+                    }
+                ziel.parentFile?.mkdirs()
+                ZipOutputStream(FileOutputStream(ziel).buffered()).use { zos ->
+                    schreibeEintrag(zos, MANIFEST_ENTRY, manifest.toString(2).toByteArray(Charsets.UTF_8))
+                    schreibeEintrag(
+                        zos,
+                        EINSTELLUNGEN_ENTRY,
+                        buildEinstellungenJson(settings).toString(2).toByteArray(Charsets.UTF_8),
+                    )
+                    zos.putNextEntry(ZipEntry(DATENBANK_ENTRY))
+                    FileInputStream(kopie ?: dbDatei).use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+                stand
+            } finally {
+                kopie?.delete()
             }
         }
+
+    /**
+     * Vollsicherung fuer Drive: ohne `level_samples`, mit Stand fuer die Teilsicherungen. Legt
+     * die Datei selbst im `cacheDir` an und raeumt sie bei einem Fehlschlag wieder weg (wie
+     * [baueSicherungsDateiMitAufraeumen]); im Erfolgsfall gehoert sie dem Aufrufer.
+     */
+    suspend fun baueVollsicherung(
+        context: Context,
+        settings: SettingsManager,
+        freierPlatzErmitteln: (File) -> Long = { it.usableSpace },
+    ): Vollsicherung {
+        val ziel = File.createTempFile("drive_vollsicherung_", ".zip", context.cacheDir)
+        var erfolgreich = false
+        try {
+            val id = System.currentTimeMillis()
+            val stand =
+                baueSicherungsDatei(context, settings, ziel, freierPlatzErmitteln, ohneRohwerte = true, vollsicherungId = id)!!
+            erfolgreich = true
+            return Vollsicherung(ziel, id, stand)
+        } finally {
+            if (!erfolgreich) ziel.delete()
+        }
     }
+
+    /**
+     * Kumulative Teilsicherung (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md): alles, was sich seit
+     * der Vollsicherung [vollsicherungId] geaendert hat - kleine Tabellen komplett, Messwerte und
+     * Klassifikations-Rohdaten nur der Zuwachs ueber [stand]. Liegt im `cacheDir`; bei einem
+     * Fehlschlag wird sie wieder entfernt, im Erfolgsfall gehoert sie dem Aufrufer.
+     */
+    suspend fun baueTeilsicherung(
+        context: Context,
+        vollsicherungId: Long,
+        stand: SicherungsDatenbank.Stand,
+    ): File =
+        withContext(Dispatchers.IO) {
+            val dbDatei = checkpointeDatenbankDatei(context)
+            val schemaVersion =
+                AppDatabase
+                    .getDatabase(context)
+                    .openHelper
+                    .writableDatabase
+                    .version
+            val teilDb = File.createTempFile("teilsicherung_", ".db", context.cacheDir)
+            val ziel = File.createTempFile("drive_teilsicherung_", ".zip", context.cacheDir)
+            var erfolgreich = false
+            try {
+                SicherungsDatenbank.baueTeilsicherung(dbDatei, teilDb, stand)
+                val manifest =
+                    buildManifest().apply {
+                        put("art", ART_TEIL)
+                        put("schemaVersion", schemaVersion)
+                        put("basisVollsicherungId", vollsicherungId)
+                    }
+                ZipOutputStream(FileOutputStream(ziel).buffered()).use { zos ->
+                    schreibeEintrag(zos, MANIFEST_ENTRY, manifest.toString(2).toByteArray(Charsets.UTF_8))
+                    zos.putNextEntry(ZipEntry(TEIL_DATENBANK_ENTRY))
+                    FileInputStream(teilDb).use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+                erfolgreich = true
+                ziel
+            } finally {
+                teilDb.delete()
+                if (!erfolgreich) ziel.delete()
+            }
+        }
 
     /**
      * Wie [baueSicherungsDatei], legt die Zieldatei aber selbst per [File.createTempFile] im
@@ -224,9 +337,10 @@ object SicherungManager {
         context: Context,
         quelle: File,
         settings: SettingsManager,
+        teilsicherung: File? = null,
     ): SicherungsErgebnis = withContext(Dispatchers.IO) {
         try {
-            FileInputStream(quelle).buffered().use { spieleZipStreamEin(context, it, settings) }
+            FileInputStream(quelle).buffered().use { spieleZipStreamEin(context, it, settings, teilsicherung) }
         } catch (e: Exception) {
             SicherungsErgebnis(false, "Wiederherstellung fehlgeschlagen: ${e.message}")
         }
@@ -249,6 +363,7 @@ object SicherungManager {
         context: Context,
         zipStream: InputStream,
         settings: SettingsManager,
+        teilsicherung: File? = null,
     ): SicherungsErgebnis {
         var manifest: JSONObject? = null
         var einstellungen: JSONObject? = null
@@ -284,13 +399,15 @@ object SicherungManager {
             val dbDatei = datenbankTempDatei
                 ?: return SicherungsErgebnis(false, "Keine gültige Sicherungsdatei (Datenbank fehlt).")
 
-            schreibeDatenbankDatei(context, dbDatei)
+            val wiederhergestellt = schreibeDatenbankDatei(context, dbDatei)
             // schreibeDatenbankDatei() hat die Datei uebernommen (verschoben oder kopiert+geloescht) -
             // im finally unten ist nichts mehr zu tun.
             datenbankTempDatei = null
             einstellungen?.let { wendeEinstellungenAn(it, settings) }
 
-            return SicherungsErgebnis(true, "Sicherung eingespielt. Die App wird jetzt neu gestartet.")
+            val teilHinweis =
+                teilsicherung?.let { spieleTeilsicherungEin(context, it, gueltigesManifest, wiederhergestellt) }.orEmpty()
+            return SicherungsErgebnis(true, "Sicherung eingespielt.$teilHinweis Die App wird jetzt neu gestartet.")
         } catch (e: Exception) {
             return SicherungsErgebnis(false, "Wiederherstellung fehlgeschlagen: ${e.message}")
         } finally {
@@ -349,6 +466,54 @@ object SicherungManager {
     }
 
     /**
+     * Spielt die kumulative Teilsicherung [teil] in die eben aus der Vollsicherung
+     * wiederhergestellte Datei [dbDatei] ein - nur, wenn sie zu genau dieser Vollsicherung und
+     * derselben Schema-Version gehoert. Passt sie nicht oder scheitert das Einspielen, bleibt der
+     * Stand der Vollsicherung (das Einspielen laeuft in einer Transaktion). Liefert einen Satz
+     * fuer die Meldung an den Nutzer.
+     */
+    private fun spieleTeilsicherungEin(
+        context: Context,
+        teil: File,
+        vollManifest: JSONObject,
+        dbDatei: File,
+    ): String {
+        var teilManifest: JSONObject? = null
+        val teilDb = File.createTempFile("teil_wiederherstellung_", ".db", context.cacheDir)
+        try {
+            var dbGefunden = false
+            ZipInputStream(FileInputStream(teil).buffered()).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    when (entry.name) {
+                        MANIFEST_ENTRY -> teilManifest = JSONObject(zis.readBytes().toString(Charsets.UTF_8))
+                        TEIL_DATENBANK_ENTRY -> {
+                            FileOutputStream(teilDb).use { out -> zis.copyTo(out) }
+                            dbGefunden = true
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+            val m = teilManifest
+            val passt =
+                dbGefunden &&
+                    m != null &&
+                    m.optString("art") == ART_TEIL &&
+                    m.optLong("basisVollsicherungId", -1L) == vollManifest.optLong("vollsicherungId", -2L) &&
+                    m.optInt("schemaVersion", -1) == vollManifest.optInt("schemaVersion", -2)
+            if (!passt) return " Die Teilsicherung gehörte nicht zu dieser Vollsicherung und wurde übergangen."
+            SicherungsDatenbank.spieleTeilsicherungEin(dbDatei, teilDb)
+            return " Die Änderungen seit der Vollsicherung (Teilsicherung vom ${m!!.optString("createdAt")}) sind enthalten."
+        } catch (e: Exception) {
+            return " Die Teilsicherung ließ sich nicht einspielen (${e.message}); es gilt der Stand der Vollsicherung."
+        } finally {
+            teilDb.delete()
+        }
+    }
+
+    /**
      * Die laufende Room-Instanz hält eine offene Verbindung zur alten Datei - deshalb erst
      * schließen, dann überschreiben. [starteNeustart] danach ist zwingend, sonst würde die
      * nächste Anfrage über die bereits geöffnete, jetzt veraltete Verbindung laufen.
@@ -359,7 +524,10 @@ object SicherungManager {
      * Metadaten-Operation ohne Datenkopie), sonst per [File.copyTo] (streamt mit Standardpuffer,
      * kein `readBytes()`) kopiert und die Quelle danach geloescht.
      */
-    private fun schreibeDatenbankDatei(context: Context, quelle: File) {
+    private fun schreibeDatenbankDatei(
+        context: Context,
+        quelle: File,
+    ): File {
         // Pfad VOR dem Schliessen abfragen (siehe Begründung in checkpointeDatenbankDatei) -
         // danach ist die Verbindung weg.
         val database = AppDatabase.getDatabase(context)
@@ -377,5 +545,6 @@ object SicherungManager {
         // Daten kollidieren.
         File(dbFile.path + "-wal").delete()
         File(dbFile.path + "-shm").delete()
+        return dbFile
     }
 }

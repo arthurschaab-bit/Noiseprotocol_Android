@@ -795,4 +795,6 @@
     <string name="cockpit_unterbrechung_eintrag">Interrupted from %1$s to %2$s (running again)</string>
     <string name="cockpit_unterbrechung_eintrag_unbekannt">Interrupted until %1$s (start unknown, running again)</string>
     <string name="btn_unterbrechung_bestaetigen">Understood</string>
+    <string name="vollsicherung_kanal_name">Database backup</string>
+    <string name="vollsicherung_benachrichtigung_titel">Backing up database to Drive</string>
 </resources>

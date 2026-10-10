@@ -542,6 +542,35 @@ class SettingsManager(
         get() = prefs.getLong("datenbank_sicherung_last_attempt_at", 0L)
         set(value) = prefs.edit().putLong("datenbank_sicherung_last_attempt_at", value).apply()
 
+    /**
+     * Kennung der letzten erfolgreich nach Drive hochgeladenen Vollsicherung (0 = noch keine) und
+     * ihr Stand (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md). Die Teilsicherungen bauen darauf auf;
+     * ohne Vollsicherung gibt es keine Teilsicherung. Erst NACH dem erfolgreichen Upload gesetzt,
+     * damit eine Teilsicherung nie auf einer Vollsicherung aufsetzt, die in Drive fehlt.
+     */
+    val vollsicherungStand: Pair<Long, com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand>?
+        get() {
+            val id = prefs.getLong("vollsicherung_id", 0L)
+            if (id == 0L) return null
+            return id to
+                com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand(
+                    basisMesswertId = prefs.getLong("vollsicherung_basis_messwert_id", 0L),
+                    basisRohdatenId = prefs.getLong("vollsicherung_basis_rohdaten_id", 0L),
+                )
+        }
+
+    fun merkeVollsicherung(
+        id: Long,
+        stand: com.example.lrmprotokoll.backup.SicherungsDatenbank.Stand,
+    ) {
+        prefs
+            .edit()
+            .putLong("vollsicherung_id", id)
+            .putLong("vollsicherung_basis_messwert_id", stand.basisMesswertId)
+            .putLong("vollsicherung_basis_rohdaten_id", stand.basisRohdatenId)
+            .commit()
+    }
+
     // ---------------------------------------------------------------- M11: Videobeweis
 
     /**

@@ -76,7 +76,7 @@ class DriveSyncCoordinator(
      * loescht die zurueckgelieferte Datei in JEDEM Fall (Erfolg wie Fehlschlag) im `finally` von
      * [ladeDatenbankSicherungHoch] - sie gehoert nur diesem einen Versuch.
      */
-    private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
+    private val datenbankSicherungQuelle: (suspend () -> java.io.File?)? = null,
     private val sessionDao: SessionDao? = null,
 ) {
 
@@ -940,8 +940,11 @@ class DriveSyncCoordinator(
         }
         settings.datenbankSicherungLastAttemptAt = now.now().toEpochMilli()
 
+        // Seit docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md liefert die Quelle die kumulative
+        // TEILsicherung; `null` heisst "noch keine Vollsicherung in Drive", dann gibt es nichts,
+        // worauf sie aufsetzen koennte (die Vollsicherung macht der DatenbankVollsicherungWorker).
         val tempDatei = try {
-            quelle()
+            quelle() ?: return
         } catch (e: java.util.concurrent.CancellationException) {
             throw e
         } catch (fehler: Throwable) {
@@ -961,10 +964,11 @@ class DriveSyncCoordinator(
             return
         }
         try {
-            DriveDatenbankSicherung.hochladen(driveApi, ordnerId, tempDatei)
+            DriveDatenbankSicherung
+                .hochladenTeil(driveApi, ordnerId, tempDatei)
                 .onSuccess {
                     settings.datenbankSicherungLastSuccessAt = now.now().toEpochMilli()
-                    diagnosticsReporter?.breadcrumb("DriveSync", "Datenbank-Sicherung hochgeladen (${tempDatei.length()} Bytes)")
+                    diagnosticsReporter?.breadcrumb("DriveSync", "Teilsicherung hochgeladen (${tempDatei.length()} Bytes)")
                 }
                 .onFailure { fehler ->
                     val dauerMs = Duration.between(zyklusStart, now.now()).toMillis()

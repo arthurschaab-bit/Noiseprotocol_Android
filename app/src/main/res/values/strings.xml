@@ -799,4 +799,6 @@
     <string name="cockpit_unterbrechung_eintrag">Unterbrochen von %1$s bis %2$s (läuft wieder)</string>
     <string name="cockpit_unterbrechung_eintrag_unbekannt">Unterbrochen bis %1$s (Beginn unbekannt, läuft wieder)</string>
     <string name="btn_unterbrechung_bestaetigen">Verstanden</string>
+    <string name="vollsicherung_kanal_name">Datenbanksicherung</string>
+    <string name="vollsicherung_benachrichtigung_titel">Datenbank wird in Drive gesichert</string>
 </resources>

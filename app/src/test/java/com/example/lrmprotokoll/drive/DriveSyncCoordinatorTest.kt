@@ -244,6 +244,7 @@ class DriveSyncCoordinatorTest {
         var resumableNeuanlagenAufrufe = 0
         var resumableAktualisierenAufrufe = 0
         var letzteResumableAktualisierteFileId: String? = null
+        var letzterResumableName: String? = null
 
         // Bewusst der INHALT (nicht die File-Referenz): der Koordinator loescht die temporaere
         // Sicherungsdatei im finally, SOBALD dateiHochladenResumable/dateiAktualisierenResumable
@@ -260,6 +261,7 @@ class DriveSyncCoordinatorTest {
             fortschritt: suspend (Long, Long) -> Unit,
         ): Result<String> {
             resumableNeuanlagenAufrufe++
+            letzterResumableName = name
             letzterSicherungsInhalt = datei.readBytes()
             return resumableNeuanlagenErgebnis
         }
@@ -1242,7 +1244,7 @@ class DriveSyncCoordinatorTest {
     // dem Versuch wieder. Da die Datei zu diesem Zeitpunkt schon geloescht ist, liest das Fake
     // ihren Inhalt SOFORT beim Aufruf (letzterSicherungsInhalt), nicht erst in der Testassertion.
 
-    private fun koordinatorMitDatenbankSicherung(quelle: (suspend () -> java.io.File)?) =
+    private fun koordinatorMitDatenbankSicherung(quelle: (suspend () -> java.io.File?)?) =
         DriveSyncCoordinator(
             driveApi = driveApi,
             levelSampleDao = levelSampleDao,
@@ -1296,6 +1298,20 @@ class DriveSyncCoordinatorTest {
 
             assertEquals(1, driveApi.resumableNeuanlagenAufrufe)
             assertArrayEquals(bytes, driveApi.letzterSicherungsInhalt)
+            // docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md: der 30-Minuten-Schritt laedt die
+            // Teilsicherung, nicht mehr die Vollsicherung.
+            assertEquals(TEILSICHERUNG_DATEINAME, driveApi.letzterResumableName)
+        }
+
+    @Test
+    fun ohneVollsicherungGehtKeineTeilsicherungRaus() =
+        runTest {
+            settings.datenbankSicherungDriveUpload = true
+
+            koordinatorMitDatenbankSicherung({ null }).syncEinenZyklus()
+
+            assertEquals(0, driveApi.resumableNeuanlagenAufrufe)
+            assertEquals(0, driveApi.resumableAktualisierenAufrufe)
         }
 
     @Test
