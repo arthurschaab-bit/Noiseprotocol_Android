@@ -32,6 +32,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.audio.ACTION_STOP_SERVICE
@@ -189,26 +192,35 @@ fun LiveCockpitCard(
         berechneDbFensterAb(s.startedAt, s.endedAt ?: jetzt, dienstAktiv)
     }
 
-    LaunchedEffect(letzteSession?.id, dbFensterAb) {
+    // Befund 3 (docs/BEFUNDE_BUNDLES_2026-10-10.md): Ohne Lebenszyklus-Bindung lud die Karte
+    // auch bei gesperrtem Bildschirm alle 5 s (jeder Messwert-Batch) das ganze 4-h-Fenster neu -
+    // "CursorWindow is full" und 12-28 MB Garbage Collection im Takt, fuer Werte, die niemand
+    // sieht. Gesammelt wird nur noch ab STARTED; beim Zurueckkehren laedt der Flow sofort neu.
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(letzteSession?.id, dbFensterAb, lifecycleOwner) {
         val s = letzteSession
         if (s != null && dbFensterAb != null) {
-            launch {
-                db.measurementDao().fuerSessionAbFlow(s.id, dbFensterAb).collectLatest { geladeneMesswerte ->
-                    messwerte = geladeneMesswerte
-                    if (geladeneMesswerte.isNotEmpty()) {
-                        kennwerte = withContext(Dispatchers.Default) {
-                            AkustischeKennwerte.leqUndMax(geladeneMesswerte)
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    db.measurementDao().fuerSessionAbFlow(s.id, dbFensterAb).collectLatest { geladeneMesswerte ->
+                        messwerte = geladeneMesswerte
+                        if (geladeneMesswerte.isNotEmpty()) {
+                            kennwerte =
+                                withContext(Dispatchers.Default) {
+                                    AkustischeKennwerte.leqUndMax(geladeneMesswerte)
+                                }
+                        } else {
+                            val geladeneAggregate = db.minuteAggregateDao().fuerSession(s.id)
+                            aggregate = geladeneAggregate
+                            kennwerte = AkustischeKennwerte.ausAggregaten(geladeneAggregate)
                         }
-                    } else {
-                        val geladeneAggregate = db.minuteAggregateDao().fuerSession(s.id)
-                        aggregate = geladeneAggregate
-                        kennwerte = AkustischeKennwerte.ausAggregaten(geladeneAggregate)
                     }
                 }
-            }
-            launch {
-                db.connectionEventDao().fuerSessionFlow(s.id).collectLatest { events ->
-                    ausfallbaender = leiteAusfallbaenderAb(events, s.endedAt)
+                launch {
+                    db.connectionEventDao().fuerSessionFlow(s.id).collectLatest { events ->
+                        ausfallbaender = leiteAusfallbaenderAb(events, s.endedAt)
+                    }
                 }
             }
         } else {
@@ -219,10 +231,12 @@ fun LiveCockpitCard(
         }
     }
 
-    LaunchedEffect(dienstAktiv, offeneSession?.startedAt) {
-        while (dienstAktiv || offeneSession != null) {
-            jetzt = System.currentTimeMillis()
-            delay(1000)
+    LaunchedEffect(dienstAktiv, offeneSession?.startedAt, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (dienstAktiv || offeneSession != null) {
+                jetzt = System.currentTimeMillis()
+                delay(1000)
+            }
         }
     }
 
