@@ -257,7 +257,7 @@ internal fun zaehleRahmen(stacks: List<Array<StackTraceElement>>): List<Pair<Str
             .distinct()
             .forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
     }
-    return treffer.entries.sortedByDescending { it.value }.map { it.key to it.value }
+    return treffer.nachHaeufigkeit()
 }
 
 /** App- oder Compose-Rahmen, aber weder die Regel selbst noch der Testrumpf. */
@@ -276,11 +276,24 @@ internal fun zaehleNachrichten(warteschlangen: List<List<String>>): List<Pair<St
     for (warteschlange in warteschlangen) {
         warteschlange.distinct().forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
     }
-    return treffer.entries.sortedByDescending { it.value }.map { it.key to it.value }
+    return treffer.nachHaeufigkeit()
 }
 
-/** `Foo$$Lambda/0x00007f...` -> `Foo$$Lambda`: die Adresse ist je Lauf anders und zerlegt die Zaehlung. */
-internal fun ohneLambdaAdresse(klassenname: String): String = klassenname.substringBefore("/0x")
+/**
+ * Haeufigste zuerst, bei Gleichstand alphabetisch - sonst haengt die Reihenfolge von der
+ * HashMap-Iteration ab, und zwei Diagnosen desselben Haengers saehen verschieden aus.
+ */
+private fun Map<String, Int>.nachHaeufigkeit(): List<Pair<String, Int>> =
+    entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key to it.value }
+
+/**
+ * `Foo$$Lambda/0x00007f...` -> `Foo$$Lambda`: der Zusatz einer Hidden Class ist je Lauf anders
+ * und zerlegt die Zaehlung. Geschnitten wird am `/` selbst, nicht erst an `/0x` - ein regulaerer
+ * Klassenname enthaelt nie einen `/`, und das Format des Zusatzes ist nicht festgelegt.
+ */
+internal fun ohneLambdaAdresse(klassenname: String): String = klassenname.substringBefore('/')
 
 /**
  * Liest die wartenden Nachrichten des Main-Loopers, ohne sie anzufassen: je Nachricht die
@@ -312,7 +325,17 @@ private fun beschreibeNachricht(nachricht: Any): String {
     return "Handler ${ziel?.javaClass?.name?.let(::ohneLambdaAdresse) ?: "?"} what=$what"
 }
 
+/**
+ * Je Klasse und Name nur einmal aufgeloest: Die Schleife liest bis zu
+ * [ZeitwaechterRegel.MAX_NACHRICHTEN] Nachrichten je Stichprobe, jede mit bis zu vier Feldern -
+ * ohne Zwischenspeicher waeren das zehntausende Lookups neben dem beobachteten Testthread.
+ */
+private val aufgeloesteFelder = java.util.concurrent.ConcurrentHashMap<Pair<Class<*>, String>, java.lang.reflect.Field>()
+
 private fun feld(
     klasse: Class<*>,
     name: String,
-): java.lang.reflect.Field = klasse.getDeclaredField(name).apply { isAccessible = true }
+): java.lang.reflect.Field =
+    aufgeloesteFelder.getOrPut(klasse to name) {
+        klasse.getDeclaredField(name).apply { isAccessible = true }
+    }
