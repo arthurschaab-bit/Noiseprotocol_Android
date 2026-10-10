@@ -336,6 +336,7 @@ class AppContainer(
                     settingsManager,
                 )
             },
+            zipArbeitsverzeichnis = java.io.File(context.cacheDir, "wav_zip_upload"),
         )
     }
 

@@ -2,7 +2,6 @@ package com.example.lrmprotokoll.drive
 
 import android.util.Log
 import com.example.lrmprotokoll.data.NoiseRecord
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -14,17 +13,23 @@ private const val TAG = "WavHourlyZipper"
 
 /**
  * Repräsentiert ein stündlich gebündeltes ZIP-Archiv für den Google Drive Upload.
- * Der ZIP-Inhalt wird bei Bedarf lazy erzeugt, damit bei bereits existierenden
- * Archiven auf Drive keine unnötigen Megabytes im RAM allokiert werden.
+ * Das Archiv wird erst bei Bedarf und STREAMEND in eine Datei geschrieben ([schreibeZipNach]),
+ * nie als `ByteArray` im RAM aufgebaut (Befund 1, docs/BEFUNDE_BUNDLES_2026-10-10.md): Eine
+ * Stunde mit 855 WAVs ergab ~138 MB, und der wachsende `ByteArrayOutputStream` samt
+ * `toByteArray()` warf auf dem P30 (384 MB Heap) `OutOfMemoryError` bis hin zum Absturz.
  */
 class HourlyZipPackage(
     val zipFileName: String,
     val wavCount: Int,
     val isClosedHour: Boolean,
     val tagesordner: String = zipFileName.removePrefix("audio_").substringBefore('_'),
-    private val zipBytesProvider: () -> ByteArray,
+    private val zipSchreiber: (ziel: File) -> Boolean,
 ) {
-    val zipBytes: ByteArray by lazy(zipBytesProvider)
+    /**
+     * Schreibt das ZIP-Archiv nach [ziel] (wird überschrieben). `false`, wenn es nicht
+     * geschrieben werden konnte - der Aufrufer überspringt das Paket dann wie bisher ein leeres.
+     */
+    fun schreibeZipNach(ziel: File): Boolean = zipSchreiber(ziel)
 
     /** Sekundärer Konstruktor für direkte Bytes (z. B. in Tests). */
     constructor(
@@ -38,14 +43,11 @@ class HourlyZipPackage(
         wavCount = wavCount,
         isClosedHour = isClosedHour,
         tagesordner = tagesordner,
-        zipBytesProvider = { zipBytes },
+        zipSchreiber = { ziel ->
+            ziel.writeBytes(zipBytes)
+            zipBytes.isNotEmpty()
+        },
     )
-
-    operator fun component1(): String = zipFileName
-    operator fun component2(): ByteArray = zipBytes
-    operator fun component3(): Int = wavCount
-    operator fun component4(): Boolean = isClosedHour
-    operator fun component5(): String = tagesordner
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -111,7 +113,7 @@ object WavHourlyZipper {
                     wavCount = dateien.size,
                     isClosedHour = isClosedHour,
                     tagesordner = tagesordner,
-                    zipBytesProvider = { erstelleZipArchiv(dateien) ?: ByteArray(0) },
+                    zipSchreiber = { ziel -> erstelleZipArchiv(dateien, ziel) },
                 )
             )
             Log.d(TAG, "ZIP-Paket vorbereitet: $zipName (${dateien.size} WAVs, abgeschlossen=$isClosedHour, Tagesordner=$tagesordner)")
@@ -121,10 +123,12 @@ object WavHourlyZipper {
         return ergebnisse.sortedByDescending { it.zipFileName }
     }
 
-    private fun erstelleZipArchiv(dateien: List<File>): ByteArray? {
-        return runCatching {
-            val byteStream = ByteArrayOutputStream()
-            ZipOutputStream(byteStream).use { zipOut ->
+    private fun erstelleZipArchiv(
+        dateien: List<File>,
+        ziel: File,
+    ): Boolean =
+        runCatching {
+            ZipOutputStream(ziel.outputStream().buffered()).use { zipOut ->
                 val bereitsEnthalteneNamen = mutableSetOf<String>()
                 for (datei in dateien) {
                     var eintragName = datei.name
@@ -144,7 +148,7 @@ object WavHourlyZipper {
                     zipOut.closeEntry()
                 }
             }
-            byteStream.toByteArray()
-        }.getOrNull()
-    }
+            ziel.length() > 0
+        }.onFailure { Log.w(TAG, "ZIP-Archiv konnte nicht geschrieben werden: ${ziel.name}", it) }
+            .getOrDefault(false)
 }

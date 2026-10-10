@@ -150,7 +150,7 @@ class DriveWavUploadAndCsvTest {
             fortsetzenAb: String?,
             sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
-        ): Result<String> = throw NotImplementedError("im Test nicht benoetigt")
+        ): Result<String> = dateiAnlegen(name, ordnerId, datei.readBytes(), mimeType, gzip = false)
 
         override suspend fun dateiAktualisierenResumable(
             fileId: String,
@@ -159,7 +159,7 @@ class DriveWavUploadAndCsvTest {
             fortsetzenAb: String?,
             sessionGestartet: suspend (String) -> Unit,
             fortschritt: suspend (Long, Long) -> Unit,
-        ): Result<Unit> = throw NotImplementedError("im Test nicht benoetigt")
+        ): Result<Unit> = dateiAktualisieren(fileId, datei.readBytes(), mimeType, gzip = false)
     }
 
     private lateinit var noiseDao: TestNoiseDao
@@ -407,5 +407,51 @@ class DriveWavUploadAndCsvTest {
                 !driveApi.hochgeladeneDateien.containsKey("laermprotokoll_2026-08-20.csv"),
             )
             assertTrue(settings.kiNachtragOffeneTage.isEmpty())
+        }
+
+    /**
+     * Befund 1 (docs/BEFUNDE_BUNDLES_2026-10-10.md): Das Stunden-ZIP wird ueber eine
+     * temporaere Datei hochgeladen. Danach darf im Arbeitsverzeichnis nichts liegen bleiben -
+     * weder die Datei dieses Laufs noch Reste eines frueheren, abgebrochenen Laufs.
+     */
+    @Test
+    fun zipArbeitsverzeichnisIstNachDemLaufLeerAuchMitAltenResten() =
+        runTest {
+            val wavFile = tempFolder.newFile("noise_20260823_110000.wav")
+            wavFile.writeBytes(byteArrayOf(1, 2, 3, 4))
+            noiseDao.insert(
+                NoiseRecord(
+                    id = 1,
+                    timestamp = uhr.now().minusSeconds(3600).toEpochMilli(),
+                    amplitude = 1000.0,
+                    dbValue = 60.0,
+                    filePath = wavFile.absolutePath,
+                ),
+            )
+            val arbeitsverzeichnis = tempFolder.newFolder("wav_zip_upload")
+            java.io.File(arbeitsverzeichnis, "wav_rest_eines_abgebrochenen_laufs.zip").writeBytes(ByteArray(10))
+
+            val coordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                    zipArbeitsverzeichnis = arbeitsverzeichnis,
+                )
+
+            coordinator.syncEinenZyklus()
+
+            assertTrue(
+                "ZIP muss hochgeladen worden sein",
+                driveApi.hochgeladeneDateien.keys.any { it.endsWith(".zip") },
+            )
+            assertTrue(
+                "Arbeitsverzeichnis muss leer sein: ${arbeitsverzeichnis.list()?.toList()}",
+                arbeitsverzeichnis.list().isNullOrEmpty(),
+            )
         }
 }

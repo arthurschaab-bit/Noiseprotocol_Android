@@ -15,6 +15,7 @@ import com.example.lrmprotokoll.messreihe.erkanntesLabel
 import com.example.lrmprotokoll.meter.InstantSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -78,6 +79,14 @@ class DriveSyncCoordinator(
      */
     private val datenbankSicherungQuelle: (suspend () -> java.io.File)? = null,
     private val sessionDao: SessionDao? = null,
+    /**
+     * Arbeitsverzeichnis fuer die stuendlichen WAV-ZIPs, die STREAMEND auf die Platte statt in
+     * den Speicher gebaut werden (Befund 1, docs/BEFUNDE_BUNDLES_2026-10-10.md). Der Koordinator
+     * legt hier nur eigene Dateien ab und leert es zu Beginn jeder WAV-Phase - ein eigenes
+     * Unterverzeichnis, nie direkt `cacheDir`. Standard `java.io.tmpdir`, auf Android das
+     * `cacheDir` der App.
+     */
+    private val zipArbeitsverzeichnis: File = File(System.getProperty("java.io.tmpdir"), "wav_zip_upload"),
 ) {
 
     /**
@@ -285,6 +294,7 @@ class DriveSyncCoordinator(
         ladeDatenbankSicherungHoch(ordnerId, jetzt)
 
         if (settings.driveUploadWav) {
+            raeumeZipArbeitsverzeichnisAuf()
             val wavRecords = noiseDao.getAlleAktiven()
             if (wavRecords.isNotEmpty()) {
                 val stundenZips = WavHourlyZipper.packeStundenZips(wavRecords, jetzt, zone)
@@ -313,18 +323,19 @@ class DriveSyncCoordinator(
 
                         // Wenn die Datei noch nicht auf Drive im Tagesordner existiert -> Neu anlegen
                         if (!existierendeNamen.contains(dateiName)) {
-                            val inhalt = zipPackage.zipBytes
-                            if (inhalt.isEmpty()) {
+                            val uploadResult =
+                                mitZipDatei(zipPackage) { zipDatei ->
+                                    driveApi.dateiHochladenResumable(
+                                        name = dateiName,
+                                        ordnerId = wavOrdner,
+                                        datei = zipDatei,
+                                        mimeType = "application/zip",
+                                    )
+                                }
+                            if (uploadResult == null) {
                                 Log.w(TAG, "ZIP-Inhalt für $dateiName ist leer – überspringe")
                                 continue
                             }
-                            val uploadResult = driveApi.dateiAnlegen(
-                                name = dateiName,
-                                ordnerId = wavOrdner,
-                                inhalt = inhalt,
-                                mimeType = "application/zip",
-                                gzip = false,
-                            )
                             if (uploadResult.isFailure) {
                                 val err = uploadResult.exceptionOrNull()
                                 val httpCode = (err as? DriveApiException)?.httpCode
@@ -373,14 +384,15 @@ class DriveSyncCoordinator(
                             val suchenResult = driveApi.dateiSuchen(dateiName, wavOrdner)
                             val existierendeDatei = suchenResult.getOrNull()
                             if (existierendeDatei != null) {
-                                val inhalt = zipPackage.zipBytes
-                                if (inhalt.isNotEmpty()) {
-                                    val updateResult = driveApi.dateiAktualisieren(
-                                        fileId = existierendeDatei.id,
-                                        inhalt = inhalt,
-                                        mimeType = "application/zip",
-                                        gzip = false,
-                                    )
+                                val updateResult =
+                                    mitZipDatei(zipPackage) { zipDatei ->
+                                        driveApi.dateiAktualisierenResumable(
+                                            fileId = existierendeDatei.id,
+                                            datei = zipDatei,
+                                            mimeType = "application/zip",
+                                        )
+                                    }
+                                if (updateResult != null) {
                                     if (updateResult.isSuccess) {
                                         zipPackagesUploadedCount++
                                         totalWavCountInZips += zipPackage.wavCount
@@ -946,6 +958,41 @@ class DriveSyncCoordinator(
             }
         }
         return erfolgreich
+    }
+
+    /**
+     * Schreibt [paket] STREAMEND in eine temporaere Datei, gibt sie an [upload] und loescht sie
+     * danach in jedem Fall wieder (Befund 1, docs/BEFUNDE_BUNDLES_2026-10-10.md: das ZIP einer
+     * vollen Stunde ist bis ~140 MB gross und darf nie als `ByteArray` im Speicher liegen).
+     * `null`, wenn das ZIP nicht geschrieben werden konnte oder leer ist.
+     */
+    private suspend fun <T> mitZipDatei(
+        paket: HourlyZipPackage,
+        upload: suspend (File) -> T,
+    ): T? {
+        val zipDatei =
+            runCatching {
+                zipArbeitsverzeichnis.mkdirs()
+                File.createTempFile("wav_", ".zip", zipArbeitsverzeichnis)
+            }.getOrElse {
+                Log.w(TAG, "Temporaere ZIP-Datei fuer ${paket.zipFileName} nicht anlegbar", it)
+                return null
+            }
+        try {
+            if (!paket.schreibeZipNach(zipDatei)) return null
+            return upload(zipDatei)
+        } finally {
+            zipDatei.delete()
+        }
+    }
+
+    /**
+     * Entfernt ZIP-Reste eines Laufs, den ein Prozess-Tod mitten im Upload beendet hat - der
+     * `finally`-Zweig in [mitZipDatei] laeuft dann nicht. Gefahrlos, weil der Mutex in
+     * [syncEinenZyklus] nie zwei Zyklen gleichzeitig zulaesst.
+     */
+    private fun raeumeZipArbeitsverzeichnisAuf() {
+        zipArbeitsverzeichnis.listFiles()?.forEach { it.delete() }
     }
 
     /**
