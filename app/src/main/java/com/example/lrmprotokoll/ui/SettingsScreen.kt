@@ -1634,6 +1634,14 @@ fun SettingsScreen(
                                         withContext(Dispatchers.IO) {
                                             java.io.File.createTempFile("drive_wiederherstellung_", ".zip", context.cacheDir)
                                         }
+                                    // Kumulative Teilsicherung (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md):
+                                    // zusaetzlich zur Vollsicherung, damit der letzte Stand statt der
+                                    // letzten Nacht wiederhergestellt wird. Fehlt sie oder scheitert
+                                    // der Download, gilt die Vollsicherung allein.
+                                    val teilDatei =
+                                        withContext(Dispatchers.IO) {
+                                            java.io.File.createTempFile("drive_teilwiederherstellung_", ".zip", context.cacheDir)
+                                        }
                                     try {
                                         val heruntergeladen = withContext(Dispatchers.IO) {
                                             com.example.lrmprotokoll.drive.DriveDatenbankSicherung.herunterladen(
@@ -1642,8 +1650,21 @@ fun SettingsScreen(
                                                 tempDatei,
                                             )
                                         }
+                                        val teilVorhanden =
+                                            withContext(Dispatchers.IO) {
+                                                com.example.lrmprotokoll.drive.DriveDatenbankSicherung
+                                                    .herunterladenTeil(container.driveApiClient, ordnerId, teilDatei)
+                                                    .getOrDefault(false)
+                                            }
                                         heruntergeladen.fold(
-                                            onSuccess = { SicherungManager.spieleSicherungDateiEin(context, tempDatei, settings) },
+                                            onSuccess = {
+                                                SicherungManager.spieleSicherungDateiEin(
+                                                    context,
+                                                    tempDatei,
+                                                    settings,
+                                                    teilsicherung = teilDatei.takeIf { teilVorhanden },
+                                                )
+                                            },
                                             onFailure = { fehler ->
                                                 com.example.lrmprotokoll.backup.SicherungsErgebnis(
                                                     false, "Herunterladen fehlgeschlagen: ${fehler.message}",
@@ -1652,6 +1673,7 @@ fun SettingsScreen(
                                         )
                                     } finally {
                                         tempDatei.delete()
+                                        teilDatei.delete()
                                     }
                                 }
                                 driveWiederherstellungLaeuft = false

@@ -84,6 +84,11 @@ class LaermprotokollApp : Application() {
         // M12 Schritt 6 (Konzept Schritt 6 Aufgabe 1): immer geplant, der Abschalter wirkt im
         // Coordinator bei jedem Lauf (siehe SupportBundleHealthPlanung-KDoc).
         com.example.lrmprotokoll.diagnose.export.SupportBundleHealthPlanung.plane(this)
+        // Naechtliche Vollsicherung (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md), bei jedem Start
+        // geplant, damit ein Update ohne weiteres Zutun greift.
+        val vollsicherungVorhanden = container.settingsManager.vollsicherungStand != null
+        com.example.lrmprotokoll.drive.DatenbankVollsicherungPlanung
+            .plane(this, vollsicherungVorhanden)
     }
 
     /**

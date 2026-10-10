@@ -321,20 +321,25 @@ class AppContainer(
             beweisVideoDao = database.beweisVideoDao(),
             diagnosticsReporter = diagnosticsReporter,
             datenbankSicherungQuelle = {
-                // Streamend in eine temporaere Datei im cacheDir bauen (Bugfix 23.09.2026,
-                // docs/PROMPT_FIX_DATENBANK_SICHERUNG.md) - der Koordinator loescht sie wieder,
-                // sobald der Upload-Versuch (Erfolg oder Fehlschlag) abgeschlossen ist.
-                // baueSicherungsDateiMitAufraeumen() raeumt zusaetzlich selbst auf, wenn schon
-                // das BAUEN fehlschlaegt (Nachbesserung, Review-Befund zu #194, 24.09.2026) -
-                // vorher blieb genau in diesem Fall die hier per createTempFile() angelegte
-                // Temp-Datei fuer immer im cacheDir liegen, weil diese Lambda dann nie ein File
-                // zurueckgab, das der Koordinator in seinem eigenen finally haette loeschen
-                // koennen: auf einem Geraet, das wiederholt an Speicherproblemen scheitert (der
-                // Fall, den der Streaming-Umbau oben beheben soll), eine Leiche pro Fehlschlag.
-                com.example.lrmprotokoll.backup.SicherungManager.baueSicherungsDateiMitAufraeumen(
-                    context.applicationContext,
-                    settingsManager,
-                )
+                // Kumulative Teilsicherung (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md): baut auf der
+                // letzten erfolgreich hochgeladenen Vollsicherung auf. Ohne Vollsicherung `null` -
+                // dann gibt es noch nichts, worauf sie aufsetzen koennte. Die Datei liegt im
+                // cacheDir; der Koordinator loescht sie nach dem Upload-Versuch,
+                // baueTeilsicherung() raeumt bei einem Fehlschlag beim Bauen selbst auf.
+                // Fehlt die Basis fuer den aktuellen Ordner (erster Start, Ordnerwechsel), wird
+                // die Vollsicherung sofort eingeplant statt erst in der naechsten Nacht.
+                val basis = settingsManager.vollsicherungStand
+                if (basis == null) {
+                    com.example.lrmprotokoll.drive.DatenbankVollsicherungPlanung
+                        .planeErstsicherung(context.applicationContext)
+                    null
+                } else {
+                    com.example.lrmprotokoll.backup.SicherungManager.baueTeilsicherung(
+                        context.applicationContext,
+                        basis.first,
+                        basis.second,
+                    )
+                }
             },
             zipArbeitsverzeichnis = java.io.File(context.cacheDir, "wav_zip_upload"),
         )

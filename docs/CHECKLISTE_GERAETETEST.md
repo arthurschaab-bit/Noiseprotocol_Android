@@ -531,6 +531,17 @@ führten am 07.10. zu 16 × `OutOfMemoryError` und einem Absturz.
 |---|---|---|
 | Einen Tag mit vielen Ereignissen (mehrere hundert WAVs pro Stunde) aufzeichnen, danach Bundle erzeugen | Kein `DRIVE_UPLOAD_FAILED … OutOfMemoryError` bei `ladeWavZipsHoch`, kein Absturz im Crash-Puffer; die Stunden-ZIPs liegen vollständig in Drive | |
 
+### F30 — Datenbanksicherung als Voll- und Teilsicherung (10.10.2026)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md`), aber **noch nicht
+auf echter Hardware gesehen**.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach dem Update eine Nacht im WLAN laufen lassen, danach Bundle erzeugen | Im Protokoll steht „Vollsicherung hochgeladen“ gegen 03:00; die Datei in Drive `BACKUP/laermprotokoll_datenbank.zip` ist deutlich kleiner als vorher (vorher ~300 MB) | |
+| Tagsüber | Alle ~30 min „Teilsicherung hochgeladen“ mit wenigen MB; kein „Datenbank-Sicherung hochgeladen“ mit mehreren hundert MB mehr | |
+| Wiederherstellung von Drive auf einem Testgerät | Meldung nennt „Teilsicherung vom …“; Aufnahmen bis zur letzten Teilsicherung sind da | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
