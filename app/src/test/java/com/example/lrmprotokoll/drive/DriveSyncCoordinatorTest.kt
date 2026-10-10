@@ -996,7 +996,9 @@ class DriveSyncCoordinatorTest {
                         )
                 }
             settings.driveUploadWav = true
-            driveApi.dateiAnlegenErgebnis =
+            // Seit Befund 1 (BEFUNDE_BUNDLES_2026-10-10.md) laufen WAV-ZIPs ueber den
+            // resumable Datei-Upload statt ueber dateiAnlegen(ByteArray).
+            driveApi.resumableNeuanlagenErgebnis =
                 Result.failure(
                     DriveApiException("Kein Zugriffstoken verfügbar", httpCode = 401),
                 )
