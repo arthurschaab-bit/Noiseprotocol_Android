@@ -185,22 +185,29 @@ object PegelAggregator {
             )
         }
 
-        val pegel = samples.map { it.levelDb }
+        // PCE-Vorrang (Owner-Entscheidung 10.10.2026): Liefert das Messgeraet im Fenster Werte,
+        // zaehlen NUR diese. Mikrofonwerte (unkalibriert, nicht A-bewertet) sind reiner Fallback fuer
+        // Fenster ganz ohne Messgeraetwert und werden NIE mit PCE-Werten gemittelt. Dadurch
+        // entsteht keine Zeile mehr mit QUELLE_GEMISCHT; die Konstante bleibt fuer bereits
+        // exportierte Alt-CSVs bestehen.
+        val messgeraetSamples = samples.filter { it.source == LevelSource.PCE_323 }
+        val genutzt = messgeraetSamples.ifEmpty { samples }
+        val pegel = genutzt.map { it.levelDb }
         val energetischerMittelwert = 10.0 * log10(pegel.sumOf { 10.0.pow(it / 10.0) } / pegel.size)
-        val quellen = samples.map { it.source }.toSet()
+        val quellen = genutzt.map { it.source }.toSet()
         val erstEreignis = ereignisse.firstOrNull()
         val quelleStr = if (quellen.size == 1) quellen.first() else QUELLE_GEMISCHT
 
         return AggregatZeile(
             fensterStart = fensterStart,
-            pegelDb = samples.lastOrNull()?.levelDb,
+            pegelDb = genutzt.lastOrNull()?.levelDb,
             laeqDb = energetischerMittelwert,
             lafMaxDb = pegel.max(),
             lafMinDb = pegel.min(),
             bewertung = erstEreignis?.weighting ?: (if (quelleStr == LevelSource.PCE_323) "A" else null),
             zeitbewertung = if (quelleStr == LevelSource.PCE_323) "FAST" else null,
             messbereich = if (quelleStr == LevelSource.PCE_323) "AUTO" else null,
-            samples = samples.size,
+            samples = genutzt.size,
             quelle = quelleStr,
             ereignis = ereignisse.isNotEmpty(),
             klassifikation = erstEreignis?.klassifikation,
