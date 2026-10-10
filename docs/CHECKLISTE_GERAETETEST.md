@@ -530,6 +530,7 @@ führten am 07.10. zu 16 × `OutOfMemoryError` und einem Absturz.
 | Test | Erwartung | Ergebnis |
 |---|---|---|
 | Einen Tag mit vielen Ereignissen (mehrere hundert WAVs pro Stunde) aufzeichnen, danach Bundle erzeugen | Kein `DRIVE_UPLOAD_FAILED … OutOfMemoryError` bei `ladeWavZipsHoch`, kein Absturz im Crash-Puffer; die Stunden-ZIPs liegen vollständig in Drive | |
+
 ### F29 — KI-Batch im Hintergrund und nachts (10.10.2026)
 
 Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_KI_BATCH_HINTERGRUND.md`), aber **noch nicht
