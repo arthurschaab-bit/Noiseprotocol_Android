@@ -151,6 +151,49 @@ class ZeitwaechterRegelTest {
         )
     }
 
+    @Test
+    fun zaehleNachrichtenZaehltJeStichprobeEinmal() {
+        val stichproben =
+            listOf(
+                listOf("Runnable A", "Runnable A", "Handler B what=1"),
+                listOf("Runnable A"),
+                emptyList(),
+            )
+
+        assertEquals(
+            listOf("Runnable A" to 2, "Handler B what=1" to 1),
+            zaehleNachrichten(stichproben),
+        )
+    }
+
+    @Test
+    fun lambdaAdresseWirdFuerDieZaehlungEntfernt() {
+        assertEquals(
+            "com.example.Foo$\$Lambda",
+            ohneLambdaAdresse("com.example.Foo$\$Lambda/0x00007eff64eb0c00"),
+        )
+        assertEquals("com.example.Bar", ohneLambdaAdresse("com.example.Bar"))
+        // Das Format des Zusatzes ist nicht festgelegt - geschnitten wird am "/" selbst.
+        assertEquals("com.example.Foo$\$Lambda", ohneLambdaAdresse("com.example.Foo$\$Lambda/123456"))
+    }
+
+    /** Review zu PR #270: Gleichstand darf nicht von der HashMap-Iteration abhaengen. */
+    @Test
+    fun gleichstandWirdAlphabetischSortiert() {
+        val stichproben = listOf(listOf("Runnable Z", "Runnable A", "Runnable M"))
+
+        assertEquals(
+            listOf("Runnable A" to 1, "Runnable M" to 1, "Runnable Z" to 1),
+            zaehleNachrichten(stichproben),
+        )
+    }
+
+    /** Ohne Robolectric gibt es keinen Main-Looper - die Diagnose meldet das, statt zu scheitern. */
+    @Test
+    fun warteschlangeIstAusserhalbVonRobolectricNichtLesbar() {
+        assertEquals(null, leseHauptLooperWarteschlange())
+    }
+
     private companion object {
         /** Derselbe Pfad, den [ZeitwaechterRegel] schreibt - relativ zum Modulverzeichnis. */
         const val DIAGNOSEDATEI = "build/zeitwaechter-diagnose.txt"
