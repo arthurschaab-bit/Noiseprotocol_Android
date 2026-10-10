@@ -115,6 +115,10 @@ class HighEndReportExport(
                     jsonDays.getJSONObject(index).put("samplesPath", file.absolutePath)
                         .put("rawSampleCount", tagesRohwerte).put("sessions", sessions).put("photos", photos)
                 }
+                require(rawSampleCount > 0) {
+                    "Im gewählten Zeitraum liegen keine Messgerät-Rohdaten vor " +
+                        "(Mikrofonwerte fließen nicht in den Bericht ein)."
+                }
                 json.toString()
             }
             val transaktionDauerMs = System.currentTimeMillis() - transaktionStart
@@ -206,6 +210,7 @@ class HighEndReportExport(
         datei: File,
     ): Pair<Int, Set<Long>> {
         val sessionIds = mutableSetOf<Long>()
+        val mikrofonSessions = mutableMapOf<Long, Boolean>()
         var rohwerte = 0
         datei.bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.appendLine("timestampMillis,levelDb,flags,sessionId,weighting,timeWeighting")
@@ -214,10 +219,20 @@ class HighEndReportExport(
                 val abschnittsBis = minOf(abschnittsVon + HIGH_END_REPORT_ABSCHNITT_MILLIS, day.bis)
                 val rows = db.measurementDao().zwischen(abschnittsVon, abschnittsBis)
                 for (row in rows) {
+                    // Owner-Entscheidung 10.10.2026: Mikrofonwerte (reine Mikrofon-Sessions, leere
+                    // deviceAddress) fliessen in keine Berechnung ein - weder in LAeq noch in
+                    // Abdeckung oder Dauerlaermphasen. Sie gehen deshalb gar nicht erst in den
+                    // Rohdatenexport an die Python-Berichtslogik. Eine nicht mehr auffindbare
+                    // Session gilt wie bisher als Messgeraet-Session.
+                    val istMikrofon =
+                        mikrofonSessions.getOrPut(row.sessionId) {
+                            db.sessionDao().byId(row.sessionId)?.deviceAddress?.isBlank() == true
+                        }
+                    if (istMikrofon) continue
                     writer.appendLine(csvZeile(row))
                     sessionIds += row.sessionId
+                    rohwerte++
                 }
-                rohwerte += rows.size
                 abschnittsVon = abschnittsBis
             }
         }

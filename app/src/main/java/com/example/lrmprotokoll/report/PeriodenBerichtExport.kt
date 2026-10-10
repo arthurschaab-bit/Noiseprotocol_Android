@@ -87,6 +87,7 @@ open class PeriodenBerichtExport(
                 zeichnePegelverlaufChart(
                     canvas = c,
                     spalten = bericht.chartSpalten,
+                    mikrofonSpalten = bericht.mikrofonChartSpalten,
                     ausfallbaender = bericht.ausfallbaender,
                     events = bericht.events,
                     von = bericht.von,
@@ -165,6 +166,9 @@ internal fun zeichnePegelverlaufChart(
     top: Float,
     right: Float,
     bottom: Float,
+    // Unkalibrierte Mikrofon-Pegel: nur dezent und beschriftet gezeichnet, nie Teil von Skala,
+    // Kennwerten oder Hauptkurve (Owner-Entscheidung 10.10.2026).
+    mikrofonSpalten: List<ChartSpalte> = emptyList(),
 ) {
     val textPaint =
         Paint().apply {
@@ -172,7 +176,7 @@ internal fun zeichnePegelverlaufChart(
             color = Color.DKGRAY
             isAntiAlias = true
         }
-    if (spalten.isEmpty()) {
+    if (spalten.isEmpty() && mikrofonSpalten.isEmpty()) {
         canvas.drawText("Keine Messwerte für den Pegelverlauf.", left, (top + bottom) / 2f, textPaint)
         return
     }
@@ -186,8 +190,11 @@ internal fun zeichnePegelverlaufChart(
     val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
     val plotHeight = (plotBottom - plotTop).coerceAtLeast(1f)
 
-    val rawMinDb = spalten.minOf { it.minDb }
-    val rawMaxDb = spalten.maxOf { it.maxDb }
+    // Skala nur aus kalibrierten Werten; die Mikrofonkurve (anderer, unkalibrierter Bezug) darf
+    // sie nicht verzerren. Gibt es gar keine kalibrierten Werte, bestimmt das Mikrofon die Skala.
+    val skalaSpalten = spalten.ifEmpty { mikrofonSpalten }
+    val rawMinDb = skalaSpalten.minOf { it.minDb }
+    val rawMaxDb = skalaSpalten.maxOf { it.maxDb }
     val minScaleDb = floor((rawMinDb - 2.0) / 10.0) * 10.0
     val maxScaleDb = ceil((maxOf(rawMaxDb, laeqDb ?: 0.0) + 4.0) / 10.0) * 10.0
     val dbSpanne = (maxScaleDb - minScaleDb).coerceAtLeast(10.0)
@@ -274,30 +281,27 @@ internal fun zeichnePegelverlaufChart(
     }
 
     // 4. Pegeldaten in Segmente aufteilen (Datenlücken wie im Original erkannt) & zeichnen
-    val spaltenAbstandSek =
-        if (spalten.size > 1) {
-            (spalten.last().zeitOffsetSekunden - spalten.first().zeitOffsetSekunden) / (spalten.size - 1)
-        } else {
-            60L
-        }
-    val maxLueckeSekunden = maxOf(180L, (spaltenAbstandSek * 2.5).toLong())
-
-    val segmente = mutableListOf<MutableList<ChartSpalte>>()
-    var aktuellesSegment = mutableListOf<ChartSpalte>()
-    spalten.forEach { spalte ->
-        if (aktuellesSegment.isEmpty()) {
-            aktuellesSegment.add(spalte)
-        } else {
-            val deltaSek = spalte.zeitOffsetSekunden - aktuellesSegment.last().zeitOffsetSekunden
-            if (deltaSek > maxLueckeSekunden) {
-                segmente.add(aktuellesSegment)
-                aktuellesSegment = mutableListOf(spalte)
+    fun teileInSegmente(liste: List<ChartSpalte>): List<List<ChartSpalte>> {
+        val abstandSek =
+            if (liste.size > 1) {
+                (liste.last().zeitOffsetSekunden - liste.first().zeitOffsetSekunden) / (liste.size - 1)
             } else {
-                aktuellesSegment.add(spalte)
+                60L
             }
+        val maxLuecke = maxOf(180L, (abstandSek * 2.5).toLong())
+        val ergebnis = mutableListOf<MutableList<ChartSpalte>>()
+        var aktuell = mutableListOf<ChartSpalte>()
+        liste.forEach { spalte ->
+            if (aktuell.isNotEmpty() && spalte.zeitOffsetSekunden - aktuell.last().zeitOffsetSekunden > maxLuecke) {
+                ergebnis.add(aktuell)
+                aktuell = mutableListOf()
+            }
+            aktuell.add(spalte)
         }
+        if (aktuell.isNotEmpty()) ergebnis.add(aktuell)
+        return ergebnis
     }
-    if (aktuellesSegment.isNotEmpty()) segmente.add(aktuellesSegment)
+    val segmente = teileInSegmente(spalten)
 
     segmente.forEach { segment ->
         if (segment.size == 1) {
@@ -325,6 +329,54 @@ internal fun zeichnePegelverlaufChart(
         }
     }
 
+    // 4b. Mikrofon (unkalibriert): sehr dezent - duenne, helle, gestrichelte Linie ohne Flaeche -
+    // und deutlich beschriftet, damit sie nicht als Messkurve gelesen wird.
+    if (mikrofonSpalten.isNotEmpty()) {
+        val mikrofonPaint =
+            Paint().apply {
+                color = Color.argb(110, 150, 150, 150)
+                strokeWidth = 0.7f
+                style = Paint.Style.STROKE
+                isAntiAlias = true
+                pathEffect = DashPathEffect(floatArrayOf(2f, 3f), 0f)
+            }
+        val mikrofonPunktPaint =
+            Paint().apply {
+                color = Color.argb(110, 150, 150, 150)
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+        teileInSegmente(mikrofonSpalten).forEach { segment ->
+            if (segment.size == 1) {
+                // Einzelne Spalte (ein einziger Messwert oder isolierter Punkt zwischen Luecken):
+                // wie beim PCE-Zweig als Punkt zeichnen, sonst verschwaende er ganz (Review PR #275).
+                val spalte = segment.first()
+                canvas.drawCircle(x(spalte.zeitOffsetSekunden), y(spalte.mittelDb), MIKROFON_PUNKT_RADIUS, mikrofonPunktPaint)
+            } else {
+                val pfad = Path()
+                segment.forEachIndexed { index, spalte ->
+                    val px = x(spalte.zeitOffsetSekunden)
+                    val py = y(spalte.mittelDb)
+                    if (index == 0) pfad.moveTo(px, py) else pfad.lineTo(px, py)
+                }
+                canvas.drawPath(pfad, mikrofonPaint)
+            }
+        }
+        val hinweisPaint =
+            Paint().apply {
+                textSize = 7f
+                color = Color.argb(200, 120, 120, 120)
+                isAntiAlias = true
+                textAlign = Paint.Align.RIGHT
+            }
+        canvas.drawText(
+            "- - - Mikrofon (unkalibriert, nicht in Berechnung)",
+            plotRight - 2f,
+            plotTop + 8f,
+            hinweisPaint,
+        )
+    }
+
     // 5. Ereignis-Pins auf der Zeitachse
     events.forEach { event ->
         val eventSek = ((event.timestamp - von) / 1000).coerceIn(0, gesamtSekunden)
@@ -350,3 +402,6 @@ internal fun zeichnePegelverlaufChart(
 
     canvas.drawRect(plotLeft, plotTop, plotRight, plotBottom, rahmenPaint)
 }
+
+/** Radius des dezenten Mikrofonpunkts (kleiner als der PCE-Punkt mit 2f). */
+internal const val MIKROFON_PUNKT_RADIUS = 1.4f

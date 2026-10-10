@@ -148,15 +148,13 @@ class PeriodenBerichtDatenTest {
     }
 
     /**
-     * Bugfix (Owner-Feedback 12.09.2026, "im Gesamtbericht keine Schallwerte mischen"): enthaelt
-     * ein Zeitraum sowohl eine Messgeraet- als auch eine reine Mikrofon-Session, darf das
-     * Pegelverlauf-Diagramm nicht beide Quellen im selben Graphen zeigen - kalibrierte dBA-Werte
-     * und unkalibrierte Mikrofonwerte sind nicht vergleichbar. Kennwerte (LAeq/Max/Min, weiterhin
-     * ueber ALLE Messwerte gerechnet, siehe [PeriodenBericht.nurMikrofon]) und die Ereignisliste
-     * sind davon bewusst NICHT betroffen - nur die Diagramm-Daten.
+     * Owner-Entscheidung 10.10.2026 (loest die vom 12.09.2026 ab): Mikrofonwerte fliessen in
+     * KEINE Berechnung ein. Kennwerte und Hauptkurve stammen nur aus Messgeraet-Sessions; die
+     * Mikrofonwerte stehen getrennt in [PeriodenBericht.mikrofonChartSpalten] und werden nur
+     * dezent und beschriftet im Pegelverlauf gezeichnet.
      */
     @Test
-    fun diagrammMischtKeineMessgeraetUndMikrofonwerteBeiGemischtemZeitraum() = runBlocking {
+    fun mikrofonwerteFliessenInKeineBerechnungEinUndStehenNurGetrenntImDiagramm() = runBlocking {
         val basis = 3_250_000_000_000L
         val von = basis
         val bis = basis + 100_000
@@ -182,16 +180,17 @@ class PeriodenBerichtDatenTest {
 
         val bericht = ermittlePeriodenBericht(db, von, bis)
 
-        // Kennwerte bleiben bewusst UNVERAENDERT ueber beide Quellen gerechnet (Owner-Feedback:
-        // "ich meinte nicht in einem Diagramm darstellen" - nur das Diagramm soll nicht mischen).
-        assertTrue("Kennwerte bleiben ueber beide Quellen gerechnet", bericht.kennwerte.sampleCount >= 2)
-        assertEquals("Kennwerte-Max darf weiterhin den Mikrofonwert enthalten", 90.0, bericht.kennwerte.maxDb!!, 0.01)
-        val punkteImDiagramm = bericht.chartSpalten.sumOf { it.anzahl }
+        assertEquals("Kennwerte nur aus dem Messgeraet", 1, bericht.kennwerte.sampleCount)
+        assertEquals("Mikrofonwert (90 dB) darf nicht in die Kennwerte", 60.0, bericht.kennwerte.maxDb!!, 0.01)
         assertTrue(
-            "Diagramm darf den Mikrofon-Messwert (90 dB) nicht enthalten, wenn auch eine Messgeraet-Session im Zeitraum liegt",
+            "Hauptkurve darf den Mikrofon-Messwert (90 dB) nicht enthalten",
             bericht.chartSpalten.none { it.maxDb >= 90.0 },
         )
-        assertTrue("Diagramm muss den kalibrierten Messwert weiterhin zeigen", punkteImDiagramm >= 1)
+        assertTrue("Hauptkurve muss den kalibrierten Messwert zeigen", bericht.chartSpalten.sumOf { it.anzahl } >= 1)
+        assertTrue(
+            "Mikrofonwert gehoert in die getrennte, dezente Mikrofonkurve",
+            bericht.mikrofonChartSpalten.any { it.maxDb >= 90.0 },
+        )
     }
 
     @Test

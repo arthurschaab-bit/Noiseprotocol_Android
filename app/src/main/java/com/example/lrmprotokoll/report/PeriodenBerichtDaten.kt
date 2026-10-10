@@ -19,6 +19,12 @@ data class PeriodenBericht(
     val bis: Long,
     val sessionCount: Int,
     val chartSpalten: List<ChartSpalte>,
+    /**
+     * Mikrofon-Pegel (unkalibriert), NUR zur dezenten, deutlich beschrifteten Anzeige im
+     * Pegelverlauf. Fliesst in KEINE Berechnung ein ([kennwerte] und [chartSpalten] enthalten sie
+     * nie) - Owner-Entscheidung 10.10.2026.
+     */
+    val mikrofonChartSpalten: List<ChartSpalte> = emptyList(),
     val kennwerte: AkustischeKennwerte.Kennwerte,
     val ausfallbaender: List<Ausfallband>,
     val events: List<NoiseRecord>,
@@ -64,29 +70,17 @@ suspend fun ermittlePeriodenBericht(db: AppDatabase, von: Long, bis: Long): Peri
         }
         .sortedBy { it.von }
 
-    // Bugfix (Owner-Feedback 12.09.2026, "im Gesamtbericht keine Schallwerte mischen"): Kennwerte
-    // und Ereignisliste duerfen weiterhin ueber alle Sessions des Zeitraums gerechnet werden (das
-    // war schon so und bleibt es - eine reine Mikrofon-Session zaehlt dort weiterhin mit, nur mit
-    // "Mittelwert" statt "LAeq" bezeichnet). Das PEGELVERLAUF-DIAGRAMM soll aber nicht kalibrierte
-    // dBA-Werte und unkalibrierte Mikrofonwerte im selben Graphen mischen: enthaelt der Zeitraum
-    // BEIDE Session-Arten, zeigt das Diagramm nur die kalibrierten Messgeraet-Werte: Mikrofon-
-    // Zeitraeume bleiben darin schlicht eine Luecke (kein zusaetzliches Ausfallband noetig -
-    // downsampleMesswerteFuerChart erzeugt ohnehin keinen Punkt, wo keine Messwerte hineingegeben
-    // werden). Ist der GESAMTE Zeitraum ein reiner Mikrofonlauf, gibt es nichts zu mischen - dann
-    // bleiben die Mikrofonwerte im Diagramm wie bisher die einzige Quelle.
-    val mikrofonSessionIds = sessions.filter { it.deviceAddress.isBlank() }.mapTo(mutableSetOf()) { it.id }
-    val chartMesswerte = if (nurMikrofon || mikrofonSessionIds.isEmpty()) {
-        messwerte
-    } else {
-        messwerte.filter { it.sessionId !in mikrofonSessionIds }
-    }
+    // Owner-Entscheidung 10.10.2026: Mikrofonwerte fliessen in KEINE Berechnung (Kennwerte,
+    // Diagramm-Hauptkurve) ein, sondern werden nur separat und dezent im Pegelverlauf gezeigt.
+    val getrennt = trenneMesswerte(messwerte, sessions)
 
     return PeriodenBericht(
         von = von,
         bis = bis,
         sessionCount = sessions.size,
-        chartSpalten = downsampleMesswerteFuerChart(chartMesswerte, von, bis),
-        kennwerte = AkustischeKennwerte.berechne(messwerte),
+        chartSpalten = downsampleMesswerteFuerChart(getrennt.kalibriert, von, bis),
+        mikrofonChartSpalten = downsampleMesswerteFuerChart(getrennt.mikrofon, von, bis),
+        kennwerte = AkustischeKennwerte.berechne(getrennt.kalibriert),
         ausfallbaender = ausfallbaender,
         events = events,
         nurMikrofon = nurMikrofon,
@@ -100,3 +94,23 @@ suspend fun ermittlePeriodenBericht(db: AppDatabase, von: Long, bis: Long): Peri
  */
 internal fun nurMikrofonSessions(sessions: List<SessionEntity>): Boolean =
     sessions.isNotEmpty() && sessions.all { it.deviceAddress.isBlank() }
+
+/** Messwerte, getrennt nach kalibriertem Messgeraet und unkalibriertem Mikrofon. */
+internal data class GetrennteMesswerte(
+    val kalibriert: List<com.example.lrmprotokoll.data.MeasurementEntity>,
+    val mikrofon: List<com.example.lrmprotokoll.data.MeasurementEntity>,
+)
+
+/**
+ * Mikrofon-Messwerte sind die Messwerte reiner Mikrofon-Sessions (leere
+ * [SessionEntity.deviceAddress]; [com.example.lrmprotokoll.messreihe.MeasurementRecorder] schreibt
+ * Mikrofonwerte nie in eine Messgeraet-Session). Alles andere gilt als kalibriert.
+ */
+internal fun trenneMesswerte(
+    messwerte: List<com.example.lrmprotokoll.data.MeasurementEntity>,
+    sessions: List<SessionEntity>,
+): GetrennteMesswerte {
+    val mikrofonSessionIds = sessions.filter { it.deviceAddress.isBlank() }.mapTo(mutableSetOf()) { it.id }
+    val (mikrofon, kalibriert) = messwerte.partition { it.sessionId in mikrofonSessionIds }
+    return GetrennteMesswerte(kalibriert = kalibriert, mikrofon = mikrofon)
+}

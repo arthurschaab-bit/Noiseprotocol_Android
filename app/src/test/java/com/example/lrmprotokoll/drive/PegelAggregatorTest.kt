@@ -262,16 +262,34 @@ class PegelAggregatorTest {
     }
 
     @Test
-    fun gemischteQuellenImSelbenFensterWerdenAlsGemischtMarkiert() {
+    fun messgeraetHatVorrangMikrofonwertGehtNichtInDenMittelwertEin() {
         val zeilen =
             PegelAggregator.aggregiere(
-                samples = listOf(sample(0, 60.0, LevelSource.PCE_323), sample(1, 62.0, LevelSource.MIKROFON)),
+                samples = listOf(sample(0, 60.0, LevelSource.PCE_323), sample(1, 90.0, LevelSource.MIKROFON)),
                 ereignisse = emptyList(),
                 von = t0,
                 bis = t0.plusSeconds(10),
                 fensterDauer = Duration.ofSeconds(10),
             )
-        assertEquals(QUELLE_GEMISCHT, zeilen[0].quelle)
+        assertEquals(LevelSource.PCE_323, zeilen[0].quelle)
+        assertEquals(60.0, zeilen[0].laeqDb!!, 0.0001)
+        assertEquals(60.0, zeilen[0].lafMaxDb!!, 0.0001)
+        assertEquals(1, zeilen[0].samples)
+    }
+
+    @Test
+    fun mikrofonIstFallbackNurInFensternOhneMessgeraetwert() {
+        val zeilen =
+            PegelAggregator.aggregiere(
+                samples = listOf(sample(0, 60.0, LevelSource.PCE_323), sample(11, 45.0, LevelSource.MIKROFON)),
+                ereignisse = emptyList(),
+                von = t0,
+                bis = t0.plusSeconds(20),
+                fensterDauer = Duration.ofSeconds(10),
+            )
+        assertEquals(LevelSource.PCE_323, zeilen[0].quelle)
+        assertEquals(LevelSource.MIKROFON, zeilen[1].quelle)
+        assertEquals(45.0, zeilen[1].laeqDb!!, 0.0001)
     }
 
     @Test

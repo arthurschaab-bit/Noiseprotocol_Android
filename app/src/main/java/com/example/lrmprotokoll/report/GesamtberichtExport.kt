@@ -134,6 +134,7 @@ open class GesamtberichtExport(
                 zeichnePegelverlaufChart(
                     canvas = c,
                     spalten = gesamt.chartSpalten,
+                    mikrofonSpalten = gesamt.mikrofonChartSpalten,
                     ausfallbaender = gesamt.ausfallbaender,
                     events = gesamt.events,
                     von = gesamt.von,
@@ -276,6 +277,7 @@ open class GesamtberichtExport(
             zeichnePegelverlaufChart(
                 canvas = c,
                 spalten = tag.bericht.chartSpalten,
+                mikrofonSpalten = tag.bericht.mikrofonChartSpalten,
                 ausfallbaender = tag.bericht.ausfallbaender,
                 events = tag.bericht.events,
                 von = tag.von,
