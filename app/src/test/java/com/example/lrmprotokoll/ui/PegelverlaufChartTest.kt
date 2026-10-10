@@ -10,6 +10,7 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.ChartSpalte
+import com.example.lrmprotokoll.messreihe.Zeitraum
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import org.junit.Rule
 import org.junit.Test
@@ -151,5 +152,65 @@ class PegelverlaufChartTest {
             60.0, 55.0, 72.0, 0,
         )
         composeRule.onNodeWithContentDescription(erwarteteBeschreibung).assertIsDisplayed()
+    }
+
+    @Test
+    fun chartZeigtLegendeKeineAufzeichnungBeiAufzeichnungsLuecken() {
+        // Test 8 (PROMPT_FIX_AUFZEICHNUNGSLUECKEN_SICHTBAR.md):
+        // Bei gegebenen Luecken erhaelt PegelverlaufChart sie und zeigt die Beschriftung "Keine Aufzeichnung".
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        val spalten = listOf(
+            ChartSpalte(zeitOffsetSekunden = 0, minDb = 45.0, maxDb = 65.0, mittelDb = 55.0, anzahl = 10),
+            ChartSpalte(zeitOffsetSekunden = 60, minDb = 48.0, maxDb = 72.0, mittelDb = 60.0, anzahl = 10),
+        )
+        val luecken = listOf(Zeitraum(von = 1000L + 20_000L, bis = 1000L + 40_000L))
+
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = true) {
+                PegelverlaufChart(
+                    spalten = spalten,
+                    ausfallbaender = emptyList(),
+                    sessionStart = 1000L,
+                    sessionEnde = 1000L + 60_000L,
+                    aufzeichnungsLuecken = luecken,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        val keineAufzeichnungText =
+            composeRule.activity.getString(
+                com.example.lrmprotokoll.R.string.chart_legend_no_recording,
+            )
+        composeRule.onNodeWithText(keineAufzeichnungText).assertIsDisplayed()
+    }
+
+    @Test
+    fun chartZeigtLegendeVerbindungsausfallBeiAusfallbaendern() {
+        ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+
+        val spalten = listOf(
+            ChartSpalte(zeitOffsetSekunden = 0, minDb = 45.0, maxDb = 65.0, mittelDb = 55.0, anzahl = 10),
+        )
+        val ausfall = listOf(Ausfallband(von = 1000L + 10_000L, bis = 1000L + 20_000L))
+
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = false) {
+                PegelverlaufChart(
+                    spalten = spalten,
+                    ausfallbaender = ausfall,
+                    sessionStart = 1000L,
+                    sessionEnde = 1000L + 60_000L,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        val verbindungsausfallText =
+            composeRule.activity.getString(
+                com.example.lrmprotokoll.R.string.chart_legend_connection_outage,
+            )
+        composeRule.onNodeWithText(verbindungsausfallText).assertIsDisplayed()
     }
 }

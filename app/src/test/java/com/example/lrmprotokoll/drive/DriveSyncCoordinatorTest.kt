@@ -89,25 +89,30 @@ class DriveSyncCoordinatorTest {
     }
 
     private open class FakeNoiseDao : NoiseDao {
-        override fun getAll(): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        val records = mutableListOf<NoiseRecord>()
 
-        override suspend fun getAlleAktiven(): List<NoiseRecord> = emptyList()
+        override fun getAll(): Flow<List<NoiseRecord>> = flowOf(records)
 
-        override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        override suspend fun getAlleAktiven(): List<NoiseRecord> = records.filter { it.deletedAt == null }
+
+        override fun getTrash(): Flow<List<NoiseRecord>> = flowOf(records.filter { it.deletedAt != null })
 
         override suspend fun zwischenZeitpunkt(
             von: Long,
             bis: Long,
-        ): List<NoiseRecord> = emptyList()
+        ): List<NoiseRecord> = records.filter { it.timestamp in von until bis && it.deletedAt == null }
 
         override fun zwischenZeitpunktFlow(
             von: Long,
             bis: Long,
-        ): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        ): Flow<List<NoiseRecord>> = flowOf(records.filter { it.timestamp in von until bis && it.deletedAt == null })
 
-        override fun abZeitpunktFlow(von: Long): Flow<List<NoiseRecord>> = flowOf(emptyList())
+        override fun abZeitpunktFlow(von: Long): Flow<List<NoiseRecord>> = flowOf(records.filter { it.timestamp >= von && it.deletedAt == null })
 
-        override suspend fun insert(record: NoiseRecord): Long = 0
+        override suspend fun insert(record: NoiseRecord): Long {
+            records.add(record)
+            return record.id
+        }
 
         override suspend fun update(record: NoiseRecord) {}
 
@@ -345,6 +350,44 @@ class DriveSyncCoordinatorTest {
         }
     }
 
+    /** FakeSessionDao fuer Test 7. */
+    private class FakeSessionDao(
+        val sessions: MutableList<com.example.lrmprotokoll.data.SessionEntity> = mutableListOf(),
+    ) : com.example.lrmprotokoll.data.SessionDao {
+        override suspend fun insert(session: com.example.lrmprotokoll.data.SessionEntity): Long {
+            sessions += session
+            return session.id
+        }
+        override suspend fun update(session: com.example.lrmprotokoll.data.SessionEntity) {
+            val idx = sessions.indexOfFirst { it.id == session.id }
+            if (idx >= 0) sessions[idx] = session else sessions += session
+        }
+        override suspend fun byId(id: Long): com.example.lrmprotokoll.data.SessionEntity? = sessions.find { it.id == id }
+        override fun byIdFlow(id: Long): Flow<com.example.lrmprotokoll.data.SessionEntity?> =
+            flowOf(sessions.find { it.id == id })
+        override suspend fun fuerMessvorgang(messvorgangId: Long): List<com.example.lrmprotokoll.data.SessionEntity> =
+            sessions.filter { it.messvorgangId == messvorgangId }
+        override suspend fun fotoAbfrageAbgeschlossen(messvorgangId: Long) {}
+        override suspend fun stammdatenAbfrageAbgeschlossen(messvorgangId: Long) {}
+        override suspend fun offeneSession(): com.example.lrmprotokoll.data.SessionEntity? =
+            sessions.filter { it.endedAt == null }.maxByOrNull { it.startedAt }
+        override fun offeneSessionFlow(): Flow<com.example.lrmprotokoll.data.SessionEntity?> =
+            flowOf(sessions.filter { it.endedAt == null }.maxByOrNull { it.startedAt })
+        override suspend fun letzte(): com.example.lrmprotokoll.data.SessionEntity? =
+            sessions.maxByOrNull { it.startedAt }
+        override suspend fun letzteBeendete(): com.example.lrmprotokoll.data.SessionEntity? =
+            sessions.filter { it.endedAt != null }.maxByOrNull { it.endedAt!! }
+        override fun letzteSessionFlow(): Flow<com.example.lrmprotokoll.data.SessionEntity?> =
+            flowOf(sessions.maxByOrNull { it.startedAt })
+        override suspend fun alleOffenen(): List<com.example.lrmprotokoll.data.SessionEntity> =
+            sessions.filter { it.endedAt == null }.sortedBy { it.startedAt }
+        override fun alle(): Flow<List<com.example.lrmprotokoll.data.SessionEntity>> =
+            flowOf(sessions.sortedByDescending { it.startedAt })
+        override suspend fun zwischen(von: Long, bis: Long): List<com.example.lrmprotokoll.data.SessionEntity> =
+            sessions.filter { it.startedAt < bis && (it.endedAt == null || it.endedAt >= von) }
+        override suspend fun fruehesterStart(): Long? = sessions.minOfOrNull { it.startedAt }
+    }
+
     private lateinit var levelSampleDao: FakeLevelSampleDao
     private lateinit var dailyFileDao: FakeDailyFileDao
     private lateinit var noiseDao: FakeNoiseDao
@@ -474,13 +517,13 @@ class DriveSyncCoordinatorTest {
                     .toLocalDate()
                     .minusDays(1)
             val gestrigerSchluessel = DriveAblage.tagesordner(gestern.atStartOfDay(zone).toInstant(), zone)
-            // Bereits als SYNCED mit der (hier bekannten) korrekten Zeilenzahl 1 registriert.
+            // Bereits als SYNCED mit der (nach E1 korrekten) Zeilenzahl 8640 registriert (10s-Raster = 8640 Zeilen/Tag).
             dailyFileDao.zeilen[gestrigerSchluessel] =
                 DriveDailyFileEntity(
                     date = gestrigerSchluessel,
                     fileId = "schon-da",
                     lastSyncedAt = 0L,
-                    lastRowCount = 1,
+                    lastRowCount = 8640,
                     state = DriveSyncState.SYNCED,
                 )
 
@@ -2007,6 +2050,74 @@ class DriveSyncCoordinatorTest {
         }
 
     /**
+     * Test 7: Abschnittsgrenzen: Eine Lücke, die eine Abschnittsgrenze von aggregiereInAbschnitten
+     * überspannt, erscheint vollständig und mit dem richtigen Wert (KEINE_AUFZEICHNUNG).
+     */
+    @Test
+    fun abschnittsgrenzenUeberspannendeLueckeErscheintVollstaendigUndMitRichtigemWert() =
+        runTest {
+            uhr = TestUhr(Instant.parse("2026-08-19T21:59:50Z"))
+            val mitternacht = uhr.now().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant()
+            // Abschnittsdauer bei 10s-Raster ist 1800s (30 Minuten)
+            // Session 1: 00:00 bis 00:20 (0..1200s), mit Samples
+            // Session 2: 00:40 bis 01:00 (2400..3600s), mit Samples
+            // Die Lücke zwischen 1200s und 2400s überspannt die Abschnittsgrenze bei 1800s.
+            val session1 = com.example.lrmprotokoll.data.SessionEntity(
+                id = 1,
+                startedAt = mitternacht.toEpochMilli(),
+                endedAt = mitternacht.plusSeconds(1200).toEpochMilli(),
+                deviceAddress = "AA:BB:CC:DD:EE:FF",
+                deviceName = "PCE-323",
+                weighting = "A",
+                timeWeighting = "FAST",
+            )
+            val session2 = com.example.lrmprotokoll.data.SessionEntity(
+                id = 2,
+                startedAt = mitternacht.plusSeconds(2400).toEpochMilli(),
+                endedAt = mitternacht.plusSeconds(3600).toEpochMilli(),
+                deviceAddress = "AA:BB:CC:DD:EE:FF",
+                deviceName = "PCE-323",
+                weighting = "A",
+                timeWeighting = "FAST",
+            )
+            val fakeSessionDao = FakeSessionDao(mutableListOf(session1, session2))
+
+            val samples = listOf(
+                LevelSampleEntity(at = mitternacht.plusSeconds(600).toEpochMilli(), levelDb = 55.0, source = LevelSource.PCE_323),
+                LevelSampleEntity(at = mitternacht.plusSeconds(3000).toEpochMilli(), levelDb = 58.0, source = LevelSource.PCE_323),
+            )
+            val dao = FakeLevelSampleDao().apply { eingefuegt += samples }
+            settings.driveAggregationSekunden = 10
+            val eigenerDriveApi = FakeDriveApiClient()
+
+            val koordinator = DriveSyncCoordinator(
+                driveApi = eigenerDriveApi,
+                levelSampleDao = dao,
+                dailyFileDao = FakeDailyFileDao(),
+                noiseDao = noiseDao,
+                settings = settings,
+                now = uhr,
+                zone = zone,
+                sessionDao = fakeSessionDao,
+            )
+
+            val ergebnis = koordinator.syncEinenZyklus()
+            assertTrue(ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+
+            val csvText = String(eigenerDriveApi.letzterAktualisierterInhalt!!, Charsets.UTF_8)
+            val csvZeilen = csvText.lines().filter { it.isNotBlank() && !it.startsWith("Zeit") && !it.startsWith("\uFEFFZeit") }
+
+            // Das Fenster bei 1800s (genau an der Abschnittsgrenze) muss KEINE_AUFZEICHNUNG tragen
+            // 1800s bei 10s-Raster = Zeilenindex 180
+            assertTrue(csvZeilen.size > 180)
+            val grenzZeile = csvZeilen[180]
+            assertTrue(
+                "Zeile an der Abschnittsgrenze ($grenzZeile) muss KEINE_AUFZEICHNUNG tragen",
+                grenzZeile.contains(QUELLE_KEINE_AUFZEICHNUNG),
+            )
+        }
+
+    /**
      * Review-Befund zu PR #264: Das `runCatching` je Tag in holeVersaeumteTageNach schluckte
      * auch einen Abbruch - die Schleife lief nach dem Worker-Stopp ueber alle 29 Tage weiter.
      */
@@ -2032,5 +2143,90 @@ class DriveSyncCoordinatorTest {
                 }
             }
             assertEquals("Nach dem Abbruch darf kein weiterer Tag abgefragt werden", 1, abfragen)
+        }
+
+    @Test
+    fun tagMitEreignissenAberOhneRohwerteWirdErfolgreichHochgeladen() =
+        runTest {
+            val tagStart = uhr.now().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant()
+            noiseDao.insert(
+                NoiseRecord(
+                    id = 1L,
+                    timestamp = tagStart.plusSeconds(1800).toEpochMilli(),
+                    amplitude = 1000.0,
+                    dbValue = 68.0,
+                    filePath = "",
+                    label = "Laermereignis",
+                ),
+            )
+            val eigenerDriveApi = FakeDriveApiClient()
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = eigenerDriveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+
+            val ergebnis = koordinator.syncEinenZyklus()
+            assertTrue("Tag mit Ereignissen muss erfolgreich synchronisiert werden: $ergebnis", ergebnis is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+            assertEquals(1, eigenerDriveApi.anlegenAufrufe)
+            val csvText = String(eigenerDriveApi.letzterAktualisierterInhalt!!, Charsets.UTF_8)
+            assertTrue("CSV muss das Laermereignis enthalten", csvText.contains("68.0") || csvText.contains("68,0"))
+        }
+
+    @Test
+    fun nachAufzeichnungsendeFuehrenNachfolgendeZyklenOhneNeueDatenNichtZuWiederholtemUpload() =
+        runTest {
+            val tagStart = uhr.now().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant()
+            val sample =
+                LevelSampleEntity(
+                    at = tagStart.plusSeconds(600).toEpochMilli(),
+                    levelDb = 55.0,
+                    source = LevelSource.PCE_323,
+                )
+            levelSampleDao.insert(sample)
+            val sessionDao =
+                FakeSessionDao(
+                    mutableListOf(
+                        com.example.lrmprotokoll.data.SessionEntity(
+                            id = 1L,
+                            startedAt = tagStart.toEpochMilli(),
+                            endedAt = tagStart.plusSeconds(900).toEpochMilli(),
+                            deviceAddress = "00:11:22:33:44:55",
+                            deviceName = "PCE-323",
+                            weighting = "A",
+                            timeWeighting = "FAST",
+                            messvorgangId = 1L,
+                        ),
+                    ),
+                )
+            val eigenerDriveApi = FakeDriveApiClient()
+            val koordinator =
+                DriveSyncCoordinator(
+                    driveApi = eigenerDriveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                    sessionDao = sessionDao,
+                )
+
+            val ergebnis1 = koordinator.syncEinenZyklus()
+            assertTrue("ergebnis1 war $ergebnis1", ergebnis1 is DriveSyncCoordinator.SyncErgebnis.Erfolgreich)
+            assertEquals(1, eigenerDriveApi.anlegenAufrufe)
+
+            uhr.setze(uhr.now().plusSeconds(1200))
+
+            val ergebnis2 = koordinator.syncEinenZyklus()
+            assertEquals(DriveSyncCoordinator.SyncErgebnis.KeineAenderung, ergebnis2)
+            assertEquals("Upload darf nicht erneut ausgefuehrt werden", 1, eigenerDriveApi.anlegenAufrufe)
+            assertEquals(0, eigenerDriveApi.aktualisierenAufrufe)
+            assertEquals(true, settings.driveSyncLastMessage?.startsWith("Aktuell"))
         }
 }

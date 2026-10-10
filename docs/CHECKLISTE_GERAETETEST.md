@@ -515,6 +515,12 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 | Handy neu starten, App öffnen, Bundle erzeugen | `log/lebenszyklus.jsonl` enthält den Eintrag „Gerät wurde neu gestartet“ | |
 | Einen Tag aufzeichnen | Das Protokoll reicht im Bundle trotzdem bis zum Vortag zurück | |
 
+### F27 — Aufzeichnungslücken in Tages-CSV und Pegelverlauf sichtbar machen (08.10.2026, Befund G)
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Aufzeichnung kurz beenden, nach 10 min wieder starten | Im Cockpit-Verlauf erscheint ein graues Band „Keine Aufzeichnung“; nach dem nächsten Drive-Sync enthält die Tages-CSV diese 10 min als `KEINE_AUFZEICHNUNG`. Die Datei des Vortags reicht bis 23:59:59 | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

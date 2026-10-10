@@ -934,11 +934,14 @@ Zeit;LAeq_dBA;LAFmax_dBA;LAFmin_dBA;Samples;Quelle;Ereignis;Klassifikation
 2026-08-16T08:00:00+02:00;52,3;61,8;48,1;20;PCE-323;;
 2026-08-16T08:00:10+02:00;71,4;89,2;53,0;20;PCE-323;JA;Hämmern
 2026-08-16T08:00:20+02:00;;;;0;KEINE_VERBINDUNG;;
+2026-08-16T08:00:30+02:00;;;;0;KEINE_AUFZEICHNUNG;;
 ```
 
-Die Zeile mit `KEINE_VERBINDUNG` ist wesentlich: **Lücken müssen als Lücken sichtbar sein.** Eine
-Messreihe, in der Ausfälle einfach fehlen, ist forensisch wertlos — dasselbe Argument wie bei
-`ConnectionEventEntity`. Dezimalkomma passend zum deutschen Excel.
+Die Zeilen mit `KEINE_VERBINDUNG` (Verbindungsausfall innerhalb einer aktiven Session) und
+`KEINE_AUFZEICHNUNG` (Zeitraum außerhalb jeder Session, Owner-Entscheidung E2) sind wesentlich:
+**Lücken müssen als Lücken sichtbar sein.** Eine Messreihe, in der Ausfälle einfach fehlen, ist
+forensisch wertlos — dasselbe Argument wie bei `ConnectionEventEntity`. Dezimalkomma passend zum
+deutschen Excel.
 
 #### 8.4.3 Authentifizierung und Ordnerwahl — die kritische Weichenstellung
 

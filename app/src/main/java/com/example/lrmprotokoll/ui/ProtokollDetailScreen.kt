@@ -38,6 +38,8 @@ import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
 import com.example.lrmprotokoll.messreihe.Messintegritaet
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
+import com.example.lrmprotokoll.messreihe.Zeitraum
+import com.example.lrmprotokoll.messreihe.aufzeichnungsLuecken
 import com.example.lrmprotokoll.messreihe.bewerteMessintegritaet
 import com.example.lrmprotokoll.messreihe.downsampleAggregateFuerChart
 import com.example.lrmprotokoll.messreihe.downsampleMesswerteFuerChart
@@ -108,6 +110,7 @@ fun ProtokollDetailScreen(
     var gapAnzahl by remember { mutableIntStateOf(0) }
     var unbestaetigteWerte by remember { mutableIntStateOf(0) }
     var reportConfig by remember { mutableStateOf<ReportConfigEntity?>(null) }
+    var aufzeichnungsLuecken by remember { mutableStateOf<List<Zeitraum>>(emptyList()) }
     // Owner-Feature-Auftrag 12.09.2026: Kategoriewahl fuer einen Galerie-Import - eine Auswahl
     // gilt fuer den ganzen (moeglicherweise mehrere Fotos umfassenden) Picker-Vorgang.
     var zeigeGalerieKategorieDialog by remember { mutableStateOf(false) }
@@ -180,13 +183,36 @@ fun ProtokollDetailScreen(
                 fotos = geladeneFotos
             }
         }
-
     }
 
     LaunchedEffect(session?.endedAt) {
         while (session != null && session?.endedAt == null) {
             jetzt = System.currentTimeMillis()
             delay(1000)
+        }
+    }
+
+    LaunchedEffect(
+        session?.id,
+        session?.startedAt,
+        session?.endedAt,
+    ) {
+        val s = session ?: return@LaunchedEffect
+        val sessions = withContext(Dispatchers.IO) {
+            if (s.messvorgangId != 0L) {
+                container.database.sessionDao().fuerMessvorgang(s.messvorgangId)
+            } else {
+                listOf(s)
+            }
+        }
+        val start = sessions.minOfOrNull { it.startedAt } ?: s.startedAt
+        val ende = sessions.maxOfOrNull { it.endedAt ?: Long.MIN_VALUE }?.takeIf { it > Long.MIN_VALUE }
+            ?: (s.endedAt ?: System.currentTimeMillis())
+        val offeneId = sessions.firstOrNull { it.endedAt == null }?.id
+        aufzeichnungsLuecken = if (sessions.size > 1 && start < ende) {
+            aufzeichnungsLuecken(sessions, start, ende, offeneId)
+        } else {
+            emptyList()
         }
     }
 
@@ -451,6 +477,7 @@ fun ProtokollDetailScreen(
                         laeqDb = kennwerte?.leqDb,
                         isLive = isLive,
                         height = 180.dp,
+                        aufzeichnungsLuecken = aufzeichnungsLuecken,
                     )
                 }
             }
