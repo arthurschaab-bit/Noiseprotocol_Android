@@ -224,6 +224,7 @@ fun SettingsScreen(
     var aiMode by remember { mutableStateOf(settings.aiMode) }
     var aiEinSchwelle by remember { mutableFloatStateOf(settings.aiEinSchwelle) }
     var aiAusSchwelle by remember { mutableFloatStateOf(settings.aiAusSchwelle) }
+    var kiNachtlauf by remember { mutableStateOf(settings.kiNachtlauf) }
     var aiNormalisierung by remember { mutableStateOf(settings.aiNormalisierung) }
 
     // F8: Ruhezeiten
@@ -1148,6 +1149,32 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                if (aiMode != "OFF") {
+                    // Owner-Entscheidung 10.10.2026 (docs/PROMPT_KI_BATCH_HINTERGRUND.md):
+                    // nächtlicher KI-Batch über alle unklassifizierten Aufnahmen, Default an.
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_ki_nachtlauf_title), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                stringResource(R.string.settings_ki_nachtlauf_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = kiNachtlauf,
+                            onCheckedChange = {
+                                kiNachtlauf = it
+                                settings.kiNachtlauf = it
+                                com.example.lrmprotokoll.audio.KiBatchPlanung
+                                    .planeNachtlauf(context, it)
+                            },
+                            modifier = Modifier.testTag("switch_ki_nachtlauf"),
+                        )
+                    }
+                }
 
                 // UX-Feedback: Einstellungen ist nur fuer die Default-Betriebsart zustaendig -
                 // der eigentliche "jetzt klassifizieren"-Trigger lebt seitdem pro Aufnahme (Home,

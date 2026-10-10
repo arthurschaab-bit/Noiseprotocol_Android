@@ -450,8 +450,6 @@
     <string name="ai_batch_running">KI-Verarbeitung läuft …</string>
     <string name="ai_batch_progress">KI-Verarbeitung: %1$d von %2$d</string>
     <string name="action_ai_batch_day">Unklassifizierte Aufnahmen dieses Tages jetzt klassifizieren</string>
-    <string name="ai_batch_day_result">%1$d Aufnahme(n) für %2$s klassifiziert</string>
-    <string name="ai_batch_day_result_empty">Keine der ausgewählten Aufnahmen konnte klassifiziert werden</string>
     <string name="action_neu_bewerten">Neu bewerten (ohne erneute KI-Analyse)</string>
     <string name="ai_reevaluated_count">%1$d Aufnahme(n) neu bewertet</string>
     <string name="ai_reevaluated_empty">Keine Aufnahme mit gespeicherten Rohdaten gefunden - Neu bewerten wirkt erst ab neu klassifizierten Aufnahmen</string>
@@ -799,4 +797,10 @@
     <string name="cockpit_unterbrechung_eintrag">Unterbrochen von %1$s bis %2$s (läuft wieder)</string>
     <string name="cockpit_unterbrechung_eintrag_unbekannt">Unterbrochen bis %1$s (Beginn unbekannt, läuft wieder)</string>
     <string name="btn_unterbrechung_bestaetigen">Verstanden</string>
+    <string name="ki_batch_kanal_name">KI-Klassifizierung</string>
+    <string name="ki_batch_benachrichtigung_titel">KI-Klassifizierung läuft</string>
+    <string name="ki_batch_abbrechen">Abbrechen</string>
+    <string name="ki_batch_gestartet">KI-Klassifizierung läuft im Hintergrund weiter, auch bei gesperrtem Bildschirm</string>
+    <string name="settings_ki_nachtlauf_title">Nachts automatisch klassifizieren</string>
+    <string name="settings_ki_nachtlauf_desc">Klassifiziert gegen 01:30 Uhr alle noch unklassifizierten Aufnahmen, auch bei gesperrtem Bildschirm</string>
 </resources>
