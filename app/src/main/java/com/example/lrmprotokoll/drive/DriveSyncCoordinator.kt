@@ -281,6 +281,7 @@ class DriveSyncCoordinator(
         // WAV-Dateien in stündliche 1h-ZIP-Archive bündeln und hochladen, wenn Option aktiviert ist
         ladeFotosHoch(ordnerId)
         ladeVideosHoch(ordnerId)
+        ladeKlassifikationsNachtraegeHoch(ordnerId)
         ladeDatenbankSicherungHoch(ordnerId, jetzt)
 
         if (settings.driveUploadWav) {
@@ -731,6 +732,44 @@ class DriveSyncCoordinator(
         }
 
         return AbschnittsAggregation(zeilen, hatteRohwerte)
+    }
+
+    /**
+     * Laedt fuer jeden vom KI-Batch vorgemerkten Tag die Nachtragsdatei
+     * `klassifikation_nachtrag_JJJJ-MM-TT.csv` in den Schallmessung-Ordner des Tages (Owner-
+     * Entscheidung 10.10.2026, Variante A, docs/PROMPT_KI_BATCH_HINTERGRUND.md). Bewusst NICHT
+     * die Tages-CSV neu: deren Rohwerte sind nach drei Tagen geloescht, eine neu erzeugte CSV
+     * ueberschriebe die gute in Drive mit einer ohne Pegel. Ein Tag bleibt vorgemerkt, bis sein
+     * Upload gelungen ist; die Datei wird bei erneutem Nachtrag ersetzt, nicht verdoppelt.
+     */
+    private suspend fun ladeKlassifikationsNachtraegeHoch(ordnerId: String) {
+        for (tag in settings.kiNachtragOffeneTage.sorted()) {
+            runCatching {
+                val datum = LocalDate.parse(tag)
+                val tagVon = datum.atStartOfDay(zone).toInstant()
+                val tagBis = datum.plusDays(1).atStartOfDay(zone).toInstant()
+                val records =
+                    noiseDao
+                        .zwischenZeitpunkt(tagVon.toEpochMilli(), tagBis.toEpochMilli())
+                        .filter { it.detectedLabel != null }
+                if (records.isEmpty()) return@runCatching
+                val ordner = ordnerbaum.ordnerFuer(ordnerId, tag, DriveKategorie.SCHALLMESSUNG).getOrThrow()
+                val inhalt = DriveCsv.schreibeKlassifikationsNachtrag(records, zone).toByteArray(Charsets.UTF_8)
+                schreibeDatei(null, "klassifikation_nachtrag_$tag.csv", ordner, inhalt).getOrThrow()
+            }.abbruchWeiterreichen()
+                .onSuccess { settings.erledigeKiNachtrag(tag) }
+                .onFailure { fehler ->
+                    Log.w(TAG, "KI-Nachtrag fuer $tag nicht hochgeladen: ${fehler.message}")
+                    diagnosticsReporter?.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.DRIVE_UPLOAD_FAILED,
+                        component = "DriveSyncCoordinator",
+                        operation = "ladeKlassifikationsNachtraegeHoch",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        cause = fehler,
+                        details = mapOf("tag" to tag),
+                    )
+                }
+        }
     }
 
     /**

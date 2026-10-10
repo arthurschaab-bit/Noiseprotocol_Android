@@ -353,4 +353,59 @@ class DriveWavUploadAndCsvTest {
         // Da die Stunde abgeschlossen und gecacht ist, darf die ZIP-Datei gar nicht erst hochgeladen werden
         assertTrue("ZIP darf nicht hochgeladen werden, da bereits gecacht", !driveApi.hochgeladeneDateien.containsKey(zipName))
     }
+
+    /**
+     * KI-Nachtrag (docs/PROMPT_KI_BATCH_HINTERGRUND.md, Variante A): fuer einen vorgemerkten Tag
+     * landet eine eigene Nachtragsdatei in Drive, die Tages-CSV dieses Tages wird dafuer nicht
+     * neu erzeugt, und der Tag ist danach nicht mehr vorgemerkt.
+     */
+    @Test
+    fun vorgemerkterTagBekommtNachtragsdateiOhneNeueTagesCsv() =
+        runTest {
+            settings.driveUploadWav = false
+            noiseDao.insert(
+                NoiseRecord(
+                    id = 7,
+                    timestamp = Instant.parse("2026-08-20T08:15:00Z").toEpochMilli(),
+                    amplitude = 0.0,
+                    dbValue = 63.4,
+                    filePath = "/x/noise_20260820_101500.wav",
+                    detectedLabel = "Bohren",
+                ),
+            )
+            settings.merkeKiNachtragVor(listOf("2026-08-20"))
+            // Der Tag ist laengst nach Tagesende synchronisiert - der Normalfall fuer alte Tage,
+            // deren Rohwerte schon geloescht sind.
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = "2026-08-20",
+                    fileId = "file-laermprotokoll_2026-08-20.csv",
+                    lastSyncedAt = uhr.now().toEpochMilli(),
+                    lastRowCount = 1,
+                    state = DriveSyncState.SYNCED,
+                ),
+            )
+
+            val coordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+            coordinator.syncEinenZyklus()
+
+            val nachtrag = driveApi.hochgeladeneDateien["klassifikation_nachtrag_2026-08-20.csv"]
+            assertNotNull("Nachtragsdatei muss hochgeladen sein", nachtrag)
+            val text = String(nachtrag!!, Charsets.UTF_8)
+            assertTrue(text, text.contains("noise_20260820_101500.wav;63,4;Bohren"))
+            assertTrue(
+                "Die Tages-CSV des Nachtragstags darf nicht neu erzeugt werden",
+                !driveApi.hochgeladeneDateien.containsKey("laermprotokoll_2026-08-20.csv"),
+            )
+            assertTrue(settings.kiNachtragOffeneTage.isEmpty())
+        }
 }

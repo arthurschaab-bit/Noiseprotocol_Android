@@ -56,7 +56,7 @@ import com.example.lrmprotokoll.audio.EXTRA_START_AUDIO_MONITORING
 import com.example.lrmprotokoll.audio.NoiseClassifier
 import com.example.lrmprotokoll.audio.berechneBaulaermMinutenDesTages
 import com.example.lrmprotokoll.audio.bewerteAlleNeu
-import com.example.lrmprotokoll.audio.klassifiziereUndSpeichere
+import com.example.lrmprotokoll.audio.KiBatchPlanung
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
@@ -580,6 +580,8 @@ fun NoiseProtocolApp(
     var showOverflowMenu by remember { mutableStateOf(false) }
     var batchLaeuft by remember { mutableStateOf(false) }
     var batchFortschritt by remember { mutableStateOf(0 to 0) }
+    // IDs der KI-Batch-Laeufe, die in dieser Sitzung gestartet wurden (fuer die Abschlussmeldung).
+    val gestarteteKiBatches = remember { mutableStateListOf<java.util.UUID>() }
 
     val selectedIds = remember { mutableStateListOf<Long>() }
     val collapsedDays = remember { mutableStateListOf<String>() }
@@ -714,10 +716,40 @@ fun NoiseProtocolApp(
             )
         }
 
+    // KI-Batch als Hintergrundarbeit (docs/PROMPT_KI_BATCH_HINTERGRUND.md): Zustand und
+    // Fortschritt kommen vom KiBatchWorker, nicht mehr aus einer Schleife in diesem Scope - die
+    // lief bei gesperrtem Bildschirm nicht weiter und brach beim Schliessen der App ab.
+    val kiBatchInfos by remember {
+        runCatching {
+            androidx.work.WorkManager
+                .getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(com.example.lrmprotokoll.audio.KI_BATCH_WORK_NAME)
+        }.getOrElse { kotlinx.coroutines.flow.flowOf(emptyList()) }
+    }.collectAsState(initial = emptyList())
+    val laufenderKiBatch = kiBatchInfos.firstOrNull { !it.state.isFinished }
+    val gemeldeteKiBatches = remember { mutableStateListOf<java.util.UUID>() }
+    LaunchedEffect(kiBatchInfos) {
+        kiBatchInfos
+            .filter { it.state == androidx.work.WorkInfo.State.SUCCEEDED && it.id !in gemeldeteKiBatches }
+            .forEach { info ->
+                gemeldeteKiBatches += info.id
+                // Nur Laeufe melden, die diese Ansicht selbst gestartet hat - kein Snackbar fuer
+                // einen alten, laengst beendeten Lauf beim naechsten Oeffnen der App.
+                if (info.id in gestarteteKiBatches) {
+                    val anzahl = info.outputData.getInt(com.example.lrmprotokoll.audio.KiBatchWorker.KEY_ANZAHL, 0)
+                    onShowSnackbar(context.getString(R.string.ai_classified_count, anzahl), null, null)
+                }
+            }
+    }
+
     // Beide States hier lesen, damit der gesamte Screen auf den Batch-Zustand reagiert. Nur
     // innerhalb des LazyColumn-Builders gelesen koennte eine spaetere Aenderung unsichtbar bleiben.
-    val istBatchAktiv = batchLaeuft
-    val aktuellerBatchFortschritt = batchFortschritt
+    val istBatchAktiv = batchLaeuft || laufenderKiBatch != null
+    val aktuellerBatchFortschritt =
+        laufenderKiBatch?.let {
+            it.progress.getInt(com.example.lrmprotokoll.audio.KiBatchWorker.KEY_FERTIG, 0) to
+                it.progress.getInt(com.example.lrmprotokoll.audio.KiBatchWorker.KEY_GESAMT, 0)
+        } ?: batchFortschritt
 
     // Single LazyColumn Layout für die gesamte Startseite
     LazyColumn(
@@ -840,21 +872,18 @@ fun NoiseProtocolApp(
                                     batchLaeuft = true
                                     val kandidaten = unklassifizierteAufnahmen(records)
                                     batchFortschritt = 0 to kandidaten.size
+                                    if (batchClassifyOverride == null) {
+                                        // Hintergrundarbeit statt Schleife in diesem Scope, siehe kiBatchInfos.
+                                        batchLaeuft = false
+                                        gestarteteKiBatches += KiBatchPlanung.starteJetzt(context)
+                                        onShowSnackbar(context.getString(R.string.ki_batch_gestartet), null, null)
+                                        return@DropdownMenuItem
+                                    }
                                     scope.launch {
                                         try {
-                                            val onFortschritt: (Int, Int) -> Unit =
-                                                { fertig, gesamt -> batchFortschritt = fertig to gesamt }
                                             val count =
-                                                if (batchClassifyOverride != null) {
-                                                    batchClassifyOverride(kandidaten, onFortschritt)
-                                                } else {
-                                                    klassifiziereUndSpeichere(
-                                                        kandidaten = kandidaten,
-                                                        classifier = classifier.value,
-                                                        dao = dao,
-                                                        rohdatenDao = rohdatenDao,
-                                                        onFortschritt = onFortschritt,
-                                                    )
+                                                batchClassifyOverride(kandidaten) { fertig, gesamt ->
+                                                    batchFortschritt = fertig to gesamt
                                                 }
                                             onShowSnackbar(context.getString(R.string.ai_classified_count, count), null, null)
                                         } finally {
@@ -1414,35 +1443,27 @@ fun NoiseProtocolApp(
                                 )
                                 val unklassifizierteDesTages = unklassifizierteAufnahmen(dailyRecords)
                                 if (unklassifizierteDesTages.isNotEmpty()) {
-                                    val wirdKlassifiziert = klassifizierendeTage.contains(date)
+                                    // Der Tag zeigt seinen Ladezustand nur, solange der KI-Batch laeuft.
+                                    val wirdKlassifiziert = laufenderKiBatch != null && klassifizierendeTage.contains(date)
                                     IconButton(
                                         onClick = {
-                                            if (batchLaeuft) return@IconButton
-                                            batchLaeuft = true
-                                            batchFortschritt = 0 to unklassifizierteDesTages.size
-                                            scope.launch {
-                                                klassifizierendeTage.add(date)
-                                                try {
-                                                    val count =
-                                                        klassifiziereUndSpeichere(
-                                                            kandidaten = unklassifizierteDesTages,
-                                                            classifier = classifier.value,
-                                                            dao = dao,
-                                                            rohdatenDao = rohdatenDao,
-                                                            onFortschritt = { fertig, gesamt -> batchFortschritt = fertig to gesamt },
-                                                        )
-                                                    val msg =
-                                                        if (count > 0) {
-                                                            context.getString(R.string.ai_batch_day_result, count, date)
-                                                        } else {
-                                                            context.getString(R.string.ai_batch_day_result_empty)
-                                                        }
-                                                    onShowSnackbar(msg, null, null)
-                                                } finally {
-                                                    klassifizierendeTage.remove(date)
-                                                    batchLaeuft = false
-                                                }
-                                            }
+                                            if (istBatchAktiv) return@IconButton
+                                            val zone = java.time.ZoneId.systemDefault()
+                                            val ersteAufnahme = unklassifizierteDesTages.first().timestamp
+                                            val tagVon =
+                                                java.time.Instant
+                                                    .ofEpochMilli(ersteAufnahme)
+                                                    .atZone(zone)
+                                                    .toLocalDate()
+                                                    .atStartOfDay(zone)
+                                            klassifizierendeTage.add(date)
+                                            gestarteteKiBatches +=
+                                                KiBatchPlanung.starteJetzt(
+                                                    context,
+                                                    von = tagVon.toInstant().toEpochMilli(),
+                                                    bis = tagVon.plusDays(1).toInstant().toEpochMilli(),
+                                                )
+                                            onShowSnackbar(context.getString(R.string.ki_batch_gestartet), null, null)
                                         },
                                         enabled = !istBatchAktiv && !wirdKlassifiziert,
                                         // F-21: Touch-Flaeche auf 48 dp, Icon bleibt optisch gleich gross.

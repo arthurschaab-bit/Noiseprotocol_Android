@@ -4,6 +4,8 @@ import com.example.lrmprotokoll.data.KlassifikationsRohdatenDao
 import com.example.lrmprotokoll.data.NoiseDao
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.File
 
 /**
@@ -24,6 +26,11 @@ import java.io.File
  * jede Aufnahme wird sonst nur einmal ueberhaupt inferenziert, hier ist bereits eine `recordId`
  * bekannt (anders als beim Online-Pfad), die Rohdaten koennen also direkt mitgespeichert werden.
  *
+ * Prueft vor jeder Aufnahme, ob der Aufrufer abgebrochen wurde - der [KiBatchWorker] laeuft
+ * ueber Stunden, und "Abbrechen" in seiner Benachrichtigung soll nicht erst nach dem letzten
+ * Kandidaten greifen. [onGespeichert] meldet jede Aufnahme mit gespeicherter Entscheidung, damit
+ * der Worker die betroffenen Tage fuer den Drive-Nachtrag vormerken kann.
+ *
  * @return Anzahl der Aufnahmen mit gespeicherter Klassifizierungsentscheidung.
  */
 suspend fun klassifiziereUndSpeichere(
@@ -31,11 +38,13 @@ suspend fun klassifiziereUndSpeichere(
     classifier: RohdatenClassifier,
     dao: NoiseDao,
     rohdatenDao: KlassifikationsRohdatenDao,
+    onGespeichert: (NoiseRecord) -> Unit = {},
     onFortschritt: (bearbeitet: Int, gesamt: Int) -> Unit = { _, _ -> },
 ): Int {
     var anzahl = 0
     onFortschritt(0, kandidaten.size)
     for ((index, record) in kandidaten.withIndex()) {
+        currentCoroutineContext().ensureActive()
         try {
             val file = File(record.filePath)
             if (!file.exists() || !file.isFile) continue
@@ -46,8 +55,10 @@ suspend fun klassifiziereUndSpeichere(
             rohdatenDao.loescheFuerRecord(record.id)
             rohdatenDao.insert(ergebnis.rohdaten.mitRecordId(record.id))
             val erkannt = ergebnis.label ?: NICHT_ERKANNT_MARKER
-            dao.update(record.copy(detectedLabel = erkannt))
+            val aktualisiert = record.copy(detectedLabel = erkannt)
+            dao.update(aktualisiert)
             anzahl++
+            onGespeichert(aktualisiert)
         } finally {
             onFortschritt(index + 1, kandidaten.size)
         }

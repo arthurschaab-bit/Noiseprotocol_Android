@@ -140,6 +140,37 @@ class SettingsManager(
         }
 
     /**
+     * KI-Nachtlauf (Owner-Entscheidung 10.10.2026, docs/PROMPT_KI_BATCH_HINTERGRUND.md): jede
+     * Nacht alle noch unklassifizierten Aufnahmen im Hintergrund klassifizieren, auch bei
+     * gesperrtem Bildschirm. Default AN, damit keine Aufnahme ohne Label bleibt. Wirkt nur, wenn
+     * [aiMode] nicht "OFF" ist - wer die KI ganz abschaltet, will auch nachts keine.
+     */
+    var kiNachtlauf: Boolean
+        get() = prefs.getBoolean("ki_nachtlauf", true)
+        set(value) = prefs.edit().putBoolean("ki_nachtlauf", value).apply()
+
+    /**
+     * Tage (JJJJ-MM-TT), deren Aufnahmen der KI-Batch nachtraeglich klassifiziert hat und deren
+     * Nachtragsdatei noch nicht in Drive liegt. Die Tages-CSV selbst wird dafuer NICHT neu
+     * erzeugt: deren Rohwerte sind nach drei Tagen geloescht, eine neue CSV ueberschriebe die
+     * gute in Drive mit einer ohne Pegel (Owner-Entscheidung 10.10.2026, Variante A).
+     */
+    val kiNachtragOffeneTage: Set<String>
+        get() = prefs.getStringSet("ki_nachtrag_offene_tage", emptySet()) ?: emptySet()
+
+    /** Synchronisiert, weil KI-Worker und Drive-Sync gleichzeitig schreiben koennen. */
+    @Synchronized
+    fun merkeKiNachtragVor(tage: Collection<String>) {
+        if (tage.isEmpty()) return
+        prefs.edit().putStringSet("ki_nachtrag_offene_tage", kiNachtragOffeneTage + tage).commit()
+    }
+
+    @Synchronized
+    fun erledigeKiNachtrag(tag: String) {
+        prefs.edit().putStringSet("ki_nachtrag_offene_tage", kiNachtragOffeneTage - tag).commit()
+    }
+
+    /**
      * KI-Umbau Etappe 2.6: die alte, pauschale "Einheitsschwelle" (`ai_confidence`, 30% fuer
      * jede Klasse) ist abgeschafft - bei einem Sigmoid-Multilabel-Modell wie YAMNet erreichen
      * breite Klassen wie "Speech" regelmaessig 0.8+, spezifische wie "Jackhammer" oft nur
