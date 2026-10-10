@@ -573,7 +573,9 @@ diesen Mechanismus zeigt.
 - **Symptom:** In etwa einem von vier lokalen Vollläufen fallen 8–10 Tests in sechs Klassen mit
   `AppNotIdleException`: `HomeNavigationComposeTest`, `MainActivityLaunchTest`,
   `MarkNoiseEventBottomSheetTest`, `MeterScreenComposeTest`, `MeterScreenPermissionAndScanTest`,
-  `ReportConfigSettingsTest`. Auf der CI bisher 3 rote von 11 Läufen.
+  `ReportConfigSettingsTest`; seit PR #243 zusätzlich `MeterKoppelnBestaetigungTest`
+  (siehe „Eine messbare Lücke in der Instrumentierung" unten). Auf der CI 6 rote von 33
+  aussagekräftigen Läufen (Stand 06.10.2026).
 - **Nicht zu verwechseln mit 4.5.** Dort war die Ursache die Endlosanimation in
   `BluetoothStatusBadge`, behoben in PR #189 (`ebb9f17`). Dieser Fix ist intakt — nachgesehen am
   01.10.2026: `rememberInfiniteTransition` nur bei `isAnimating`, Alpha in der Draw-Phase über
@@ -777,6 +779,97 @@ gegen eine einzelne Wartung, sondern gegen deren Summe — ein roter Lauf verlie
 betroffenem Test, und ein schlechterer Lauf als der gemessene frisst sonst das Zeitbudget des
 Jobs.
 
+#### Zehn Diagnosen aus einem Lauf (06.10.2026) — fünf Einstiegspunkte statt einem
+
+Der Wächter hat geliefert, worauf der vorige Unterabschnitt gewartet hat. Lauf `37179022936`
+(Versuch 1, PR #254, Branch `codex/ux-phase7-f20-rest`, Head `526d43a`, 04.10.2026) fiel mit
+13 Fehlschlägen und hinterließ `app/build/zeitwaechter-diagnose.txt` mit 880 Zeilen in zehn
+`ZEITWAECHTER`-Blöcken. Die Datei lag im Artefakt `unit-test-reports` — der Artefaktpfad aus
+PR #245 hat sich damit zum zweiten Mal bewährt.
+
+**Der Takt-Befund bleibt unverändert.** `ComposeIdlingResource.isIdleNow` stellt die Testuhr
+weiter (`isIdleNow` → `advanceTimeByFrame` → `advanceDispatcher` →
+`TestCoroutineScheduler.advanceTimeBy`); die „Millionen attempts" sind weitergestellte Frames.
+Bestätigt in allen zehn Blöcken.
+
+**Korrigiert: es ist nicht „ein `waitUntil`, dessen Prädikat Semantikknoten holt".** Das ist
+*ein* Spezialfall von fünf. Belegt sind fünf Einstiegspunkte, die alle in dieselbe Endlosschleife
+laufen:
+
+| Einstiegspunkt | Klasse(n) | Blöcke |
+| --- | --- | --- |
+| `setContent` selbst | `MeterScreenComposeTest` (4×), `MeterScreenPermissionAndScanTest` (1×) | 5 |
+| `performClick` → `performTouchInput` → `fetchSemanticsNode` → `getRoots` | `HomeNavigationComposeTest` | 2 |
+| `composeTestRule.waitForIdle()` direkt | `MainActivityLaunchTest` | 1 |
+| `runOnIdle` über `StateRestorationTester.emulateSavedInstanceStateRestore` | `MarkNoiseEventBottomSheetTest` | 1 |
+| `waitUntil`-Prädikat mit `fetchSemanticsNodes` | `ReportConfigSettingsTest` | 1 |
+
+Jeder Pfad, der in `waitForIdle` mündet, steht unter Espressos Master-Idling-Policy (60 s) — nicht
+nur der Prädikat-Fall. Das erklärt die 60 s auch für Tests, die überhaupt kein eigenes Budget
+angeben.
+
+**Fünf von zehn hängen in `setContent`.** Das ist der eigentlich überraschende Teil und
+verschiebt den Verdacht. Der Hänger passiert dort, *bevor* der Test irgendetwas tut, während der
+ersten Komposition — ohne jedes geöffnete Popup. Prüfpunkt 1 („nach dem Öffnen eines Popups kein
+pauschales Warten") greift für diese fünf Fälle also nicht: es ist kein geöffnetes Popup im Spiel.
+
+**In keinem der zehn Blöcke erscheint ein App-eigener Composable-Rahmen.** Die Schleife liegt
+vollständig in der Compose-Testinfrastruktur. Wer im Stack nach `com.example.lrmprotokoll` sucht,
+findet nur den Testrumpf selbst.
+
+#### Der naheliegende Verdächtige — und was ihm fehlt
+
+`BluetoothStatusBadge.kt:79–89` nutzt `rememberInfiniteTransition` + `infiniteRepeatable`, aktiv
+genau dann, wenn der Zustand `SCANNING`, `CONNECTING`, `DISCOVERING`, `SUBSCRIBING` oder
+`RECONNECTING` ist. Eine unendliche Animation fordert dauerhaft Frames an — genau das, was die
+Schleife braucht. Das Badge rendern `MainActivity` (766), `DiagnoseScreen` (302),
+`SettingsScreen` (451), `ProtokollDetailScreen` (240) und `MeterScreen` (312); das deckt die
+betroffenen Klassen weitgehend ab.
+
+**Das ist ausdrücklich kein neuer Befund.** Genau diese Animation war die Ursache von
+Abschnitt 4.5 und wurde in PR #189 (`ebb9f17`) behoben. Der Fix ist intakt — die Bedingung
+`if (isAnimating)` steht unverändert im Quelltext. Neu ist nur die Frage, die der `setContent`-Befund
+aufwirft: **die Bedingung schließt die Animation nicht aus, sie macht sie zustandsabhängig.**
+Rendert ein Test den Screen mit einem Verbindungszustand aus dieser Menge, läuft die Animation
+wieder — und zwar ab der ersten Komposition. Die Kopfdokumentation von
+`MessgeraetKopplungAufraeumenRegel.kt` nennt diesen Zusammenhang selbst
+(„Zuständen wie SCANNING und CONNECTING, in denen BluetoothStatusBadge animiert").
+
+**Was fehlt, ist der Beweis.** Keine der zehn Diagnosen schreibt den `ConnectionState` mit. Ob der
+Zustand in diesen Läufen tatsächlich in der animierenden Menge lag, ist damit offen. Die Diagnose
+müsste ihn mitschreiben — eine kleine Erweiterung der `ZeitwaechterRegel`, und der billigste
+nächste Schritt (offener Punkt, Abschnitt 5a).
+
+#### Eine naheliegende Erklärung, die die Reihenfolge ausschließt
+
+Die Vermutung, ein Leck aus `MeterKoppelnBestaetigungTest` (die Klasse pinnt ein Gerät als ihren
+eigentlichen Zweck) verunreinige die folgenden Klassen, trägt für diesen Lauf **nicht**. Die
+Zeitstempel widerlegen sie: `HomeNavigationComposeTest` fiel um 05:12:16 und damit **vor**
+`MeterKoppelnBestaetigungTest` um 05:16:19. `DiagnoseScreenComposeTest` lief um 05:12:11 direkt
+davor — und war grün; sie trägt die Aufräumregel.
+
+#### Eine messbare Lücke in der Instrumentierung
+
+Der Lauf hatte 13 Fehlschläge, aber nur zehn Diagnoseblöcke. Die fehlenden drei sind genau die
+`MeterKoppelnBestaetigungTest`-Fälle: die Klasse trägt **weder** die `ZeitwaechterRegel` **noch**
+die `MessgeraetKopplungAufraeumenRegel`. Sie kam über PR #243, PR #245 war davor abgezweigt — die
+Klasse ist in beiden Listen durchgerutscht. Sie rendert `MeterScreen` unter
+`@GraphicsMode(NATIVE)` und gehört damit fachlich in die Menge dieses Abschnitts; der
+betroffene-Klassen-Liste in der Symptombeschreibung oben fehlt sie aus demselben Grund.
+
+#### Zählstand und eine Richtigstellung in eigener Sache
+
+**Stand 06.10.2026: 6 rote von 33 aussagekräftigen CI-Läufen** (18 %), lokal 5 von 14. Rote Läufe:
+`36842594352` (Versuch 1, PR #243, 13 Fehlschläge), `36856413949` (Versuch 1, main `31e0d7d`,
+1 Fehlschlag), `37179022936` (Versuch 1, PR #254, 13 Fehlschläge, mit Diagnose).
+
+Am 01.10.2026 habe ich nach **einem** Lauf gemeldet, PR #245 habe die Rate „nicht bewegt". Das war
+zu stark. Mit 20 weiteren Läufen: 5 von 13 (38 %) vor der Messreihe, 6 von 33 (18 %) danach.
+Beides bleibt richtig zu sagen — PR #245 ist **keine belegte Behebung** (schlägt e) zu, schlägt es
+mit unveränderter Härte zu: 13 Fehlschläge), aber die Häufigkeit ist gefallen. 20 Läufe sind kein
+Trend. Weder „behoben" noch „unverändert" trifft es; wer eine der beiden Formulierungen braucht,
+braucht mehr Läufe.
+
 ## 5 · Prüfpunkte & Empfehlungen nach AGENTS.md §8a
 
 Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidung von Flakes:
@@ -811,3 +904,30 @@ Für künftige Compose- und UI-Tests gelten folgende Best Practices zur Vermeidu
    Grenze muss **unter** 60 s liegen, weil Espressos Master-Idling-Policy dort abbricht; ein
    Wächter mit größerer Grenze löst nie aus. Die Summenschranke gegen viele solcher 60-Sekunden-
    Verluste in einem Lauf steht als `tasks.withType<Test>` in `app/build.gradle.kts`.
+7. **Ein Hänger in `setContent` braucht keine Interaktion (06.10.2026, Abschnitt 4.8):** fünf von
+   zehn Wächter-Diagnosen hängen in `setContent` selbst — vor der ersten Testaktion, ohne
+   geöffnetes Popup. Punkt 1 und 2 zielen auf das Warten *nach* einer Interaktion und greifen für
+   diesen Fall nicht. Wer einen vollständigen Screen rendert, muss deshalb den Zustand
+   kontrollieren, mit dem er ihn rendert: ein Verbindungszustand aus
+   {`SCANNING`, `CONNECTING`, `DISCOVERING`, `SUBSCRIBING`, `RECONNECTING`} lässt
+   `BluetoothStatusBadge` ab der ersten Komposition animieren (`BluetoothStatusBadge.kt:79–89`).
+   `IDLE` oder `STREAMING` als Ausgangszustand zu setzen, ist billiger als jede Wartestrategie.
+   **Nicht belegt**, dass das die Ursache der fünf Fälle ist — siehe dort.
+
+## 5a · Offene Punkte beim Owner (Stand 06.10.2026)
+
+Festgehalten, damit sie nicht nur im Prompt einer Routine stehen. Keiner davon ist ohne
+Owner-Entscheidung anzufassen (AGENTS.md §8a).
+
+1. **Vier-Zeilen-Folge-PR:** `MeterKoppelnBestaetigungTest` die `ZeitwaechterRegel` **und** die
+   `MessgeraetKopplungAufraeumenRegel` geben. Die Lücke ist gemessen (13 Fehlschläge, 10
+   Diagnoseblöcke), der Aufwand ist minimal, der Nutzen ist die nächste vollständige Diagnose.
+2. **Soll die `ZeitwaechterRegel` den `ConnectionState` und laufende Animationen mitschreiben?**
+   Das würde den `BluetoothStatusBadge`-Verdacht aus Abschnitt 4.8 beweisen oder erledigen. Der
+   billigste nächste Schritt — Empfehlung.
+3. **Wird `DiagnoseScreenComposeTest > neuerDiagnoseLogEintragErscheintOhneDenScreenNeuZuOeffnen`
+   ein eigener Berichtseintrag?** Ein Vorkommen (01.10.2026, Lauf `36856413949` Versuch 1, 30,119 s
+   aus `scrolleZuSobaldGeladen`, also eigenes Budget — **nicht** Abschnitt 4.8). Seither in 20
+   Läufen grün. Ein zweites Vorkommen würde die Frage von selbst beantworten.
+4. **Umbau der Wartestrategie über die sieben betroffenen Klassen.** Betrifft fremde Testklassen
+   und mehrere Milestones — ausdrücklich Owner-Entscheidung, kein Nebenbei-Fix.
