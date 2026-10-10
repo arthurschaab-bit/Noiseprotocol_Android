@@ -23,6 +23,8 @@ import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.drive.DriveAblage
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.messreihe.unklassifizierteAufnahmen
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZoneId
@@ -35,7 +37,14 @@ private const val NOTIFICATION_ID = 4720
 
 /** Name des einmaligen Laufs (Menü, Tagesknopf). Die UI beobachtet ihn für den Fortschritt. */
 const val KI_BATCH_WORK_NAME = "ki_batch"
-private const val KI_NACHTLAUF_WORK_NAME = "ki_batch_nacht"
+const val KI_NACHTLAUF_WORK_NAME = "ki_batch_nacht"
+
+/**
+ * Markiert manuell gestartete Läufe. Die Startseite zeigt einen manuellen Lauf schon ab
+ * `ENQUEUED`, den Nachtlauf nur während `RUNNING` - ein periodischer Auftrag steht zwischen
+ * seinen Läufen dauerhaft auf `ENQUEUED`.
+ */
+const val KI_BATCH_TAG_MANUELL = "ki_batch_manuell"
 
 /** Startzeit des Nachtlaufs - vor der Vollsicherung um 03:00, damit deren Stand die Labels enthält. */
 private val NACHTLAUF_UHRZEIT: LocalTime = LocalTime.of(1, 30)
@@ -65,42 +74,61 @@ class KiBatchWorker
             val nachtlauf = inputData.getBoolean(KEY_NACHTLAUF, false)
             if (nachtlauf && (!settings.kiNachtlauf || settings.aiMode == "OFF")) return Result.success()
 
+            // Review zu #273: Nacht- und Handlauf laufen unter verschiedenen Work-Namen. Ohne
+            // gemeinsame Sperre koennten beide dieselben Kandidaten waehlen und fuer eine
+            // Aufnahme zwei Rohdatensaetze anlegen. Die Sperre umfasst schon die Kandidatenwahl:
+            // wer wartet, sieht danach nur noch, was der erste Lauf uebrig gelassen hat.
+            return LAUF_SPERRE.withLock { klassifiziere(container, settings) }
+        }
+
+        private suspend fun klassifiziere(
+            container: com.example.lrmprotokoll.AppContainer,
+            settings: com.example.lrmprotokoll.data.SettingsManager,
+        ): Result {
             val dao = container.database.noiseDao()
             val von = inputData.getLong(KEY_VON, Long.MIN_VALUE)
             val bis = inputData.getLong(KEY_BIS, Long.MAX_VALUE)
             val kandidaten = unklassifizierteAufnahmen(dao.getAlleAktiven()).filter { it.timestamp in von until bis }
             if (kandidaten.isEmpty()) return Result.success(workDataOf(KEY_ANZAHL to 0))
 
+            // Review zu #273 (P1): Die Tage werden VOR dem ersten gespeicherten Label dauerhaft
+            // vorgemerkt. Stirbt der Prozess mitten im Batch, laeuft kein finally - und die schon
+            // klassifizierten Aufnahmen sind fuer spaetere Laeufe keine Kandidaten mehr, ihr
+            // Nachtrag waere sonst fuer immer verloren. Ein vorgemerkter Tag ohne neue Labels
+            // kostet nur einen ueberfluessigen, kleinen Upload.
+            val zone = ZoneId.systemDefault()
+            settings.merkeKiNachtragVor(kandidaten.map { DriveAblage.tagesordner(it.timestamp, zone) }.toSet())
+
             // Kein Abbruch, wenn das System den Vordergrunddienst verweigert (ab Android 12 aus dem
             // Hintergrund moeglich): der Lauf geht dann als gewoehnliche Hintergrundarbeit weiter.
             runCatching { setForeground(vordergrundInfo(0, kandidaten.size)) }
                 .onFailure { Log.w(TAG, "Vordergrund nicht moeglich, laufe im Hintergrund weiter", it) }
 
-            val zone = ZoneId.systemDefault()
-            val geaenderteTage = mutableSetOf<String>()
             var letzteMeldung = 0L
+            var etwasGespeichert = false
             val anzahl =
-                try {
-                    klassifiziereUndSpeichere(
-                        kandidaten = kandidaten,
-                        classifier = classifierOverride ?: NoiseClassifier(applicationContext),
-                        dao = dao,
-                        rohdatenDao = container.database.klassifikationsRohdatenDao(),
-                        onGespeichert = { geaenderteTage += DriveAblage.tagesordner(it.timestamp, zone) },
-                        onFortschritt = { fertig, gesamt ->
-                            setProgressAsync(workDataOf(KEY_FERTIG to fertig, KEY_GESAMT to gesamt))
-                            val jetzt = System.currentTimeMillis()
-                            if (jetzt - letzteMeldung >= 2_000L || fertig == gesamt) {
-                                letzteMeldung = jetzt
-                                runCatching { setForegroundAsync(vordergrundInfo(fertig, gesamt)) }
-                            }
-                        },
-                    )
-                } finally {
-                    // Auch bei Abbruch: was bis dahin klassifiziert wurde, gehoert nach Drive.
-                    settings.merkeKiNachtragVor(geaenderteTage)
-                }
-            if (geaenderteTage.isNotEmpty()) DriveSyncPlanung.starteSofort(applicationContext)
+                klassifiziereUndSpeichere(
+                    kandidaten = kandidaten,
+                    classifier = classifierOverride ?: NoiseClassifier(applicationContext),
+                    dao = dao,
+                    rohdatenDao = container.database.klassifikationsRohdatenDao(),
+                    onGespeichert = { record ->
+                        etwasGespeichert = true
+                        // Hat ein Drive-Upload den Tag inzwischen uebernommen, gehoert dieses
+                        // Label noch nicht dazu: neu vormerken (neue Generation, Review P2).
+                        val tag = DriveAblage.tagesordner(record.timestamp, zone)
+                        if (settings.brauchtKiNachtragsVormerkung(tag)) settings.merkeKiNachtragVor(listOf(tag))
+                    },
+                    onFortschritt = { fertig, gesamt ->
+                        setProgressAsync(workDataOf(KEY_FERTIG to fertig, KEY_GESAMT to gesamt))
+                        val jetzt = System.currentTimeMillis()
+                        if (jetzt - letzteMeldung >= 2_000L || fertig == gesamt) {
+                            letzteMeldung = jetzt
+                            runCatching { setForegroundAsync(vordergrundInfo(fertig, gesamt)) }
+                        }
+                    },
+                )
+            if (etwasGespeichert) DriveSyncPlanung.starteSofort(applicationContext)
             return Result.success(workDataOf(KEY_ANZAHL to anzahl))
         }
 
@@ -146,6 +174,9 @@ class KiBatchWorker
         }
 
         companion object {
+            /** Prozessweit: serialisiert Nacht- und Handlauf (beide laufen im App-Prozess). */
+            private val LAUF_SPERRE = Mutex()
+
             const val KEY_VON = "von"
             const val KEY_BIS = "bis"
             const val KEY_NACHTLAUF = "nachtlauf"
@@ -175,6 +206,7 @@ object KiBatchPlanung {
         val anfrage =
             OneTimeWorkRequestBuilder<KiBatchWorker>()
                 .setInputData(daten)
+                .addTag(KI_BATCH_TAG_MANUELL)
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
         WorkManager.getInstance(context).enqueueUniqueWork(KI_BATCH_WORK_NAME, ExistingWorkPolicy.KEEP, anfrage)

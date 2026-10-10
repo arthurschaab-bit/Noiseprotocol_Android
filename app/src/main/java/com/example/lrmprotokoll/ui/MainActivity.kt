@@ -721,12 +721,27 @@ fun NoiseProtocolApp(
     // lief bei gesperrtem Bildschirm nicht weiter und brach beim Schliessen der App ab.
     val kiBatchInfos by remember {
         runCatching {
+            // Manueller Lauf und Nachtlauf (Review zu #273): beide sperren die Knoepfe.
+            val abfrage =
+                androidx.work.WorkQuery
+                    .fromUniqueWorkNames(
+                        listOf(
+                            com.example.lrmprotokoll.audio.KI_BATCH_WORK_NAME,
+                            com.example.lrmprotokoll.audio.KI_NACHTLAUF_WORK_NAME,
+                        ),
+                    )
             androidx.work.WorkManager
                 .getInstance(context)
-                .getWorkInfosForUniqueWorkFlow(com.example.lrmprotokoll.audio.KI_BATCH_WORK_NAME)
+                .getWorkInfosFlow(abfrage)
         }.getOrElse { kotlinx.coroutines.flow.flowOf(emptyList()) }
     }.collectAsState(initial = emptyList())
-    val laufenderKiBatch = kiBatchInfos.firstOrNull { !it.state.isFinished }
+    // Der periodische Nachtlauf steht zwischen seinen Laeufen dauerhaft auf ENQUEUED - er zaehlt
+    // nur waehrend RUNNING, ein manueller Lauf schon ab ENQUEUED.
+    val laufenderKiBatch =
+        kiBatchInfos.firstOrNull {
+            it.state == androidx.work.WorkInfo.State.RUNNING ||
+                (!it.state.isFinished && com.example.lrmprotokoll.audio.KI_BATCH_TAG_MANUELL in it.tags)
+        }
     val gemeldeteKiBatches = remember { mutableStateListOf<java.util.UUID>() }
     LaunchedEffect(kiBatchInfos) {
         kiBatchInfos

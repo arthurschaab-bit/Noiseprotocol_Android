@@ -154,20 +154,77 @@ class SettingsManager(
      * Nachtragsdatei noch nicht in Drive liegt. Die Tages-CSV selbst wird dafuer NICHT neu
      * erzeugt: deren Rohwerte sind nach drei Tagen geloescht, eine neue CSV ueberschriebe die
      * gute in Drive mit einer ohne Pegel (Owner-Entscheidung 10.10.2026, Variante A).
+     *
+     * Je Tag mit Generation und "uebernommen"-Markierung (Review zu #273): Der Drive-Sync
+     * uebernimmt einen Tag ([uebernimmKiNachtrag]), laedt hoch und erledigt ihn nur, wenn die
+     * Generation seitdem gleich geblieben ist ([erledigeKiNachtrag]). Speichert der KI-Batch
+     * waehrenddessen weitere Labels fuer denselben Tag, merkt er ihn neu vor (neue Generation)
+     * - der aeltere Upload kann diese Vormerkung dann nicht mehr loeschen.
      */
     val kiNachtragOffeneTage: Set<String>
-        get() = prefs.getStringSet("ki_nachtrag_offene_tage", emptySet()) ?: emptySet()
+        get() = kiNachtragEintraege().keys
 
-    /** Synchronisiert, weil KI-Worker und Drive-Sync gleichzeitig schreiben koennen. */
+    private data class KiNachtragEintrag(
+        val generation: Long,
+        val uebernommen: Boolean,
+    )
+
+    private fun kiNachtragEintraege(): Map<String, KiNachtragEintrag> =
+        (prefs.getStringSet("ki_nachtrag_offene_tage", emptySet()) ?: emptySet())
+            .mapNotNull { eintrag ->
+                val teile = eintrag.split('|')
+                when (teile.size) {
+                    // Format vor dem Review-Fix: nur der Tag.
+                    1 -> teile[0] to KiNachtragEintrag(0L, uebernommen = false)
+                    3 -> teile[0] to KiNachtragEintrag(teile[1].toLongOrNull() ?: 0L, teile[2] == "1")
+                    else -> null
+                }
+            }.toMap()
+
+    private fun speichereKiNachtragEintraege(eintraege: Map<String, KiNachtragEintrag>) {
+        val werte = eintraege.map { (tag, e) -> "$tag|${e.generation}|${if (e.uebernommen) 1 else 0}" }.toSet()
+        prefs.edit().putStringSet("ki_nachtrag_offene_tage", werte).commit()
+    }
+
+    /** Merkt [tage] (neu) vor: neue Generation, nicht uebernommen. */
     @Synchronized
     fun merkeKiNachtragVor(tage: Collection<String>) {
         if (tage.isEmpty()) return
-        prefs.edit().putStringSet("ki_nachtrag_offene_tage", kiNachtragOffeneTage + tage).commit()
+        val eintraege = kiNachtragEintraege().toMutableMap()
+        for (tag in tage) {
+            eintraege[tag] = KiNachtragEintrag((eintraege[tag]?.generation ?: 0L) + 1, uebernommen = false)
+        }
+        speichereKiNachtragEintraege(eintraege)
     }
 
+    /**
+     * Ob der KI-Batch [tag] nach dem Speichern eines Labels erneut vormerken muss: wenn der Tag
+     * fehlt oder ein Drive-Upload ihn bereits uebernommen hat. Sonst genuegt die bestehende
+     * Vormerkung - so schreibt nicht jede einzelne Aufnahme in die Einstellungen.
+     */
     @Synchronized
-    fun erledigeKiNachtrag(tag: String) {
-        prefs.edit().putStringSet("ki_nachtrag_offene_tage", kiNachtragOffeneTage - tag).commit()
+    fun brauchtKiNachtragsVormerkung(tag: String): Boolean = kiNachtragEintraege()[tag]?.uebernommen ?: true
+
+    /** Der Drive-Sync uebernimmt [tag] vor dem Lesen der Labels; liefert die Generation oder `null`. */
+    @Synchronized
+    fun uebernimmKiNachtrag(tag: String): Long? {
+        val eintraege = kiNachtragEintraege().toMutableMap()
+        val eintrag = eintraege[tag] ?: return null
+        eintraege[tag] = eintrag.copy(uebernommen = true)
+        speichereKiNachtragEintraege(eintraege)
+        return eintrag.generation
+    }
+
+    /** Erledigt [tag] nur, wenn seit [uebernommeneGeneration] keine neue Vormerkung kam. */
+    @Synchronized
+    fun erledigeKiNachtrag(
+        tag: String,
+        uebernommeneGeneration: Long,
+    ) {
+        val eintraege = kiNachtragEintraege().toMutableMap()
+        if (eintraege[tag]?.generation != uebernommeneGeneration) return
+        eintraege.remove(tag)
+        speichereKiNachtragEintraege(eintraege)
     }
 
     /**
