@@ -521,6 +521,18 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 |---|---|---|
 | Aufzeichnung kurz beenden, nach 10 min wieder starten | Im Cockpit-Verlauf erscheint ein graues Band „Keine Aufzeichnung“; nach dem nächsten Drive-Sync enthält die Tages-CSV diese 10 min als `KEINE_AUFZEICHNUNG`. Die Datei des Vortags reicht bis 23:59:59 | |
 
+### F29 — KI-Batch im Hintergrund und nachts (10.10.2026)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_KI_BATCH_HINTERGRUND.md`), aber **noch nicht
+auf echter Hardware gesehen**.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| „Alle klassifizieren“ starten, Bildschirm sperren, nach 10 min entsperren | Die Benachrichtigung „KI-Klassifizierung läuft“ zeigt Fortschritt; der Zähler ist weitergelaufen | |
+| Während des Batches in der Benachrichtigung auf „Abbrechen“ tippen | Batch endet; bis dahin klassifizierte Aufnahmen behalten ihr Label | |
+| Batch starten, App aus der Übersicht wischen | Batch läuft weiter (Benachrichtigung bleibt) | |
+| Eine Nacht mit unklassifizierten Aufnahmen, Schalter „Nachts automatisch klassifizieren“ an | Am Morgen sind sie klassifiziert; in Drive liegt je betroffenem Tag `Schallmessung/klassifikation_nachtrag_JJJJ-MM-TT.csv`, die Tages-CSV ist unverändert | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
