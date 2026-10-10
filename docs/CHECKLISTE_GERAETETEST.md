@@ -521,6 +521,17 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 |---|---|---|
 | Aufzeichnung kurz beenden, nach 10 min wieder starten | Im Cockpit-Verlauf erscheint ein graues Band „Keine Aufzeichnung“; nach dem nächsten Drive-Sync enthält die Tages-CSV diese 10 min als `KEINE_AUFZEICHNUNG`. Die Datei des Vortags reicht bis 23:59:59 | |
 
+### F30 — Datenbanksicherung als Voll- und Teilsicherung (10.10.2026)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md`), aber **noch nicht
+auf echter Hardware gesehen**.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach dem Update eine Nacht im WLAN laufen lassen, danach Bundle erzeugen | Im Protokoll steht „Vollsicherung hochgeladen“ gegen 03:00; die Datei in Drive `BACKUP/laermprotokoll_datenbank.zip` ist deutlich kleiner als vorher (vorher ~300 MB) | |
+| Tagsüber | Alle ~30 min „Teilsicherung hochgeladen“ mit wenigen MB; kein „Datenbank-Sicherung hochgeladen“ mit mehreren hundert MB mehr | |
+| Wiederherstellung von Drive auf einem Testgerät | Meldung nennt „Teilsicherung vom …“; Aufnahmen bis zur letzten Teilsicherung sind da | |
+
 ---
 
 ## Was zurückgemeldet werden sollte
