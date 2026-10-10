@@ -340,8 +340,19 @@ internal fun zeichnePegelverlaufChart(
                 isAntiAlias = true
                 pathEffect = DashPathEffect(floatArrayOf(2f, 3f), 0f)
             }
+        val mikrofonPunktPaint =
+            Paint().apply {
+                color = Color.argb(110, 150, 150, 150)
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
         teileInSegmente(mikrofonSpalten).forEach { segment ->
-            if (segment.size > 1) {
+            if (segment.size == 1) {
+                // Einzelne Spalte (ein einziger Messwert oder isolierter Punkt zwischen Luecken):
+                // wie beim PCE-Zweig als Punkt zeichnen, sonst verschwaende er ganz (Review PR #275).
+                val spalte = segment.first()
+                canvas.drawCircle(x(spalte.zeitOffsetSekunden), y(spalte.mittelDb), MIKROFON_PUNKT_RADIUS, mikrofonPunktPaint)
+            } else {
                 val pfad = Path()
                 segment.forEachIndexed { index, spalte ->
                     val px = x(spalte.zeitOffsetSekunden)
@@ -391,3 +402,6 @@ internal fun zeichnePegelverlaufChart(
 
     canvas.drawRect(plotLeft, plotTop, plotRight, plotBottom, rahmenPaint)
 }
+
+/** Radius des dezenten Mikrofonpunkts (kleiner als der PCE-Punkt mit 2f). */
+internal const val MIKROFON_PUNKT_RADIUS = 1.4f
