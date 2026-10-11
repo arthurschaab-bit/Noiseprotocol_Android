@@ -1,5 +1,6 @@
 package com.example.lrmprotokoll.testhilfen
 
+import android.os.Looper
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
@@ -154,9 +155,11 @@ class ZeitwaechterRegel(
         fertig: CountDownLatch,
     ) {
         val stacks = mutableListOf<Array<StackTraceElement>>()
+        val warteschlangen = mutableListOf<List<String>>()
         for (i in 0 until STICHPROBEN) {
             if (fertig.count == 0L) break
             stacks += testThread.stackTrace
+            leseHauptLooperWarteschlange()?.let { warteschlangen += it }
             if (fertig.await(STICHPROBEN_ABSTAND_MS, TimeUnit.MILLISECONDS)) break
         }
         zeilen.appendLine()
@@ -172,6 +175,33 @@ class ZeitwaechterRegel(
         zeilen.appendLine("Compose-Rahmen:")
         if (compose.isEmpty()) zeilen.appendLine("\t(keiner getroffen)")
         compose.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) -> zeilen.appendLine("\t$anzahl  $rahmen") }
+        haengeWarteschlangeAn(zeilen, warteschlangen)
+    }
+
+    /**
+     * Die erste CI-Diagnose mit Stichproben (PR #269, 10.10.2026) zeigte in 100 Stichproben keinen
+     * einzigen App- oder Compose-Rahmen; der Einzelstack stand in `Espresso.onIdle ->
+     * ShadowPausedLooper.idle`. Die Wartung haengt also daran, dass der Main-Looper nie leer wird.
+     * Wer dort laufend Nachrichten einstellt, zeigt nur die Warteschlange selbst - deshalb wird sie
+     * bei jeder Stichprobe mitgelesen.
+     */
+    private fun haengeWarteschlangeAn(
+        zeilen: StringBuilder,
+        warteschlangen: List<List<String>>,
+    ) {
+        zeilen.appendLine()
+        if (warteschlangen.isEmpty()) {
+            zeilen.appendLine("--- Main-Looper-Warteschlange: nicht lesbar (kein Robolectric-Looper) ---")
+            return
+        }
+        val schnitt = warteschlangen.sumOf { it.size }.toDouble() / warteschlangen.size
+        zeilen.appendLine(
+            "--- Main-Looper-Warteschlange: ${warteschlangen.size} Stichproben, im Schnitt " +
+                "${"%.1f".format(java.util.Locale.ROOT, schnitt)} Nachrichten, in wie vielen Stichproben je Nachrichtenart ---",
+        )
+        val treffer = zaehleNachrichten(warteschlangen)
+        if (treffer.isEmpty()) zeilen.appendLine("\t(Warteschlange in allen Stichproben leer)")
+        treffer.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (art, anzahl) -> zeilen.appendLine("\t$anzahl  $art") }
     }
 
     internal companion object {
@@ -180,6 +210,7 @@ class ZeitwaechterRegel(
         const val STICHPROBEN_ABSTAND_MS = 50L
         const val GEZEIGTE_STICHPROBEN_RAHMEN = 30
         const val ABSCHLUSS_WARTEZEIT_MS = 1_000L
+        const val MAX_NACHRICHTEN = 200
 
         const val APP_PAKET = "com.example.lrmprotokoll."
 
@@ -226,7 +257,7 @@ internal fun zaehleRahmen(stacks: List<Array<StackTraceElement>>): List<Pair<Str
             .distinct()
             .forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
     }
-    return treffer.entries.sortedByDescending { it.value }.map { it.key to it.value }
+    return treffer.nachHaeufigkeit()
 }
 
 /** App- oder Compose-Rahmen, aber weder die Regel selbst noch der Testrumpf. */
@@ -235,3 +266,76 @@ internal fun istAussagekraeftig(rahmen: String): Boolean {
     if (ZeitwaechterRegel.AUSGENOMMENE_RAHMEN.any { rahmen.startsWith(it) }) return false
     return !rahmen.substringBeforeLast('.').endsWith("Test")
 }
+
+/**
+ * Zaehlt je Nachrichtenart, in wie vielen Stichproben sie in der Warteschlange stand - jede
+ * Stichprobe zaehlt eine Art hoechstens einmal. Haeufigste zuerst.
+ */
+internal fun zaehleNachrichten(warteschlangen: List<List<String>>): List<Pair<String, Int>> {
+    val treffer = HashMap<String, Int>()
+    for (warteschlange in warteschlangen) {
+        warteschlange.distinct().forEach { treffer[it] = (treffer[it] ?: 0) + 1 }
+    }
+    return treffer.nachHaeufigkeit()
+}
+
+/**
+ * Haeufigste zuerst, bei Gleichstand alphabetisch - sonst haengt die Reihenfolge von der
+ * HashMap-Iteration ab, und zwei Diagnosen desselben Haengers saehen verschieden aus.
+ */
+private fun Map<String, Int>.nachHaeufigkeit(): List<Pair<String, Int>> =
+    entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key to it.value }
+
+/**
+ * `Foo$$Lambda/0x00007f...` -> `Foo$$Lambda`: der Zusatz einer Hidden Class ist je Lauf anders
+ * und zerlegt die Zaehlung. Geschnitten wird am `/` selbst, nicht erst an `/0x` - ein regulaerer
+ * Klassenname enthaelt nie einen `/`, und das Format des Zusatzes ist nicht festgelegt.
+ */
+internal fun ohneLambdaAdresse(klassenname: String): String = klassenname.substringBefore('/')
+
+/**
+ * Liest die wartenden Nachrichten des Main-Loopers, ohne sie anzufassen: je Nachricht die
+ * Klasse ihres Callbacks, sonst Handler-Klasse und `what`. Ausserhalb von Robolectric (oder
+ * wenn sich die Felder aendern) `null` - eine Diagnose darf nie selbst scheitern.
+ *
+ * Bewusst ohne Sperre gelesen, waehrend der Main-Thread weiterlaeuft: eine verkettete Liste,
+ * deren Enden sich verschieben, liefert hoechstens eine leicht unscharfe Momentaufnahme. Die
+ * Obergrenze [ZeitwaechterRegel.MAX_NACHRICHTEN] verhindert, dass eine dabei entstehende Schleife haengt.
+ */
+internal fun leseHauptLooperWarteschlange(): List<String>? =
+    runCatching {
+        val warteschlange = Looper.getMainLooper().queue
+        val kopf = feld(warteschlange.javaClass, "mMessages").get(warteschlange)
+        val ergebnis = mutableListOf<String>()
+        var nachricht: Any? = kopf
+        while (nachricht != null && ergebnis.size < ZeitwaechterRegel.MAX_NACHRICHTEN) {
+            ergebnis += beschreibeNachricht(nachricht)
+            nachricht = feld(nachricht.javaClass, "next").get(nachricht)
+        }
+        ergebnis
+    }.getOrNull()
+
+private fun beschreibeNachricht(nachricht: Any): String {
+    val callback = feld(nachricht.javaClass, "callback").get(nachricht)
+    if (callback != null) return "Runnable ${ohneLambdaAdresse(callback.javaClass.name)}"
+    val ziel = feld(nachricht.javaClass, "target").get(nachricht)
+    val what = feld(nachricht.javaClass, "what").get(nachricht)
+    return "Handler ${ziel?.javaClass?.name?.let(::ohneLambdaAdresse) ?: "?"} what=$what"
+}
+
+/**
+ * Je Klasse und Name nur einmal aufgeloest: Die Schleife liest bis zu
+ * [ZeitwaechterRegel.MAX_NACHRICHTEN] Nachrichten je Stichprobe, jede mit bis zu vier Feldern -
+ * ohne Zwischenspeicher waeren das zehntausende Lookups neben dem beobachteten Testthread.
+ */
+private val aufgeloesteFelder = java.util.concurrent.ConcurrentHashMap<Pair<Class<*>, String>, java.lang.reflect.Field>()
+
+private fun feld(
+    klasse: Class<*>,
+    name: String,
+): java.lang.reflect.Field =
+    aufgeloesteFelder.getOrPut(klasse to name) {
+        klasse.getDeclaredField(name).apply { isAccessible = true }
+    }
