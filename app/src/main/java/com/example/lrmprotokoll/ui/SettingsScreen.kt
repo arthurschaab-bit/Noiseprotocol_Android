@@ -50,6 +50,7 @@ import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.backup.SicherungManager
+import com.example.lrmprotokoll.backup.SicherungsErgebnis
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
@@ -126,6 +127,7 @@ fun SettingsScreen(
      * Owner-Entscheidung 16.09.2026).
      */
     neustartAusloeser: (Context) -> Unit = SicherungManager::starteNeustart,
+    sicherungErsteller: suspend (Context, Uri, SettingsManager) -> SicherungsErgebnis = SicherungManager::erstelleSicherung,
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
     val context = LocalContext.current
@@ -371,24 +373,32 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
-            scope.launch {
+            if (container.manuelleSicherungLaeuft.compareAndSet(false, true)) {
                 sicherungLaeuft = true
-                val ergebnis = SicherungManager.erstelleSicherung(context, uri, settings)
-                sicherungLaeuft = false
-                if (!ergebnis.erfolg) {
-                    // Bugfix (docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 4): ein
-                    // fehlgeschlagenes Erstellen ging bisher NIRGENDS ins Diagnoseprotokoll/
-                    // Support-Bundle - anders als ein fehlgeschlagenes Einspielen
-                    // (BACKUP_RESTORE_FAILED weiter unten).
-                    container.diagnosticsReporter.report(
-                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
-                        component = "SettingsScreen",
-                        operation = "erstelleSicherung",
-                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
-                        message = ergebnis.nachricht,
-                    )
+                container.diagnosticsReporter.breadcrumb("Sicherung", "Manuelle Sicherung gestartet")
+                onShowSnackbar?.invoke("Sicherung wird erstellt. Bitte auf die Abschlussmeldung warten.")
+                container.sicherungScope.launch {
+                    try {
+                        val ergebnis = sicherungErsteller(context.applicationContext, uri, settings)
+                        if (ergebnis.erfolg) {
+                            container.diagnosticsReporter.breadcrumb("Sicherung", "Manuelle Sicherung geprüft und abgeschlossen")
+                        } else {
+                            container.diagnosticsReporter.report(
+                                code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                                component = "SettingsScreen",
+                                operation = "erstelleSicherung",
+                                severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                                message = ergebnis.nachricht,
+                            )
+                        }
+                        onShowSnackbar?.invoke(ergebnis.nachricht)
+                    } finally {
+                        sicherungLaeuft = false
+                        container.manuelleSicherungLaeuft.set(false)
+                    }
                 }
-                onShowSnackbar?.invoke(ergebnis.nachricht)
+            } else {
+                onShowSnackbar?.invoke("Eine Sicherung läuft bereits.")
             }
         }
     }

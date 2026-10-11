@@ -24,6 +24,7 @@ import com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider
 import com.example.lrmprotokoll.messreihe.MeasurementRecorder
 import com.example.lrmprotokoll.messreihe.RetentionCoordinator
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterAutoConnect
@@ -392,6 +393,26 @@ class AppContainer(
         CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     }
 
+    /** Eine manuelle Sicherung muss das Verlassen des Einstellungsbildschirms überleben. */
+    val manuelleSicherungLaeuft = AtomicBoolean(false)
+
+    val sicherungScope: CoroutineScope by lazy {
+        val exceptionHandler =
+            CoroutineExceptionHandler { _, throwable ->
+                Log.e("AppContainer", "Unerwarteter Fehler bei der manuellen Sicherung", throwable)
+                diagnosticsReporter.report(
+                    code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                    component = "AppContainer",
+                    operation = "sicherungScope",
+                    severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.ERROR,
+                    handled = false,
+                    cause = throwable,
+                    message = "Unerwarteter Fehler bei der manuellen Sicherung",
+                )
+            }
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
+    }
+
     // ---------------------------------------------------------------- M4: Messreihe
 
     val measurementRecorder: MeasurementRecorder by lazy {
@@ -468,6 +489,7 @@ class AppContainer(
     fun close() {
         connectionSupervisorScope.cancel()
         videobeweisAbschlussScope.cancel()
+        sicherungScope.cancel()
         if (anrWatchdogLazy.isInitialized()) anrWatchdog.stop()
         anrWatchdogScope.cancel()
     }

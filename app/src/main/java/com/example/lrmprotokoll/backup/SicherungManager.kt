@@ -3,23 +3,27 @@ package com.example.lrmprotokoll.backup
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SettingsManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 private const val MANIFEST_ENTRY = "manifest.json"
 private const val DATENBANK_ENTRY = "noise_database"
@@ -115,21 +119,75 @@ object SicherungManager {
         context: Context,
         ziel: Uri,
         settings: SettingsManager,
-    ): SicherungsErgebnis = withContext(Dispatchers.IO) {
-        // Streamend in eine temporaere Datei bauen, dann in den SAF-OutputStream kopieren - ein
-        // SAF-Uri liefert keinen direkten Dateipfad, den ZipOutputStream bräuchte, und manche
-        // SAF-Provider puffern/validieren ohnehin erst nach dem vollständigen Schreiben.
-        val tempDatei = File.createTempFile("sicherung_", ".zip", context.cacheDir)
-        try {
-            baueSicherungsDatei(context, settings, tempDatei)
-            val output = context.contentResolver.openOutputStream(ziel)
-                ?: return@withContext SicherungsErgebnis(false, "Zieldatei konnte nicht geöffnet werden.")
-            output.use { out -> FileInputStream(tempDatei).use { it.copyTo(out) } }
-            SicherungsErgebnis(true, "Sicherung erstellt.")
-        } catch (e: Exception) {
-            SicherungsErgebnis(false, "Sicherung fehlgeschlagen: ${e.message}")
-        } finally {
-            tempDatei.delete()
+    ): SicherungsErgebnis =
+        withContext(Dispatchers.IO) {
+            // Der SAF-Provider bekommt nur eine vollstaendig gebaute ZIP.
+            var tempDatei: File? = null
+            var erfolgreich = false
+            try {
+                val gebauteDatei = File.createTempFile("sicherung_", ".zip", context.cacheDir)
+                tempDatei = gebauteDatei
+                baueSicherungsDatei(context, settings, gebauteDatei)
+                val output =
+                    context.contentResolver.openOutputStream(ziel)
+                        ?: return@withContext SicherungsErgebnis(false, "Zieldatei konnte nicht geöffnet werden.")
+                val kopieHash = MessageDigest.getInstance("SHA-256")
+                val kopierteBytes =
+                    output.use { out ->
+                        DigestInputStream(FileInputStream(gebauteDatei), kopieHash).use { it.copyTo(out) }
+                    }
+                if (kopierteBytes != gebauteDatei.length() || kopierteBytes == 0L) {
+                    throw IOException("Die Sicherung wurde nicht vollständig an den Speicherort übertragen.")
+                }
+                pruefeZieldatei(context, ziel, kopierteBytes, kopieHash.digest())
+                erfolgreich = true
+                SicherungsErgebnis(true, "Sicherung erstellt.")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SicherungsErgebnis(false, "Sicherung fehlgeschlagen: ${e.message}")
+            } finally {
+                if (!erfolgreich) loescheFehlgeschlageneZieldatei(context, ziel)
+                tempDatei?.delete()
+            }
+        }
+
+    /** SAF-Provider koennen einen erfolgreichen write/close melden, obwohl nur ein Platzhalter
+     * gespeichert wurde. Erst die erneut gelesene, bytegleiche ZIP gilt als Sicherung. */
+    private fun pruefeZieldatei(
+        context: Context,
+        ziel: Uri,
+        groesse: Long,
+        hash: ByteArray,
+    ) {
+        val eingabe =
+            context.contentResolver.openInputStream(ziel)
+                ?: throw IOException("Sicherungsdatei konnte zur Kontrolle nicht geöffnet werden.")
+        val gelesenHash = MessageDigest.getInstance("SHA-256")
+        var gelesen = 0L
+        eingabe.use { input ->
+            val puffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val anzahl = input.read(puffer)
+                if (anzahl < 0) break
+                gelesenHash.update(puffer, 0, anzahl)
+                gelesen += anzahl
+            }
+        }
+        if (gelesen != groesse || !MessageDigest.isEqual(hash, gelesenHash.digest())) {
+            throw IOException("Die gespeicherte Sicherungsdatei ist leer oder unvollständig.")
+        }
+    }
+
+    private fun loescheFehlgeschlageneZieldatei(
+        context: Context,
+        ziel: Uri,
+    ) {
+        runCatching {
+            when (ziel.scheme) {
+                "file" -> ziel.path?.let { File(it).delete() }
+                "content" -> DocumentsContract.deleteDocument(context.contentResolver, ziel)
+            }
         }
     }
 
