@@ -52,6 +52,38 @@ class BerichtErstellungDaoTest {
     }
 
     /**
+     * Review PR #275: Mikrofonwerte (Session mit leerer deviceAddress, weighting/timeWeighting
+     * null) duerfen weder als Rohwerte noch als "unbestaetigt" zaehlen - sonst blockiert die
+     * Vorpruefung einen Tag mit gueltigen Messgeraet-Werten wegen Werten, die gar nicht exportiert
+     * werden.
+     */
+    @Test fun mikrofonSessionsZaehlenWederAlsRohwerteNochAlsUnbestaetigt() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries().build()
+        val messgeraet = db.sessionDao().insert(SessionEntity(
+            startedAt = 1_000, endedAt = 2_000, deviceAddress = "AA:BB", deviceName = "PCE-323",
+            weighting = "A", timeWeighting = "FAST",
+        ))
+        val mikrofon = db.sessionDao().insert(SessionEntity(
+            startedAt = 1_000, endedAt = 2_000, deviceAddress = "", deviceName = "Smartphone-Mikrofon",
+            weighting = null, timeWeighting = null,
+        ))
+        db.measurementDao().insertAll(listOf(
+            MeasurementEntity(sessionId = messgeraet, timestamp = 1_100, levelDb = 56.0,
+                weighting = "A", timeWeighting = "FAST", flags = 0),
+            MeasurementEntity(sessionId = mikrofon, timestamp = 1_200, levelDb = 90.0,
+                weighting = null, timeWeighting = null, flags = 0),
+            MeasurementEntity(sessionId = mikrofon, timestamp = 1_300, levelDb = 91.0,
+                weighting = null, timeWeighting = null, flags = 0),
+        ))
+
+        assertEquals(1, db.measurementDao().anzahlZwischen(1_000, 2_000))
+        assertEquals(0, db.measurementDao().anzahlUnbestaetigtZwischen(1_000, 2_000))
+        db.close()
+    }
+
+    /**
      * Review-Befund PR #144: eine Session, die ueber Mitternacht laeuft, hat ihre
      * Stammdaten-Zeile mit einem `erstelltAm` kurz vor Mitternacht (Tag D). `fuerTag()` allein
      * findet sie fuer Tag D+1 nicht, obwohl derselbe dokumentierte Messaufbau beide Tage betrifft

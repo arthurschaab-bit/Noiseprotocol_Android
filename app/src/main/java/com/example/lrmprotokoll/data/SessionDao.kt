@@ -111,12 +111,17 @@ interface MeasurementDao {
     suspend fun zwischen(von: Long, bis: Long): List<MeasurementEntity>
 
     /** Der Rechtsbericht prueft Tage vor dem Massendaten-Export, ohne Millionen Zeilen nur
-     * fuer eine Vorabentscheidung in den Speicher zu laden. */
-    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis")
+     * fuer eine Vorabentscheidung in den Speicher zu laden.
+     *
+     * Zaehlt NUR Messgeraet-Werte: Mikrofonwerte (Sessions mit leerer deviceAddress) fliessen
+     * nach der Owner-Entscheidung vom 10.10.2026 in keinen Bericht ein und werden auch nicht
+     * exportiert (HighEndReportExport) - Vorpruefung und Export nutzen dieselbe Datenbasis. */
+    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis AND sessionId NOT IN (SELECT id FROM sessions WHERE deviceAddress = '')")
     suspend fun anzahlZwischen(von: Long, bis: Long): Int
 
-    /** GAP-Zeilen sind keine bestaetigten Pegelmessungen und zaehlen hier nicht mit. */
-    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis AND (flags & 8) = 0 AND (weighting IS NULL OR timeWeighting IS NULL)")
+    /** GAP-Zeilen sind keine bestaetigten Pegelmessungen und zaehlen hier nicht mit. Mikrofonwerte
+     * (ohne Bewertung, per Definition unbestaetigt) werden wie in [anzahlZwischen] ausgenommen. */
+    @Query("SELECT COUNT(*) FROM measurements WHERE timestamp >= :von AND timestamp < :bis AND (flags & 8) = 0 AND (weighting IS NULL OR timeWeighting IS NULL) AND sessionId NOT IN (SELECT id FROM sessions WHERE deviceAddress = '')")
     suspend fun anzahlUnbestaetigtZwischen(von: Long, bis: Long): Int
 
     /** Anzahl der Rohwerte mit gesetztem GAP-Flag je Session (F-12). */

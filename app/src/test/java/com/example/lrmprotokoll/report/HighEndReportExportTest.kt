@@ -257,6 +257,55 @@ class HighEndReportExportTest {
         }
 
     /**
+     * Owner-Entscheidung 10.10.2026: Mikrofonwerte fliessen in keine Berechnung ein - der
+     * Rohdatenexport an die Python-Berichtslogik enthaelt deshalb nur Messwerte der
+     * Messgeraet-Session, und rawSampleCount zaehlt nur diese.
+     */
+    @Test
+    fun mikrofonSessionsGehenNichtInDenRohdatenexportEin() =
+        runBlocking {
+            val tag = tagMit(anzahl = 5)
+            val mikrofonSessionId =
+                db.sessionDao().insert(
+                    SessionEntity(
+                        startedAt = tag.von + 4_000_000L,
+                        endedAt = tag.von + 4_010_000L,
+                        deviceAddress = "",
+                        deviceName = "Smartphone-Mikrofon",
+                        weighting = null,
+                        timeWeighting = null,
+                    ),
+                )
+            db.measurementDao().insertAll(
+                (0 until 7).map {
+                    MeasurementEntity(
+                        sessionId = mikrofonSessionId,
+                        timestamp = tag.von + 4_000_000L + it * 1_000L,
+                        levelDb = 90.0,
+                        weighting = null,
+                        timeWeighting = null,
+                        flags = 0,
+                    )
+                },
+            )
+
+            var csv: List<String> = emptyList()
+            var rawSampleCount = -1
+            val ergebnis =
+                HighEndReportExport(context, db, reporter).generate(listOf(tag), config, emptyMap()) { json ->
+                    val tagJson = JSONObject(json).getJSONArray("days").getJSONObject(0)
+                    csv = File(tagJson.getString("samplesPath")).readLines()
+                    rawSampleCount = tagJson.getInt("rawSampleCount")
+                    ChaquopyReportRunner.Ergebnis.Fehler("Test bricht bewusst vor dem Python-Aufruf ab")
+                }
+
+            assertTrue("$ergebnis", ergebnis is ChaquopyReportRunner.Ergebnis.Fehler)
+            assertEquals("nur die 5 Messgeraet-Werte", 5, rawSampleCount)
+            assertEquals("Kopfzeile + 5 Werte", 6, csv.size)
+            assertTrue("kein Mikrofonwert (90 dB) im Export", csv.drop(1).none { it.contains(",90.0,") })
+        }
+
+    /**
      * Test 5 (PROMPT_FIX_BERICHT_HIGHEND.md Abschnitt 3): muss ohne die Änderung rot sein.
      * Speichergrenze als Proxy - über Rooms eigenen `setQueryCallback` (kein Fake nötig): kein
      * Aufruf der Rohwerte-Abfrage darf mehr als einen Abschnitt umfassen.

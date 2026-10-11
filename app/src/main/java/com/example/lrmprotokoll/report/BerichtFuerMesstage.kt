@@ -1,7 +1,6 @@
 package com.example.lrmprotokoll.report
 
 import com.example.lrmprotokoll.data.AppDatabase
-import com.example.lrmprotokoll.data.MeasurementEntity
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.AkustischeKennwerte
 import com.example.lrmprotokoll.messreihe.Ausfallband
@@ -50,13 +49,15 @@ suspend fun ermittlePeriodenBerichtFuerTage(
     val events = ladeJeTag(sortiert) { tag -> db.noiseDao().zwischenZeitpunkt(tag.von, tag.bis) }
     val ausfallbaender = ausfallbaenderFuerTage(db, sessions, sortiert)
     val nurMikrofon = nurMikrofonSessions(sessions)
+    val getrennt = trenneMesswerte(messwerte, sessions)
 
     return PeriodenBericht(
         von = von,
         bis = bis,
         sessionCount = sessions.size,
-        chartSpalten = downsampleMesswerteFuerChart(chartMesswerte(messwerte, sessions, nurMikrofon), von, bis),
-        kennwerte = AkustischeKennwerte.berechne(messwerte),
+        chartSpalten = downsampleMesswerteFuerChart(getrennt.kalibriert, von, bis),
+        mikrofonChartSpalten = downsampleMesswerteFuerChart(getrennt.mikrofon, von, bis),
+        kennwerte = AkustischeKennwerte.berechne(getrennt.kalibriert),
         ausfallbaender = ausfallbaender,
         events = events,
         nurMikrofon = nurMikrofon,
@@ -125,22 +126,4 @@ private suspend fun ausfallbaenderFuerTage(
                 if (geschnittenesBis > geschnittenesVon) Ausfallband(geschnittenesVon, geschnittenesBis) else null
             }
         }.sortedBy { it.von }
-}
-
-/**
- * Dieselbe Regel wie in [ermittlePeriodenBericht] (Owner-Feedback 12.09.2026): enthaelt die
- * Auswahl sowohl Messgeraet- als auch reine Mikrofon-Sessions, zeigt das Pegelverlauf-Diagramm nur
- * die kalibrierten Werte. Kennwerte und Ereignisliste bleiben unberuehrt.
- */
-private fun chartMesswerte(
-    messwerte: List<MeasurementEntity>,
-    sessions: List<SessionEntity>,
-    nurMikrofon: Boolean,
-): List<MeasurementEntity> {
-    val mikrofonSessionIds = sessions.filter { it.deviceAddress.isBlank() }.mapTo(mutableSetOf()) { it.id }
-    return if (nurMikrofon || mikrofonSessionIds.isEmpty()) {
-        messwerte
-    } else {
-        messwerte.filter { it.sessionId !in mikrofonSessionIds }
-    }
 }
