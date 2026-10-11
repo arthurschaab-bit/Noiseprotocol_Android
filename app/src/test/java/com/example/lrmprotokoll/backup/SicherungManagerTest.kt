@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.LevelSampleEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SettingsManager
 import kotlinx.coroutines.test.runTest
@@ -388,4 +389,56 @@ class SicherungManagerTest {
             platzGross < (huaweiDbGroesse * 0.8).toLong(),
         )
     }
+
+    /**
+     * docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md, End-zu-Ende gegen die echte Room-Datenbank:
+     * Vollsicherung ohne Rohwerte, danach eine neue Aufnahme, Teilsicherung, Aufnahme lokal
+     * verloren - Vollsicherung plus Teilsicherung bringen sie zurueck, die Rohwerte nicht.
+     */
+    @Test
+    fun vollsicherungPlusTeilsicherungStelltDenLetztenStandOhneRohwerteHer() =
+        runTest {
+            AppDatabase.resetInstance()
+            val db = AppDatabase.getDatabase(context)
+            val rohwerte = db.levelSampleDao()
+            val rohwert = LevelSampleEntity(at = 1L, levelDb = 40.0, source = "MIKROFON")
+            rohwerte.insert(rohwert)
+
+            val voll = SicherungManager.baueVollsicherung(context, neueSettings())
+
+            val spaeterAm = 1_800_200_000_000L + System.nanoTime() % 1_000_000L
+            db.noiseDao().insert(
+                NoiseRecord(timestamp = spaeterAm, amplitude = 0.0, dbValue = 70.0, filePath = "", label = "nach-voll"),
+            )
+            val teil = SicherungManager.baueTeilsicherung(context, voll.vollsicherungId, voll.stand)
+
+            val treffer = db.noiseDao().getAlleAktiven().filter { it.timestamp == spaeterAm }
+            db.noiseDao().deleteMultiple(treffer.map { it.id })
+
+            val ergebnis = SicherungManager.spieleSicherungDateiEin(context, voll.datei, neueSettings(), teil)
+            assertTrue(ergebnis.nachricht, ergebnis.erfolg)
+            assertTrue(ergebnis.nachricht, ergebnis.nachricht.contains("Teilsicherung vom"))
+
+            val wiederhergestellt = AppDatabase.getDatabase(context)
+            assertTrue(wiederhergestellt.noiseDao().getAlleAktiven().any { it.timestamp == spaeterAm })
+            assertEquals(0, wiederhergestellt.levelSampleDao().anzahl())
+            voll.datei.delete()
+            teil.delete()
+        }
+
+    @Test
+    fun teilsicherungEinerAnderenVollsicherungWirdUebergangen() =
+        runTest {
+            AppDatabase.resetInstance()
+            AppDatabase.getDatabase(context)
+            val voll = SicherungManager.baueVollsicherung(context, neueSettings())
+            val fremdeTeil = SicherungManager.baueTeilsicherung(context, voll.vollsicherungId + 1, voll.stand)
+
+            val ergebnis = SicherungManager.spieleSicherungDateiEin(context, voll.datei, neueSettings(), fremdeTeil)
+
+            assertTrue(ergebnis.nachricht, ergebnis.erfolg)
+            assertTrue(ergebnis.nachricht, ergebnis.nachricht.contains("übergangen"))
+            voll.datei.delete()
+            fremdeTeil.delete()
+        }
 }

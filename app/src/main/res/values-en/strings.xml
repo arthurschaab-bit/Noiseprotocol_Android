@@ -799,4 +799,6 @@
     <string name="ki_batch_gestartet">AI classification continues in the background, even with the screen locked</string>
     <string name="settings_ki_nachtlauf_title">Classify automatically at night</string>
     <string name="settings_ki_nachtlauf_desc">Classifies all unclassified recordings around 01:30, even with the screen locked</string>
+    <string name="vollsicherung_kanal_name">Database backup</string>
+    <string name="vollsicherung_benachrichtigung_titel">Backing up database to Drive</string>
 </resources>

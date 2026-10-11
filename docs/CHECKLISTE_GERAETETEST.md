@@ -543,6 +543,17 @@ auf echter Hardware gesehen**.
 | Batch starten, App aus der Übersicht wischen | Batch läuft weiter (Benachrichtigung bleibt) | |
 | Eine Nacht mit unklassifizierten Aufnahmen, Schalter „Nachts automatisch klassifizieren“ an | Am Morgen sind sie klassifiziert; in Drive liegt je betroffenem Tag `Schallmessung/klassifikation_nachtrag_JJJJ-MM-TT.csv`, die Tages-CSV ist unverändert | |
 
+### F30 — Datenbanksicherung als Voll- und Teilsicherung (10.10.2026)
+
+Umgesetzt und mit Robolectric unit-getestet (`docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md`), aber **noch nicht
+auf echter Hardware gesehen**.
+
+| Test | Erwartung | Ergebnis |
+|---|---|---|
+| Nach dem Update eine Nacht im WLAN laufen lassen, danach Bundle erzeugen | Im Protokoll steht „Vollsicherung hochgeladen“ gegen 03:00; die Datei in Drive `BACKUP/laermprotokoll_datenbank.zip` ist deutlich kleiner als vorher (vorher ~300 MB) | |
+| Tagsüber | Alle ~30 min „Teilsicherung hochgeladen“ mit wenigen MB; kein „Datenbank-Sicherung hochgeladen“ mit mehreren hundert MB mehr | |
+| Wiederherstellung von Drive auf einem Testgerät | Meldung nennt „Teilsicherung vom …“; Aufnahmen bis zur letzten Teilsicherung sind da | |
+
 ---
 
 ## Was zurückgemeldet werden sollte

@@ -803,4 +803,6 @@
     <string name="ki_batch_gestartet">KI-Klassifizierung läuft im Hintergrund weiter, auch bei gesperrtem Bildschirm</string>
     <string name="settings_ki_nachtlauf_title">Nachts automatisch klassifizieren</string>
     <string name="settings_ki_nachtlauf_desc">Klassifiziert gegen 01:30 Uhr alle noch unklassifizierten Aufnahmen, auch bei gesperrtem Bildschirm</string>
+    <string name="vollsicherung_kanal_name">Datenbanksicherung</string>
+    <string name="vollsicherung_benachrichtigung_titel">Datenbank wird in Drive gesichert</string>
 </resources>

@@ -4,6 +4,12 @@ import java.io.File
 
 internal const val BACKUP_ORDNERNAME = "BACKUP"
 internal const val BACKUP_DATEINAME = "laermprotokoll_datenbank.zip"
+
+/**
+ * Kumulative Teilsicherung zur Vollsicherung [BACKUP_DATEINAME] (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md):
+ * genau eine Datei, alle 30 Minuten ueberschrieben. Wiederherstellen = Vollsicherung plus diese.
+ */
+internal const val TEILSICHERUNG_DATEINAME = "laermprotokoll_teilsicherung.zip"
 private const val BACKUP_MIME_TYPE = "application/zip"
 
 /**
@@ -47,18 +53,42 @@ object DriveDatenbankSicherung {
         client: DriveApiClient,
         wurzelOrdnerId: String,
         datei: File,
+        dateiname: String = BACKUP_DATEINAME,
     ): Result<Unit> =
         runCatching {
             val ordnerId = ordnerSicherstellen(client, wurzelOrdnerId).getOrThrow()
-            val bestehende = client.dateiSuchen(BACKUP_DATEINAME, ordnerId).getOrThrow()
+            val bestehende = client.dateiSuchen(dateiname, ordnerId).getOrThrow()
             if (bestehende != null) {
                 client.dateiAktualisierenResumable(bestehende.id, datei, BACKUP_MIME_TYPE).getOrThrow()
             } else {
-                client.dateiHochladenResumable(BACKUP_DATEINAME, ordnerId, datei, BACKUP_MIME_TYPE).getOrThrow()
+                client.dateiHochladenResumable(dateiname, ordnerId, datei, BACKUP_MIME_TYPE).getOrThrow()
             }
             Unit
         }.onFailure { fehler ->
             if (fehler is java.util.concurrent.CancellationException) throw fehler
+        }
+
+    /** Wie [hochladen], fuer die Teilsicherung [TEILSICHERUNG_DATEINAME]. */
+    suspend fun hochladenTeil(
+        client: DriveApiClient,
+        wurzelOrdnerId: String,
+        datei: File,
+    ): Result<Unit> = hochladen(client, wurzelOrdnerId, datei, TEILSICHERUNG_DATEINAME)
+
+    /**
+     * Laedt die Teilsicherung nach [ziel], falls es eine gibt. `true`, wenn heruntergeladen,
+     * `false`, wenn in Drive keine liegt - das ist kein Fehler: dann gilt die Vollsicherung allein.
+     */
+    suspend fun herunterladenTeil(
+        client: DriveApiClient,
+        wurzelOrdnerId: String,
+        ziel: File,
+    ): Result<Boolean> =
+        runCatching {
+            val ordner = client.ordnerSuchen(BACKUP_ORDNERNAME, wurzelOrdnerId).getOrThrow() ?: return@runCatching false
+            val datei = client.dateiSuchen(TEILSICHERUNG_DATEINAME, ordner.id).getOrThrow() ?: return@runCatching false
+            client.dateiHerunterladenNach(datei.id, ziel).getOrThrow()
+            true
         }
 
     /**

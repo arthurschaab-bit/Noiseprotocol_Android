@@ -89,6 +89,11 @@ class LaermprotokollApp : Application() {
         val kiNachtlauf = container.settingsManager.kiNachtlauf
         com.example.lrmprotokoll.audio.KiBatchPlanung
             .planeNachtlauf(this, kiNachtlauf)
+        // Naechtliche Vollsicherung (docs/PROMPT_SICHERUNG_VOLL_UND_TEIL.md), bei jedem Start
+        // geplant, damit ein Update ohne weiteres Zutun greift.
+        val vollsicherungVorhanden = container.settingsManager.vollsicherungStand != null
+        com.example.lrmprotokoll.drive.DatenbankVollsicherungPlanung
+            .plane(this, vollsicherungVorhanden)
     }
 
     /**
