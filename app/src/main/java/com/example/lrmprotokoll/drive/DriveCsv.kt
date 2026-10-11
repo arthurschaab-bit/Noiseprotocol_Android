@@ -1,5 +1,9 @@
 package com.example.lrmprotokoll.drive
 
+import com.example.lrmprotokoll.data.NoiseRecord
+import com.example.lrmprotokoll.messreihe.erkanntesLabel
+import java.io.File
+import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -25,6 +29,34 @@ object DriveCsv {
         sb.append(KOPFZEILE).append("\r\n")
         for (zeile in zeilen) {
             sb.append(formatiereZeile(zeile, zone)).append("\r\n")
+        }
+        return sb.toString()
+    }
+
+    private const val NACHTRAG_KOPFZEILE = "Zeit;Aufnahme;Pegel_dB;Klassifikation"
+
+    /**
+     * Nachtragsdatei mit den KI-Labels eines Tages (Owner-Entscheidung 10.10.2026, Variante A,
+     * docs/PROMPT_KI_BATCH_HINTERGRUND.md): eine Zeile je Aufnahme mit KI-Entscheidung, "nicht
+     * erkannt" ausdruecklich als solches. Die Tages-CSV bleibt unangetastet.
+     */
+    fun schreibeKlassifikationsNachtrag(
+        records: List<NoiseRecord>,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): String {
+        val sb = StringBuilder()
+        sb.append('\uFEFF') // BOM
+        sb.append(NACHTRAG_KOPFZEILE).append("\r\n")
+        for (record in records.sortedBy { it.timestamp }) {
+            val label = erkanntesLabel(record.detectedLabel) ?: "nicht erkannt"
+            val spalten =
+                listOf(
+                    ZEITFORMAT.format(Instant.ofEpochMilli(record.timestamp).atZone(zone)),
+                    File(record.filePath).name,
+                    formatiereDezimalkomma(record.calibratedDbA ?: record.dbValue),
+                    label.replace(';', ','),
+                )
+            sb.append(spalten.joinToString(";")).append("\r\n")
         }
         return sb.toString()
     }

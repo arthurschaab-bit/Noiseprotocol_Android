@@ -448,8 +448,6 @@
     <string name="ai_batch_running">AI processing in progress …</string>
     <string name="ai_batch_progress">AI processing: %1$d of %2$d</string>
     <string name="action_ai_batch_day">Classify unclassified recordings for this day now</string>
-    <string name="ai_batch_day_result">%1$d recording(s) classified for %2$s</string>
-    <string name="ai_batch_day_result_empty">None of the selected recordings could be classified</string>
     <string name="action_neu_bewerten">Re-evaluate (without new AI analysis)</string>
     <string name="ai_reevaluated_count">%1$d recording(s) re-evaluated</string>
     <string name="ai_reevaluated_empty">No recording with stored raw data found - re-evaluate only affects recordings classified since this update</string>
@@ -795,4 +793,10 @@
     <string name="cockpit_unterbrechung_eintrag">Interrupted from %1$s to %2$s (running again)</string>
     <string name="cockpit_unterbrechung_eintrag_unbekannt">Interrupted until %1$s (start unknown, running again)</string>
     <string name="btn_unterbrechung_bestaetigen">Understood</string>
+    <string name="ki_batch_kanal_name">AI classification</string>
+    <string name="ki_batch_benachrichtigung_titel">AI classification running</string>
+    <string name="ki_batch_abbrechen">Cancel</string>
+    <string name="ki_batch_gestartet">AI classification continues in the background, even with the screen locked</string>
+    <string name="settings_ki_nachtlauf_title">Classify automatically at night</string>
+    <string name="settings_ki_nachtlauf_desc">Classifies all unclassified recordings around 01:30, even with the screen locked</string>
 </resources>

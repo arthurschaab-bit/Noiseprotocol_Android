@@ -84,6 +84,11 @@ class LaermprotokollApp : Application() {
         // M12 Schritt 6 (Konzept Schritt 6 Aufgabe 1): immer geplant, der Abschalter wirkt im
         // Coordinator bei jedem Lauf (siehe SupportBundleHealthPlanung-KDoc).
         com.example.lrmprotokoll.diagnose.export.SupportBundleHealthPlanung.plane(this)
+        // KI-Nachtlauf (docs/PROMPT_KI_BATCH_HINTERGRUND.md): bei jedem Start nach der
+        // Einstellung geplant oder entfernt, damit ein Update ohne Oeffnen der Einstellungen greift.
+        val kiNachtlauf = container.settingsManager.kiNachtlauf
+        com.example.lrmprotokoll.audio.KiBatchPlanung
+            .planeNachtlauf(this, kiNachtlauf)
     }
 
     /**
