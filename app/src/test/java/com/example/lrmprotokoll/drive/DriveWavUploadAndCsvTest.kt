@@ -119,9 +119,13 @@ class DriveWavUploadAndCsvTest {
             return if (dateiOrdnerZuordnung[name] == ordnerId) Result.success(DriveDatei("file-$name", name)) else Result.success(null)
         }
 
+        /** Wird vor jedem Anlegen aufgerufen - simuliert, was waehrend eines Uploads passiert. */
+        var beimAnlegen: (String) -> Unit = {}
+
         override suspend fun dateiAnlegen(
             name: String, ordnerId: String, inhalt: ByteArray, mimeType: String, gzip: Boolean
         ): Result<String> {
+            beimAnlegen(name)
             hochgeladeneDateien[name] = inhalt
             dateiOrdnerZuordnung[name] = ordnerId
             return Result.success("file-$name")
@@ -355,6 +359,61 @@ class DriveWavUploadAndCsvTest {
     }
 
     /**
+     * KI-Nachtrag (docs/PROMPT_KI_BATCH_HINTERGRUND.md, Variante A): fuer einen vorgemerkten Tag
+     * landet eine eigene Nachtragsdatei in Drive, die Tages-CSV dieses Tages wird dafuer nicht
+     * neu erzeugt, und der Tag ist danach nicht mehr vorgemerkt.
+     */
+    @Test
+    fun vorgemerkterTagBekommtNachtragsdateiOhneNeueTagesCsv() =
+        runTest {
+            settings.driveUploadWav = false
+            noiseDao.insert(
+                NoiseRecord(
+                    id = 7,
+                    timestamp = Instant.parse("2026-08-20T08:15:00Z").toEpochMilli(),
+                    amplitude = 0.0,
+                    dbValue = 63.4,
+                    filePath = "/x/noise_20260820_101500.wav",
+                    detectedLabel = "Bohren",
+                ),
+            )
+            settings.merkeKiNachtragVor(listOf("2026-08-20"))
+            // Der Tag ist laengst nach Tagesende synchronisiert - der Normalfall fuer alte Tage,
+            // deren Rohwerte schon geloescht sind.
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = "2026-08-20",
+                    fileId = "file-laermprotokoll_2026-08-20.csv",
+                    lastSyncedAt = uhr.now().toEpochMilli(),
+                    lastRowCount = 1,
+                    state = DriveSyncState.SYNCED,
+                ),
+            )
+
+            val coordinator =
+                DriveSyncCoordinator(
+                    driveApi = driveApi,
+                    levelSampleDao = levelSampleDao,
+                    dailyFileDao = dailyFileDao,
+                    noiseDao = noiseDao,
+                    settings = settings,
+                    now = uhr,
+                    zone = zone,
+                )
+            coordinator.syncEinenZyklus()
+
+            val nachtrag = driveApi.hochgeladeneDateien["klassifikation_nachtrag_2026-08-20.csv"]
+            assertNotNull("Nachtragsdatei muss hochgeladen sein", nachtrag)
+            val text = String(nachtrag!!, Charsets.UTF_8)
+            assertTrue(text, text.contains("noise_20260820_101500.wav;63,4;Bohren"))
+            assertTrue(
+                "Die Tages-CSV des Nachtragstags darf nicht neu erzeugt werden",
+                !driveApi.hochgeladeneDateien.containsKey("laermprotokoll_2026-08-20.csv"),
+            )
+            assertTrue(settings.kiNachtragOffeneTage.isEmpty())
+        }
+
+    /**
      * Befund 1 (docs/BEFUNDE_BUNDLES_2026-10-10.md): Das Stunden-ZIP wird ueber eine
      * temporaere Datei hochgeladen. Danach darf im Arbeitsverzeichnis nichts liegen bleiben -
      * weder die Datei dieses Laufs noch Reste eines frueheren, abgebrochenen Laufs.
@@ -398,5 +457,54 @@ class DriveWavUploadAndCsvTest {
                 "Arbeitsverzeichnis muss leer sein: ${arbeitsverzeichnis.list()?.toList()}",
                 arbeitsverzeichnis.list().isNullOrEmpty(),
             )
+        }
+
+    /**
+     * Review zu #273 (P2): Speichert der KI-Batch WAEHREND des Nachtrag-Uploads weitere Labels
+     * fuer denselben Tag, darf der aeltere Upload die neue Vormerkung nicht loeschen.
+     */
+    @Test
+    fun neueVormerkungWaehrendDesUploadsBleibtErhalten() =
+        runTest {
+            settings.driveUploadWav = false
+            noiseDao.insert(
+                NoiseRecord(
+                    id = 8,
+                    timestamp = Instant.parse("2026-08-19T08:15:00Z").toEpochMilli(),
+                    amplitude = 0.0,
+                    dbValue = 61.0,
+                    filePath = "/x/noise_20260819_101500.wav",
+                    detectedLabel = "Hämmern",
+                ),
+            )
+            settings.merkeKiNachtragVor(listOf("2026-08-19"))
+            dailyFileDao.upsert(
+                DriveDailyFileEntity(
+                    date = "2026-08-19",
+                    fileId = "file-laermprotokoll_2026-08-19.csv",
+                    lastSyncedAt = uhr.now().toEpochMilli(),
+                    lastRowCount = 1,
+                    state = DriveSyncState.SYNCED,
+                ),
+            )
+            driveApi.beimAnlegen = { name ->
+                if (name == "klassifikation_nachtrag_2026-08-19.csv") {
+                    // Der Batch speichert gerade ein weiteres Label fuer diesen Tag.
+                    if (settings.brauchtKiNachtragsVormerkung("2026-08-19")) settings.merkeKiNachtragVor(listOf("2026-08-19"))
+                }
+            }
+
+            DriveSyncCoordinator(
+                driveApi = driveApi,
+                levelSampleDao = levelSampleDao,
+                dailyFileDao = dailyFileDao,
+                noiseDao = noiseDao,
+                settings = settings,
+                now = uhr,
+                zone = zone,
+            ).syncEinenZyklus()
+
+            assertTrue(driveApi.hochgeladeneDateien.containsKey("klassifikation_nachtrag_2026-08-19.csv"))
+            assertEquals(setOf("2026-08-19"), settings.kiNachtragOffeneTage)
         }
 }
