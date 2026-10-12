@@ -196,6 +196,153 @@ class SicherungManagerTest {
             }
         }
 
+    @Test
+    fun voruebergehenderLesefehlerBeimKontrolllesenBleibtDieGueltigeSicherungErhalten() =
+        runTest {
+            AppDatabase.resetInstance()
+            AppDatabase.getDatabase(context)
+            val datei = File(context.cacheDir, "provider_lesefehler_${System.nanoTime()}.zip")
+            var lesezugriffe = 0
+            var geloescht = false
+            val provider =
+                object : ContentProvider() {
+                    override fun onCreate() = true
+
+                    override fun getType(uri: Uri): String = "application/zip"
+
+                    override fun query(
+                        uri: Uri,
+                        projection: Array<out String>?,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                        sortOrder: String?,
+                    ): Cursor? = null
+
+                    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+
+                    override fun update(
+                        uri: Uri,
+                        values: ContentValues?,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                    ): Int = 0
+
+                    override fun delete(
+                        uri: Uri,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                    ): Int {
+                        geloescht = true
+                        return 0
+                    }
+
+                    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
+                        if (method.contains("delete", ignoreCase = true)) geloescht = true
+                        return null
+                    }
+
+                    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+                        if (mode.contains('w')) {
+                            return ParcelFileDescriptor.open(
+                                datei,
+                                ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_WRITE_ONLY,
+                            )
+                        }
+                        if (lesezugriffe++ == 0) throw java.io.FileNotFoundException("Provider kurz nicht erreichbar")
+                        return ParcelFileDescriptor.open(datei, ParcelFileDescriptor.MODE_READ_ONLY)
+                    }
+                }
+            provider.attachInfo(context, ProviderInfo().apply { authority = "test.backup.lesefehler" })
+            ShadowContentResolver.registerProviderInternal("test.backup.lesefehler", provider)
+
+            try {
+                val ergebnis =
+                    SicherungManager.erstelleSicherung(
+                        context,
+                        Uri.parse("content://test.backup.lesefehler/document/sicherung"),
+                        neueSettings(),
+                    )
+                // Die Wiederholung findet die bytegleiche Datei; entscheidend ist, dass sie nie
+                // als "unvollstaendig" geloescht wurde.
+                assertTrue(ergebnis.nachricht, ergebnis.erfolg)
+                assertTrue("Gueltige Sicherung darf nicht geloescht werden", datei.length() > 0)
+                assertFalse("Zieldatei darf nicht geloescht werden", geloescht)
+            } finally {
+                datei.delete()
+            }
+        }
+
+    @Test
+    fun dauerhaftNichtPruefbareSicherungWirdNichtAlsErfolgGemeldetUndBleibtErhalten() =
+        runTest {
+            AppDatabase.resetInstance()
+            AppDatabase.getDatabase(context)
+            val datei = File(context.cacheDir, "provider_nie_lesbar_${System.nanoTime()}.zip")
+            var geloescht = false
+            val provider =
+                object : ContentProvider() {
+                    override fun onCreate() = true
+
+                    override fun getType(uri: Uri): String = "application/zip"
+
+                    override fun query(
+                        uri: Uri,
+                        projection: Array<out String>?,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                        sortOrder: String?,
+                    ): Cursor? = null
+
+                    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+
+                    override fun update(
+                        uri: Uri,
+                        values: ContentValues?,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                    ): Int = 0
+
+                    override fun delete(
+                        uri: Uri,
+                        selection: String?,
+                        selectionArgs: Array<out String>?,
+                    ): Int {
+                        geloescht = true
+                        return 0
+                    }
+
+                    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
+                        if (method.contains("delete", ignoreCase = true)) geloescht = true
+                        return null
+                    }
+
+                    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+                        if (!mode.contains('w')) throw java.io.FileNotFoundException("nicht lesbar")
+                        return ParcelFileDescriptor.open(
+                            datei,
+                            ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_WRITE_ONLY,
+                        )
+                    }
+                }
+            provider.attachInfo(context, ProviderInfo().apply { authority = "test.backup.nielesbar" })
+            ShadowContentResolver.registerProviderInternal("test.backup.nielesbar", provider)
+
+            try {
+                val ergebnis =
+                    SicherungManager.erstelleSicherung(
+                        context,
+                        Uri.parse("content://test.backup.nielesbar/document/sicherung"),
+                        neueSettings(),
+                    )
+                assertFalse(ergebnis.erfolg)
+                assertTrue(ergebnis.nachricht, ergebnis.nachricht.contains("nicht überprüft"))
+                assertTrue("Geschriebene Datei muss erhalten bleiben", datei.length() > 0)
+                assertFalse("Zieldatei darf nicht geloescht werden", geloescht)
+            } finally {
+                datei.delete()
+            }
+        }
+
     /**
      * PROMPT_FIX_DATENBANK_SICHERUNG.md Test 1 (Roundtrip): [SicherungManager.baueSicherungsDatei]
      * direkt auf eine Datei statt eines SAF-[Uri] - der Weg, den die automatische Drive-Sicherung

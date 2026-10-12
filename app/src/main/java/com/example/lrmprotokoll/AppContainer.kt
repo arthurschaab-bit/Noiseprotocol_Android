@@ -24,7 +24,6 @@ import com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider
 import com.example.lrmprotokoll.messreihe.MeasurementRecorder
 import com.example.lrmprotokoll.messreihe.RetentionCoordinator
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterAutoConnect
@@ -38,8 +37,10 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.example.lrmprotokoll.audio.AudioRecordingService
 
@@ -393,8 +394,58 @@ class AppContainer(
         CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     }
 
-    /** Eine manuelle Sicherung muss das Verlassen des Einstellungsbildschirms überleben. */
-    val manuelleSicherungLaeuft = AtomicBoolean(false)
+    /**
+     * Eine manuelle Sicherung muss das Verlassen des Einstellungsbildschirms überleben. Der Zustand
+     * ist App-weit und beobachtbar, damit ein neu geöffneter Bildschirm (oder eine neu erstellte
+     * Activity) Sicherung und Wiederherstellung weiter gegenseitig sperrt (Review zu #276).
+     */
+    val manuelleSicherungLaeuft = MutableStateFlow(false)
+
+    /**
+     * Abschlussmeldung der manuellen Sicherung, vom Container gehalten statt über einen
+     * Activity-Callback zugestellt: die aktuelle UI (MainActivity) zeigt sie an und löscht sie
+     * danach per [meldungAngezeigt]. Eine Neuerstellung der Activity verliert sie so nicht.
+     */
+    val sicherungMeldung = MutableStateFlow<String?>(null)
+
+    fun meldungAngezeigt(meldung: String) {
+        sicherungMeldung.compareAndSet(meldung, null)
+    }
+
+    /**
+     * Startet die manuelle Sicherung im App-Scope. Gibt `false` zurück, wenn bereits eine läuft
+     * (dann wurde nichts gestartet).
+     */
+    fun starteManuelleSicherung(
+        context: Context,
+        ziel: android.net.Uri,
+        settings: SettingsManager,
+        ersteller: suspend (Context, android.net.Uri, SettingsManager) -> com.example.lrmprotokoll.backup.SicherungsErgebnis,
+    ): Boolean {
+        if (!manuelleSicherungLaeuft.compareAndSet(false, true)) return false
+        val appContext = context.applicationContext
+        diagnosticsReporter.breadcrumb("Sicherung", "Manuelle Sicherung gestartet")
+        sicherungScope.launch {
+            try {
+                val ergebnis = ersteller(appContext, ziel, settings)
+                if (ergebnis.erfolg) {
+                    diagnosticsReporter.breadcrumb("Sicherung", "Manuelle Sicherung geprüft und abgeschlossen")
+                } else {
+                    diagnosticsReporter.report(
+                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
+                        component = "AppContainer",
+                        operation = "erstelleSicherung",
+                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
+                        message = ergebnis.nachricht,
+                    )
+                }
+                sicherungMeldung.value = ergebnis.nachricht
+            } finally {
+                manuelleSicherungLaeuft.value = false
+            }
+        }
+        return true
+    }
 
     val sicherungScope: CoroutineScope by lazy {
         val exceptionHandler =
