@@ -1,7 +1,9 @@
 package com.example.lrmprotokoll.testhilfen
 
 import androidx.compose.ui.test.junit4.ComposeTestRule
+import java.lang.reflect.Modifier
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Liest von aussen, WORAUF Composes Testumgebung gerade wartet - die Antwort, die die
@@ -42,6 +44,9 @@ internal object IdlingGruende {
         val testzeitMs: Long?,
         val roots: List<String>?,
         val fehler: List<String>,
+        /** `GlobalSnapshotManager.started` / `.sent`; `null` = nicht lesbar. Siehe [leseGlobalSnapshotManager]. */
+        val gsmGestartet: Boolean? = null,
+        val gsmSent: Boolean? = null,
     )
 
     /**
@@ -87,8 +92,32 @@ internal object IdlingGruende {
                 .onFailure { fehler += "Testuhr nicht lesbar: ${it.javaClass.simpleName}" }
                 .getOrNull()
         val roots = umgebung?.let { leseRoots(it, fehler) }
-        return Momentaufnahme(gruende, testzeit, roots, fehler)
+        val (gestartet, sent) = leseGlobalSnapshotManager()
+        return Momentaufnahme(gruende, testzeit, roots, fehler, gestartet, sent)
     }
+
+    /**
+     * Hypothese C-H9 (PR #280): `GlobalSnapshotManager` ist ein prozessweiter Singleton (je Sandbox).
+     * Das erste Schreiben in globalen Zustand setzt `sent = true` und weckt einen Konsumenten auf dem
+     * Main-Looper, der `Snapshot.sendApplyNotifications()` ruft und `sent` zurueck auf `false` setzt.
+     * Geht das Wecken verloren, bleibt `sent == true`, es wird nie wieder geweckt, und
+     * `hadSnapshotChanges` bleibt fuer immer wahr. Vorhersage: im naechsten echten Haenger ist
+     * `sent == true`. Ist es `false`, ist C-H9 widerlegt.
+     */
+    private fun leseGlobalSnapshotManager(): Pair<Boolean?, Boolean?> =
+        runCatching {
+            val klasse = Class.forName("androidx.compose.ui.platform.GlobalSnapshotManager")
+
+            fun flag(name: String): Boolean? =
+                runCatching {
+                    val feld = klasse.getDeclaredField(name).apply { isAccessible = true }
+                    val statisch = Modifier.isStatic(feld.modifiers)
+                    val instanzFeld = klasse.getDeclaredField("INSTANCE")
+                    val ziel = if (statisch) null else instanzFeld.get(null)
+                    (feld.get(ziel) as AtomicBoolean).get()
+                }.getOrNull()
+            flag("started") to flag("sent")
+        }.getOrDefault(null to null)
 
     /** Die registrierten Compose-Roots; das Popup eines Menues ist ein eigener Root. */
     private fun leseRoots(
@@ -171,6 +200,7 @@ internal class IdlingStichproben {
                 z.appendLine("\t${"%-26s".format(Locale.ROOT, feld)} $wahr / ${lesbar.size}")
             }
         }
+        haengeGlobalSnapshotManagerAn(z, lesbar.size)
         haengeTestuhrAn(z)
         val roots = aufnahmen.lastOrNull { it.second.roots != null }?.second?.roots
         if (roots != null) {
@@ -178,6 +208,23 @@ internal class IdlingStichproben {
             roots.forEach { z.appendLine("\t$it") }
         }
         return z.toString()
+    }
+
+    /** `sent` dauerhaft wahr = das Wecken des Singletons ist verloren gegangen (Hypothese C-H9). */
+    private fun haengeGlobalSnapshotManagerAn(
+        z: StringBuilder,
+        lesbar: Int,
+    ) {
+        val alle = aufnahmen.map { it.second }
+        val gestartet = alle.filter { it.gsmGestartet != null }
+        val sent = alle.filter { it.gsmSent != null }
+        z.appendLine("--- GlobalSnapshotManager (Singleton): in wie vielen Stichproben wahr ---")
+        if (sent.isEmpty()) {
+            z.appendLine("\tnicht lesbar (Klasse oder Feld nicht gefunden)")
+            return
+        }
+        z.appendLine("\tstarted                   ${gestartet.count { it.gsmGestartet == true }} / ${gestartet.size}")
+        z.appendLine("\tsent                      ${sent.count { it.gsmSent == true }} / ${sent.size}")
     }
 
     /**

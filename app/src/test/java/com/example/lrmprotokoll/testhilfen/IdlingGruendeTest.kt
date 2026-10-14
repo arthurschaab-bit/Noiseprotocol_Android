@@ -59,6 +59,8 @@ class IdlingGruendeTest {
         )
         assertNotNull("Testuhr muss lesbar sein", aufnahme.testzeitMs)
         assertNotNull("Roots muessen lesbar sein", aufnahme.roots)
+        assertEquals("GlobalSnapshotManager muss gestartet sein", true, aufnahme.gsmGestartet)
+        assertNotNull("sent muss lesbar sein", aufnahme.gsmSent)
     }
 
     @Test
@@ -121,6 +123,7 @@ class IdlingGruendeTest {
         assertTrue("Roots-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Compose-Roots"))
         assertTrue("Zweig-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zweig der Idle-Schleife"))
         assertTrue("JVM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zustand der Test-JVM"))
+        assertTrue("GSM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- GlobalSnapshotManager"))
         assertTrue("Diagnosedatei fehlt", File(ZeitwaechterRegel.DIAGNOSEDATEI).readText().contains("Idling-Gruende"))
     }
 
