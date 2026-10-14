@@ -1,5 +1,7 @@
 package com.example.lrmprotokoll.testhilfen
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import java.lang.reflect.Modifier
 import java.util.Locale
@@ -39,6 +41,7 @@ internal object IdlingGruende {
         )
 
     private const val COMPOSE_REGEL = "androidx.compose.ui.test.junit4.AndroidComposeTestRule"
+    private const val MAX_NACHRICHTEN = 200
 
     /** Eine Momentaufnahme; [fehler] ist gesetzt, wenn ein Teil nicht lesbar war. */
     internal data class Momentaufnahme(
@@ -63,6 +66,10 @@ internal object IdlingGruende {
         val trampolineGeplant: Boolean?,
         val frameGeplant: Boolean?,
         val wartend: Int?,
+        /** Gehoert der Handler des Dispatchers zum aktuellen Main-Looper? `false` = Nachricht liegt woanders. */
+        val handlerAmMainLooper: Boolean? = null,
+        /** Steht die `dispatchCallback` des Dispatchers als Nachricht in der Queue seines Loopers? */
+        val dispatchNachrichtInQueue: Boolean? = null,
     )
 
     /**
@@ -159,14 +166,38 @@ internal object IdlingGruende {
             } else {
                 val dispatcher = (verzoegert.value as CoroutineContext)[ContinuationInterceptor]
                 dispatcher?.let {
+                    val handler = leseFeld(it, "handler") as? Handler
+                    val callback = leseFeld(it, "dispatchCallback")
                     Dispatcherzustand(
                         initialisiert = true,
                         trampolineGeplant = leseFeld(it, "scheduledTrampolineDispatch") as? Boolean,
                         frameGeplant = leseFeld(it, "scheduledFrameDispatch") as? Boolean,
                         wartend = (leseFeld(it, "toRunTrampolined") as? Collection<*>)?.size,
+                        handlerAmMainLooper = handler?.let { h -> h.looper === Looper.getMainLooper() },
+                        dispatchNachrichtInQueue = handler?.let { h -> callback?.let { c -> stehtInQueue(h.looper, c) } },
                     )
                 }
             }
+        }.getOrNull()
+
+    /**
+     * Liegt [callback] (nach Identitaet) als Nachricht in der Queue von [looper]? Trennt "Nachricht
+     * wurde verworfen" (nein) von "Nachricht liegt da, wird aber nicht abgearbeitet" (ja). Liest ohne
+     * Sperre, hoechstens [MAX_NACHRICHTEN] Nachrichten.
+     */
+    private fun stehtInQueue(
+        looper: Looper,
+        callback: Any,
+    ): Boolean? =
+        runCatching {
+            var nachricht: Any? = leseFeld(looper.queue, "mMessages")
+            var gelesen = 0
+            while (nachricht != null && gelesen < MAX_NACHRICHTEN) {
+                if (leseFeld(nachricht, "callback") === callback) return@runCatching true
+                nachricht = leseFeld(nachricht, "next")
+                gelesen++
+            }
+            false
         }.getOrNull()
 
     /** Die registrierten Compose-Roots; das Popup eines Menues ist ein eigener Root. */
@@ -298,6 +329,10 @@ internal class IdlingStichproben {
             "\ttoRunTrampolined nicht leer   ${wartend.count { it > 0 }} / ${wartend.size}" +
                 " (hoechstens ${wartend.maxOrNull() ?: 0} Eintraege)",
         )
+        val amMain = initialisiert.mapNotNull { it.handlerAmMainLooper }
+        val inQueue = initialisiert.mapNotNull { it.dispatchNachrichtInQueue }
+        z.appendLine("\tHandler am Main-Looper        ${amMain.count { it }} / ${amMain.size}")
+        z.appendLine("\tdispatchCallback in Queue      ${inQueue.count { it }} / ${inQueue.size}")
     }
 
     /**

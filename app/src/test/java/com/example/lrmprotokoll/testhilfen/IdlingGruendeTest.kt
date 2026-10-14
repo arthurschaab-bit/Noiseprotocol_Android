@@ -69,6 +69,8 @@ class IdlingGruendeTest {
         assertNotNull("scheduledTrampolineDispatch muss lesbar sein", dispatcher.trampolineGeplant)
         assertNotNull("scheduledFrameDispatch muss lesbar sein", dispatcher.frameGeplant)
         assertNotNull("toRunTrampolined muss lesbar sein", dispatcher.wartend)
+        assertEquals("Handler muss am Main-Looper haengen", true, dispatcher.handlerAmMainLooper)
+        assertNotNull("Queue-Pruefung muss lesbar sein", dispatcher.dispatchNachrichtInQueue)
     }
 
     /**
@@ -196,6 +198,7 @@ class IdlingGruendeTest {
         assertTrue("JVM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zustand der Test-JVM"))
         assertTrue("GSM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- GlobalSnapshotManager"))
         assertTrue("Dispatcher-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- AndroidUiDispatcher.Main"))
+        assertTrue("Schreiber-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Globale Schreibzugriffe"))
         assertTrue("Diagnosedatei fehlt", File(ZeitwaechterRegel.DIAGNOSEDATEI).readText().contains("Idling-Gruende"))
     }
 
