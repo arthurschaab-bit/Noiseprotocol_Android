@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.ui
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -17,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 
 /**
  * Regressionstest fuer den schwarzen Bildschirm nach einem Videobeweis (Bundles vom 14.10.2026,
@@ -36,11 +36,11 @@ import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class VideoAbschlussMainThreadTest {
-
     @get:Rule
     val zeitwaechter = ZeitwaechterRegel()
 
-    private class Aufruf(val meldung: AtomicReference<String?> = AtomicReference(null)) {
+    private class Aufruf {
+        val meldung = AtomicReference<String?>(null)
         val fertigAufMain = AtomicReference<Boolean?>(null)
         val snackbarAufMain = AtomicReference<Boolean?>(null)
         val fertig = CountDownLatch(1)
