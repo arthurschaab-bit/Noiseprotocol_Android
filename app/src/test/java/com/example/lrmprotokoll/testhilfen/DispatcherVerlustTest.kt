@@ -92,7 +92,11 @@ class DispatcherVerlustTest {
             .invoke(dispatcher, EmptyCoroutineContext, Runnable { })
     }
 
-    /** Fuehrt aus, was der Dispatcher selbst bei Ankunft der Nachricht und des Frames taete. */
+    /**
+     * Fuehrt aus, was der Dispatcher selbst bei Ankunft der Nachricht und des Frames taete. Jeder Schritt
+     * ist einzeln abgesichert, und bleibt danach ein Flag wahr, wird es als letzte Rettung zurueckgesetzt:
+     * ein liegengebliebener Dispatcher haengte alle Folgetests der geteilten Sandbox (Review Gemini, PR #280).
+     */
     private fun raeumeAuf(dispatcher: Any) {
         val callback =
             runCatching {
@@ -100,7 +104,14 @@ class DispatcherVerlustTest {
                 feld.isAccessible = true
                 feld.get(dispatcher)
             }.getOrNull()
-        (callback as? Runnable)?.run()
-        (callback as? Choreographer.FrameCallback)?.doFrame(0)
+        runCatching { (callback as? Runnable)?.run() }
+        runCatching { (callback as? Choreographer.FrameCallback)?.doFrame(0) }
+        for (name in listOf("scheduledTrampolineDispatch", "scheduledFrameDispatch")) {
+            runCatching {
+                val feld = dispatcher.javaClass.getDeclaredField(name)
+                feld.isAccessible = true
+                if (feld.getBoolean(dispatcher)) feld.setBoolean(dispatcher, false)
+            }
+        }
     }
 }
