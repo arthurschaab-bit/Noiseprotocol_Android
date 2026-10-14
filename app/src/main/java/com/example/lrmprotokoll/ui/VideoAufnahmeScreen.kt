@@ -511,7 +511,7 @@ private suspend fun starteAufnahme(
     onGestartet(aufnahme)
 }
 
-private suspend fun beendeAufnahme(
+internal suspend fun beendeAufnahme(
     context: android.content.Context,
     container: com.example.lrmprotokoll.AppContainer,
     videoId: Long,
