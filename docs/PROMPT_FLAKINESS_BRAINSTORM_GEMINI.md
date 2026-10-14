@@ -73,11 +73,14 @@ unter den 10 s des `waitUntil`.
 
 **Was das für die bisherige Theorie bedeutet.** Der Bericht (Abschnitt 4.8, „Der Takt wird
 weitergestellt") erklärt den Hänger damit, dass etwas fortlaufend Frames anfordert und jeder
-`isIdleNow`-Aufruf neue Arbeit erzeugt. Diese Instanz stützt das **nicht**: Wer Frames anforderte
-und bediente, müsste in 100 Stichproben als `Recomposer`/`androidx.compose.ui.`-Rahmen auftauchen.
-Gemessen ist das Gegenteil — `isIdleNow` bleibt `false`, ohne dass irgendwo Arbeit stattfindet.
-Das ist ein Hinweis, **kein Beweis**: eine Stichprobe, ein Vorfall, Rahmenfilter nicht geprüft
-auf Lücken (zum Beispiel `kotlinx.coroutines.test.`-Rahmen werden nicht gezählt).
+`isIdleNow`-Aufruf neue Arbeit erzeugt. Diese Instanz **spricht eher dagegen, widerlegt es aber
+nicht**: Wer Frames anforderte und bediente, müsste in 100 Stichproben als
+`Recomposer`-/`androidx.compose.ui.`-Rahmen auftauchen, und es taucht keiner auf. Zwei Vorbehalte
+sind selbst Teil der Untersuchung: (1) `Thread.getStackTrace` ist **safepoint-verzerrt** — es sieht
+bevorzugt Schleifenrücksprünge und Methodenenden, also genau die leere Schleife; (2) ein einzelner
+Frame-Callback kann so kurz sein, dass 100 Stichproben ihn verfehlen. Eine Stichprobe, ein
+Vorfall, Rahmenfilter nicht auf Lücken geprüft (`kotlinx.coroutines.test.`-Rahmen werden nicht
+gezählt). Behandle die Zahl als Hinweis, nicht als Messung der Arbeitslast.
 
 **Weiteres Vorwissen, das du nicht neu entdecken musst** — `docs/CI_FLAKINESS_UNTERSUCHUNG_BERICHT.md`:
 Abschnitt 4.2 (Material-3-Popups unter `GraphicsMode.NATIVE`), 4.3 (Überlaufmenü), 4.5
