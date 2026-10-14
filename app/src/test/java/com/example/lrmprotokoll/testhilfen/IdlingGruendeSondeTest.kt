@@ -7,8 +7,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.test.espresso.AppNotIdleException
-import androidx.test.espresso.IdlingPolicies
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -41,15 +39,21 @@ class IdlingGruendeSondeTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    @Before
-    fun kurzesLimit() {
-        IdlingPolicies.setMasterPolicyTimeout(KURZES_LIMIT_S, TimeUnit.SECONDS)
+    /**
+     * Espresso steht für Unit-Tests nicht zur Compile-Zeit bereit (nur androidTest), zur Laufzeit
+     * aber schon - deshalb per Reflexion statt einer neuen Abhängigkeit für eine Sonde.
+     */
+    private fun setzeEspressoLimit(sekunden: Long) {
+        Class.forName("androidx.test.espresso.IdlingPolicies")
+            .getMethod("setMasterPolicyTimeout", Long::class.javaPrimitiveType, TimeUnit::class.java)
+            .invoke(null, sekunden, TimeUnit.SECONDS)
     }
 
+    @Before
+    fun kurzesLimit() = setzeEspressoLimit(KURZES_LIMIT_S)
+
     @After
-    fun limitZuruecksetzen() {
-        IdlingPolicies.setMasterPolicyTimeout(60, TimeUnit.SECONDS)
-    }
+    fun limitZuruecksetzen() = setzeEspressoLimit(60)
 
     /** Liest die fünf Felder; Namen und Pfad stammen aus compose-ui-test 1.6.7 (Quelltext gelesen). */
     private fun gruende(): Map<String, Boolean> {
@@ -94,7 +98,10 @@ class IdlingGruendeSondeTest {
         }.exceptionOrNull()
         thread.join(2_000)
         println("SONDE frameSchleife: ausnahme=${ausnahme?.javaClass?.simpleName} gruende=${ergebnis.get()}")
-        assertTrue("Erwartet AppNotIdle, war: $ausnahme", ausnahme is AppNotIdleException)
+        assertTrue(
+            "Erwartet AppNotIdleException, war: $ausnahme",
+            ausnahme?.javaClass?.name == "androidx.test.espresso.AppNotIdleException",
+        )
         assertEquals(true, ergebnis.get()?.get("hadAwaitersOnMainClock"))
     }
 
