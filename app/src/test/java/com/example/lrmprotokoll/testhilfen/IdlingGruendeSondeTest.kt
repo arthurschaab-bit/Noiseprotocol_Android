@@ -90,6 +90,7 @@ class IdlingGruendeSondeTest {
     @Test
     fun handgeschriebeneFrameSchleifeHaeltDieAwaiterFest() {
         val (thread, ergebnis) = beobachter(3_000)
+        val start = System.nanoTime()
         val ausnahme = runCatching {
             composeRule.setContent {
                 LaunchedEffect(Unit) { while (true) androidx.compose.runtime.withFrameNanos { } }
@@ -97,12 +98,17 @@ class IdlingGruendeSondeTest {
             }
         }.exceptionOrNull()
         thread.join(2_000)
-        println("SONDE frameSchleife: ausnahme=${ausnahme?.javaClass?.simpleName} gruende=${ergebnis.get()}")
+        println(
+            "SONDE frameSchleife: nach ${(System.nanoTime() - start) / 1_000_000} ms " +
+                "ausnahme=${ausnahme?.javaClass?.simpleName} meldung=${ausnahme?.message?.take(160)} gruende=${ergebnis.get()}",
+        )
         assertTrue(
             "Erwartet AppNotIdleException, war: $ausnahme",
             ausnahme?.javaClass?.name == "androidx.test.espresso.AppNotIdleException",
         )
-        assertEquals(true, ergebnis.get()?.get("hadAwaitersOnMainClock"))
+        // Gemessen (14.10.2026): eine withFrameNanos-Schleife erscheint als hadRecomposerChanges, nicht
+        // als hadAwaitersOnMainClock - Recomposer.hasPendingWork schliesst eigene Frame-Wartende ein.
+        assertEquals(true, ergebnis.get()?.get("hadRecomposerChanges"))
     }
 
     @Test
@@ -115,6 +121,7 @@ class IdlingGruendeSondeTest {
             }
         }.apply { isDaemon = true }
         val (thread, ergebnis) = beobachter(3_000)
+        val start = System.nanoTime()
         val ausnahme = try {
             runCatching {
                 composeRule.setContent {
@@ -129,7 +136,10 @@ class IdlingGruendeSondeTest {
             laeuft.set(false)
         }
         thread.join(2_000)
-        println("SONDE fremdSchreiber: ausnahme=${ausnahme?.javaClass?.simpleName} gruende=${ergebnis.get()}")
+        println(
+            "SONDE fremdSchreiber: nach ${(System.nanoTime() - start) / 1_000_000} ms " +
+                "ausnahme=${ausnahme?.javaClass?.simpleName} meldung=${ausnahme?.message?.take(160)} gruende=${ergebnis.get()}",
+        )
     }
 
     private companion object {
