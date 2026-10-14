@@ -511,7 +511,7 @@ private suspend fun starteAufnahme(
     onGestartet(aufnahme)
 }
 
-private suspend fun beendeAufnahme(
+internal suspend fun beendeAufnahme(
     context: android.content.Context,
     container: com.example.lrmprotokoll.AppContainer,
     videoId: Long,
@@ -524,6 +524,13 @@ private suspend fun beendeAufnahme(
 ) {
     val diagnose = container.diagnosticsReporter
     val dao = container.database.beweisVideoDao()
+    // Dieser Abschluss laeuft auf videobeweisAbschlussScope (Dispatchers.IO). onShowSnackbar und
+    // onFertig fuehren aber UI-Zustand nach - onFertig ist navController.popBackStack(), und die
+    // Navigation setzt den Lifecycle-Zustand der Back-Stack-Eintraege, was nur auf dem Main-Thread
+    // erlaubt ist. Vom IO-Thread aus warf das "setCurrentState must be called on the main thread":
+    // die Rueckkehr ins Cockpit scheiterte und der Screen blieb schwarz stehen.
+    val meldung: suspend (String) -> Unit = { text -> withContext(Dispatchers.Main) { onShowSnackbar(text) } }
+    val fertig: suspend () -> Unit = { withContext(Dispatchers.Main) { onFertig() } }
     // Der Mitschnitt wird IMMER beendet - auch im Fehlerfall. Sonst liefe die PCM-Senke weiter
     // und schriebe den Speicher voll.
     val ton = container.videoTonMitschnitt.beende()
@@ -536,11 +543,11 @@ private suspend fun beendeAufnahme(
             severity = DiagnosticSeverity.ERROR,
             details = mapOf("videoId" to videoId.toString()),
         )
-        onShowSnackbar("Die Videoaufnahme ist fehlgeschlagen")
+        meldung("Die Videoaufnahme ist fehlgeschlagen")
         withContext(Dispatchers.IO) { dao.loesche(videoId) }
         runCatching { videoDatei.delete() }
         runCatching { pcmDatei.delete() }
-        onFertig()
+        fertig()
         return
     }
 
@@ -554,8 +561,8 @@ private suspend fun beendeAufnahme(
 
     if (ton == null) {
         // Kein Ton mitgeschnitten - das Video ist so, wie es ist, fertig.
-        onShowSnackbar("Video ohne Ton gespeichert")
-        onFertig()
+        meldung("Video ohne Ton gespeichert")
+        fertig()
         return
     }
 
@@ -568,6 +575,6 @@ private suspend fun beendeAufnahme(
         abtastrate = ton.abtastrate,
         kanaele = ton.kanaele,
     )
-    onShowSnackbar("Video gespeichert – der Ton wird im Hintergrund hinzugefügt")
-    onFertig()
+    meldung("Video gespeichert – der Ton wird im Hintergrund hinzugefügt")
+    fertig()
 }
