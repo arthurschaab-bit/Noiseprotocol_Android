@@ -32,7 +32,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.ZipInputStream
 
 /**
@@ -146,7 +145,7 @@ class SettingsSicherungInstrumentedTest {
         val zeigeEinstellungen = mutableStateOf(true)
         val gestartet = CompletableDeferred<Unit>()
         val fortsetzen = CompletableDeferred<Unit>()
-        val meldungen = CopyOnWriteArrayList<String>()
+        app.container.sicherungMeldung.value = null
 
         Intents.init()
         try {
@@ -161,7 +160,6 @@ class SettingsSicherungInstrumentedTest {
                     SettingsScreen(
                         onBack = {},
                         initialTab = SettingsTab.DATEN,
-                        onShowSnackbar = { meldungen += it },
                         sicherungErsteller = { context, uri, settings ->
                             gestartet.complete(Unit)
                             fortsetzen.await()
@@ -182,11 +180,13 @@ class SettingsSicherungInstrumentedTest {
             fortsetzen.complete(Unit)
 
             composeRule.waitUntil(timeoutMillis = 10_000L) {
-                zielDatei.length() > 0 && meldungen.contains("Sicherung erstellt.")
+                // Die Abschlussmeldung liegt App-weit im Container (nicht im Screen-Callback).
+                zielDatei.length() > 0 && app.container.sicherungMeldung.value == "Sicherung erstellt."
             }
             assertTrue("ZIP muss nach dem Verlassen des Screens vollständig sein", zielDatei.length() > 0)
         } finally {
             fortsetzen.complete(Unit)
+            app.container.sicherungMeldung.value = null
             Intents.release()
             zielDatei.delete()
         }
