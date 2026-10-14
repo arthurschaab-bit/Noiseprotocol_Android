@@ -365,9 +365,7 @@ object SicherungManager {
                     .version
             val teilDb = File.createTempFile("teilsicherung_", ".db", context.cacheDir)
             val ziel = File.createTempFile("drive_teilsicherung_", ".zip", context.cacheDir)
-            // Nur nachgewiesene Fehlschlaege (Schreiben, Laenge, Hash) loeschen die Zieldatei; ein
-            // nicht moegliches Kontrolllesen beweist keine Beschaedigung (Review zu #276).
-            var zieldateiLoeschen = false
+            var erfolgreich = false
             try {
                 SicherungsDatenbank.baueTeilsicherung(dbDatei, teilDb, stand)
                 val manifest =
