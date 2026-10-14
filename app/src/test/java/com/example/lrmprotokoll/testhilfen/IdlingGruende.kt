@@ -61,8 +61,7 @@ internal object IdlingGruende {
         return null
     }
 
-    private fun istComposeRegel(typ: Class<*>): Boolean =
-        generateSequence<Class<*>>(typ) { it.superclass }.any { it.name == COMPOSE_REGEL }
+    private fun istComposeRegel(typ: Class<*>): Boolean = generateSequence<Class<*>>(typ) { it.superclass }.any { it.name == COMPOSE_REGEL }
 
     fun lies(zielobjekt: Any?): Momentaufnahme {
         val fehler = mutableListOf<String>()

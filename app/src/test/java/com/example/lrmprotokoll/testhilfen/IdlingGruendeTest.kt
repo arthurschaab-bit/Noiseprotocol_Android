@@ -52,7 +52,10 @@ class IdlingGruendeTest {
         assertEquals(
             "Im Leerlauf darf kein Grund gesetzt sein: ${aufnahme.gruende}",
             emptyList<String>(),
-            aufnahme.gruende.filterValues { it }.keys.toList(),
+            aufnahme.gruende
+                .filterValues { it }
+                .keys
+                .toList(),
         )
         assertNotNull("Testuhr muss lesbar sein", aufnahme.testzeitMs)
         assertNotNull("Roots muessen lesbar sein", aufnahme.roots)
