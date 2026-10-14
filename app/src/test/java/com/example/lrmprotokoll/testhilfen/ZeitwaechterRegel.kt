@@ -110,7 +110,7 @@ class ZeitwaechterRegel(
                 try {
                     base.evaluate()
                 } finally {
-                    GlobaleSchreiber.setzePhase("nach dem Rumpf von $testname (Teardown, Robolectric-Reset, naechster Setup)")
+                    GlobaleSchreiber.setzePhase("seit dem Ende von $testname, auch in Klassen OHNE diese Regel (sie setzen keine Phase)")
                     fertig.countDown()
                     // Die Stichproben brechen mit dem Testende ab, schreiben aber noch ihren Block.
                     // Kurz darauf warten, damit die Diagnose vollstaendig ist, bevor der naechste
