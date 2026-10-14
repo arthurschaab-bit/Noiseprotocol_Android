@@ -1,8 +1,9 @@
 package com.example.lrmprotokoll.testhilfen
 
 import android.os.Looper
-import org.junit.rules.TestRule
+import org.junit.rules.MethodRule
 import org.junit.runner.Description
+import org.junit.runners.model.FrameworkMethod
 import org.junit.runners.model.Statement
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -64,10 +65,30 @@ import java.util.concurrent.TimeUnit
  */
 class ZeitwaechterRegel(
     private val grenzeSekunden: Long = 50,
-) : TestRule {
+) : MethodRule {
+    /**
+     * `MethodRule` statt `TestRule`, damit die Regel die Testinstanz bekommt und darin die
+     * Compose-Testregel findet (siehe [IdlingGruende]) - ohne dass die neun Testklassen, die sie
+     * tragen, angefasst werden muessen. Die Regel liegt dadurch INNERHALB der Compose-Testregel
+     * (JUnit wendet `MethodRule`s vor `TestRule`s an): die 50 s zaehlen erst ab dem Testrumpf, nicht
+     * ab dem Start von Activity und Robolectric-Laufzeit.
+     */
     override fun apply(
         base: Statement,
+        method: FrameworkMethod,
+        target: Any,
+    ): Statement = pruefe(base, Description.createTestDescription(target.javaClass, method.name), target)
+
+    /** Fuer Tests der Regel selbst, ohne Testinstanz: dann entfallen nur die Idling-Gruende. */
+    fun apply(
+        base: Statement,
         description: Description,
+    ): Statement = pruefe(base, description, null)
+
+    private fun pruefe(
+        base: Statement,
+        description: Description,
+        zielobjekt: Any?,
     ): Statement =
         object : Statement() {
             override fun evaluate() {
@@ -76,7 +97,7 @@ class ZeitwaechterRegel(
                 val beobachter =
                     Thread {
                         if (fertig.await(grenzeSekunden, TimeUnit.SECONDS)) return@Thread
-                        gibDiagnoseAus(description, testThread, fertig)
+                        gibDiagnoseAus(description, testThread, fertig, zielobjekt)
                     }
                 beobachter.isDaemon = true
                 beobachter.name = "Zeitwaechter"
@@ -97,6 +118,7 @@ class ZeitwaechterRegel(
         description: Description,
         testThread: Thread,
         fertig: CountDownLatch,
+        zielobjekt: Any?,
     ) {
         val zeilen = StringBuilder()
         zeilen.appendLine()
@@ -122,7 +144,7 @@ class ZeitwaechterRegel(
         schreibe(zeilen.toString())
 
         val stichproben = StringBuilder()
-        haengeStichprobenAn(stichproben, testThread, fertig)
+        haengeStichprobenAn(stichproben, testThread, fertig, zielobjekt)
         stichproben.appendLine("=== ZEITWAECHTER Ende ===")
         schreibe(stichproben.toString())
     }
@@ -153,13 +175,16 @@ class ZeitwaechterRegel(
         zeilen: StringBuilder,
         testThread: Thread,
         fertig: CountDownLatch,
+        zielobjekt: Any?,
     ) {
         val stacks = mutableListOf<Array<StackTraceElement>>()
         val warteschlangen = mutableListOf<List<String>>()
+        val idling = IdlingStichproben()
         for (i in 0 until STICHPROBEN) {
             if (fertig.count == 0L) break
             stacks += testThread.stackTrace
             leseHauptLooperWarteschlange()?.let { warteschlangen += it }
+            idling.fuegeHinzu(System.currentTimeMillis(), IdlingGruende.lies(zielobjekt))
             if (fertig.await(STICHPROBEN_ABSTAND_MS, TimeUnit.MILLISECONDS)) break
         }
         zeilen.appendLine()
@@ -176,6 +201,32 @@ class ZeitwaechterRegel(
         if (compose.isEmpty()) zeilen.appendLine("\t(keiner getroffen)")
         compose.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (rahmen, anzahl) -> zeilen.appendLine("\t$anzahl  $rahmen") }
         haengeWarteschlangeAn(zeilen, warteschlangen)
+        haengeIdleSchleifeAn(zeilen, stacks)
+        zeilen.append(idling.text())
+    }
+
+    /**
+     * Wo die Zeit in der Idle-Schleife steht und was der Scheduler beim Pumpen ausfuehrt. Der
+     * Rahmenfilter oben blendet `androidx.compose.ui.test.` und `kotlinx.coroutines.test.` bewusst
+     * aus; ohne diese Zaehlung liest sich ein Stack, der ZU 100 % in der Idle-Schleife steht, wie
+     * "keine Arbeit" (Review Gemini, PR #280, G-H1).
+     */
+    private fun haengeIdleSchleifeAn(
+        zeilen: StringBuilder,
+        stacks: List<Array<StackTraceElement>>,
+    ) {
+        zeilen.appendLine()
+        zeilen.appendLine("--- Zweig der Idle-Schleife, in wie vielen von ${stacks.size} Stichproben ---")
+        stacks
+            .groupingBy(::klassifiziereZweig)
+            .eachCount()
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .forEach { (zweig, anzahl) -> zeilen.appendLine("\t$anzahl  $zweig") }
+        val (nurScheduler, aufgaben) = zaehleAufgabenImScheduler(stacks)
+        zeilen.appendLine("--- Aufgaben, die der TestCoroutineScheduler beim Pumpen ausfuehrt ---")
+        zeilen.appendLine("\t$nurScheduler  Scheduler selbst am Blatt (keine Aufgabe)")
+        aufgaben.take(GEZEIGTE_STICHPROBEN_RAHMEN).forEach { (blatt, anzahl) -> zeilen.appendLine("\t$anzahl  $blatt") }
     }
 
     /**
