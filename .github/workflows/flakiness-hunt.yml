@@ -95,9 +95,11 @@ jobs:
         run: |
           echo "### Arm A vollsuite #${{ matrix.lauf }} — Tests: ${{ steps.tests.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -f app/build/zeitwaechter-diagnose.txt ]; then
-            echo "**Zeitwächter hat ausgelöst** ($(grep -c '=== ZEITWAECHTER:' app/build/zeitwaechter-diagnose.txt) Blöcke)" >> "$GITHUB_STEP_SUMMARY"
+            haenger=$(grep -c '=== ZEITWAECHTER:' app/build/zeitwaechter-diagnose.txt || true)
+            repariert=$(grep -c '=== DISPATCHER-REPARATUR:' app/build/zeitwaechter-diagnose.txt || true)
+            echo "**Zeitwächter:** $haenger Hänger-Blöcke, **Dispatcher-Reparaturen:** $repariert" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Kein Hänger (keine Wächter-Diagnose)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Kein Hänger, keine Reparatur (keine Wächter-Diagnose)." >> "$GITHUB_STEP_SUMMARY"
           fi
           python .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY" || true
 
