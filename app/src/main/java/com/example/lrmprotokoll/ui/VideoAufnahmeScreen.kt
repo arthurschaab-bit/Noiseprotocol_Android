@@ -76,6 +76,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.video.VideoMuxPlanung
 import com.example.lrmprotokoll.video.Videospeicher
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -126,6 +127,13 @@ fun VideoAufnahmeScreen(
     }
     LaunchedEffect(Unit) {
         if (!kameraErlaubt) berechtigung.launch(Manifest.permission.CAMERA)
+    }
+
+    // Sagt dem Abschluss (laeuft auf dem App-Scope und kann NACH dem Verlassen des Screens enden),
+    // ob dieser Screen noch da ist - sonst schlosse onBack() einen fremden Screen.
+    val waechter = remember { BildschirmWaechter() }
+    DisposableEffect(Unit) {
+        onDispose { waechter.verlassen() }
     }
 
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
@@ -219,12 +227,17 @@ fun VideoAufnahmeScreen(
                 laeuft = true
             },
             onBeendet = {
-                laeuft = false
-                aufnahme = null
-                // Zurueck ins Cockpit: Die Kamera wird dabei ueber onDispose freigegeben, und
-                // der Mux-Lauf laeuft im Hintergrund weiter. Sein Fortschritt steht im
-                // Session-Detail, nicht in einer Anzeige, die niemand mehr beobachtet.
-                onBack()
+                // Hat der Nutzer den Screen schon verlassen (z. B. Zurueck-Taste waehrend der
+                // Aufnahme: onDispose stoppt sie, Finalize kommt erst danach), gibt es hier nichts
+                // mehr zu schliessen - onBack() pruefte nicht, WELCHER Screen gerade oben liegt.
+                waechter.wennAktiv {
+                    laeuft = false
+                    aufnahme = null
+                    // Zurueck ins Cockpit: Die Kamera wird dabei ueber onDispose freigegeben, und
+                    // der Mux-Lauf laeuft im Hintergrund weiter. Sein Fortschritt steht im
+                    // Session-Detail, nicht in einer Anzeige, die niemand mehr beobachtet.
+                    onBack()
+                }
             },
             onShowSnackbar = onShowSnackbar,
         )
@@ -577,4 +590,23 @@ internal suspend fun beendeAufnahme(
     )
     meldung("Video gespeichert – der Ton wird im Hintergrund hinzugefügt")
     fertig()
+}
+
+/**
+ * Merkt sich, ob der Videoscreen noch angezeigt wird. [verlassen] wird beim Verlassen aufgerufen
+ * (Main-Thread, onDispose), [wennAktiv] vom Abschluss der Aufnahme (ebenfalls Main-Thread, siehe
+ * [beendeAufnahme]). AtomicBoolean statt Compose-State, weil der Wert ausserhalb der Komposition
+ * gelesen wird, wenn diese schon verworfen ist.
+ */
+internal class BildschirmWaechter {
+    private val aktiv = AtomicBoolean(true)
+
+    fun verlassen() {
+        aktiv.set(false)
+    }
+
+    /** Fuehrt [block] nur aus, solange der Screen noch da ist. */
+    fun wennAktiv(block: () -> Unit) {
+        if (aktiv.get()) block()
+    }
 }
