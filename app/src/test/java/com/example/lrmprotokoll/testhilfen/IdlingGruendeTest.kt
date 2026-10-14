@@ -120,6 +120,7 @@ class IdlingGruendeTest {
         assertTrue("Testuhr-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Testuhr"))
         assertTrue("Roots-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Compose-Roots"))
         assertTrue("Zweig-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zweig der Idle-Schleife"))
+        assertTrue("JVM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zustand der Test-JVM"))
         assertTrue("Diagnosedatei fehlt", File(ZeitwaechterRegel.DIAGNOSEDATEI).readText().contains("Idling-Gruende"))
     }
 

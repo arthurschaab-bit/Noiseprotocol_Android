@@ -120,6 +120,7 @@ class ZeitwaechterRegel(
         fertig: CountDownLatch,
         zielobjekt: Any?,
     ) {
+        val jvmAnfang = LaufzeitZustand.lies()
         val zeilen = StringBuilder()
         zeilen.appendLine()
         zeilen.appendLine("=== ZEITWAECHTER: ${description.className}.${description.methodName} ===")
@@ -145,6 +146,7 @@ class ZeitwaechterRegel(
 
         val stichproben = StringBuilder()
         haengeStichprobenAn(stichproben, testThread, fertig, zielobjekt)
+        stichproben.append(LaufzeitZustand.text(jvmAnfang, LaufzeitZustand.lies()))
         stichproben.appendLine("=== ZEITWAECHTER Ende ===")
         schreibe(stichproben.toString())
     }
