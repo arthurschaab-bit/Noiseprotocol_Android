@@ -93,6 +93,9 @@ class ZeitwaechterRegel(
         object : Statement() {
             override fun evaluate() {
                 val testThread = Thread.currentThread()
+                val testname = "${description.className}.${description.methodName}"
+                GlobaleSchreiber.installiere()
+                GlobaleSchreiber.setzePhase("Test $testname")
                 val fertig = CountDownLatch(1)
                 val beobachter =
                     Thread {
@@ -105,6 +108,7 @@ class ZeitwaechterRegel(
                 try {
                     base.evaluate()
                 } finally {
+                    GlobaleSchreiber.setzePhase("nach dem Rumpf von $testname (Teardown, Robolectric-Reset, naechster Setup)")
                     fertig.countDown()
                     // Die Stichproben brechen mit dem Testende ab, schreiben aber noch ihren Block.
                     // Kurz darauf warten, damit die Diagnose vollstaendig ist, bevor der naechste
@@ -205,6 +209,7 @@ class ZeitwaechterRegel(
         haengeWarteschlangeAn(zeilen, warteschlangen)
         haengeIdleSchleifeAn(zeilen, stacks)
         zeilen.append(idling.text())
+        zeilen.append(GlobaleSchreiber.text())
     }
 
     /**
