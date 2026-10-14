@@ -96,6 +96,8 @@ class ZeitwaechterRegel(
                 val testname = "${description.className}.${description.methodName}"
                 GlobaleSchreiber.installiere()
                 GlobaleSchreiber.setzePhase("Test $testname")
+                // Ein festgefahrener Dispatcher aus einem frueheren Test haengt sonst diesen hier (PR #280).
+                DispatcherReparatur.pruefeUndHeile()?.let { schreibe(it.text(testname)) }
                 val fertig = CountDownLatch(1)
                 val beobachter =
                     Thread {

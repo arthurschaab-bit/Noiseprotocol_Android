@@ -127,7 +127,7 @@ internal object IdlingGruende {
      * `hadSnapshotChanges` bleibt fuer immer wahr. Vorhersage: im naechsten echten Haenger ist
      * `sent == true`. Ist es `false`, ist C-H9 widerlegt.
      */
-    private fun leseGlobalSnapshotManager(): Pair<Boolean?, Boolean?> =
+    internal fun leseGlobalSnapshotManager(): Pair<Boolean?, Boolean?> =
         runCatching {
             val klasse = Class.forName("androidx.compose.ui.platform.GlobalSnapshotManager")
 
@@ -159,8 +159,7 @@ internal object IdlingGruende {
      */
     internal fun leseDispatcher(): Dispatcherzustand? =
         runCatching {
-            val klasse = Class.forName("androidx.compose.ui.platform.AndroidUiDispatcher")
-            val verzoegert = klasse.getDeclaredField("Main\$delegate").apply { isAccessible = true }.get(null) as Lazy<*>
+            val verzoegert = dispatcherLazy()
             if (!verzoegert.isInitialized()) {
                 Dispatcherzustand(initialisiert = false, trampolineGeplant = null, frameGeplant = null, wartend = null)
             } else {
@@ -179,6 +178,21 @@ internal object IdlingGruende {
                 }
             }
         }.getOrNull()
+
+    /**
+     * Der `AndroidUiDispatcher` der Sandbox, aber NUR wenn er schon angelegt ist; sonst `null`. Legt ihn
+     * nie an (der Erstzugriff aus einem Fremd-Thread liefe ueber `runBlocking(Dispatchers.Main)`).
+     */
+    internal fun dispatcherFallsVorhanden(): Any? =
+        runCatching {
+            val verzoegert = dispatcherLazy()
+            if (verzoegert.isInitialized()) (verzoegert.value as CoroutineContext)[ContinuationInterceptor] else null
+        }.getOrNull()
+
+    private fun dispatcherLazy(): Lazy<*> {
+        val klasse = Class.forName("androidx.compose.ui.platform.AndroidUiDispatcher")
+        return klasse.getDeclaredField("Main\$delegate").apply { isAccessible = true }.get(null) as Lazy<*>
+    }
 
     /**
      * Liegt [callback] (nach Identitaet) als Nachricht in der Queue von [looper]? Trennt "Nachricht
@@ -232,7 +246,7 @@ internal object IdlingGruende {
     }
 
     /** Liest ein (auch privates) Feld ueber die Klassenhierarchie; `null`, wenn es fehlt. */
-    private fun leseFeld(
+    internal fun leseFeld(
         objekt: Any,
         name: String,
     ): Any? {
