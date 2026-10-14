@@ -20,6 +20,8 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Nachweis fuer [IdlingGruende] und die Erweiterung der [ZeitwaechterRegel] (Untersuchung
@@ -61,6 +63,75 @@ class IdlingGruendeTest {
         assertNotNull("Roots muessen lesbar sein", aufnahme.roots)
         assertEquals("GlobalSnapshotManager muss gestartet sein", true, aufnahme.gsmGestartet)
         assertNotNull("sent muss lesbar sein", aufnahme.gsmSent)
+        val dispatcher = aufnahme.dispatcher
+        assertNotNull("AndroidUiDispatcher muss lesbar sein", dispatcher)
+        assertEquals("Der Singleton ist nach dem Start des GlobalSnapshotManager angelegt", true, dispatcher!!.initialisiert)
+        assertNotNull("scheduledTrampolineDispatch muss lesbar sein", dispatcher.trampolineGeplant)
+        assertNotNull("scheduledFrameDispatch muss lesbar sein", dispatcher.frameGeplant)
+        assertNotNull("toRunTrampolined muss lesbar sein", dispatcher.wartend)
+    }
+
+    /**
+     * Positivkontrolle fuer das LESEN: ein bekannter Wert (Flag kuenstlich gesetzt) muss ankommen.
+     * Die Sandbox ist mit anderen Testklassen geteilt - das Flag wird deshalb in jedem Fall zurueckgesetzt,
+     * sonst bliebe der Dispatcher fuer Folgetests tot (genau der Mechanismus, den die Messung sucht).
+     */
+    @Test
+    fun einGesetztesDispatchFlagWirdAlsWahrGelesen() {
+        composeRule.setContent { Text("Hallo") }
+        composeRule.waitForIdle()
+        val dispatcher = dispatcherInstanz()
+        val feld = dispatcher.javaClass.getDeclaredField("scheduledTrampolineDispatch").apply { isAccessible = true }
+        val vorher = feld.getBoolean(dispatcher)
+        try {
+            feld.setBoolean(dispatcher, true)
+
+            val gelesen = IdlingGruende.leseDispatcher()
+
+            assertEquals("Gesetztes Flag muss als wahr ankommen: $gelesen", true, gelesen?.trampolineGeplant)
+        } finally {
+            feld.setBoolean(dispatcher, vorher)
+        }
+    }
+
+    @Test
+    fun dieAuswertungZaehltDieDispatcherFelderProStichprobe() {
+        val stichproben = IdlingStichproben()
+        listOf(true, true, false).forEachIndexed { i, geplant ->
+            stichproben.fuegeHinzu(
+                wanduhrMs = i * 50L,
+                aufnahme =
+                    IdlingGruende.Momentaufnahme(
+                        gruende = emptyMap(),
+                        testzeitMs = null,
+                        roots = null,
+                        fehler = emptyList(),
+                        dispatcher =
+                            IdlingGruende.Dispatcherzustand(
+                                initialisiert = true,
+                                trampolineGeplant = geplant,
+                                frameGeplant = false,
+                                wartend = if (geplant) 2 else 0,
+                            ),
+                    ),
+            )
+        }
+
+        val text = stichproben.text()
+
+        assertTrue("Abschnitt fehlt: $text", text.contains("--- AndroidUiDispatcher.Main"))
+        assertTrue("trampoline 2 / 3 fehlt: $text", Regex("""scheduledTrampolineDispatch\s+2 / 3""").containsMatchIn(text))
+        assertTrue("frame 0 / 3 fehlt: $text", Regex("""scheduledFrameDispatch\s+0 / 3""").containsMatchIn(text))
+        assertTrue(
+            "wartend 2 / 3 fehlt: $text",
+            Regex("""nicht leer\s+2 / 3 \(hoechstens 2 Eintraege\)""").containsMatchIn(text),
+        )
+    }
+
+    private fun dispatcherInstanz(): Any {
+        val klasse = Class.forName("androidx.compose.ui.platform.AndroidUiDispatcher")
+        val verzoegert = klasse.getDeclaredField("Main\$delegate").apply { isAccessible = true }.get(null) as Lazy<*>
+        return (verzoegert.value as CoroutineContext)[ContinuationInterceptor]!!
     }
 
     @Test
@@ -124,6 +195,7 @@ class IdlingGruendeTest {
         assertTrue("Zweig-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zweig der Idle-Schleife"))
         assertTrue("JVM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- Zustand der Test-JVM"))
         assertTrue("GSM-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- GlobalSnapshotManager"))
+        assertTrue("Dispatcher-Abschnitt fehlt: $ausgabe", ausgabe.contains("--- AndroidUiDispatcher.Main"))
         assertTrue("Diagnosedatei fehlt", File(ZeitwaechterRegel.DIAGNOSEDATEI).readText().contains("Idling-Gruende"))
     }
 

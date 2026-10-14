@@ -4,6 +4,8 @@ import androidx.compose.ui.test.junit4.ComposeTestRule
 import java.lang.reflect.Modifier
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Liest von aussen, WORAUF Composes Testumgebung gerade wartet - die Antwort, die die
@@ -47,6 +49,20 @@ internal object IdlingGruende {
         /** `GlobalSnapshotManager.started` / `.sent`; `null` = nicht lesbar. Siehe [leseGlobalSnapshotManager]. */
         val gsmGestartet: Boolean? = null,
         val gsmSent: Boolean? = null,
+        /** Zustand von `AndroidUiDispatcher.Main`; `null` = nicht lesbar. Siehe [leseDispatcher]. */
+        val dispatcher: Dispatcherzustand? = null,
+    )
+
+    /**
+     * Die Felder von `AndroidUiDispatcher`, die zeigen, ob eine Dispatch-Nachricht unterwegs sein
+     * MUSS. [initialisiert] `false` heisst: der Singleton wurde noch nie angefordert, die uebrigen
+     * Felder sind dann `null`.
+     */
+    internal data class Dispatcherzustand(
+        val initialisiert: Boolean,
+        val trampolineGeplant: Boolean?,
+        val frameGeplant: Boolean?,
+        val wartend: Int?,
     )
 
     /**
@@ -93,7 +109,7 @@ internal object IdlingGruende {
                 .getOrNull()
         val roots = umgebung?.let { leseRoots(it, fehler) }
         val (gestartet, sent) = leseGlobalSnapshotManager()
-        return Momentaufnahme(gruende, testzeit, roots, fehler, gestartet, sent)
+        return Momentaufnahme(gruende, testzeit, roots, fehler, gestartet, sent, leseDispatcher())
     }
 
     /**
@@ -118,6 +134,40 @@ internal object IdlingGruende {
                 }.getOrNull()
             flag("started") to flag("sent")
         }.getOrDefault(null to null)
+
+    /**
+     * Hypothese C-H9, Teil 2 (PR #280): WARUM bleibt `sent` wahr? Der Konsument laeuft auf
+     * `AndroidUiDispatcher.Main`, und dessen `dispatch` postet nur, wenn `scheduledTrampolineDispatch`
+     * noch `false` ist (Bytecode compose-ui 1.6.7 gelesen). Zwei Wege sind moeglich:
+     *  - (a) Konsument tot (`consumeEach` hat den Channel nach einer Exception geschlossen):
+     *    `scheduledTrampolineDispatch` ist `false`, `toRunTrampolined` leer.
+     *  - (b) Dispatch-Nachricht verloren (z. B. Main-Looper zwischen Tests geleert): das Flag ist
+     *    `true`, die Warteschlange des Dispatchers nicht leer, aber keine Nachricht mehr unterwegs.
+     * Welcher davon eintritt, ist NICHT belegt - diese Felder sollen es trennen.
+     *
+     * Gelesen wird nur, wenn der Singleton schon existiert: `Main` ist `lazy`, und der erste Zugriff
+     * von einem anderen Thread als dem Main-Thread laeuft ueber `runBlocking(Dispatchers.Main)` -
+     * das wuerde den Waechter blockieren, solange der Main-Thread im Idle-Warten steckt. Die Felder
+     * sind nicht volatil und werden ohne Sperre gelesen; bei 100 Stichproben reicht das.
+     */
+    internal fun leseDispatcher(): Dispatcherzustand? =
+        runCatching {
+            val klasse = Class.forName("androidx.compose.ui.platform.AndroidUiDispatcher")
+            val verzoegert = klasse.getDeclaredField("Main\$delegate").apply { isAccessible = true }.get(null) as Lazy<*>
+            if (!verzoegert.isInitialized()) {
+                Dispatcherzustand(initialisiert = false, trampolineGeplant = null, frameGeplant = null, wartend = null)
+            } else {
+                val dispatcher = (verzoegert.value as CoroutineContext)[ContinuationInterceptor]
+                dispatcher?.let {
+                    Dispatcherzustand(
+                        initialisiert = true,
+                        trampolineGeplant = leseFeld(it, "scheduledTrampolineDispatch") as? Boolean,
+                        frameGeplant = leseFeld(it, "scheduledFrameDispatch") as? Boolean,
+                        wartend = (leseFeld(it, "toRunTrampolined") as? Collection<*>)?.size,
+                    )
+                }
+            }
+        }.getOrNull()
 
     /** Die registrierten Compose-Roots; das Popup eines Menues ist ein eigener Root. */
     private fun leseRoots(
@@ -201,6 +251,7 @@ internal class IdlingStichproben {
             }
         }
         haengeGlobalSnapshotManagerAn(z, lesbar.size)
+        haengeDispatcherAn(z)
         haengeTestuhrAn(z)
         val roots = aufnahmen.lastOrNull { it.second.roots != null }?.second?.roots
         if (roots != null) {
@@ -225,6 +276,28 @@ internal class IdlingStichproben {
         }
         z.appendLine("\tstarted                   ${gestartet.count { it.gsmGestartet == true }} / ${gestartet.size}")
         z.appendLine("\tsent                      ${sent.count { it.gsmSent == true }} / ${sent.size}")
+    }
+
+    /** Trennt "Konsument tot" von "Dispatch-Nachricht verloren" (Hypothese C-H9, siehe [IdlingGruende.leseDispatcher]). */
+    private fun haengeDispatcherAn(z: StringBuilder) {
+        val zustaende = aufnahmen.mapNotNull { it.second.dispatcher }
+        z.appendLine("--- AndroidUiDispatcher.Main (Singleton): in wie vielen Stichproben wahr ---")
+        if (zustaende.isEmpty()) {
+            z.appendLine("\tnicht lesbar (Klasse oder Feld nicht gefunden)")
+            return
+        }
+        val initialisiert = zustaende.filter { it.initialisiert }
+        z.appendLine("\tinitialisiert                ${initialisiert.size} / ${zustaende.size}")
+        if (initialisiert.isEmpty()) return
+        val geplant = initialisiert.filter { it.trampolineGeplant != null }
+        val frame = initialisiert.filter { it.frameGeplant != null }
+        val wartend = initialisiert.mapNotNull { it.wartend }
+        z.appendLine("\tscheduledTrampolineDispatch  ${geplant.count { it.trampolineGeplant == true }} / ${geplant.size}")
+        z.appendLine("\tscheduledFrameDispatch        ${frame.count { it.frameGeplant == true }} / ${frame.size}")
+        z.appendLine(
+            "\ttoRunTrampolined nicht leer   ${wartend.count { it > 0 }} / ${wartend.size}" +
+                " (hoechstens ${wartend.maxOrNull() ?: 0} Eintraege)",
+        )
     }
 
     /**
