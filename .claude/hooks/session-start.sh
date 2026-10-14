@@ -52,3 +52,31 @@ echo "sdk.dir=$SDK_ROOT" > "$CLAUDE_PROJECT_DIR/local.properties"
   echo "export ANDROID_HOME=\"$SDK_ROOT\""
   echo "export ANDROID_SDK_ROOT=\"$SDK_ROOT\""
 } >> "$CLAUDE_ENV_FILE"
+
+# Maven Central drosselt (HTTP 429) hinter dem Egress-Proxy der Cloud-Sandbox: Gradle holt
+# viele Artefakte parallel, und der Proxy teilt sich wenige Ausgangs-IPs. Google betreibt einen
+# Spiegel von Maven Central; beide Wege muessen umgeleitet werden:
+#  1. Gradle: Init-Skript in ~/.gradle/init.d (liegt ausserhalb des Repos, settings.gradle.kts
+#     und damit CI/Release bleiben unveraendert).
+#  2. Robolectric holt sein android-all-JAR zur Laufzeit selbst und ignoriert (1) - dafuer die
+#     Property robolectric.dependency.repo.url, die der Test-JVM per JAVA_TOOL_OPTIONS erreicht.
+MIRROR_URL="https://maven-central.storage-download.googleapis.com/maven2/"
+INIT_DIR="$HOME/.gradle/init.d"
+mkdir -p "$INIT_DIR"
+cat > "$INIT_DIR/maven-central-mirror.gradle.kts" <<INIT
+// Von .claude/hooks/session-start.sh erzeugt - nur Cloud-Sandbox, siehe dort.
+val spiegel = "$MIRROR_URL"
+fun org.gradle.api.artifacts.dsl.RepositoryHandler.umleiten() = all {
+    if (this is org.gradle.api.artifacts.repositories.MavenArtifactRepository &&
+        url.toString().trimEnd('/').let { it == "https://repo.maven.apache.org/maven2" || it == "https://repo1.maven.org/maven2" }
+    ) {
+        setUrl(spiegel)
+    }
+}
+beforeSettings {
+    pluginManagement.repositories.umleiten()
+    dependencyResolutionManagement.repositories.umleiten()
+}
+INIT
+
+echo "export JAVA_TOOL_OPTIONS=\"\${JAVA_TOOL_OPTIONS:-} -Drobolectric.dependency.repo.url=$MIRROR_URL -Drobolectric.dependency.repo.id=mirror\"" >> "$CLAUDE_ENV_FILE"
