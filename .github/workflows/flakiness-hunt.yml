@@ -1,0 +1,209 @@
+name: Flakiness Hunt (temporär, nur PR #280)
+
+# TEMPORÄR, NUR AUF DEM UNTERSUCHUNGS-BRANCH. Gehört NICHT nach main.
+#
+# Zweck: Untersuchung des AppNotIdle-Hängers (docs/PROMPT_FLAKINESS_BRAINSTORM_GEMINI.md, PR #280).
+# Der Hänger tritt lokal nicht auf und auf der CI sporadisch (3 von 9 Läufen am 14.10.2026, alle in
+# einer Stunde). Dieser Workflow sammelt mehr echte Hänger samt Diagnose (zeitwaechter-diagnose.txt).
+#
+# Zwei Arme, damit die Frage "beeinflussen Vortests das Ergebnis?" mitgemessen wird:
+#   Arm A "vollsuite": die gesamte Suite mit EXAKT dem Befehl der echten CI (./gradlew test ...),
+#                      gleiche Reihenfolge, gleiche eine Test-JVM, gleiche Einrichtung.
+#   Arm B "teilsuite": nur die 8 Klassen, die in Versuch 2 (Lauf 38553441763) hingen, in derselben
+#                      relativen Reihenfolge, OHNE die übrigen ~230 Klassen davor.
+# Hängt A, aber B nie: Vortests spielen eine Rolle. Hängen beide: nicht. Sind beide grün: keine Aussage.
+#
+# Ausgelöst wird er NUR, wenn dem PR das Label "flakiness-hunt" hinzugefügt wird (Label entfernen und
+# neu setzen = neuer Lauf). Er läuft bewusst nicht bei jedem Push. Kosten pro Auslösung: 12 Jobs.
+#
+# Sicherheit: keine Secrets, nur lesender Zugriff.
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flakiness-hunt-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  # Konstante Versionsinputs wie in androidci.yml, damit nicht neu kompiliert wird.
+  ORG_GRADLE_PROJECT_buildSha: ${{ github.event.pull_request.head.sha }}
+  ORG_GRADLE_PROJECT_buildPrNumber: ${{ github.event.pull_request.number }}
+  ORG_GRADLE_PROJECT_buildCiRun: ${{ github.run_number }}
+
+jobs:
+  vollsuite:
+    name: "Arm A vollsuite #${{ matrix.lauf }}"
+    if: github.event.label.name == 'flakiness-hunt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lauf: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11 (Chaquopy build requirement)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0 platform-tools
+
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Umgebung festhalten
+        run: |
+          {
+            echo "arm=vollsuite lauf=${{ matrix.lauf }}"
+            echo "datum_utc=$(date -u +%FT%TZ)"
+            echo "runner_image=${ImageOS:-?} ${ImageVersion:-?}"
+            echo "nproc=$(nproc)"
+            lscpu | grep -E 'Model name|^CPU\(s\)|CPU max MHz|Thread|Hypervisor' || true
+            free -m
+            uptime
+          } | tee hunt-umgebung.txt
+
+      # EXAKT der Befehl aus androidci.yml (Schritt "Unit & Robolectric Tests"), ohne ci-timing.
+      - name: Unit & Robolectric Tests (wie CI)
+        id: tests
+        continue-on-error: true
+        run: ./gradlew test --stacktrace --continue
+
+      - name: Ergebnis in die Zusammenfassung schreiben
+        if: ${{ !cancelled() }}
+        run: |
+          echo "### Arm A vollsuite #${{ matrix.lauf }} — Tests: ${{ steps.tests.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f app/build/zeitwaechter-diagnose.txt ]; then
+            echo "**Zeitwächter hat ausgelöst** ($(grep -c '=== ZEITWAECHTER:' app/build/zeitwaechter-diagnose.txt) Blöcke)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Kein Hänger (keine Wächter-Diagnose)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          python .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Artefakte hochladen
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hunt-vollsuite-${{ matrix.lauf }}
+          path: |
+            hunt-umgebung.txt
+            app/build/zeitwaechter-diagnose.txt
+            app/build/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Der Job soll rot werden, wenn die Tests rot waren - damit die Matrix auf einen Blick zeigt,
+      # in welchen Läufen es hing. continue-on-error oben war nur, damit die Artefakte noch kommen.
+      - name: Fehlschlag weiterreichen
+        if: ${{ steps.tests.outcome == 'failure' }}
+        run: exit 1
+
+  teilsuite:
+    name: "Arm B teilsuite #${{ matrix.lauf }}"
+    if: github.event.label.name == 'flakiness-hunt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lauf: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11 (Chaquopy build requirement)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0 platform-tools
+
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Umgebung festhalten
+        run: |
+          {
+            echo "arm=teilsuite lauf=${{ matrix.lauf }}"
+            echo "datum_utc=$(date -u +%FT%TZ)"
+            echo "runner_image=${ImageOS:-?} ${ImageVersion:-?}"
+            echo "nproc=$(nproc)"
+            lscpu | grep -E 'Model name|^CPU\(s\)|CPU max MHz|Thread|Hypervisor' || true
+            free -m
+            uptime
+          } | tee hunt-umgebung.txt
+
+      # Die 8 Klassen, die in Versuch 2 (Lauf 38553441763) hingen. Gradle führt sie in der
+      # Reihenfolge der Suite aus (alphabetisch nach Paket und Klasse), also so wie in Arm A, nur
+      # ohne die Klassen dazwischen und davor.
+      - name: Unit-Tests der anfälligen Klassen
+        id: tests
+        continue-on-error: true
+        run: |
+          ./gradlew testDebugUnitTest --stacktrace --continue \
+            --tests '*HomeNavigationComposeTest' \
+            --tests '*LiveCockpitUnterbrechungTest' \
+            --tests '*MainActivityLaunchTest' \
+            --tests '*MarkNoiseEventBottomSheetTest' \
+            --tests '*MeterKoppelnBestaetigungTest' \
+            --tests '*MeterScreenComposeTest' \
+            --tests '*MeterScreenPermissionAndScanTest' \
+            --tests '*ReportConfigSettingsTest'
+
+      - name: Ergebnis in die Zusammenfassung schreiben
+        if: ${{ !cancelled() }}
+        run: |
+          echo "### Arm B teilsuite #${{ matrix.lauf }} — Tests: ${{ steps.tests.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f app/build/zeitwaechter-diagnose.txt ]; then
+            echo "**Zeitwächter hat ausgelöst** ($(grep -c '=== ZEITWAECHTER:' app/build/zeitwaechter-diagnose.txt) Blöcke)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Kein Hänger (keine Wächter-Diagnose)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          python .github/scripts/testbericht.py "JVM & Robolectric Testbericht" "app/build/test-results" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Artefakte hochladen
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hunt-teilsuite-${{ matrix.lauf }}
+          path: |
+            hunt-umgebung.txt
+            app/build/zeitwaechter-diagnose.txt
+            app/build/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fehlschlag weiterreichen
+        if: ${{ steps.tests.outcome == 'failure' }}
+        run: exit 1
