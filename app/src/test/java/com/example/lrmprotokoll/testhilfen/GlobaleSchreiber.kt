@@ -5,6 +5,8 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Haelt fest, WER wann in globalen Compose-State schreibt - auch zwischen zwei Tests.
@@ -42,8 +44,20 @@ internal object GlobaleSchreiber {
     private const val MAX_EREIGNISSE = 60
     private const val GEZEIGTE_EREIGNISSE = 15
     private const val GEZEIGTE_RAHMEN = 8
+    private const val MAX_STACKS_PRO_FENSTER = 20
+    private const val STACK_FENSTER_MS = 100L
 
     private val installiert = AtomicBoolean(false)
+    private val stackFensterStart = AtomicLong(0)
+    private val stacksImFenster = AtomicInteger(0)
+    private val ohneStack = AtomicInteger(0)
+    private val letzteGedrosselt = AtomicReference<Gedrosselt?>(null)
+
+    private data class Gedrosselt(
+        val zeitMs: Long,
+        val thread: String,
+        val phase: String,
+    )
 
     @Volatile
     private var phase: String = "vor dem ersten Test"
@@ -64,6 +78,10 @@ internal object GlobaleSchreiber {
     /** Nur fuer Tests: leert Zaehler und Aufzeichnung, damit sie von frueheren Schreibzugriffen unabhaengig sind. */
     fun zuruecksetzen() {
         proThread.clear()
+        ohneStack.set(0)
+        letzteGedrosselt.set(null)
+        stackFensterStart.set(0)
+        stacksImFenster.set(0)
         synchronized(fremde) { fremde.clear() }
     }
 
@@ -73,18 +91,20 @@ internal object GlobaleSchreiber {
             val gruppe = gruppenname(thread.name)
             proThread.getOrPut(gruppe) { AtomicInteger() }.incrementAndGet()
             if (thread.name.startsWith(MAIN_PRAEFIX)) return
+            val jetztMs = System.nanoTime() / NANOS_PRO_MS
+            if (!darfStackAufnehmen(jetztMs)) {
+                // Nur zaehlen: stacklose Ereignisse im Ringpuffer verdraengten in einem Sturm die Stacks.
+                ohneStack.incrementAndGet()
+                letzteGedrosselt.set(Gedrosselt(jetztMs, thread.name, phase))
+                return
+            }
             val ereignis =
                 Ereignis(
-                    zeitMs = System.nanoTime() / NANOS_PRO_MS,
+                    zeitMs = jetztMs,
                     phase = phase,
                     thread = thread.name,
                     zustand = zustand.javaClass.name.substringAfterLast('.'),
-                    stack =
-                        Throwable()
-                            .stackTrace
-                            .map { "${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
-                            .dropWhile { istInterner(it) }
-                            .take(GEZEIGTE_RAHMEN),
+                    stack = holeStack(),
                 )
             synchronized(fremde) {
                 fremde.addLast(ereignis)
@@ -92,6 +112,26 @@ internal object GlobaleSchreiber {
             }
         }
     }
+
+    /**
+     * Ein voller Stack-Walk kostet je nach Tiefe 20 bis 100 us (Review Gemini, PR #280). Pro Fenster von
+     * [STACK_FENSTER_MS] werden deshalb hoechstens [MAX_STACKS_PRO_FENSTER] Stacks aufgenommen; weitere
+     * Ereignisse werden ohne Stack festgehalten, damit ein Schreibsturm den Testlauf nicht verlangsamt.
+     */
+    private fun darfStackAufnehmen(jetztMs: Long): Boolean {
+        val start = stackFensterStart.get()
+        if (jetztMs - start >= STACK_FENSTER_MS && stackFensterStart.compareAndSet(start, jetztMs)) {
+            stacksImFenster.set(0)
+        }
+        return stacksImFenster.incrementAndGet() <= MAX_STACKS_PRO_FENSTER
+    }
+
+    private fun holeStack(): List<String> =
+        Throwable()
+            .stackTrace
+            .map { "${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
+            .dropWhile { istInterner(it) }
+            .take(GEZEIGTE_RAHMEN)
 
     /** Der Abschnitt der Diagnose; Zeiten sind relativ zum Aufruf (negativ = vor der Diagnose). */
     fun text(): String {
@@ -110,11 +150,19 @@ internal object GlobaleSchreiber {
                 .joinToString("; ") { "${it.value.get()} ${it.key}" }
         z.appendLine("\tinsgesamt $gesamt: $nachThread")
         val ereignisse = synchronized(fremde) { fremde.toList() }
+        letzteGedrosselt.get()?.let {
+            val sekunden = "%.1f".format(Locale.ROOT, (it.zeitMs - jetztMs) / MS_PRO_S)
+            z.appendLine(
+                "\t${ohneStack.get()} weitere Schreibzugriffe aus Fremd-Threads ohne Stack gedrosselt " +
+                    "(hoechstens $MAX_STACKS_PRO_FENSTER Stacks je ${STACK_FENSTER_MS} ms); der letzte $sekunden s, " +
+                    "Thread ${it.thread}, [${it.phase}]",
+            )
+        }
         if (ereignisse.isEmpty()) {
             z.appendLine("\tkein Schreibzugriff aus einem anderen Thread als dem Main-Thread aufgezeichnet")
             return z.toString()
         }
-        z.appendLine("\tAus fremden Threads (${ereignisse.size} aufgezeichnet, die letzten $GEZEIGTE_EREIGNISSE):")
+        z.appendLine("\tAus fremden Threads (${ereignisse.size} mit Stack aufgezeichnet, die letzten $GEZEIGTE_EREIGNISSE):")
         for (e in ereignisse.takeLast(GEZEIGTE_EREIGNISSE)) {
             val sekunden = "%.1f".format(Locale.ROOT, (e.zeitMs - jetztMs) / MS_PRO_S)
             z.appendLine("\t\t$sekunden s  [${e.phase}]  ${e.thread}  ${e.zustand}")

@@ -94,12 +94,14 @@ internal object DispatcherReparatur {
         sentVorher: Boolean?,
         ausstehendVorher: Boolean?,
     ): Bericht {
-        var fehler: String? = null
-        runCatching {
-            val callback = IdlingGruende.leseFeld(dispatcher, "dispatchCallback")
-            (callback as? Runnable)?.run()
-            (callback as? Choreographer.FrameCallback)?.doFrame(0)
-        }.onFailure { fehler = "${it.javaClass.simpleName}: ${it.message}" }
+        val fehler = mutableListOf<String>()
+        val callback = IdlingGruende.leseFeld(dispatcher, "dispatchCallback")
+        // Getrennt abgesichert: wirft run() (z. B. ein Apply-Beobachter), muss doFrame(0) trotzdem das
+        // zweite Flag zuruecksetzen (Review Gemini, PR #280).
+        runCatching { (callback as? Runnable)?.run() }
+            .onFailure { fehler += "run(): ${it.javaClass.simpleName}: ${it.message}" }
+        runCatching { (callback as? Choreographer.FrameCallback)?.doFrame(0) }
+            .onFailure { fehler += "doFrame(): ${it.javaClass.simpleName}: ${it.message}" }
         val nachher = IdlingGruende.leseDispatcher()
         val sentNachher = IdlingGruende.leseGlobalSnapshotManager().second
         val ausstehendNachher = ausstehendeAenderungen()
@@ -112,8 +114,8 @@ internal object DispatcherReparatur {
             sentNachher = sentNachher,
             ausstehendVorher = ausstehendVorher,
             ausstehendNachher = ausstehendNachher,
-            repariert = gesund && fehler == null,
-            fehler = fehler,
+            repariert = gesund && fehler.isEmpty(),
+            fehler = fehler.takeIf { it.isNotEmpty() }?.joinToString("; "),
         )
     }
 

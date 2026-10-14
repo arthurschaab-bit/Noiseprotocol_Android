@@ -1,6 +1,7 @@
 package com.example.lrmprotokoll.testhilfen
 
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,23 @@ class GlobaleSchreiberTest {
         val text = GlobaleSchreiber.text()
         assertTrue("Zaehler fehlt: $text", Regex("""1 SDK 99 Main Thread""").containsMatchIn(text))
         assertTrue("Main-Thread darf nicht aufgezeichnet sein: $text", text.contains("kein Schreibzugriff aus einem anderen Thread"))
+    }
+
+    @Test
+    fun einSchreibsturmAusEinemFremdenThreadWirdGedrosseltStattJedesMalEinStackZuHolen() {
+        GlobaleSchreiber.setzePhase("Phase-Sturm")
+        val zustand = mutableIntStateOf(0)
+        Snapshot.notifyObjectsInitialized()
+
+        schreibeAusThread("fremd-sturm-1") { repeat(STURM) { zustand.intValue = it + 1 } }
+
+        val text = GlobaleSchreiber.text()
+        assertTrue("Drosselung muss sichtbar sein: $text", text.contains("ohne Stack gedrosselt"))
+        assertTrue("Die ersten Stacks muessen im Sturm erhalten bleiben: $text", text.contains("GlobaleSchreiberTest"))
+    }
+
+    private companion object {
+        const val STURM = 3_000
     }
 
     private fun schreibeAusThread(
