@@ -218,7 +218,10 @@ class SicherungManagerTest {
                         sortOrder: String?,
                     ): Cursor? = null
 
-                    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+                    override fun insert(
+                        uri: Uri,
+                        values: ContentValues?,
+                    ): Uri? = null
 
                     override fun update(
                         uri: Uri,
@@ -236,12 +239,19 @@ class SicherungManagerTest {
                         return 0
                     }
 
-                    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
+                    override fun call(
+                        method: String,
+                        arg: String?,
+                        extras: android.os.Bundle?,
+                    ): android.os.Bundle? {
                         if (method.contains("delete", ignoreCase = true)) geloescht = true
                         return null
                     }
 
-                    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+                    override fun openFile(
+                        uri: Uri,
+                        mode: String,
+                    ): ParcelFileDescriptor {
                         if (mode.contains('w')) {
                             return ParcelFileDescriptor.open(
                                 datei,
@@ -293,7 +303,10 @@ class SicherungManagerTest {
                         sortOrder: String?,
                     ): Cursor? = null
 
-                    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+                    override fun insert(
+                        uri: Uri,
+                        values: ContentValues?,
+                    ): Uri? = null
 
                     override fun update(
                         uri: Uri,
@@ -311,12 +324,19 @@ class SicherungManagerTest {
                         return 0
                     }
 
-                    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
+                    override fun call(
+                        method: String,
+                        arg: String?,
+                        extras: android.os.Bundle?,
+                    ): android.os.Bundle? {
                         if (method.contains("delete", ignoreCase = true)) geloescht = true
                         return null
                     }
 
-                    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+                    override fun openFile(
+                        uri: Uri,
+                        mode: String,
+                    ): ParcelFileDescriptor {
                         if (!mode.contains('w')) throw java.io.FileNotFoundException("nicht lesbar")
                         return ParcelFileDescriptor.open(
                             datei,
