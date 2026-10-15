@@ -50,6 +50,7 @@ import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.backup.SicherungManager
+import com.example.lrmprotokoll.backup.SicherungsErgebnis
 import com.example.lrmprotokoll.data.ReportConfigEntity
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.erzeugeNtfyTopic
@@ -126,6 +127,7 @@ fun SettingsScreen(
      * Owner-Entscheidung 16.09.2026).
      */
     neustartAusloeser: (Context) -> Unit = SicherungManager::starteNeustart,
+    sicherungErsteller: suspend (Context, Uri, SettingsManager) -> SicherungsErgebnis = SicherungManager::erstelleSicherung,
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
     val context = LocalContext.current
@@ -292,7 +294,9 @@ fun SettingsScreen(
     var expBerichtParameter by remember { mutableStateOf(false) }
 
     // F13 Sicherung und Wiederherstellung
-    var sicherungLaeuft by remember { mutableStateOf(false) }
+    var lokaleWiederherstellungLaeuft by remember { mutableStateOf(false) }
+    val manuelleSicherungLaeuft by container.manuelleSicherungLaeuft.collectAsState()
+    val sicherungLaeuft = lokaleWiederherstellungLaeuft || manuelleSicherungLaeuft
     var ausstehendeWiederherstellungUri by remember { mutableStateOf<Uri?>(null) }
 
     // Datenbank-Sicherung aus Drive (Owner-Entscheidung 09.09.2026): manuell auf Knopfdruck,
@@ -371,24 +375,12 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
-            scope.launch {
-                sicherungLaeuft = true
-                val ergebnis = SicherungManager.erstelleSicherung(context, uri, settings)
-                sicherungLaeuft = false
-                if (!ergebnis.erfolg) {
-                    // Bugfix (docs/PROMPT_FIX_DATENBANK_SICHERUNG.md Schritt 4): ein
-                    // fehlgeschlagenes Erstellen ging bisher NIRGENDS ins Diagnoseprotokoll/
-                    // Support-Bundle - anders als ein fehlgeschlagenes Einspielen
-                    // (BACKUP_RESTORE_FAILED weiter unten).
-                    container.diagnosticsReporter.report(
-                        code = com.example.lrmprotokoll.diagnose.DiagnosticCode.BACKUP_CREATE_FAILED,
-                        component = "SettingsScreen",
-                        operation = "erstelleSicherung",
-                        severity = com.example.lrmprotokoll.diagnose.DiagnosticSeverity.WARN,
-                        message = ergebnis.nachricht,
-                    )
-                }
-                onShowSnackbar?.invoke(ergebnis.nachricht)
+            if (container.starteManuelleSicherung(context, uri, settings, sicherungErsteller)) {
+                onShowSnackbar?.invoke("Sicherung wird erstellt. Bitte auf die Abschlussmeldung warten.")
+            } else {
+                // CreateDocument hat die (leere) Zieldatei schon angelegt - nicht liegen lassen.
+                SicherungManager.loescheLeereZieldatei(context, uri)
+                onShowSnackbar?.invoke("Eine Sicherung läuft bereits.")
             }
         }
     }
@@ -1649,6 +1641,10 @@ fun SettingsScreen(
                             ausstehendeDriveWiederherstellung = false
                             val ordnerId = driveOrdnerId
                             scope.launch {
+                                if (container.manuelleSicherungLaeuft.value) {
+                                    onShowSnackbar?.invoke("Eine Sicherung läuft noch. Bitte auf die Abschlussmeldung warten.")
+                                    return@launch
+                                }
                                 driveWiederherstellungLaeuft = true
                                 val ergebnis = if (ordnerId == null) {
                                     com.example.lrmprotokoll.backup.SicherungsErgebnis(false, "Kein Drive-Ordner eingerichtet.")
@@ -1747,9 +1743,13 @@ fun SettingsScreen(
                         TextButton(onClick = {
                             ausstehendeWiederherstellungUri = null
                             scope.launch {
-                                sicherungLaeuft = true
+                                if (container.manuelleSicherungLaeuft.value) {
+                                    onShowSnackbar?.invoke("Eine Sicherung läuft noch. Bitte auf die Abschlussmeldung warten.")
+                                    return@launch
+                                }
+                                lokaleWiederherstellungLaeuft = true
                                 val ergebnis = SicherungManager.spieleSicherungEin(context, uri, settings)
-                                sicherungLaeuft = false
+                                lokaleWiederherstellungLaeuft = false
                                 if (ergebnis.erfolg) {
                                     container.diagnosticsReporter.breadcrumb(
                                         "Sicherung", "Lokale Sicherung eingespielt – App wird neu gestartet",

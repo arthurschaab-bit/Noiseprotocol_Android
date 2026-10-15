@@ -3,24 +3,30 @@ package com.example.lrmprotokoll.backup
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SettingsManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
+private const val KONTROLLE_VERSUCHE = 3
+private const val KONTROLLE_PAUSE_MS = 200L
 private const val MANIFEST_ENTRY = "manifest.json"
 private const val DATENBANK_ENTRY = "noise_database"
 private const val EINSTELLUNGEN_ENTRY = "settings.json"
@@ -57,6 +63,12 @@ internal fun schatzeBenoetigtenSpeicherplatz(dbGroesse: Long): Long {
     }
     return maxOf(10L * 1024L * 1024L, basis)
 }
+
+/** Das Kontrolllesen der geschriebenen Sicherung war nicht möglich (nicht: Inhalt falsch). */
+class SicherungNichtPruefbarException(
+    message: String,
+    cause: Throwable?,
+) : IOException(message, cause)
 
 data class SicherungsErgebnis(val erfolg: Boolean, val nachricht: String)
 
@@ -115,21 +127,119 @@ object SicherungManager {
         context: Context,
         ziel: Uri,
         settings: SettingsManager,
-    ): SicherungsErgebnis = withContext(Dispatchers.IO) {
-        // Streamend in eine temporaere Datei bauen, dann in den SAF-OutputStream kopieren - ein
-        // SAF-Uri liefert keinen direkten Dateipfad, den ZipOutputStream bräuchte, und manche
-        // SAF-Provider puffern/validieren ohnehin erst nach dem vollständigen Schreiben.
-        val tempDatei = File.createTempFile("sicherung_", ".zip", context.cacheDir)
+    ): SicherungsErgebnis =
+        withContext(Dispatchers.IO) {
+            // Der SAF-Provider bekommt nur eine vollstaendig gebaute ZIP.
+            var tempDatei: File? = null
+            // Nur nachgewiesene Fehlschlaege (Schreiben, Laenge, Hash) loeschen die Zieldatei; ein
+            // nicht moegliches Kontrolllesen beweist keine Beschaedigung (Review zu #276).
+            var zieldateiLoeschen = false
+            try {
+                val gebauteDatei = File.createTempFile("sicherung_", ".zip", context.cacheDir)
+                tempDatei = gebauteDatei
+                baueSicherungsDatei(context, settings, gebauteDatei)
+                val output =
+                    context.contentResolver.openOutputStream(ziel)
+                        ?: run {
+                            zieldateiLoeschen = true
+                            return@withContext SicherungsErgebnis(false, "Zieldatei konnte nicht geöffnet werden.")
+                        }
+                zieldateiLoeschen = true
+                val kopieHash = MessageDigest.getInstance("SHA-256")
+                val kopierteBytes =
+                    output.use { out ->
+                        DigestInputStream(FileInputStream(gebauteDatei), kopieHash).use { it.copyTo(out) }
+                    }
+                if (kopierteBytes != gebauteDatei.length() || kopierteBytes == 0L) {
+                    throw IOException("Die Sicherung wurde nicht vollständig an den Speicherort übertragen.")
+                }
+                pruefeZieldateiMitWiederholung(context, ziel, kopierteBytes, kopieHash.digest())
+                zieldateiLoeschen = false
+                SicherungsErgebnis(true, "Sicherung erstellt.")
+            } catch (e: SicherungNichtPruefbarException) {
+                // Geschrieben und geschlossen, aber nicht kontrollierbar: Datei behalten, kein Erfolg.
+                zieldateiLoeschen = false
+                SicherungsErgebnis(
+                    false,
+                    "Sicherung geschrieben, konnte aber nicht überprüft werden (${e.message}). " +
+                        "Die Datei bleibt erhalten; bitte prüfen oder die Sicherung wiederholen.",
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SicherungsErgebnis(false, "Sicherung fehlgeschlagen: ${e.message}")
+            } finally {
+                if (zieldateiLoeschen) loescheLeereZieldatei(context, ziel)
+                tempDatei?.delete()
+            }
+        }
+
+    /** Kontrolllesen mit wenigen Wiederholungen: ein vorübergehender Providerfehler (z. B. nach
+     * Providerabsturz, `openInputStream() == null`) ist kein Beweis für eine kaputte Datei. */
+    private fun pruefeZieldateiMitWiederholung(
+        context: Context,
+        ziel: Uri,
+        groesse: Long,
+        hash: ByteArray,
+    ) {
+        var letzterFehler: IOException? = null
+        repeat(KONTROLLE_VERSUCHE) { versuch ->
+            try {
+                pruefeZieldatei(context, ziel, groesse, hash)
+                return
+            } catch (e: SicherungNichtPruefbarException) {
+                letzterFehler = e
+                if (versuch < KONTROLLE_VERSUCHE - 1) Thread.sleep(KONTROLLE_PAUSE_MS)
+            }
+        }
+        throw letzterFehler ?: SicherungNichtPruefbarException("unbekannter Fehler", null)
+    }
+
+    /** SAF-Provider koennen einen erfolgreichen write/close melden, obwohl nur ein Platzhalter
+     * gespeichert wurde. Erst die erneut gelesene, bytegleiche ZIP gilt als Sicherung.
+     * Werfen: [SicherungNichtPruefbarException] wenn das Lesen selbst scheitert, eine normale
+     * [IOException] bei nachgewiesener Laengen-/Hash-Abweichung. */
+    private fun pruefeZieldatei(
+        context: Context,
+        ziel: Uri,
+        groesse: Long,
+        hash: ByteArray,
+    ) {
+        val gelesenHash = MessageDigest.getInstance("SHA-256")
+        var gelesen = 0L
         try {
-            baueSicherungsDatei(context, settings, tempDatei)
-            val output = context.contentResolver.openOutputStream(ziel)
-                ?: return@withContext SicherungsErgebnis(false, "Zieldatei konnte nicht geöffnet werden.")
-            output.use { out -> FileInputStream(tempDatei).use { it.copyTo(out) } }
-            SicherungsErgebnis(true, "Sicherung erstellt.")
-        } catch (e: Exception) {
-            SicherungsErgebnis(false, "Sicherung fehlgeschlagen: ${e.message}")
-        } finally {
-            tempDatei.delete()
+            val eingabe =
+                context.contentResolver.openInputStream(ziel)
+                    ?: throw IOException("Provider lieferte keinen Lesestrom")
+            eingabe.use { input ->
+                val puffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val anzahl = input.read(puffer)
+                    if (anzahl < 0) break
+                    gelesenHash.update(puffer, 0, anzahl)
+                    gelesen += anzahl
+                }
+            }
+        } catch (e: IOException) {
+            throw SicherungNichtPruefbarException(e.message ?: "Lesefehler", e)
+        } catch (e: SecurityException) {
+            throw SicherungNichtPruefbarException(e.message ?: "Zugriff verweigert", e)
+        }
+        if (gelesen != groesse || !MessageDigest.isEqual(hash, gelesenHash.digest())) {
+            throw IOException("Die gespeicherte Sicherungsdatei ist leer oder unvollständig.")
+        }
+    }
+
+    /** Entfernt eine unvollständige oder (von `CreateDocument`) leer angelegte Zieldatei. */
+    fun loescheLeereZieldatei(
+        context: Context,
+        ziel: Uri,
+    ) {
+        runCatching {
+            when (ziel.scheme) {
+                "file" -> ziel.path?.let { File(it).delete() }
+                "content" -> DocumentsContract.deleteDocument(context.contentResolver, ziel)
+            }
         }
     }
 

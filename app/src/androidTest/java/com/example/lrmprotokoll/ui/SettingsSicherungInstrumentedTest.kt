@@ -5,6 +5,8 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -19,8 +21,7 @@ import com.example.lrmprotokoll.backup.SicherungManager
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.meter.FakeMeterTransport
-import java.io.File
-import java.util.zip.ZipInputStream
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -30,6 +31,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.util.zip.ZipInputStream
 
 /**
  * Checkliste Button/Screen-Coverage Phase 9c (docs Plan sorted-orbiting-crown.md). Der
@@ -49,7 +52,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SettingsSicherungInstrumentedTest {
-
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -96,7 +98,7 @@ class SettingsSicherungInstrumentedTest {
                     dbValue = 55.0,
                     filePath = "",
                     label = "SicherungUiTest-Erstellen",
-                )
+                ),
             )
         }
 
@@ -109,7 +111,7 @@ class SettingsSicherungInstrumentedTest {
                 Instrumentation.ActivityResult(
                     Activity.RESULT_OK,
                     Intent().setData(Uri.fromFile(zielDatei)),
-                )
+                ),
             )
 
             oeffneSicherungsAbschnitt()
@@ -138,6 +140,59 @@ class SettingsSicherungInstrumentedTest {
     }
 
     @Test
+    fun sicherungWirdNachVerlassenDerEinstellungenFertiggestellt() {
+        val zielDatei = File(app.cacheDir, "ui_sicherung_nach_navigation_${System.nanoTime()}.zip")
+        val zeigeEinstellungen = mutableStateOf(true)
+        val gestartet = CompletableDeferred<Unit>()
+        val fortsetzen = CompletableDeferred<Unit>()
+        app.container.sicherungMeldung.value = null
+
+        Intents.init()
+        try {
+            intending(anyIntent()).respondWith(
+                Instrumentation.ActivityResult(
+                    Activity.RESULT_OK,
+                    Intent().setData(Uri.fromFile(zielDatei)),
+                ),
+            )
+            composeRule.setContent {
+                if (zeigeEinstellungen.value) {
+                    SettingsScreen(
+                        onBack = {},
+                        initialTab = SettingsTab.DATEN,
+                        sicherungErsteller = { context, uri, settings ->
+                            gestartet.complete(Unit)
+                            fortsetzen.await()
+                            SicherungManager.erstelleSicherung(context, uri, settings)
+                        },
+                    )
+                } else {
+                    Text("Einstellungen verlassen")
+                }
+            }
+            val titel = composeRule.activity.getString(R.string.settings_backup_title)
+            composeRule.onNodeWithText(titel, substring = true).performScrollTo().performClick()
+            composeRule.onNodeWithTag("btn_backup_create").performScrollTo().performClick()
+            composeRule.waitUntil(timeoutMillis = 10_000L) { gestartet.isCompleted }
+
+            composeRule.runOnUiThread { zeigeEinstellungen.value = false }
+            composeRule.waitForIdle()
+            fortsetzen.complete(Unit)
+
+            composeRule.waitUntil(timeoutMillis = 10_000L) {
+                // Die Abschlussmeldung liegt App-weit im Container (nicht im Screen-Callback).
+                zielDatei.length() > 0 && app.container.sicherungMeldung.value == "Sicherung erstellt."
+            }
+            assertTrue("ZIP muss nach dem Verlassen des Screens vollständig sein", zielDatei.length() > 0)
+        } finally {
+            fortsetzen.complete(Unit)
+            app.container.sicherungMeldung.value = null
+            Intents.release()
+            zielDatei.delete()
+        }
+    }
+
+    @Test
     fun vollerWiederherstellungsPfadStelltDatenWiederHerUndLoestNeustartAusloeserAusStattDenProzessZuBeenden() {
         val settings = app.container.settingsManager
         val zeitstempel = 1_850_100_000_000L + System.nanoTime() % 1_000_000L
@@ -149,7 +204,7 @@ class SettingsSicherungInstrumentedTest {
                     dbValue = 62.0,
                     filePath = "",
                     label = "SicherungUiTest-Wiederherstellen",
-                )
+                ),
             )
         }
 
@@ -175,7 +230,7 @@ class SettingsSicherungInstrumentedTest {
                 Instrumentation.ActivityResult(
                     Activity.RESULT_OK,
                     Intent().setData(Uri.fromFile(sicherungsDatei)),
-                )
+                ),
             )
 
             oeffneSicherungsAbschnitt(neustartAufgerufen = { neustartAufgerufen = true })
@@ -209,7 +264,7 @@ class SettingsSicherungInstrumentedTest {
                     dbValue = 40.0,
                     filePath = "",
                     label = "SicherungUiTest-Abbrechen",
-                )
+                ),
             )
         }
 
@@ -225,7 +280,7 @@ class SettingsSicherungInstrumentedTest {
                 Instrumentation.ActivityResult(
                     Activity.RESULT_OK,
                     Intent().setData(Uri.fromFile(beliebigeDatei)),
-                )
+                ),
             )
 
             oeffneSicherungsAbschnitt(neustartAufgerufen = { neustartAufgerufen = true })

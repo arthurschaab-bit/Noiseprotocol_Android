@@ -199,6 +199,16 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Abschlussmeldung der manuellen Sicherung: App-weit im Container gehalten, damit sie auch nach
+    // Verlassen der Einstellungen oder Neuerstellung der Activity (Drehen) angezeigt wird.
+    val sicherungMeldung by container.sicherungMeldung.collectAsState()
+    LaunchedEffect(sicherungMeldung) {
+        sicherungMeldung?.let { meldung ->
+            snackbarHostState.showSnackbar(meldung)
+            container.meldungAngezeigt(meldung)
+        }
+    }
+
     fun navigiereZuTab(route: String) {
         navController.navigate(route) {
             popUpTo("main") { inclusive = false }
