@@ -3,6 +3,7 @@ package com.example.lrmprotokoll.testhilfen
 import android.os.Looper
 import android.view.Choreographer
 import androidx.compose.runtime.snapshots.Snapshot
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Repariert einen festgefahrenen `AndroidUiDispatcher.Main` zu Beginn eines Tests - und sagt es laut.
@@ -56,12 +57,31 @@ internal object DispatcherReparatur {
             }
     }
 
+    /** Wann geprüft wird: zu Beginn eines Tests (Regel) oder VOR dem Looper-Reset von Robolectric (Plugin). */
+    internal enum class Anlass { TESTSTART, VOR_RESET }
+
+    /** Zähler je Sandbox-Classloader; das Plugin schreibt sie am JVM-Ende in die Diagnosedatei. */
+    val aufrufe = AtomicInteger()
+    private val ruhigAbgearbeitet = AtomicInteger()
+    private val verlorenGefunden = AtomicInteger()
+    private val nichtRepariert = AtomicInteger()
+
+    fun zusammenfassung(): String =
+        "\n=== DISPATCHER-PLUGIN-ZUSAMMENFASSUNG: Aufrufe=${aufrufe.get()} ruhigAbgearbeitet=${ruhigAbgearbeitet.get()} " +
+            "verlorenGefunden=${verlorenGefunden.get()} nichtRepariert=${nichtRepariert.get()} ===\n"
+
     /**
-     * `null`: nichts zu tun (Dispatcher gesund, nicht angelegt, nicht lesbar oder nicht auf dem
-     * Main-Thread). Sonst der Bericht. Wirft nie - eine Diagnose darf keinen Test rot machen.
+     * `null`: nichts zu tun oder nur ruhig erledigt (Dispatcher gesund, nicht angelegt, nicht lesbar, nicht auf dem
+     * Main-Thread, oder ein anstehender Dispatch wurde vor dem Reset ohne Auffälligkeit abgearbeitet). Sonst der
+     * Bericht. Wirft nie - eine Diagnose darf keinen Test rot machen.
+     *
+     * [Anlass.TESTSTART] heilt nur eine bereits verlorene Nachricht. [Anlass.VOR_RESET] arbeitet zusätzlich jeden
+     * anstehenden Dispatch ab: Robolectric verwirft die Looper-Nachrichten kurz danach, und was dann noch ansteht,
+     * ließe den Dispatcher dauerhaft stumm (Bytecode 4.16.1: Plugins laufen VOR `resetLoopers()`).
      */
-    fun pruefeUndHeile(): Bericht? =
+    fun pruefeUndHeile(anlass: Anlass = Anlass.TESTSTART): Bericht? =
         runCatching {
+            if (anlass == Anlass.VOR_RESET) aufrufe.incrementAndGet()
             if (Looper.getMainLooper().thread !== Thread.currentThread()) return@runCatching null
             val dispatcher = IdlingGruende.dispatcherFallsVorhanden() ?: return@runCatching null
             val vorher = IdlingGruende.leseDispatcher() ?: return@runCatching null
@@ -69,10 +89,20 @@ internal object DispatcherReparatur {
             val ausstehendVorher = ausstehendeAenderungen()
 
             val verloren = vorher.trampolineGeplant == true && vorher.dispatchNachrichtInQueue == false
-            val konsumentTot = sentVorher == true && vorher.trampolineGeplant == false
+            val anstehend = vorher.trampolineGeplant == true || vorher.frameGeplant == true || (vorher.wartend ?: 0) > 0
+            val konsumentTot = sentVorher == true && !anstehend
             when {
-                verloren -> heile(dispatcher, vorher, sentVorher, ausstehendVorher)
-                konsumentTot ->
+                verloren -> {
+                    verlorenGefunden.incrementAndGet()
+                    heile(dispatcher, vorher, sentVorher, ausstehendVorher, BEFUND_VERLOREN)
+                }
+                anlass == Anlass.VOR_RESET && anstehend -> {
+                    val bericht = heile(dispatcher, vorher, sentVorher, ausstehendVorher, BEFUND_ANSTEHEND)
+                    ruhigAbgearbeitet.incrementAndGet()
+                    if (bericht.repariert) null else bericht.also { nichtRepariert.incrementAndGet() }
+                }
+                konsumentTot -> {
+                    nichtRepariert.incrementAndGet()
                     Bericht(
                         befund = "sent wahr, aber kein Dispatch ausstehend (Konsument tot?) - hier nicht reparierbar",
                         vorher = vorher,
@@ -84,15 +114,21 @@ internal object DispatcherReparatur {
                         repariert = false,
                         fehler = null,
                     )
+                }
                 else -> null
             }
         }.getOrNull()
+
+    private const val BEFUND_VERLOREN =
+        "verlorene Dispatch-Nachricht (scheduledTrampolineDispatch wahr, dispatchCallback nicht in der Main-Looper-Queue)"
+    private const val BEFUND_ANSTEHEND = "anstehender Dispatch vor dem Reset abgearbeitet (Nachricht war noch da)"
 
     private fun heile(
         dispatcher: Any,
         vorher: IdlingGruende.Dispatcherzustand,
         sentVorher: Boolean?,
         ausstehendVorher: Boolean?,
+        befund: String,
     ): Bericht {
         val fehler = mutableListOf<String>()
         val callback = IdlingGruende.leseFeld(dispatcher, "dispatchCallback")
@@ -107,7 +143,7 @@ internal object DispatcherReparatur {
         val ausstehendNachher = ausstehendeAenderungen()
         val gesund = nachher != null && nachher.trampolineGeplant == false && nachher.frameGeplant == false && nachher.wartend == 0
         return Bericht(
-            befund = "verlorene Dispatch-Nachricht (scheduledTrampolineDispatch wahr, dispatchCallback nicht in der Main-Looper-Queue)",
+            befund = befund,
             vorher = vorher,
             nachher = nachher,
             sentVorher = sentVorher,

@@ -5,7 +5,6 @@ import org.junit.rules.MethodRule
 import org.junit.runner.Description
 import org.junit.runners.model.FrameworkMethod
 import org.junit.runners.model.Statement
-import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -157,15 +156,7 @@ class ZeitwaechterRegel(
         schreibe(stichproben.toString())
     }
 
-    private fun schreibe(text: String) {
-        System.err.print(text)
-        System.err.flush()
-        runCatching {
-            val datei = File(DIAGNOSEDATEI)
-            datei.parentFile?.mkdirs()
-            datei.appendText(text)
-        }
-    }
+    private fun schreibe(text: String) = Diagnoseausgabe.schreibe(text)
 
     /**
      * Nimmt bis zu [STICHPROBEN] Stacks des Testthreads im Abstand von [STICHPROBEN_ABSTAND_MS] auf
