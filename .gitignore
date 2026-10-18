@@ -23,3 +23,6 @@ __pycache__/
 # Isolierte Git-Worktrees von Hintergrund-Agents (Claude Code) - Laufzeit-Scratch, kein
 # Projektinhalt.
 /.claude/worktrees/
+
+# Recovery-Arbeitsdaten (Beweismittel-Kopien, Datenbanken, Ergebnisse) - nie einchecken
+/data/recovery/
