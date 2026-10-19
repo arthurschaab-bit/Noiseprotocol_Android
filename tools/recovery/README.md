@@ -1,7 +1,7 @@
 # Recovery-Werkzeuge: reine PCE-323-Sekunden zurückgewinnen
 
 Werkzeuge für den Auftrag „Rückgewinnung reiner PCE-323-Messwerte für GEMISCHT- und Lückenzeiträume“
-(Beweissicherung Zeppelinstraße 47). Nur Python-Standardbibliothek, für Parquet zusätzlich `pyarrow`
+Nur Python-Standardbibliothek, für Parquet zusätzlich `pyarrow`
 (`pip install -r tools/recovery/requirements.txt`, Python ≥ 3.11).
 
 **Stand:** getestet nur mit synthetischen Daten (`app/src/test/python/test_recovery.py`). An echten
