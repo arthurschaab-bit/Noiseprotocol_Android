@@ -10,18 +10,20 @@ from datetime import datetime
 ARBEIT = (7, 18)  # Annahme: Mo-Fr 07:00-18:00, mit Owner abzustimmen
 
 
-def lade(wurzel):
+def lade(wurzel, wartezeiten=(2, 4, 6, 8, 10)):
     zeilen = []
     pat = os.path.join(glob.escape(wurzel), "*", "Schallmessung", "klassifikation_nachtrag_*.csv")
     for p in sorted(glob.glob(pat)):
         text = None
-        for versuch in range(5):  # das Drive-Laufwerk liefert sporadisch Lesefehler (OSError 22)
+        for versuch in range(len(wartezeiten) + 1):  # Drive liefert sporadisch Lesefehler (OSError 22)
             try:
                 with open(p, encoding="utf-8-sig", newline="") as f:
                     text = f.read()
                 break
             except OSError:
-                time.sleep(2 * (versuch + 1))
+                if versuch < len(wartezeiten):
+                    print(f"Lesefehler bei {p}, neuer Versuch in {wartezeiten[versuch]} s", file=sys.stderr, flush=True)
+                    time.sleep(wartezeiten[versuch])
         if text is None:
             print(f"WARNUNG: {p} nicht lesbar, uebersprungen", file=sys.stderr)
             continue

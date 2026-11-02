@@ -36,11 +36,39 @@ from yamnet_numpy import YamnetNumpy  # noqa: E402
 
 _yam = None
 _modell = None
+WARTEZEITEN = (60, 300, 600, 3600)  # Sekunden zwischen den Versuchen: 1, 5, 10, 60 min
 
 
-def _init(modell):
-    global _yam, _modell
+class Zurueckgestellt(Exception):
+    """Drive-Zugriff scheiterte nach allen Wiederholungen; der Auftrag wird beim naechsten Lauf erneut versucht."""
+
+
+def log(text):
+    print(f"{time.strftime('%H:%M:%S')} {text}", flush=True)
+
+
+def mit_wiederholung(was, fn, fehler=(OSError,)):
+    """Ruft fn() auf; bei einem der `fehler` wird nach WARTEZEITEN erneut versucht. Danach Zurueckgestellt."""
+    for versuch in range(len(WARTEZEITEN) + 1):
+        try:
+            return fn()
+        except fehler as ex:
+            if versuch == len(WARTEZEITEN):
+                raise Zurueckgestellt(f"{was}: {ex}") from ex
+            log(f"WARTE {WARTEZEITEN[versuch] // 60} min und versuche es erneut ({versuch + 1}/{len(WARTEZEITEN)}): {was}: {ex}")
+            time.sleep(WARTEZEITEN[versuch])
+
+
+def laufwerk_da(wurzel):
+    if not os.path.isdir(wurzel):
+        raise OSError(f"Laufwerk/Ordner nicht erreichbar: {wurzel}")
+    return True
+
+
+def _init(modell, wartezeiten):
+    global _yam, _modell, WARTEZEITEN
     _modell = modell
+    WARTEZEITEN = wartezeiten
     _yam = YamnetNumpy(modell)
 
 
@@ -71,36 +99,43 @@ def auftrag(arg):
         return tag, stunde, -1, 0, 0.0
     t0 = time.perf_counter()
     gesucht = set(wavs)
-    zips = sorted(glob.glob(os.path.join(glob.escape(wurzel), tag, "WAV", f"audio_{tag}_{stunde}-00*.zip")))
     namen, feats, embs, smean, smax, nfenster = [], [], [], [], [], []
-    fehlend, kaputt = [], []
-    for zp in zips:
-        try:
-            z = zipfile.ZipFile(zp)
-        except zipfile.BadZipFile:
-            kaputt.append(os.path.basename(zp))
-            continue
-        with z:
-            vorhanden = {os.path.basename(n): n for n in z.namelist()}
-            for w in sorted(gesucht & vorhanden.keys()):
-                try:
-                    s = _samples(z.read(vorhanden[w]))
-                    if s is None or len(s) < 1600:
-                        kaputt.append(w)
+    kaputt = []
+    try:
+        mit_wiederholung("Laufwerk", lambda: laufwerk_da(wurzel))
+        muster = os.path.join(glob.escape(wurzel), tag, "WAV", f"audio_{tag}_{stunde}-00*.zip")
+        zips = mit_wiederholung(f"Zip-Liste {tag} {stunde}h", lambda: sorted(glob.glob(muster)))
+        for zp in zips:
+            def oeffnen(zp=zp):
+                z = zipfile.ZipFile(zp)  # BadZipFile: Zip evtl. noch nicht fertig synchronisiert
+                return z, {os.path.basename(n): n for n in z.namelist()}
+            z, vorhanden = mit_wiederholung(f"Zip oeffnen {os.path.basename(zp)}", oeffnen, (OSError, zipfile.BadZipFile))
+            with z:
+                for w in sorted(gesucht & vorhanden.keys()):
+                    try:
+                        daten = mit_wiederholung(f"Lesen {w}", lambda w=w: z.read(vorhanden[w]))
+                        s = _samples(daten)
+                        if s is None or len(s) < 1600:
+                            kaputt.append(w)
+                            gesucht.discard(w)
+                            continue
+                        f, e, m, x, n = analysiere(s)
+                    except Zurueckgestellt:
+                        raise
+                    except Exception as ex:  # ein defekter Clip (z. B. falsche CRC) darf den Lauf nicht stoppen
+                        kaputt.append(f"{w}: {ex}")
                         gesucht.discard(w)
                         continue
-                    f, e, m, x, n = analysiere(s)
-                except Exception as ex:  # ein defekter Clip darf den Lauf nicht stoppen
-                    kaputt.append(f"{w}: {ex}")
                     gesucht.discard(w)
-                    continue
-                gesucht.discard(w)
-                namen.append(w[:-4])
-                feats.append(f)
-                embs.append(e)
-                smean.append(m)
-                smax.append(x)
-                nfenster.append(n)
+                    namen.append(w[:-4])
+                    feats.append(f)
+                    embs.append(e)
+                    smean.append(m)
+                    smax.append(x)
+                    nfenster.append(n)
+    except Zurueckgestellt as ex:
+        log(f"ZURUECKGESTELLT {tag} {stunde}h (kein Shard, naechster Lauf versucht es erneut): {ex}")
+        return tag, stunde, -2, 0, time.perf_counter() - t0
     fehlend = sorted(gesucht)
     fkeys = list(feats[0].keys()) if feats else list(merkmale.alle_merkmale(np.zeros(16000, dtype=np.int16) + 1).keys())
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
@@ -122,12 +157,19 @@ def main():
     ap.add_argument("--min-db", type=float, default=60.0)
     ap.add_argument("--workers", type=int, default=5)
     ap.add_argument("--yamnet", default=os.path.join(os.path.dirname(__file__), "..", "..", "app", "src", "main", "assets", "yamnet.tflite"))
+    ap.add_argument("--wartezeiten", default="60,300,600,3600", help="Sekunden zwischen Wiederholungen")
     ap.add_argument("--max-shards", type=int, default=0)
     ap.add_argument("--von", default="")
     ap.add_argument("--bis", default="9999")
     a = ap.parse_args()
 
-    ereignisse = [e for e in lade(a.wurzel) if e["pegel"] >= a.min_db
+    global WARTEZEITEN
+    WARTEZEITEN = tuple(int(x) for x in a.wartezeiten.split(","))
+    mit_wiederholung("Laufwerk", lambda: laufwerk_da(a.wurzel))
+    alle = lade(a.wurzel, wartezeiten=WARTEZEITEN)
+    if not alle:
+        sys.exit("Keine Ereignisse gefunden (Drive leer oder nicht lesbar). Abbruch ohne Schreiben.")
+    ereignisse = [e for e in alle if e["pegel"] >= a.min_db
                   and a.von <= f"{e['zeit']:%Y-%m-%d}" <= a.bis]
     gruppen = {}
     for e in ereignisse:
@@ -148,15 +190,19 @@ def main():
           f"offen: {len(offen)} Auftraege / {clips_offen} Clips; {a.workers} Prozesse", flush=True)
 
     t0 = time.perf_counter()
-    fertig_clips = fehlend = 0
-    with Pool(a.workers, initializer=_init, initargs=(os.path.abspath(a.yamnet),)) as pool:
+    fertig_clips = fehlend = zurueckgestellt = 0
+    with Pool(a.workers, initializer=_init, initargs=(os.path.abspath(a.yamnet), WARTEZEITEN)) as pool:
         for i, (tag, h, n, f, sek) in enumerate(pool.imap_unordered(auftrag, offen), 1):
+            if n == -2:
+                zurueckgestellt += 1
             fertig_clips += max(n, 0)
             fehlend += f
             vergangen = time.perf_counter() - t0
             rest = vergangen / fertig_clips * (clips_offen - fertig_clips) if fertig_clips else float("nan")
             print(f"[{i}/{len(offen)}] {tag} {h}h: {n} Clips, {f} nicht im Zip, {sek:.0f}s "
                   f"| gesamt {fertig_clips}/{clips_offen}, Rest ca. {rest / 60:.0f} min", flush=True)
+    if zurueckgestellt:
+        print(f"ACHTUNG: {zurueckgestellt} Auftraege zurueckgestellt - denselben Aufruf spaeter erneut starten.", flush=True)
     print(f"Fertig: {fertig_clips} Clips, {fehlend} Ereignisse ohne WAV im Zip, {(time.perf_counter() - t0) / 60:.1f} min")
 
 
