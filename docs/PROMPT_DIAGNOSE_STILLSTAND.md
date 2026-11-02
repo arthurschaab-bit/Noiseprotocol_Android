@@ -128,8 +128,12 @@ Sie ist der **einzige** Schutz, der bei eingefrorenem oder zwangsbeendetem Gerä
   Alarmierung entkoppelt, die **Planung** offenbar nicht. Bestätige das am Code. Wenn ja: planen,
   sobald eine gültige URL gesetzt ist und die Aufzeichnung läuft, unabhängig von Alarmierung und
   Quelle. Stoppen beim ausdrücklichen Stopp wie bisher. Test dazu.
-- **c) Nicht entscheiden:** Wo der Ping empfangen wird und mit welchem Fenster, steht in
-  `docs/EXTERNE_DIENSTE_EINRICHTUNG.md`. Das ist Owner-Sache (siehe Abschnitt 5).
+- **c) Empfänger (Owner-Entscheidung 02.11.2026):** healthchecks.io, Einrichtung durch den Owner
+  nach `docs/EXTERNE_DIENSTE_EINRICHTUNG.md` Abschnitt 2 (Intervall 15 min, Karenzzeit 30 min,
+  E-Mail-Kanal). Der Agent legt **kein** Konto an und trägt keine URL ein. Ergänze dort nur, was
+  durch Schritt 4b nicht mehr stimmt (die Planung hängt nicht mehr an der Alarmierung) und dass
+  die Planung erst beim nächsten Dienststart greift, sofern du sie nicht auch beim Speichern der
+  URL auslöst (am Code klären und im PR vermerken).
 
 ### Schritt 5 — Support-Bundle
 
@@ -232,14 +236,18 @@ ausdrücklich, was ohne Gerät nicht geprüft wurde.**
 **Entschieden am 02.11.2026:** E1 → Schritt 6 (ja, fünf Antworten inklusive „Unklar“), E4 → Schritt 7
 (ja). Beides ist Teil dieses Auftrags.
 
-**Noch offen:**
+**Ebenfalls entschieden am 02.11.2026:**
 
-- **E2 · Zweites Gerät als Beobachter:** Das Pixel ist im Leerlauf, hat dasselbe Drive-Konto und
-  dieselbe Messgerät-Adresse. Es könnte ein Lebenszeichen aus Drive lesen und per Ntfy melden.
-  Der Owner hat zurückgefragt, was das Pixel genau tun soll, und verlangt einen sehr geringen
-  Stromverbrauch. **Nicht Teil dieses Auftrags**, ein eigener Auftrag nach Entscheidung.
-- **E3 · Empfänger der Totmannschaltung:** Dienst, Fenster (Vorschlag im Code: 45 min bei
-  15-min-Takt), Alarmweg aufs Handy des Owners. Bis dahin bleibt Schritt 4c nur Dokumentation.
+- **E3 · Empfänger der Totmannschaltung:** healthchecks.io (siehe Schritt 4c).
+- **E2 · Pixel als Beobachter:** **entfällt.** Die Totmannschaltung deckt den Fall ohne zweites
+  Gerät ab. Nicht bauen.
+
+**Noch offen (Vorschlag, der Owner bestätigt im PR):**
+
+- **E5 · Warnhinweis „Kein Schutz bei Ausfall“:** Läuft die Aufzeichnung, aber die Totmannschaltung
+  ist nicht konfiguriert oder nicht geplant (Schritt 4a), zeigt die App einen dauerhaften Hinweis
+  im Diagnose-Bildschirm. Anlass: Der Owner wusste am 02.11.2026 nicht, ob sie eingerichtet war.
+  Nur bauen nach ausdrücklicher Freigabe.
 
 ---
 
