@@ -2,7 +2,7 @@
 
 Auftrag: `docs/PROMPT_KI_PRUEFSTAND.md` (Abschnitt 4). Es wurde **kein App-Code** geändert.
 Skripte: `tools/ki_pruefstand/`. Alle Zahlen stammen aus einem Lauf auf 43 Clips, von denen der
-Owner 38 bewertet hat (5 mal `UNKLAR`). Das ist ein **Stimmungsbild, keine Statistik**.
+Owner 37 bewertet hat (6 mal `UNKLAR`). Das ist ein **Stimmungsbild, keine Statistik**.
 
 ## 1 · Datensatz
 
@@ -16,29 +16,30 @@ Owner 38 bewertet hat (5 mal `UNKLAR`). Das ist ein **Stimmungsbild, keine Stati
   Nacht/Wochenende oder frühmorgens (vor 07 Uhr), nur einer (25.09., 07:08, 94,7 dB) aus der
   Arbeitszeit. Es gibt praktisch keine Gegenbeispiele wie Zug oder Straße zur Arbeitszeit. Die Fehlalarmzahlen unten sind deshalb eher zu günstig.
 - Labels (Owner, blind, ohne App-Label): `VERLADUNG` 10, `BAU_SONST` 13, `KEINE_BAU` 9,
-  `DREHBOHR` 3, `HYD_HAMMER` 2, `DRUCKLUFT` 1, `ANKERBOHR` 0, `UNKLAR` 5.
+  `DREHBOHR` 2, `HYD_HAMMER` 2, `DRUCKLUFT` 1, `ANKERBOHR` 0, `UNKLAR` 6.
 - **Annahmen:** Drei Clips ohne Klasse, aber mit Notiz („Bagger“, „Sonstiger Hammer“), werden als
-  `BAU_SONST` gewertet. Ein Nachtclip (13.10., 01:31) ist als `DREHBOHR` gelabelt, das ist
-  ungewöhnlich und sollte der Owner prüfen. `UNKLAR` zählt in keiner Auswertung.
+  `BAU_SONST` gewertet. Der Nachtclip vom 13.10., 01:31, war zuerst als `DREHBOHR` gelabelt.
+  Der Owner hält das für unplausibel (02.11.), der Clip zählt jetzt als `UNKLAR`. `UNKLAR` zählt in
+  keiner Auswertung.
 - **Gerät:** Nur `VERLADUNG` (10 Clips) hat genug Clips für eine Aussage. `HYD_HAMMER`,
-  `DRUCKLUFT`, `DREHBOHR` und `ANKERBOHR` haben weniger als 5 Clips: **nicht beurteilbar**.
+  `DRUCKLUFT`, `DREHBOHR` (2) und `ANKERBOHR` haben weniger als 5 Clips: **nicht beurteilbar**.
   Die Geräte-Ebene wurde nur mit den drei Klassen `BAU_SONST`, `KEINE_BAU`, `VERLADUNG`
   bewertet (32 Clips).
 
 ## 2 · Ergebnisse
 
-Bewertung: 38 Clips, davon 29 Baustelle und 9 Gegenbeispiele (`KEINE_BAU`). Lernende Ansätze
+Bewertung: 37 Clips, davon 28 Baustelle und 9 Gegenbeispiele (`KEINE_BAU`). Lernende Ansätze
 mit Leave-one-group-out, Gruppe = Kalendertag (25 Tage). Konfusionsmatrizen: Zeile = wahr,
 Spalte = Vorhersage.
 
 | Ansatz | Treffer ja/nein | Baustelle erkannt | Gegenbeispiele fälschlich „Baustelle“ | Laufzeit/Clip |
 |---|---|---|---|---|
-| Ist-Zustand streng (nur „Baulärm“) | 13 / 38 | 4 / 29 | **0 / 9** | – |
-| Ist-Zustand weit (auch „Möglicher Baulärm“) | 19 / 38 | 10 / 29 | **0 / 9** | – |
-| Nur Pegel (Kontrolle), Baum Tiefe 2 | 29 / 38 | 25 / 29 | 5 / 9 | – |
-| DSP-Merkmale, Baum Tiefe 2 | 31 / 38 | 27 / 29 | 5 / 9 | ca. 4 ms |
-| YAMNet-Embedding + kNN (k=3) | 31 / 38 | 29 / 29 | 7 / 9 | ca. 0,66 s (1) |
-| YAMNet-Embedding + Logistische Regression | 33 / 38 | 28 / 29 | 4 / 9 | ca. 0,66 s (1) |
+| Ist-Zustand streng (nur „Baulärm“) | 13 / 37 | 4 / 28 | **0 / 9** | – |
+| Ist-Zustand weit (auch „Möglicher Baulärm“) | 19 / 37 | 10 / 28 | **0 / 9** | – |
+| Nur Pegel (Kontrolle), Baum Tiefe 2 | 26 / 37 | 22 / 28 | 5 / 9 | – |
+| DSP-Merkmale, Baum Tiefe 2 | 30 / 37 | 26 / 28 | 5 / 9 | ca. 4 ms |
+| YAMNet-Embedding + kNN (k=3) | 29 / 37 | 27 / 28 | 7 / 9 | ca. 0,66 s (1) |
+| YAMNet-Embedding + Logistische Regression | 32 / 37 | 27 / 28 | 4 / 9 | ca. 0,66 s (1) |
 
 (1) Gemessen mit dem NumPy-Nachbau auf dem PC (9 Fenster je Clip), nicht auf dem Handy.
 
@@ -46,12 +47,12 @@ Konfusion ja/nein (ja = Baustelle):
 
 | Ansatz | ja→ja | ja→nein | nein→ja | nein→nein |
 |---|---|---|---|---|
-| Ist-Zustand streng | 4 | 25 | 0 | 9 |
-| Ist-Zustand weit | 10 | 19 | 0 | 9 |
-| Nur Pegel | 25 | 4 | 5 | 4 |
-| DSP-Baum | 27 | 2 | 5 | 4 |
-| kNN | 29 | 0 | 7 | 2 |
-| LogReg | 28 | 1 | 4 | 5 |
+| Ist-Zustand streng | 4 | 24 | 0 | 9 |
+| Ist-Zustand weit | 10 | 18 | 0 | 9 |
+| Nur Pegel | 22 | 6 | 5 | 4 |
+| DSP-Baum | 26 | 2 | 5 | 4 |
+| kNN | 27 | 1 | 7 | 2 |
+| LogReg | 27 | 1 | 4 | 5 |
 
 Gerät, drei Klassen (Reihenfolge `BAU_SONST`, `KEINE_BAU`, `VERLADUNG`), 32 Clips:
 
@@ -66,7 +67,7 @@ Dreiklassen-Treffer von 13/32 (rund 41 %) liegen kaum über dem Raten (häufigst
 ### Was auffällt
 
 - **Die App lässt fast alles durch.** Der Ist-Zustand hat keinen Fehlalarm, erkennt aber nur 4
-  (streng) bzw. 10 (weit) von 29 Baustellenclips. Auch die lautesten Clips (bis 105 dB) tragen
+  (streng) bzw. 10 (weit) von 28 Baustellenclips. Auch die lautesten Clips (bis 105 dB) tragen
   „Kein Baulärm erkannt“.
 - **Der DSP-Baum ist praktisch ein Pegelfilter.** Auf allen Daten gelernt wählt er nur
   `pegel_rel` (Wichtigkeit 1,0). Die Impuls- und Spektralmerkmale haben in diesem Datensatz keinen
@@ -109,14 +110,14 @@ Die optionale Fusion wurde nicht gerechnet.
 1. Die jetzige Regel erkennt zu wenig. Falls die Fehlalarmquote vorrangig ist, bleibt sie sicher,
    falls das Erkennen vorrangig ist, nicht. Dafür fehlt die offene Entscheidung zur
    Fehlalarmschwelle.
-2. Ein Pegel-Gate (laut ⇒ Kandidat) allein erreicht in diesem Datensatz 29/38. Embedding-Ansätze
-   bringen 31–33/38. Der Unterschied ist zu klein, um ihn zu belegen.
+2. Ein Pegel-Gate (laut ⇒ Kandidat) allein erreicht in diesem Datensatz 26/37. Der DSP-Baum und die
+   Embedding-Ansätze bringen 29–32/37. Der Unterschied ist zu klein, um ihn zu belegen.
 3. Bevor ein Umbau geplant wird, braucht es mehr bestätigte Clips, vor allem Gegenbeispiele
    zur Arbeitszeit (Zug, Straße, Nachbarn) und mindestens 5 Clips je Gerät.
 
 ## 6 · Grenzen
 
-- 43 Clips, 38 bewertet, 25 Tage: ein Stimmungsbild.
+- 43 Clips, 37 bewertet, 25 Tage: ein Stimmungsbild.
 - Gegenbeispiele sind pegelbedingt leicht (siehe Bias).
 - YAMNet wurde mit einem **NumPy-Nachbau** gerechnet, weil die Windows-Anwendungssteuerung die
   Binärbibliotheken von LiteRT und TensorFlow blockiert und Docker nicht startete. Der Nachbau
