@@ -28,6 +28,7 @@ V1. Rechts-TODOs bleiben sichtbar. Umfang/Verifikationsgrenzen:
 | **M2** BLE-Transport (Scan, Verbindung, Notify, On-Demand Permissions) | ✅ abgeschlossen, real am Gerät bestätigt |
 | **M3** Robustheit (Reconnect, Ausfallerkennung, FGS-Typen dynamisch) | ✅ abgeschlossen, real am Gerät bestätigt |
 | **M5** Alarmierung bei Verbindungsabbruch (ntfy + Totmannschaltung, Tablet/OEM-Härtung) | ✅ abgeschlossen & gehärtet (PR #55) |
+| **Totmannschaltung bei Messausfall** | Heartbeat wird bei laufendem Dienst und gültiger URL unabhängig von Alarmierung und Messquelle geplant; `runtime.json` zeigt Konfiguration, Planung und letzte Erfolge/Fehler ohne URL. Einrichtung und Gerätetest bei healthchecks.io bleiben offen. |
 | **M7b** Google-Drive-Sync (Upload, Kontopersistenz, DriveStatusCard, Sofortiger WAV-Sync & Rohwert-CSV) | ✅ abgeschlossen & erweitert |
 | **M4** Persistenz der Messreihe (Sessions, Verbindungsereignisse, Kennwerte, Retention) | ✅ abgeschlossen |
 | **M6** Sicherheit (Pinning-Härtung, Kadenz-Watcher, verschlüsselte Ablage, Diagnose-Log standardmäßig aktiv) | ✅ abgeschlossen & gehärtet |

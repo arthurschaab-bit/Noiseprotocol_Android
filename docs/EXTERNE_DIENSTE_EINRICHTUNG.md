@@ -49,6 +49,8 @@ In *Project Settings → Alerts*:
 4. **URL in der App eintragen:** Einstellungen → „Alarmierung bei Verbindungsabbruch“ → Abschnitt „Totmannschaltung“ → Feld „Ping-URL“. Danach **„Probe-Ping senden“** drücken: Die App meldet „Probe-Ping angekommen“, und bei healthchecks.io erscheint ein Ping. Nur `https://`-Adressen werden gespeichert. Ein leeres Feld schaltet die Totmannschaltung aus.
 5. **Wichtig:** Die Ping-URL enthält ein Cap-Token und ist ein Geheimnis. Sie gehört ausschließlich in die verschlüsselten App-Einstellungen (`EncryptedSharedPreferences`) und darf niemals in Logdateien, Sentry-Events oder Support-Paketen erscheinen.
 
+Die Planung des Heartbeat-Jobs erfolgt beim nächsten Dienststart mit gültiger Ping-URL, unabhängig von der Alarmierung bei Verbindungsabbruch und unabhängig von der Messquelle. Wird die URL während einer laufenden Messung geändert, greift die Planung erst nach einem Neustart des Dienstes. Nach dem Speichern daher die Messung beenden und neu starten. Die App kann nicht prüfen, ob bei healthchecks.io ein E-Mail-Kanal eingerichtet ist; diesen dort separat testen.
+
 ### 2.2 Benachrichtigungskanal
 - In Healthchecks.io einen E-Mail-Kanal (oder SMS/Webhook) hinterlegen.
 - Bei Ausbleiben der Pings nach Ablauf von Intervall + Karenzzeit wird automatisch eine E-Mail versandt.

@@ -2,8 +2,11 @@ package com.example.lrmprotokoll.audio
 
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.WorkManager
+import androidx.work.testing.WorkManagerTestInitHelper
 import com.example.lrmprotokoll.LaermprotokollApp
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -22,6 +25,41 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AudioRecordingServiceStartupTest {
+    @Test
+    fun totmannschaltungWirdOhneAlarmierungFuerBeideQuellenGeplant() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val settings = app.container.settingsManager
+        org.robolectric.Shadows
+            .shadowOf(app)
+            .grantPermissions(android.Manifest.permission.RECORD_AUDIO)
+        WorkManagerTestInitHelper.initializeTestWorkManager(app)
+        try {
+            for (quelle in listOf("MIKROFON", "PCE_323")) {
+                settings.audioTriggerQuelle = quelle
+                settings.meterDeviceAddress = null
+                settings.alarmierungAktiv = false
+                settings.heartbeatUrl = "https://hc-ping.com/test-geheim"
+                val intent = Intent(app, AudioRecordingService::class.java)
+                val service = Robolectric.buildService(AudioRecordingService::class.java, intent)
+                service.create().startCommand(0, 1)
+                assertTrue("Dienst muss bei $quelle laufen", AudioRecordingService.laeuft.value)
+                val infos = WorkManager.getInstance(app).getWorkInfosForUniqueWork("heartbeat").get()
+                assertTrue("Heartbeat muss bei $quelle geplant sein", infos.any { !it.state.isFinished })
+                service.get().onStartCommand(
+                    Intent(app, AudioRecordingService::class.java).apply {
+                        action = ACTION_STOP_SERVICE
+                    },
+                    0,
+                    2,
+                )
+                service.destroy()
+            }
+        } finally {
+            settings.heartbeatUrl = ""
+            settings.monitoringWasActive = false
+            WorkManagerTestInitHelper.closeWorkDatabase()
+        }
+    }
 
     @Test
     fun serviceStartetOhneBluetoothVerbindungOhneAbsturz() {

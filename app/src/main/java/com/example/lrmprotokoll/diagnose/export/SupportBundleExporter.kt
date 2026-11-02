@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.BuildConfig
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.Versionskennung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
@@ -472,6 +473,7 @@ class SupportBundleExporter(
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
         json.put("aufnahmeAktiv", runCatching { aufnahmeAktivProvider() }.getOrDefault(false))
 
+        var heartbeatGeplant = false
         runCatching {
             val workManager = workManagerProvider()
             if (workManager != null) {
@@ -498,6 +500,7 @@ class SupportBundleExporter(
                     name: String,
                     info: androidx.work.WorkInfo,
                 ) {
+                    if (name == "heartbeat" && !info.state.isFinished) heartbeatGeplant = true
                     gemeldeteIds += info.id
                     hintergrundJobs.put(
                         JSONObject().apply {
@@ -537,6 +540,13 @@ class SupportBundleExporter(
                 if (unvollstaendig) json.put("hintergrundJobsUnvollstaendig", true)
             }
         }
+
+        json.put("totmannschaltung", JSONObject().apply {
+            put("konfiguriert", HeartbeatPlanung.istKonfiguriert(settingsManager.heartbeatUrl))
+            put("geplant", heartbeatGeplant)
+            put("letzterErfolgAt", settingsManager.heartbeatLetzterErfolgAt)
+            put("letzterFehlerAt", settingsManager.heartbeatLetzterFehlerAt)
+        })
 
         return json.toString(2)
     }

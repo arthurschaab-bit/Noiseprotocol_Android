@@ -7,6 +7,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.SettingsManager
 import java.util.concurrent.TimeUnit
 
 private const val WORK_NAME = "heartbeat"
@@ -35,6 +36,7 @@ class HeartbeatWorker @JvmOverloads constructor(
         val pinger = pingerOverride ?: container.heartbeatPinger
         return when (val ergebnis = pinger.ping()) {
             HeartbeatPinger.Ergebnis.GESENDET -> {
+                container.settingsManager.heartbeatLetzterErfolgAt = System.currentTimeMillis()
                 container.diagnosticsReporter.breadcrumb("Heartbeat", "Heartbeat erfolgreich gesendet")
                 Result.success()
             }
@@ -44,6 +46,7 @@ class HeartbeatWorker @JvmOverloads constructor(
             // kurzer Netzausfall. Waere das ein endgueltiger Fehlschlag, bliebe die
             // Totmannschaltung bis zum naechsten regulaeren Lauf stumm.
             HeartbeatPinger.Ergebnis.FEHLGESCHLAGEN -> {
+                container.settingsManager.heartbeatLetzterFehlerAt = System.currentTimeMillis()
                 container.diagnosticsReporter.report(
                     code = com.example.lrmprotokoll.diagnose.DiagnosticCode.HEARTBEAT_SEND_FAILED,
                     component = "HeartbeatWorker",
@@ -58,6 +61,14 @@ class HeartbeatWorker @JvmOverloads constructor(
 }
 
 object HeartbeatPlanung {
+    fun istKonfiguriert(url: String): Boolean = url.isNotBlank() && HeartbeatPinger.istGueltigeUrl(url)
+
+    fun aktualisiere(
+        context: Context,
+        settings: SettingsManager,
+    ) {
+        if (settings.monitoringWasActive && istKonfiguriert(settings.heartbeatUrl)) plane(context) else stoppe(context)
+    }
 
     fun plane(context: Context) {
         try {
