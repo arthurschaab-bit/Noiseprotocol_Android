@@ -17,8 +17,8 @@ Zustand **kurz vor dem Ausfall** im Bundle steht. Schreib diese Grenze in den PR
 
 Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
-- **Vor dem Start:** `git fetch origin`, dann
-  `git switch -c feature/diagnose-stillstand origin/main`. Nie auf `main` pushen.
+- **Vor dem Start:** `git fetch origin`, dann `git switch -c <Branch aus Abschnitt 0a> origin/main`.
+  Nie auf `main` pushen.
 - **Commits:** Conventional Commits, Typ englisch, Beschreibung deutsch, klein geschnitten.
   Beispiel: `feat(diagnose): Ausfall beim Start nach Ursache einordnen`.
 - **Nach jeder Änderung:** `./gradlew assembleDebug lintDebug test` und `./gradlew ktlintCheck`
@@ -31,6 +31,31 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 - Nie behaupten, etwas funktioniere, ohne es ausgeführt zu haben. Kommandoausgaben gehören in den
   PR.
 - **Draft-PR gegen `main`**, Definition of Done nach AGENTS.md §7.
+
+---
+
+## 0a · Aufteilung in drei Läufe (Owner-Entscheidung 02.11.2026)
+
+**Bearbeite nur den Lauf, den dir der Owner nennt.** Die anderen Schritte bleiben unberührt, auch
+wenn sie naheliegen (AGENTS.md §5: kein Vorgriff). Jeder Lauf ist ein eigener Branch und ein
+eigener Draft-PR gegen `main`.
+
+| Lauf | Wer | Schritte | Branch | Setzt voraus |
+|---|---|---|---|---|
+| 1 | Codex | **4** (Totmannschaltung) **plus** die Heartbeat-Zeitstempel aus Schritt 2 | `fix/totmannschaltung-planung` | nichts |
+| 2 | Codex | **1, 2** (nur die Wächter-Spur), **3, 5** | `feature/diagnose-stillstand-logik` | Lauf 1 gemergt |
+| 3 | Antigravity | **6, 7, 8** (Oberfläche) | `feature/diagnose-stillstand-oberflaeche` | Lauf 1 und 2 gemergt |
+
+- **Warum die Heartbeat-Zeitstempel in Lauf 1 liegen:** Schritt 4a meldet `letzterErfolgAt` und
+  `letzterFehlerAt`, und Schritt 8 braucht sie. Sie müssen existieren, bevor Lauf 2 und 3 sie lesen.
+  Lauf 2 liest sie nur (Schritt 1, Feld `heartbeatLetzterErfolgAt`) und legt sie nicht neu an.
+- **Tests und Abnahmekriterien** (Abschnitte 3 und 4) gelten je Lauf nur für dessen Schritte:
+  Lauf 1 → Test 4 und das Kriterium zur Totmannschaltung; Lauf 2 → Tests 1, 2, 3, 5; Lauf 3 → die
+  Logiktests zu Karte, Hinweis und `TotmannschaltungStatus`. Test 6 (Migration) und
+  `assembleDebug lintDebug test` gelten in jedem Lauf.
+- **Ein Lauf ist erst fertig, wenn sein PR gemergt ist.** Der nächste Lauf beginnt danach mit
+  `git fetch origin` und einem frischen Branch von `origin/main`.
+- Ist dein Lauf nicht benannt, frag den Owner, statt alles zu bauen.
 
 ---
 
@@ -83,7 +108,8 @@ Der Wächter schreibt bei **jedem** Lauf, auch bei `LAEUFT`/`AUS`, einen Zeitste
 (`waechter_letzter_lauf_at` im `SettingsManager`, kein Breadcrumb, kein Eintrag pro Lauf). Beim
 Wiederanlauf zeigt das, ob JobScheduler während der Lücke lief. Lief er nicht, sind Jobs und App
 zusammen ausgefallen (Gerät eingefroren, Zwangsbeendigung, Hersteller-Sperre), nicht nur der Prozess.
-Dieselbe Spur für den Heartbeat (`heartbeat_letzter_erfolg_at`, `..._fehler_at`).
+Dieselbe Spur für den Heartbeat (`heartbeat_letzter_erfolg_at`, `..._fehler_at`). **Der
+Heartbeat-Teil gehört zu Lauf 1** (Abschnitt 0a), die Wächter-Spur zu Lauf 2.
 
 ### Schritt 3 — `AusfallKlassifikator` (reine Funktion, wird getestet)
 
