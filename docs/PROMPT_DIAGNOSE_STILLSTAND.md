@@ -139,6 +139,45 @@ Sie ist der **einzige** Schutz, der bei eingefrorenem oder zwangsbeendetem Gerä
   `ZIP_BUDGET_PERIODISCH`) einhalten, kürzen über die bestehende Kürzungsstufe.
 - `checksums.sha256` und `manifest.json` bleiben konsistent (vorhandene Tests erweitern).
 
+### Schritt 6 — Karte „Was ist passiert?“ (Owner-Entscheidung 02.11.2026: ja)
+
+Der Owner kann sich an den Ausfall vom 30.10. nicht erinnern. Die App fragt deshalb beim nächsten
+Öffnen nach, solange die Erinnerung frisch ist.
+
+- **Wann:** Nach einem eingeordneten Ausfall von mindestens 30 min, **nicht** bei `NUTZER_STOPP`
+  und `AKKU_LEER` (dort ist die Ursache belegt, sonst fragt die App täglich wegen der Morgenroutine).
+- **Wie:** Karte oben im Hauptbildschirm mit Zeitraum und Dauer („Keine Messung von 30.10. 13:07 bis
+  01.11. 10:57, 45 h 49 min“), der Einordnung der App als Hinweis und **genau fünf** Antworten:
+  1. „Ich habe die Messung selbst beendet“
+  2. „Das Handy war aus oder der Akku leer“
+  3. „Das Handy war eingefroren oder reagierte nicht“
+  4. „Das Handy lief normal, aber die App war weg“
+  5. „**Unklar**“
+- Wegwischbar, ohne Pflicht. Jede Lücke wird **einmal** gefragt (Schlüssel: `letzteDatenAt`).
+  Unbeantwortete Lücken bleiben im Diagnose-Bildschirm abrufbar, höchstens die letzten 20.
+- Die Antwort geht als `nutzerAngabe` in den Ausfall-Eintrag (Lebenszyklus-Ringdatei und
+  `ausfaelle.json`). Kein Freitext, damit nichts Personenbezogenes ins Bundle gelangt.
+- UI-lastig: gehört nach AGENTS.md §9 an Antigravity. Die Auswahl der Fälle und die Speicherung
+  (reine Logik) werden separat getestet.
+
+### Schritt 7 — Hinweis auf Hintergrundbeschränkung (Owner-Entscheidung 02.11.2026: ja)
+
+Im Diagnose-Bildschirm und, wenn zutreffend, als Hinweis im Hauptbildschirm. **Ehrliche Grenze:**
+Huaweis „App-Start-Verwaltung“ und der Autostart lassen sich über keine öffentliche API abfragen.
+Erkennen kann die App nur diese Signale:
+
+- `isBackgroundRestricted()` (API 28) und der Standby-Bucket (`RESTRICTED`, `RARE`) aus Schritt 1;
+- die Batterieoptimierung (`batterieoptimierungIgnoriert` steht schon in `runtime.json`);
+- **indirekt:** Wenn nach einem Ausfall die Wächter-Spur (Schritt 2) zeigt, dass **keine Jobs
+  liefen**, obwohl das Gerät lief (`STILLSTAND_GERAET_LIEF`/`FRAMEWORK_NEUSTART`), zeigt der Hinweis
+  „Das System hat die App und ihre Hintergrundjobs angehalten. Bei Huawei: Einstellungen → Apps →
+  App-Start → Lärmprotokoll → **Manuell verwalten**, alle drei Schalter an.“
+
+Ein Sprung in die Huawei-Einstellungen (Activity des Systemmanagers) darf nur mit `try/catch` und
+Rückfall auf die allgemeinen App-Infos versuchen. Der Weg heißt je nach EMUI/HarmonyOS anders;
+**ohne Gerät nicht prüfbar**, das gehört in den PR. Die Texte sind Platzhalter und brauchen die
+Freigabe des Owners.
+
 ---
 
 ## 3 · Tests (Pflicht)
@@ -177,6 +216,11 @@ ausdrücklich, was ohne Gerät nicht geprüft wurde.**
 - [ ] `runtime.json` sagt, ob die Totmannschaltung konfiguriert und geplant ist, ohne die URL.
 - [ ] Die Totmannschaltung hängt nicht mehr an der Alarmierung (oder der PR belegt, dass sie es
       nie tat).
+- [ ] Die Karte erscheint nur bei Lücken ab 30 min und nicht bei `NUTZER_STOPP`/`AKKU_LEER`, fragt
+      jede Lücke einmal und speichert die Antwort (Logiktest, UI gesondert).
+- [ ] Der Hinweis auf Hintergrundbeschränkung erscheint bei den genannten Signalen. Im PR steht
+      ausdrücklich, dass die Huawei-Einstellung selbst nicht abfragbar und der Sprung dorthin nicht
+      auf einem Gerät geprüft ist.
 - [ ] Keine Schemaänderung, keine neuen Abhängigkeiten, keine neue Kryptographie.
 - [ ] README und `docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md` (Abschnitt 12, Trigger-Matrix) kurz
       nachgezogen.
@@ -185,16 +229,17 @@ ausdrücklich, was ohne Gerät nicht geprüft wurde.**
 
 ## 5 · Offene Entscheidungen — **nicht selbst entscheiden, Owner fragen (AGENTS.md §8a)**
 
-- **E1 · „Was ist passiert?“-Rückfrage:** Nach einem Ausfall beim nächsten Öffnen eine Karte mit
-  Klasse und Zeitraum und Schnellauswahl (Handy eingefroren / ausgesteckt / ich habe gestoppt /
-  weiß nicht). UI-lastig, gehört nach AGENTS.md §9 an Antigravity. Nur bauen nach Freigabe.
-- **E2 · Zweites Gerät als Beobachter:** Das Pixel ist im Leerlauf, hat dasselbe Drive und dieselbe
-  Messgerät-Adresse. Es könnte einen Heartbeat aus Drive lesen und per Ntfy melden. Vorsicht:
-  Messgerät-Adresse und Drive-Konto teilen heißt BLE-Konflikt-Risiko. Nur als Idee bewerten.
-- **E3 · Empfänger der Totmannschaltung:** Dienst, Fenster (Vorschlag im Code: 45 min bei 15-min-Takt),
-  Alarmweg aufs Handy des Owners. Bis dahin bleibt Schritt 4c nur Dokumentation.
-- **E4 · Hersteller-Einstellungen:** Soll die App beim Start prüfen und anzeigen, ob
-  `isBackgroundRestricted` oder ein ungünstiger Standby-Bucket vorliegt (Hinweis im Diagnose-Bildschirm)?
+**Entschieden am 02.11.2026:** E1 → Schritt 6 (ja, fünf Antworten inklusive „Unklar“), E4 → Schritt 7
+(ja). Beides ist Teil dieses Auftrags.
+
+**Noch offen:**
+
+- **E2 · Zweites Gerät als Beobachter:** Das Pixel ist im Leerlauf, hat dasselbe Drive-Konto und
+  dieselbe Messgerät-Adresse. Es könnte ein Lebenszeichen aus Drive lesen und per Ntfy melden.
+  Der Owner hat zurückgefragt, was das Pixel genau tun soll, und verlangt einen sehr geringen
+  Stromverbrauch. **Nicht Teil dieses Auftrags**, ein eigener Auftrag nach Entscheidung.
+- **E3 · Empfänger der Totmannschaltung:** Dienst, Fenster (Vorschlag im Code: 45 min bei
+  15-min-Takt), Alarmweg aufs Handy des Owners. Bis dahin bleibt Schritt 4c nur Dokumentation.
 
 ---
 
