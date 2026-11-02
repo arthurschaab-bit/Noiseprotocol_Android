@@ -410,7 +410,7 @@ Die Trigger werden an Funktionsgrenzen gesetzt. Nicht jeder `catch`-Block erzeug
 | `ConnectionSupervisor` | State-Wechsel und Backoff | Reconnect-Budget ausgeschöpft |
 | `AlarmCoordinator` | ausgelöst, bestätigt, beendet | Zustand nicht persistierbar, Kanal endgültig fehlgeschlagen |
 | `NtfyAlertChannel` | Versuch und Ergebnis | endgültiger Sendefehler nach Retry; keine geheime URL |
-| `HeartbeatWorker` | ausgeführt, erfolgreich, übersprungen | lokale Warnung bei Sendefehler; externe E-Mail entsteht erst beim Ausbleiben |
+| `HeartbeatWorker` | erfolgreich, übersprungen; letzter Erfolg/Fehler als Zeitstempel | lokale Warnung bei Sendefehler; externe E-Mail entsteht erst beim Ausbleiben. Planung bei Dienststart mit gültiger URL, unabhängig von Quelle und Alarmierung; `runtime.json` enthält Konfiguration und Planungsstatus ohne URL |
 | `DriveSyncWorker` | Start, Plan, Uploadschritt, Abschluss | Authentifizierung, endgültiger Upload- oder Dateifehler |
 | Room/DAOs/Worker | Migration/Operation als fester Code | Öffnungs-, Migrations- und dauerhafter Schreibfehler |
 | Bericht/Export/Player | Nutzeraktion und Abschluss | Export-, PDF-, Freigabe- oder Wiedergabefehler |
