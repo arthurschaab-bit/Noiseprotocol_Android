@@ -46,6 +46,7 @@ class YamnetNumpy:
         self.t = [Tensor(self.g, self.m.Buffers, i) for i in range(self.g.TensorsLength())]
         self.ein = self.g.Inputs(0)
         self.aus = self.g.Outputs(0)
+        self._wc = {}  # dequantisierte Gewichte/Biase, einmal berechnet
 
     # --- Hilfen -----------------------------------------------------------------
     def _deq(self, i, x):
@@ -94,8 +95,10 @@ class YamnetNumpy:
     def _conv(self, op, ins, out, depthwise):
         x_i, w_i, b_i = ins[0], ins[1], ins[2]
         x = self._deq(x_i, self.v[x_i])
-        w = self._deq(w_i, self.t[w_i].const)
-        b = self.t[b_i].const.astype(np.float32) * (self.t[x_i].scale[0] * self.t[w_i].scale.astype(np.float32))
+        if w_i not in self._wc:
+            self._wc[w_i] = (self._deq(w_i, self.t[w_i].const),
+                             self.t[b_i].const.astype(np.float32) * (self.t[x_i].scale[0] * self.t[w_i].scale.astype(np.float32)))
+        w, b = self._wc[w_i]
         if depthwise:
             o = tflite.DepthwiseConv2DOptions()
             o.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
@@ -109,8 +112,11 @@ class YamnetNumpy:
             o.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
             kh, kw = w.shape[1], w.shape[2]
             s = (o.StrideH(), o.StrideW())
-            win = self._windows(x, (kh, kw), s, o.Padding() == tflite.Padding.SAME)
-            y = np.einsum("nhwabc,oabc->nhwo", win, w, optimize=True)
+            if kh == 1 and kw == 1 and s == (1, 1):
+                y = x @ w[:, 0, 0, :].T  # 1x1-Faltung = Matrixprodukt
+            else:
+                win = self._windows(x, (kh, kw), s, o.Padding() == tflite.Padding.SAME)
+                y = np.einsum("nhwabc,oabc->nhwo", win, w, optimize=True)
         y = self._act(y + b, o.FusedActivationFunction())
         self.v[out] = self._req(out, y)
 
@@ -123,8 +129,10 @@ class YamnetNumpy:
             self.v[out] = self._act(y, o.FusedActivationFunction()).astype(np.float32)
             return
         x = self._deq(ins[0], self.v[ins[0]]).reshape(-1, wt.shape[1])
-        w = self._deq(ins[1], wt.const)
-        b = self.t[ins[2]].const.astype(np.float32) * (self.t[ins[0]].scale[0] * wt.scale.astype(np.float32))
+        if ins[1] not in self._wc:
+            self._wc[ins[1]] = (self._deq(ins[1], wt.const),
+                                self.t[ins[2]].const.astype(np.float32) * (self.t[ins[0]].scale[0] * wt.scale.astype(np.float32)))
+        w, b = self._wc[ins[1]]
         y = self._act(x @ w.T + b, o.FusedActivationFunction())
         self.v[out] = self._req(out, y).reshape(self.t[out].shape)
 

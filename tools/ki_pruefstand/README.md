@@ -14,3 +14,11 @@ Keine WAVs, Kandidatenlisten oder Drive-Pfade im Repo.
 
 Installation: `python -m venv <Ordner außerhalb des Repos>` und `pip install -r requirements.txt` (Python 3.11).
 Ergebnisse und Bewertung: `docs/BERICHT_KI_PRUEFSTAND.md`.
+
+## Stapelanalyse über alle Ereignisse
+
+9. `batch_analyse.py <Drive-Wurzel> <Ausgabeordner> [--min-db 60] [--workers 5]` — rechnet alle Ereignisse ab N dB
+   (DSP-Merkmale + YAMNet-Embedding/Scores) parallel, ein Prozess je Stunden-Zip. Fortsetzbar (Shards je Tag und Stunde),
+   schreibt `ereignisse.csv` (Metadaten) und `shards/*.npz` (nur Zahlen). Messung: ca. 3,3 Clips/s mit 5 Prozessen.
+10. `tabelle.py <Drive-Wurzel> <Ausgabeordner> <labels.json> [--cluster 30]` — `detail.csv` (eine Zeile je Clip, 48 Spalten)
+    und `cluster_uebersicht.md` (Gruppen nach Klang mit typischen Clips zum Anhören). Braucht den Drive nicht, wenn `ereignisse.csv` vorhanden ist.

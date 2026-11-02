@@ -3,7 +3,7 @@
 Aufruf: python auswahl.py <Drive-Wurzel> <Ausgabe.csv> [--seed 1]
 Die Ausgabe gehoert NICHT ins Repo (enthaelt Aufnahmenamen).
 """
-import argparse, csv, glob, os, random, re
+import argparse, csv, glob, io, os, random, re, sys, time
 from collections import defaultdict
 from datetime import datetime
 
@@ -14,8 +14,19 @@ def lade(wurzel):
     zeilen = []
     pat = os.path.join(glob.escape(wurzel), "*", "Schallmessung", "klassifikation_nachtrag_*.csv")
     for p in sorted(glob.glob(pat)):
-        with open(p, encoding="utf-8-sig", newline="") as f:
-            for r in csv.DictReader(f, delimiter=";"):
+        text = None
+        for versuch in range(5):  # das Drive-Laufwerk liefert sporadisch Lesefehler (OSError 22)
+            try:
+                with open(p, encoding="utf-8-sig", newline="") as f:
+                    text = f.read()
+                break
+            except OSError:
+                time.sleep(2 * (versuch + 1))
+        if text is None:
+            print(f"WARNUNG: {p} nicht lesbar, uebersprungen", file=sys.stderr)
+            continue
+        if True:
+            for r in csv.DictReader(io.StringIO(text, newline=""), delimiter=";"):
                 try:
                     t = datetime.fromisoformat(r["Zeit"])
                     pegel = float(r["Pegel_dB"].replace(",", "."))
