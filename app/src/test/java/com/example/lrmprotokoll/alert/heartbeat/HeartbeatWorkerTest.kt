@@ -61,6 +61,7 @@ class HeartbeatWorkerTest {
 
     @Test
     fun erfolgreicherPingLiefertResultSuccess() = runTest {
+        settings.heartbeatLetzterErfolgAt = 0L
         server.enqueue(MockResponse().setResponseCode(200))
         val worker = bauWorker(HeartbeatPinger(settings))
 
@@ -68,11 +69,14 @@ class HeartbeatWorkerTest {
 
         assertTrue(ergebnis is Result.Success)
         assertEquals(1, server.requestCount)
+        assertTrue(settings.heartbeatLetzterErfolgAt > 0L)
     }
 
     @Test
     fun uebersprungenerPingOhneUrlLiefertEbenfallsResultSuccess() = runTest {
         settings.heartbeatUrl = ""
+        settings.heartbeatLetzterErfolgAt = 0L
+        settings.heartbeatLetzterFehlerAt = 0L
         val worker = bauWorker(HeartbeatPinger(settings))
 
         val ergebnis = worker.doWork()
@@ -82,10 +86,13 @@ class HeartbeatWorkerTest {
             ergebnis is Result.Success,
         )
         assertEquals(0, server.requestCount)
+        assertEquals(0L, settings.heartbeatLetzterErfolgAt)
+        assertEquals(0L, settings.heartbeatLetzterFehlerAt)
     }
 
     @Test
     fun fehlgeschlagenerPingLiefertResultRetryNichtFailure() = runTest {
+        settings.heartbeatLetzterFehlerAt = 0L
         server.shutdown()
         val worker = bauWorker(HeartbeatPinger(settings))
 
@@ -96,5 +103,6 @@ class HeartbeatWorkerTest {
                 "lassen (siehe HeartbeatWorker-KDoc) - WorkManager muss es erneut versuchen",
             ergebnis is Result.Retry,
         )
+        assertTrue(settings.heartbeatLetzterFehlerAt > 0L)
     }
 }

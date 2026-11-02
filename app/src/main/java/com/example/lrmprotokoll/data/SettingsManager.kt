@@ -392,6 +392,16 @@ class SettingsManager(
         get() = leseVerschluesselt("heartbeat_url", "")
         set(value) = schreibeVerschluesselt("heartbeat_url", value.trim())
 
+    /** Letzter tatsaechlich angenommener periodischer Ping, ohne die geheime URL. */
+    var heartbeatLetzterErfolgAt: Long
+        get() = prefs.getLong("heartbeat_letzter_erfolg_at", 0L)
+        set(value) = prefs.edit().putLong("heartbeat_letzter_erfolg_at", value).apply()
+
+    /** Letzter fehlgeschlagener periodischer Ping. */
+    var heartbeatLetzterFehlerAt: Long
+        get() = prefs.getLong("heartbeat_letzter_fehler_at", 0L)
+        set(value) = prefs.edit().putLong("heartbeat_letzter_fehler_at", value).apply()
+
     var entwarnungUeberNtfy: Boolean
         get() = prefs.getBoolean("entwarnung_ntfy", true)
         set(value) = prefs.edit().putBoolean("entwarnung_ntfy", value).apply()

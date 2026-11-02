@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
@@ -43,6 +44,49 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SupportBundleExporterTest {
+    @Test
+    fun runtimeJsonBelegtTotmannschaltungOhneGeheimeUrl() =
+        runTest {
+            val geheim = "https://hc-ping.com/eindeutig-geheime-test-url-47296"
+            val settings = container.settingsManager
+            WorkManagerTestInitHelper.initializeTestWorkManager(context)
+            try {
+                settings.heartbeatUrl = geheim
+                settings.heartbeatLetzterErfolgAt = 1234L
+                settings.heartbeatLetzterFehlerAt = 5678L
+                HeartbeatPlanung.plane(context)
+                val zipFile =
+                    exporter(FakeDiagnosticLogDao(emptyList())).createBundle(
+                        BundleKontext(typ = BundleTyp.PERIODISCH, ausloeser = "Test"),
+                    )
+                ZipFile(zipFile).use { zip ->
+                    val runtimeText =
+                        zip
+                            .getInputStream(zip.getEntry("state/runtime.json"))
+                            .bufferedReader()
+                            .readText()
+                    val runtime = org.json.JSONObject(runtimeText)
+                    val status = runtime.getJSONObject("totmannschaltung")
+                    assertTrue(status.getBoolean("konfiguriert"))
+                    assertTrue(status.getBoolean("geplant"))
+                    assertEquals(1234L, status.getLong("letzterErfolgAt"))
+                    assertEquals(5678L, status.getLong("letzterFehlerAt"))
+                    for (entry in zip.entries().asSequence()) {
+                        val content =
+                            zip
+                                .getInputStream(entry)
+                                .bufferedReader()
+                                .readText()
+                        assertFalse("Geheime URL in ${entry.name}", content.contains(geheim))
+                    }
+                }
+            } finally {
+                settings.heartbeatUrl = ""
+                settings.heartbeatLetzterErfolgAt = 0L
+                settings.heartbeatLetzterFehlerAt = 0L
+                WorkManagerTestInitHelper.closeWorkDatabase()
+            }
+        }
 
     private class FakeDiagnosticLogDao(private val eintraege: List<DiagnosticLogEntity>) : DiagnosticLogDao {
         var abgefragteSeiten = 0

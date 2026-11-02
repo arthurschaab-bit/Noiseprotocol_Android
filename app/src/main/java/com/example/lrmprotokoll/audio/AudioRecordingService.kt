@@ -309,7 +309,6 @@ class AudioRecordingService : LifecycleService() {
 
         if (settingsManager.alarmierungAktiv) {
             alarmCoordinator.start()
-            HeartbeatPlanung.plane(applicationContext)
         }
         measurementRecorder.start(device)
     }
@@ -521,6 +520,8 @@ class AudioRecordingService : LifecycleService() {
             measurementRecorder.starteMikrofonMessung()
         }
 
+        // Totmannschaltung schuetzt auch die reine Mikrofon-Messung und ist unabhaengig von ntfy.
+        HeartbeatPlanung.aktualisiere(applicationContext, settingsManager)
         ensureMeterMonitoringStarted()
         ensureDriveSyncStarted()
         ensureDiagnosticLoggingStarted()
