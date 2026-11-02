@@ -182,6 +182,30 @@ Rückfall auf die allgemeinen App-Infos versuchen. Der Weg heißt je nach EMUI/H
 **ohne Gerät nicht prüfbar**, das gehört in den PR. Die Texte sind Platzhalter und brauchen die
 Freigabe des Owners.
 
+### Schritt 8 — Warnhinweis „Kein Schutz bei Ausfall“ (Owner-Entscheidung 02.11.2026: ja)
+
+Anlass: Der Owner wusste nicht, ob die Totmannschaltung eingerichtet war. Sie war es offenbar nicht,
+und niemand hat es gemerkt.
+
+- **Logik** als reine Funktion `TotmannschaltungStatus` (auf den Daten aus Schritt 4a):
+
+| Zustand | Bedingung | Hinweis |
+|---|---|---|
+| `NICHT_EINGERICHTET` | Aufzeichnung läuft, aber keine gültige URL | „Kein Schutz bei Ausfall: Totmannschaltung nicht eingerichtet“ |
+| `NICHT_GEPLANT` | URL gültig, Aufzeichnung läuft, aber der Job `heartbeat` ist nicht geplant | „Totmannschaltung eingerichtet, aber nicht aktiv. Messung neu starten.“ |
+| `SENDET_NICHT` | geplant, aber letzter Erfolg älter als 45 min (Fenster der Gegenseite) | „Totmannschaltung sendet nicht (Netz?)“ |
+| `OK` | alles andere | kein Hinweis |
+
+- **Wo:** dauerhaft im Diagnose-Bildschirm, bei `NICHT_EINGERICHTET` und `NICHT_GEPLANT` zusätzlich
+  als Hinweiszeile im Hauptbildschirm mit Knopf „Einrichten“, der zum Abschnitt „Totmannschaltung“
+  in den Einstellungen springt. Bei laufender Aufzeichnung ist der Hinweis nicht wegwischbar, solange
+  der Zustand nicht `OK` ist. Ohne Aufzeichnung zeigt die App ihn nicht.
+- **Grenze, im PR sagen:** Die App erkennt nur, dass **sie** keinen Ping sendet. Ob der Dienst bei
+  healthchecks.io einen Alarmkanal hat, sieht sie nicht. Der Hinweistext darf deshalb nicht „Schutz
+  aktiv“ behaupten, im Zustand `OK` zeigt die App gar nichts.
+- UI-lastig, gehört nach AGENTS.md §9 an Antigravity. Die Logik wird getrennt getestet (Tabelle oben,
+  jeder Zustand, die 45-min-Grenze, Aufzeichnung aus).
+
 ---
 
 ## 3 · Tests (Pflicht)
@@ -225,6 +249,8 @@ ausdrücklich, was ohne Gerät nicht geprüft wurde.**
 - [ ] Der Hinweis auf Hintergrundbeschränkung erscheint bei den genannten Signalen. Im PR steht
       ausdrücklich, dass die Huawei-Einstellung selbst nicht abfragbar und der Sprung dorthin nicht
       auf einem Gerät geprüft ist.
+- [ ] `TotmannschaltungStatus` liefert für jeden der vier Zustände das erwartete Ergebnis (Test),
+      und der Hinweis erscheint nicht, wenn keine Aufzeichnung läuft.
 - [ ] Keine Schemaänderung, keine neuen Abhängigkeiten, keine neue Kryptographie.
 - [ ] README und `docs/DIAGNOSE_OBSERVABILITY_KONZEPT.md` (Abschnitt 12, Trigger-Matrix) kurz
       nachgezogen.
@@ -242,12 +268,11 @@ ausdrücklich, was ohne Gerät nicht geprüft wurde.**
 - **E2 · Pixel als Beobachter:** **entfällt.** Die Totmannschaltung deckt den Fall ohne zweites
   Gerät ab. Nicht bauen.
 
-**Noch offen (Vorschlag, der Owner bestätigt im PR):**
+- **E5 · Warnhinweis „Kein Schutz bei Ausfall“:** **ja**, siehe Schritt 8.
 
-- **E5 · Warnhinweis „Kein Schutz bei Ausfall“:** Läuft die Aufzeichnung, aber die Totmannschaltung
-  ist nicht konfiguriert oder nicht geplant (Schritt 4a), zeigt die App einen dauerhaften Hinweis
-  im Diagnose-Bildschirm. Anlass: Der Owner wusste am 02.11.2026 nicht, ob sie eingerichtet war.
-  Nur bauen nach ausdrücklicher Freigabe.
+**Zu Schritt 6 bis 8 (Karte, Hersteller-Hinweis, Warnhinweis):** Wortlaut und Aussehen der Texte
+sind Platzhalter. Der Owner gibt sie im PR frei. Es ist nichts mehr offen, was vor dem Start
+geklärt werden muss.
 
 ---
 
