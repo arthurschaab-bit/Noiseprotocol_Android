@@ -7,18 +7,17 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
+import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
 import com.example.lrmprotokoll.diagnose.BreadcrumbRingFile
-import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.CompositeDiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticContext
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
-import com.example.lrmprotokoll.diagnose.ANR_TRACE_DATEINAME
+import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
+import com.example.lrmprotokoll.diagnose.LetzterZustand
+import com.example.lrmprotokoll.diagnose.LetzterZustandDatei
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
-import java.io.File
-import java.security.MessageDigest
-import java.util.zip.ZipFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -31,6 +30,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 /**
  * M12 Schritt 4: [SupportBundleExporter] streamend, mit erweiterten Inhalten und
@@ -88,6 +90,61 @@ class SupportBundleExporterTest {
             }
         }
 
+    @Test
+    fun periodischesBundleEnthaeltLetztenZustandUndZwanzigAusfaelleMitPruefsummen() =
+        runTest {
+            val ringDir = File(context.cacheDir, "ausfaelle_${System.nanoTime()}").apply { mkdirs() }
+            val ring = LebenszyklusRingFile(ringDir)
+            val zustandDatei = LetzterZustandDatei(File(ringDir, "letzter_zustand.json"))
+            zustandDatei.schreiben(
+                LetzterZustand(
+                    zeitpunkt = 1234L,
+                    akkuProzent = 80,
+                    stromquelle = "NETZTEIL",
+                    akkuStatus = "LAEDT",
+                    uptimeMs = 1000L,
+                    bootCount = 239,
+                    letzteDatenAt = 1200L,
+                    bleZustand = "VERBUNDEN",
+                    mikrofonAktiv = false,
+                    dienstLaeuft = true,
+                    sauberBeendet = false,
+                    dozeAktiv = false,
+                    energiesparModus = false,
+                    hintergrundEingeschraenkt = false,
+                    standbyBucket = 10,
+                    waechterLetzterLaufAt = null,
+                    heartbeatLetzterErfolgAt = null,
+                ),
+            )
+            repeat(22) { i ->
+                ring.protokolliere("Ausfall eingeordnet", mapOf("klassifikation" to "UNBEKANNT", "nummer" to i), i.toLong())
+            }
+            ring.wartenBisFertig()
+            val zipFile =
+                exporter(
+                    FakeDiagnosticLogDao(emptyList()),
+                    lebenszyklusRingFile = ring,
+                    letzterZustandDatei = zustandDatei,
+                ).createBundle(BundleKontext(typ = BundleTyp.PERIODISCH, ausloeser = "Test"))
+            ZipFile(zipFile).use { zip ->
+                fun text(name: String): String = zip.getInputStream(zip.getEntry(name)).bufferedReader().readText()
+                val snapshot = org.json.JSONObject(text("state/letzter_zustand.json"))
+                val ausfaelle = org.json.JSONArray(text("state/ausfaelle.json"))
+                assertEquals(239, snapshot.getInt("bootCount"))
+                assertEquals(20, ausfaelle.length())
+                assertEquals(2, ausfaelle.getJSONObject(0).getJSONObject("belege").getInt("nummer"))
+                val manifest = org.json.JSONObject(text("manifest.json"))
+                assertEquals("periodisch", manifest.getString("typ"))
+                val checksums = zip.getInputStream(zip.getEntry("checksums.sha256")).bufferedReader().readText()
+                for (name in listOf("state/letzter_zustand.json", "state/ausfaelle.json")) {
+                    val bytes = zip.getInputStream(zip.getEntry(name)).readBytes()
+                    val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+                    assertTrue(checksums.contains("$sha  $name\n"))
+                }
+            }
+        }
+
     private class FakeDiagnosticLogDao(private val eintraege: List<DiagnosticLogEntity>) : DiagnosticLogDao {
         var abgefragteSeiten = 0
         var schlaegtFehl = false
@@ -122,6 +179,7 @@ class SupportBundleExporterTest {
         berechtigungExistiertProvider: (String) -> Boolean = { name ->
             runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
         },
+        letzterZustandDatei: LetzterZustandDatei = LetzterZustandDatei(File(context.filesDir, "letzter_zustand.json")),
     ) = SupportBundleExporter(
         context = context,
         reporter = reporter,
@@ -132,6 +190,7 @@ class SupportBundleExporterTest {
         database = container.database,
         traceVerzeichnis = traceVerzeichnis,
         berechtigungExistiertProvider = berechtigungExistiertProvider,
+        letzterZustandDatei = letzterZustandDatei,
     )
 
     private fun logEintrag(id: Long, nachricht: String) =

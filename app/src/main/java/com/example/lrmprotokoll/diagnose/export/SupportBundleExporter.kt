@@ -8,8 +8,8 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.BuildConfig
-import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.Versionskennung
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
@@ -20,8 +20,11 @@ import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
 import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
+import com.example.lrmprotokoll.diagnose.LetzterZustandDatei
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -32,8 +35,6 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** Bundle-Typen (Konzept 4.4/4.7) - stehen im Dateinamen und in `manifest.json`. */
 enum class BundleTyp(val bezeichnung: String) {
@@ -138,6 +139,7 @@ class SupportBundleExporter(
     private val workManagerProvider: () -> androidx.work.WorkManager? = {
         runCatching { androidx.work.WorkManager.getInstance(context) }.getOrNull()
     },
+    private val letzterZustandDatei: LetzterZustandDatei = LetzterZustandDatei(File(context.filesDir, "letzter_zustand.json")),
 ) {
 
     suspend fun createBundle(kontext: BundleKontext): File {
@@ -235,6 +237,8 @@ class SupportBundleExporter(
 
             // state/
             schreibeEintrag("state/runtime.json") { it.write(buildRuntimeJson().toByteArray(StandardCharsets.UTF_8)) }
+            schreibeEintrag("state/letzter_zustand.json") { it.write(buildLetzterZustandJson().toByteArray(StandardCharsets.UTF_8)) }
+            schreibeEintrag("state/ausfaelle.json") { it.write(buildAusfaelleJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/settings.json") { it.write(buildSettingsJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/db_stats.json") { it.write(buildDbStatsJson().toByteArray(StandardCharsets.UTF_8)) }
             kontext.healthMetricsJson?.let { inhalt ->
@@ -307,6 +311,27 @@ class SupportBundleExporter(
             array.put(json)
         }
         return array.toString(2)
+    }
+
+    private fun buildLetzterZustandJson(): String =
+        (letzterZustandDatei.lesen()?.alsJson() ?: JSONObject().put("vorhanden", false)).toString(2)
+
+    private fun buildAusfaelleJson(): String {
+        val ausfaelle = JSONArray()
+        lebenszyklusRingFile
+            .lesen()
+            .filter { it.ereignis == "Ausfall eingeordnet" }
+            .takeLast(20)
+            .forEach { eintrag ->
+                ausfaelle.put(
+                    JSONObject().apply {
+                        put("timestamp", eintrag.timestampMillis)
+                        put("klassifikation", eintrag.details["klassifikation"] ?: JSONObject.NULL)
+                        put("belege", JSONObject(eintrag.details))
+                    },
+                )
+            }
+        return ausfaelle.toString(2)
     }
 
     private fun schreibeLogcat(out: OutputStream, kontext: BundleKontext, maxBytes: Long) {
