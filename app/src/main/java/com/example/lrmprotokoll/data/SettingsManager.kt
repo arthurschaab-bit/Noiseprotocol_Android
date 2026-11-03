@@ -47,6 +47,7 @@ class SettingsManager(
         const val SCHLUESSEL_AUSFALL_LETZTE_DATEN = "ausfall_letzte_daten_at"
         const val SCHLUESSEL_AUSFALL_KLASSIFIKATION = "ausfall_klassifikation"
         const val SCHLUESSEL_AUSFALL_WAECHTER = "ausfall_waechter_lief"
+        const val SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT = "ausfall_nachfrage_weggewischt"
     }
 
     /**
@@ -367,6 +368,31 @@ class SettingsManager(
     var ausfallWaechterLief: String?
         get() = prefs.getString(SCHLUESSEL_AUSFALL_WAECHTER, null)
         set(value) = prefs.edit().putString(SCHLUESSEL_AUSFALL_WAECHTER, value).apply()
+
+    /**
+     * `letzteDatenAt`-Schluessel der Ausfaelle, deren Nachfrage-Karte ("Was ist passiert?") im
+     * Hauptbildschirm bereits einmal beantwortet oder weggewischt wurde (Schritt 6).
+     */
+    var ausfallNachfrageWeggewischt: Set<Long>
+        get() =
+            (prefs.getStringSet(SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT, emptySet()) ?: emptySet())
+                .mapNotNull { it.toLongOrNull() }
+                .toSet()
+        set(value) =
+            prefs
+                .edit()
+                .putStringSet(
+                    SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT,
+                    value
+                        .toList()
+                        .takeLast(50)
+                        .map { it.toString() }
+                        .toSet(),
+                ).apply()
+
+    fun markiereAusfallNachfrageAlsGesehen(letzteDatenAt: Long) {
+        ausfallNachfrageWeggewischt = ausfallNachfrageWeggewischt + letzteDatenAt
+    }
 
     // ---------------------------------------------------------------- M5: Alarmierung
 
@@ -919,6 +945,7 @@ class SettingsManager(
             SCHLUESSEL_AUSFALL_LETZTE_DATEN,
             SCHLUESSEL_AUSFALL_KLASSIFIKATION,
             SCHLUESSEL_AUSFALL_WAECHTER,
+            SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT,
         )
         return vorhandeneSchluessel.any { it !in ausgenommeneSchluessel }
     }

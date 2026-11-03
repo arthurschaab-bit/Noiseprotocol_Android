@@ -326,16 +326,31 @@ class SupportBundleExporter(
                     val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
                     datenAt?.let { it to eintrag.details }
                 }.toMap()
+        val nutzerAngaben =
+            eintraege
+                .filter { it.ereignis == com.example.lrmprotokoll.diagnose.EREIGNIS_AUSFALL_NUTZERANGABE }
+                .mapNotNull { eintrag ->
+                    val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
+                    val angabe = (eintrag.details["nutzerAngabe"] as? String)?.takeIf { it.isNotBlank() }
+                    if (datenAt != null && angabe != null) datenAt to angabe else null
+                }.toMap()
         eintraege
             .filter { it.ereignis == "Ausfall eingeordnet" }
             .takeLast(20)
             .forEach { eintrag ->
                 val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
-                val belege = eintrag.details + (waechterKorrekturen[datenAt] ?: emptyMap())
+                val nutzerAngabe = datenAt?.let { nutzerAngaben[it] }
+                val belege =
+                    buildMap<String, Any?> {
+                        putAll(eintrag.details)
+                        waechterKorrekturen[datenAt]?.let { putAll(it) }
+                        if (nutzerAngabe != null) put("nutzerAngabe", nutzerAngabe)
+                    }
                 ausfaelle.put(
                     JSONObject().apply {
                         put("timestamp", eintrag.timestampMillis)
                         put("klassifikation", belege["klassifikation"] ?: JSONObject.NULL)
+                        put("nutzerAngabe", nutzerAngabe ?: JSONObject.NULL)
                         put("belege", JSONObject(belege))
                     },
                 )
