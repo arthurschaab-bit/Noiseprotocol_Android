@@ -41,6 +41,7 @@ import org.robolectric.annotation.Config
 class RetentionWorkerTest {
 
     private class ImmerFehlschlagenderMeasurementDao : MeasurementDao {
+        override suspend fun letzterMesswertAt(): Long? = null
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) {}
         override suspend fun fuerSession(sessionId: Long) = emptyList<MeasurementEntity>()
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")

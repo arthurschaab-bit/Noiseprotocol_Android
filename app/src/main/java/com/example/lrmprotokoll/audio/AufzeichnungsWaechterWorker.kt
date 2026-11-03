@@ -68,6 +68,8 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
         val ringFile = lebenszyklusRingFileOverride ?: container?.lebenszyklusRingFile
 
         val zeitProvider = zeitProviderOverride ?: { System.currentTimeMillis() }
+        val zeitJetzt = zeitProvider()
+        settings.waechterLetzterLaufAt = zeitJetzt
         val sdkInt = sdkIntOverride ?: Build.VERSION.SDK_INT
         val starter = serviceStarter ?: { ctx, intent -> ContextCompat.startForegroundService(ctx, intent) }
         val notifier = notifierOverride ?: AufzeichnungsWaechterNotifier(applicationContext)
@@ -114,7 +116,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
 
             AufzeichnungsLage.SOLL_LAEUFT_NICHT -> {
                 settings.aufzeichnungNichtStartbarGemeldet = false
-                val jetzt = zeitProvider()
+                val jetzt = zeitJetzt
                 val letzteDatenAt = runCatching { dao?.maxAt() }.getOrNull()
                 val lueckeMinuten =
                     if (letzteDatenAt != null && letzteDatenAt < jetzt) {
@@ -146,7 +148,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                                 "lueckeMinuten" to lueckeMinuten,
                                 "audioWarAktiv" to settings.audioMonitoringWasActive,
                                 "quelle" to "waechter",
-                            ),
+                            ) + ausfallDetails(settings, letzteDatenAt),
                     )
 
                     ringFile?.protokolliere(

@@ -91,6 +91,10 @@ interface SessionDao {
 @Dao
 interface MeasurementDao {
 
+    /** Letzter tatsaechlicher Rohwert; GAP-Markierungen sind keine Messdaten. */
+    @Query("SELECT MAX(timestamp) FROM measurements WHERE (flags & 8) = 0")
+    suspend fun letzterMesswertAt(): Long?
+
     @Insert
     suspend fun insertAll(messwerte: List<MeasurementEntity>)
 

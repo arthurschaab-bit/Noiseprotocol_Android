@@ -173,6 +173,35 @@ class AufzeichnungsWaechterWorkerTest {
             .build()
     }
 
+    @Test
+    fun jederWaechterLaufHinterlaesstZeitstempelAuchBeiLaufendUndAus() =
+        runTest {
+            data class Fall(
+                val sollLaufen: Boolean,
+                val laeuft: Boolean,
+                val startbar: Boolean,
+            )
+            val faelle =
+                listOf(
+                    Fall(true, true, true),
+                    Fall(false, false, true),
+                    Fall(true, false, false),
+                    Fall(true, false, true),
+                )
+            faelle.forEachIndexed { index, fall ->
+                settingsManager.monitoringWasActive = fall.sollLaufen
+                val zeit = 1_000_000L + index * 1_000L
+                val ergebnis =
+                    erstelleWorker(
+                        dienstLaeuft = fall.laeuft,
+                        kannInVordergrund = fall.startbar,
+                        zeitProvider = { zeit },
+                    ).doWork()
+                assertTrue(ergebnis is Result.Success)
+                assertEquals(zeit, settingsManager.waechterLetzterLaufAt)
+            }
+        }
+
     /**
      * Test 1: Soll laeuft nicht, SDK 29 -> ein Startaufruf mit richtigem Extra und
      * RECORDING_ENDED_UNEXPECTEDLY mit quelle = "waechter".
@@ -182,6 +211,9 @@ class AufzeichnungsWaechterWorkerTest {
         settingsManager.monitoringWasActive = true
         settingsManager.audioMonitoringWasActive = true
         fakeDao.maxAtWert = 800_000L
+        settingsManager.ausfallLetzteDatenAt = 800_000L
+        settingsManager.ausfallKlassifikation = "STILLSTAND_GERAET_LIEF"
+        settingsManager.ausfallWaechterLief = "ja"
 
         val worker = erstelleWorker(sdkInt = 29)
         val ergebnis = worker.doWork()
@@ -196,6 +228,8 @@ class AufzeichnungsWaechterWorkerTest {
         assertNotNull("RECORDING_ENDED_UNEXPECTEDLY muss gemeldet werden", event)
         assertEquals("waechter", event!!.details["quelle"])
         assertEquals(800_000L, event.details["letzteDatenAt"])
+        assertEquals("STILLSTAND_GERAET_LIEF", event.details["klassifikation"])
+        assertEquals("ja", event.details["waechterLief"])
     }
 
     /**

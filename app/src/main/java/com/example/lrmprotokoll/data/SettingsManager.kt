@@ -346,6 +346,24 @@ class SettingsManager(
         get() = prefs.getLong("waechter_letzter_gemeldeter_ausfall_at", -1L)
         set(value) = prefs.edit().putLong("waechter_letzter_gemeldeter_ausfall_at", value).apply()
 
+    /** Jede Ausfuehrung des Jobs, auch wenn die Aufzeichnung unauffaellig laeuft oder aus ist. */
+    var waechterLetzterLaufAt: Long
+        get() = prefs.getLong("waechter_letzter_lauf_at", 0L)
+        set(value) = prefs.edit().putLong("waechter_letzter_lauf_at", value).apply()
+
+    /** Schluessel der zuletzt eingeordneten Luecke; verhindert doppelte Ring-Eintraege. */
+    var ausfallLetzteDatenAt: Long
+        get() = prefs.getLong("ausfall_letzte_daten_at", 0L)
+        set(value) = prefs.edit().putLong("ausfall_letzte_daten_at", value).apply()
+
+    var ausfallKlassifikation: String?
+        get() = prefs.getString("ausfall_klassifikation", null)
+        set(value) = prefs.edit().putString("ausfall_klassifikation", value).apply()
+
+    var ausfallWaechterLief: String?
+        get() = prefs.getString("ausfall_waechter_lief", null)
+        set(value) = prefs.edit().putString("ausfall_waechter_lief", value).apply()
+
     // ---------------------------------------------------------------- M5: Alarmierung
 
     var alarmierungAktiv: Boolean

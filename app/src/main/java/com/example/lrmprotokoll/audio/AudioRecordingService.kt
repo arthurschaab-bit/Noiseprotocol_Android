@@ -200,6 +200,7 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var measurementRecorder: com.example.lrmprotokoll.messreihe.MeasurementRecorder
     private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
     private lateinit var lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
+    private lateinit var letzterZustandErfasser: com.example.lrmprotokoll.diagnose.LetzterZustandErfasser
 
     @Volatile private var letzterMeterFrame: com.example.lrmprotokoll.meter.MeterFrame? = null
     private var stromReceiver: com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger? = null
@@ -217,6 +218,7 @@ class AudioRecordingService : LifecycleService() {
         measurementRecorder = container.measurementRecorder
         videoTonMitschnitt = container.videoTonMitschnitt
         lebenszyklusRingFile = container.lebenszyklusRingFile
+        letzterZustandErfasser = container.letzterZustandErfasser
 
         diagnosticsReporter.breadcrumb(
             "AudioService",
@@ -244,6 +246,7 @@ class AudioRecordingService : LifecycleService() {
             connectionSupervisor.state.collect { state ->
                 updateNotification(state)
                 if (state != ConnectionState.STREAMING) letzterMeterFrame = null
+                aktualisiereLetztenZustand()
             }
         }
 
@@ -349,6 +352,7 @@ class AudioRecordingService : LifecycleService() {
                             ),
                         )
                     }
+                    aktualisiereLetztenZustand()
                 },
             )
         stromReceiver = receiver
@@ -432,6 +436,7 @@ class AudioRecordingService : LifecycleService() {
             _currentMicDb.value = null
             _laufendesFormat.value = null
             _laeuft.value = false
+            aktualisiereLetztenZustand(sauberBeendet = true)
             triggerWachhund.zuruecksetzen()
             wavOhneMikrofonGemeldet = false
             audioSollIstFehlerGemeldet = false
@@ -494,6 +499,7 @@ class AudioRecordingService : LifecycleService() {
             isForegroundActive = true
             settingsManager.monitoringWasActive = true
             _laeuft.value = true
+            aktualisiereLetztenZustand(sauberBeendet = false)
         }
 
         val shouldStartAudio = sollAudioMonitoringStarten(
@@ -1579,6 +1585,7 @@ class AudioRecordingService : LifecycleService() {
         _currentMicDb.value = null
         _laufendesFormat.value = null
         _laeuft.value = false
+        aktualisiereLetztenZustand(sauberBeendet = true)
         NoiseMonitoringWidgetProvider.updateAlleWidgets(applicationContext)
         trenneMessgeraetFallsNiemandEsBraucht()
         alarmCoordinator.stop()
@@ -1590,4 +1597,11 @@ class AudioRecordingService : LifecycleService() {
     }
 
     override fun onBind(intent: Intent): IBinder? = super.onBind(intent)
+
+    private fun aktualisiereLetztenZustand(sauberBeendet: Boolean? = null) {
+        if (::letzterZustandErfasser.isInitialized) {
+            runCatching { letzterZustandErfasser.aktualisieren(sauberBeendet = sauberBeendet) }
+                .onFailure { Log.w("AudioRecordingService", "Letzten Zustand nicht gespeichert", it) }
+        }
+    }
 }
