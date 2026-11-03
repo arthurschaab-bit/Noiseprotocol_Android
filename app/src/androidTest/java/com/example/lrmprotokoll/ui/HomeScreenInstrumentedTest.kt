@@ -135,8 +135,18 @@ class HomeScreenInstrumentedTest {
         composeRule.waitForIdle()
     }
 
+    // panel_filter_header ist ein Eintrag der LazyColumn. Wie viele Hinweiskarten darueber stehen
+    // (Akku, Totmannschaltung, Ausfall-Nachfrage ...), haengt vom Geraet und vom Zustand ab; je
+    // nach Bildschirmhoehe ist er dann noch nicht komponiert, und performScrollTo() findet ihn
+    // nicht ("could not find any node ... panel_filter_header"). Deshalb zuerst gezielt in der
+    // Liste dorthin scrollen (performScrollToNode ueber warteUndScrolleZu).
+    private fun scrolleZuFilterHeader() {
+        composeRule.warteUndScrolleZu(hasTestTag("panel_filter_header"))
+    }
+
     private fun setzeInhaltUndOeffneFilterPanel() {
         setzeInhalt()
+        scrolleZuFilterHeader()
         composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
@@ -160,10 +170,12 @@ class HomeScreenInstrumentedTest {
         setzeInhalt()
 
         composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()
+        scrolleZuFilterHeader()
         composeRule.onNodeWithTag("panel_filter_header").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("input_filter_search").performScrollTo().assertIsDisplayed()
 
+        scrolleZuFilterHeader()
         composeRule.onNodeWithTag("panel_filter_header").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("input_filter_search").assertDoesNotExist()

@@ -24,6 +24,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,24 +45,34 @@ import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.Versionskennung
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
+import com.example.lrmprotokoll.diagnose.AusfallNachfrageLogik
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.HealthActionType
 import com.example.lrmprotokoll.diagnose.HealthStatus
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungLogik
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungSignale
+import com.example.lrmprotokoll.diagnose.LebenszyklusEintrag
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
+import com.example.lrmprotokoll.diagnose.TotmannschaltungStatus
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
 import com.example.lrmprotokoll.drive.DriveSyncPlanung
 import com.example.lrmprotokoll.messreihe.zaehleReconnects
 import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.meter.label
+import com.example.lrmprotokoll.ui.components.AusfallNachfrageCard
+import com.example.lrmprotokoll.ui.components.HintergrundbeschraenkungHinweisCard
+import com.example.lrmprotokoll.ui.components.TotmannschaltungWarnungZeile
 import com.example.lrmprotokoll.ui.theme.statusColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -99,7 +111,9 @@ fun DiagnoseScreen(
     onShowSnackbar: ((String) -> Unit)? = null,
     onNavigateToSettings: ((tab: String?) -> Unit)? = null,
     onNavigateToMeter: (() -> Unit)? = null,
+    onNavigateToTotmannschaltung: (() -> Unit)? = null,
     exakteAlarmeErlaubtOverride: Boolean? = null,
+    heartbeatGeplantOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -181,6 +195,39 @@ fun DiagnoseScreen(
             hasNotificationPermission = granted
         }
 
+    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(emptyList()) }
+    var hintergrundSignale by remember {
+        mutableStateOf(
+            HintergrundbeschraenkungSignale(
+                hintergrundEingeschraenkt = null,
+                standbyBucket = null,
+                batterieoptimierungIgnoriert = null,
+            ),
+        )
+    }
+    var heartbeatUrl by remember { mutableStateOf("") }
+    var heartbeatLetzterErfolgAt by remember { mutableLongStateOf(0L) }
+    var ausfallKlassifikation by remember { mutableStateOf<String?>(null) }
+    var ausfallWaechterLief by remember { mutableStateOf<String?>(null) }
+    var resumeZaehler by remember { mutableIntStateOf(0) }
+    var einstellungenGeladen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(resumeZaehler) {
+        val geladeneRingEintraege = withContext(Dispatchers.IO) { container.lebenszyklusRingFile.lesen() }
+        val geladeneSignale = withContext(Dispatchers.IO) { container.hintergrundbeschraenkungQuelle.lesen() }
+        val geladeneHeartbeatUrl = withContext(Dispatchers.IO) { container.settingsManager.heartbeatUrl }
+        val geladenerHeartbeatErfolg = withContext(Dispatchers.IO) { container.settingsManager.heartbeatLetzterErfolgAt }
+        val geladeneKlassifikation = withContext(Dispatchers.IO) { container.settingsManager.ausfallKlassifikation }
+        val geladenerWaechter = withContext(Dispatchers.IO) { container.settingsManager.ausfallWaechterLief }
+        ringEintraege = geladeneRingEintraege
+        hintergrundSignale = geladeneSignale
+        heartbeatUrl = geladeneHeartbeatUrl
+        heartbeatLetzterErfolgAt = geladenerHeartbeatErfolg
+        ausfallKlassifikation = geladeneKlassifikation
+        ausfallWaechterLief = geladenerWaechter
+        einstellungenGeladen = true
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer =
@@ -198,6 +245,7 @@ fun DiagnoseScreen(
                         }
                     hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
                     canScheduleExactAlarms = kannExakteAlarme()
+                    resumeZaehler += 1
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -244,6 +292,48 @@ fun DiagnoseScreen(
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
     val isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
+    val heartbeatGeplantAusWorkManager by remember {
+        runCatching {
+            androidx.work.WorkManager
+                .getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(HeartbeatPlanung.WORK_NAME)
+                .map<List<androidx.work.WorkInfo>, Boolean?> { infos -> infos.any { !it.state.isFinished } }
+        }.getOrElse { kotlinx.coroutines.flow.flowOf(null) }
+    }.collectAsState(initial = null)
+    val effektivesHeartbeatGeplant = heartbeatGeplantOverride ?: heartbeatGeplantAusWorkManager
+    val totmannZustand =
+        remember(
+            einstellungenGeladen,
+            dienstAktiv,
+            heartbeatUrl,
+            effektivesHeartbeatGeplant,
+            heartbeatLetzterErfolgAt,
+        ) {
+            TotmannschaltungStatus.bewertenWennGeladen(
+                geladen = einstellungenGeladen,
+                aufnahmeLaeuft = dienstAktiv,
+                heartbeatUrl = heartbeatUrl,
+                geplant = effektivesHeartbeatGeplant,
+                letzterErfolgAt = heartbeatLetzterErfolgAt,
+                jetztMs = System.currentTimeMillis(),
+            )
+        }
+    val hintergrundBefund =
+        remember(
+            hintergrundSignale,
+            ausfallKlassifikation,
+            ausfallWaechterLief,
+        ) {
+            HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
+                signale = hintergrundSignale,
+                ausfallKlassifikationName = ausfallKlassifikation,
+                ausfallWaechterLiefName = ausfallWaechterLief,
+            )
+        }
+    val unbeantworteteLuecken =
+        remember(ringEintraege) {
+            AusfallNachfrageLogik.unbeantworteteLueckenFuerDiagnose(ringEintraege)
+        }
 
     val healthOverview =
         remember(
@@ -429,6 +519,61 @@ fun DiagnoseScreen(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 OemDeviceHelperCard()
+
+                if (TotmannschaltungStatus.zeigeImDiagnoseBildschirm(totmannZustand)) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TotmannschaltungWarnungZeile(
+                        zustand = totmannZustand,
+                        onEinrichtenClick = {
+                            if (onNavigateToTotmannschaltung != null) {
+                                onNavigateToTotmannschaltung()
+                            } else {
+                                onNavigateToSettings?.invoke(SettingsTab.START.routeArg)
+                            }
+                        },
+                    )
+                }
+
+                if (hintergrundBefund.aktiv) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HintergrundbeschraenkungHinweisCard(
+                        befund = hintergrundBefund,
+                        onOeffneEinstellungen = {
+                            HintergrundbeschraenkungLogik.oeffneHuaweiAppStartOderAppInfo(context)
+                        },
+                    )
+                }
+
+                if (unbeantworteteLuecken.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.diagnose_unbeantwortete_luecken_header, unbeantworteteLuecken.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    unbeantworteteLuecken.forEach { nachfrageEintrag ->
+                        AusfallNachfrageCard(
+                            eintrag = nachfrageEintrag,
+                            onAntwort = { antwort ->
+                                val neuerEintrag =
+                                    AusfallNachfrageLogik.speichereAntwort(
+                                        ringFile = container.lebenszyklusRingFile,
+                                        letzteDatenAt = nachfrageEintrag.letzteDatenAt,
+                                        antwort = antwort,
+                                    )
+                                container.settingsManager.markiereAusfallNachfrageAlsGesehen(nachfrageEintrag.letzteDatenAt)
+                                ringEintraege = ringEintraege + neuerEintrag
+                                val meldung = context.getString(R.string.ausfall_nachfrage_gespeichert)
+                                onShowSnackbar?.invoke(meldung)
+                                    ?: Toast.makeText(context, meldung, Toast.LENGTH_SHORT).show()
+                            },
+                            onWegwischen = null,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
