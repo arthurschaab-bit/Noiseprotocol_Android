@@ -24,6 +24,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,17 +45,18 @@ import com.example.lrmprotokoll.BuildConfig
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.Versionskennung
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.DiagnosticLogEntity
 import com.example.lrmprotokoll.data.DriveDailyFileEntity
 import com.example.lrmprotokoll.data.DriveSyncState
-import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.diagnose.AusfallNachfrageLogik
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.HealthActionType
 import com.example.lrmprotokoll.diagnose.HealthStatus
 import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungLogik
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungSignale
 import com.example.lrmprotokoll.diagnose.LebenszyklusEintrag
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.TotmannschaltungStatus
@@ -192,8 +195,36 @@ fun DiagnoseScreen(
             hasNotificationPermission = granted
         }
 
-    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(container.lebenszyklusRingFile.lesen()) }
-    var hintergrundSignale by remember { mutableStateOf(container.hintergrundbeschraenkungQuelle.lesen()) }
+    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(emptyList()) }
+    var hintergrundSignale by remember {
+        mutableStateOf(
+            HintergrundbeschraenkungSignale(
+                hintergrundEingeschraenkt = null,
+                standbyBucket = null,
+                batterieoptimierungIgnoriert = null,
+            ),
+        )
+    }
+    var heartbeatUrl by remember { mutableStateOf("") }
+    var heartbeatLetzterErfolgAt by remember { mutableLongStateOf(0L) }
+    var ausfallKlassifikation by remember { mutableStateOf<String?>(null) }
+    var ausfallWaechterLief by remember { mutableStateOf<String?>(null) }
+    var resumeZaehler by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(resumeZaehler) {
+        val geladeneRingEintraege = withContext(Dispatchers.IO) { container.lebenszyklusRingFile.lesen() }
+        val geladeneSignale = withContext(Dispatchers.IO) { container.hintergrundbeschraenkungQuelle.lesen() }
+        val geladeneHeartbeatUrl = withContext(Dispatchers.IO) { container.settingsManager.heartbeatUrl }
+        val geladenerHeartbeatErfolg = withContext(Dispatchers.IO) { container.settingsManager.heartbeatLetzterErfolgAt }
+        val geladeneKlassifikation = withContext(Dispatchers.IO) { container.settingsManager.ausfallKlassifikation }
+        val geladenerWaechter = withContext(Dispatchers.IO) { container.settingsManager.ausfallWaechterLief }
+        ringEintraege = geladeneRingEintraege
+        hintergrundSignale = geladeneSignale
+        heartbeatUrl = geladeneHeartbeatUrl
+        heartbeatLetzterErfolgAt = geladenerHeartbeatErfolg
+        ausfallKlassifikation = geladeneKlassifikation
+        ausfallWaechterLief = geladenerWaechter
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -212,8 +243,7 @@ fun DiagnoseScreen(
                         }
                     hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
                     canScheduleExactAlarms = kannExakteAlarme()
-                    ringEintraege = container.lebenszyklusRingFile.lesen()
-                    hintergrundSignale = container.hintergrundbeschraenkungQuelle.lesen()
+                    resumeZaehler += 1
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -272,28 +302,28 @@ fun DiagnoseScreen(
     val totmannZustand =
         remember(
             dienstAktiv,
-            container.settingsManager.heartbeatUrl,
+            heartbeatUrl,
             effektivesHeartbeatGeplant,
-            container.settingsManager.heartbeatLetzterErfolgAt,
+            heartbeatLetzterErfolgAt,
         ) {
             TotmannschaltungStatus.bewertenMitUrl(
                 aufnahmeLaeuft = dienstAktiv,
-                heartbeatUrl = container.settingsManager.heartbeatUrl,
+                heartbeatUrl = heartbeatUrl,
                 geplant = effektivesHeartbeatGeplant,
-                letzterErfolgAt = container.settingsManager.heartbeatLetzterErfolgAt,
+                letzterErfolgAt = heartbeatLetzterErfolgAt,
                 jetztMs = System.currentTimeMillis(),
             )
         }
     val hintergrundBefund =
         remember(
             hintergrundSignale,
-            container.settingsManager.ausfallKlassifikation,
-            container.settingsManager.ausfallWaechterLief,
+            ausfallKlassifikation,
+            ausfallWaechterLief,
         ) {
             HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
                 signale = hintergrundSignale,
-                ausfallKlassifikationName = container.settingsManager.ausfallKlassifikation,
-                ausfallWaechterLiefName = container.settingsManager.ausfallWaechterLief,
+                ausfallKlassifikationName = ausfallKlassifikation,
+                ausfallWaechterLiefName = ausfallWaechterLief,
             )
         }
     val unbeantworteteLuecken =

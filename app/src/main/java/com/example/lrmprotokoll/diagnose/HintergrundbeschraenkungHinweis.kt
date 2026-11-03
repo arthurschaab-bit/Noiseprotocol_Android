@@ -93,6 +93,8 @@ data class HintergrundbeschraenkungBefund(
 object HintergrundbeschraenkungLogik {
     const val STANDBY_BUCKET_RARE = 40
     const val STANDBY_BUCKET_RESTRICTED = 45
+    const val MAX_AUSFALL_ALTER_TAGE = 7L
+    const val MAX_AUSFALL_ALTER_MS = MAX_AUSFALL_ALTER_TAGE * 24L * 60L * 60_000L
 
     private val KLASSEN_MIT_LAUFENDEM_GERAET =
         setOf(
@@ -104,11 +106,22 @@ object HintergrundbeschraenkungLogik {
         signale: HintergrundbeschraenkungSignale,
         letzterAusfallKlasse: AusfallKlasse?,
         letzterAusfallWaechterLief: WaechterLief?,
+        letzterAusfallLetzteDatenAt: Long = 0L,
+        jetztMs: Long = 0L,
+        weggewischteAusfaelle: Set<Long> = emptySet(),
     ): HintergrundbeschraenkungBefund {
         val gruende = mutableListOf<HintergrundbeschraenkungGrund>()
 
+        val nichtWeggewischt = letzterAusfallLetzteDatenAt !in weggewischteAusfaelle
+        val nichtVeraltet =
+            letzterAusfallLetzteDatenAt <= 0L ||
+                jetztMs <= 0L ||
+                (jetztMs - letzterAusfallLetzteDatenAt) <= MAX_AUSFALL_ALTER_MS
+
         if (letzterAusfallKlasse in KLASSEN_MIT_LAUFENDEM_GERAET &&
-            letzterAusfallWaechterLief == WaechterLief.NEIN
+            letzterAusfallWaechterLief == WaechterLief.NEIN &&
+            nichtWeggewischt &&
+            nichtVeraltet
         ) {
             gruende += HintergrundbeschraenkungGrund.WAECHTER_BLOCKIERT_BEI_LAUFENDEM_GERAET
         }
@@ -134,6 +147,9 @@ object HintergrundbeschraenkungLogik {
         signale: HintergrundbeschraenkungSignale,
         ausfallKlassifikationName: String?,
         ausfallWaechterLiefName: String?,
+        ausfallLetzteDatenAt: Long = 0L,
+        jetztMs: Long = 0L,
+        weggewischteAusfaelle: Set<Long> = emptySet(),
     ): HintergrundbeschraenkungBefund {
         val klasse =
             ausfallKlassifikationName?.let {
@@ -147,6 +163,9 @@ object HintergrundbeschraenkungLogik {
             signale = signale,
             letzterAusfallKlasse = klasse,
             letzterAusfallWaechterLief = waechter,
+            letzterAusfallLetzteDatenAt = ausfallLetzteDatenAt,
+            jetztMs = jetztMs,
+            weggewischteAusfaelle = weggewischteAusfaelle,
         )
     }
 

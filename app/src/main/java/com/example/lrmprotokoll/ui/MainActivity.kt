@@ -49,6 +49,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.audio.ACTION_STOP_AUDIO_RECORDING
 import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.audio.BaulaermKonfiguration
@@ -60,11 +61,11 @@ import com.example.lrmprotokoll.audio.KiBatchPlanung
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
-import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.diagnose.AusfallNachfrageLogik
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungLogik
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungSignale
 import com.example.lrmprotokoll.diagnose.LebenszyklusEintrag
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
 import com.example.lrmprotokoll.diagnose.TotmannschaltungStatus
@@ -696,9 +697,45 @@ fun NoiseProtocolApp(
     // Selbstpruefung nach der Rueckkehr weiter den alten Stand - also genau den Fehler, den F-04
     // beseitigen sollte, nur an anderer Stelle.
     var isBatteryOptimizationIgnored by remember { mutableStateOf(liestAkkuAusnahme(context)) }
-    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(container.lebenszyklusRingFile.lesen()) }
-    var weggewischteNachfragen by remember { mutableStateOf(settingsManager.ausfallNachfrageWeggewischt) }
-    var hintergrundSignale by remember { mutableStateOf(container.hintergrundbeschraenkungQuelle.lesen()) }
+    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(emptyList()) }
+    var weggewischteNachfragen by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var weggewischteHintergrundHinweise by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var hintergrundSignale by remember {
+        mutableStateOf(
+            HintergrundbeschraenkungSignale(
+                hintergrundEingeschraenkt = null,
+                standbyBucket = null,
+                batterieoptimierungIgnoriert = null,
+            ),
+        )
+    }
+    var heartbeatUrl by remember { mutableStateOf("") }
+    var heartbeatLetzterErfolgAt by remember { mutableLongStateOf(0L) }
+    var ausfallKlassifikation by remember { mutableStateOf<String?>(null) }
+    var ausfallWaechterLief by remember { mutableStateOf<String?>(null) }
+    var ausfallLetzteDatenAt by remember { mutableLongStateOf(0L) }
+    var resumeZaehler by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(resumeZaehler) {
+        val geladeneRingEintraege = withContext(Dispatchers.IO) { container.lebenszyklusRingFile.lesen() }
+        val geladeneWeggewischteNachfragen = withContext(Dispatchers.IO) { settingsManager.ausfallNachfrageWeggewischt }
+        val geladeneWeggewischteHinweise = withContext(Dispatchers.IO) { settingsManager.hintergrundHinweisWeggewischt }
+        val geladeneSignale = withContext(Dispatchers.IO) { container.hintergrundbeschraenkungQuelle.lesen() }
+        val geladeneHeartbeatUrl = withContext(Dispatchers.IO) { settingsManager.heartbeatUrl }
+        val geladenerHeartbeatErfolg = withContext(Dispatchers.IO) { settingsManager.heartbeatLetzterErfolgAt }
+        val geladeneKlassifikation = withContext(Dispatchers.IO) { settingsManager.ausfallKlassifikation }
+        val geladenerWaechter = withContext(Dispatchers.IO) { settingsManager.ausfallWaechterLief }
+        val geladeneLetzteDatenAt = withContext(Dispatchers.IO) { settingsManager.ausfallLetzteDatenAt }
+        ringEintraege = geladeneRingEintraege
+        weggewischteNachfragen = geladeneWeggewischteNachfragen
+        weggewischteHintergrundHinweise = geladeneWeggewischteHinweise
+        hintergrundSignale = geladeneSignale
+        heartbeatUrl = geladeneHeartbeatUrl
+        heartbeatLetzterErfolgAt = geladenerHeartbeatErfolg
+        ausfallKlassifikation = geladeneKlassifikation
+        ausfallWaechterLief = geladenerWaechter
+        ausfallLetzteDatenAt = geladeneLetzteDatenAt
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer =
@@ -716,9 +753,7 @@ fun NoiseProtocolApp(
                     hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
                     canScheduleExactAlarms = kannExakteAlarme()
                     isBatteryOptimizationIgnored = liestAkkuAusnahme(context)
-                    ringEintraege = container.lebenszyklusRingFile.lesen()
-                    weggewischteNachfragen = settingsManager.ausfallNachfrageWeggewischt
-                    hintergrundSignale = container.hintergrundbeschraenkungQuelle.lesen()
+                    resumeZaehler += 1
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -741,15 +776,15 @@ fun NoiseProtocolApp(
     val totmannZustand =
         remember(
             dienstAktiv,
-            settingsManager.heartbeatUrl,
+            heartbeatUrl,
             effektivesHeartbeatGeplant,
-            settingsManager.heartbeatLetzterErfolgAt,
+            heartbeatLetzterErfolgAt,
         ) {
             TotmannschaltungStatus.bewertenMitUrl(
                 aufnahmeLaeuft = dienstAktiv,
-                heartbeatUrl = settingsManager.heartbeatUrl,
+                heartbeatUrl = heartbeatUrl,
                 geplant = effektivesHeartbeatGeplant,
-                letzterErfolgAt = settingsManager.heartbeatLetzterErfolgAt,
+                letzterErfolgAt = heartbeatLetzterErfolgAt,
                 jetztMs = System.currentTimeMillis(),
             )
         }
@@ -763,13 +798,18 @@ fun NoiseProtocolApp(
     val hintergrundBefund =
         remember(
             hintergrundSignale,
-            settingsManager.ausfallKlassifikation,
-            settingsManager.ausfallWaechterLief,
+            ausfallKlassifikation,
+            ausfallWaechterLief,
+            ausfallLetzteDatenAt,
+            weggewischteHintergrundHinweise,
         ) {
             HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
                 signale = hintergrundSignale,
-                ausfallKlassifikationName = settingsManager.ausfallKlassifikation,
-                ausfallWaechterLiefName = settingsManager.ausfallWaechterLief,
+                ausfallKlassifikationName = ausfallKlassifikation,
+                ausfallWaechterLiefName = ausfallWaechterLief,
+                ausfallLetzteDatenAt = ausfallLetzteDatenAt,
+                jetztMs = System.currentTimeMillis(),
+                weggewischteAusfaelle = weggewischteHintergrundHinweise,
             )
         }
     val healthOverview =
@@ -1104,6 +1144,15 @@ fun NoiseProtocolApp(
                         onOeffneEinstellungen = {
                             HintergrundbeschraenkungLogik.oeffneHuaweiAppStartOderAppInfo(context)
                         },
+                        onWegwischen =
+                            if (hintergrundBefund.hatWaechterSpurBeleg && ausfallLetzteDatenAt > 0L) {
+                                {
+                                    settingsManager.markiereHintergrundHinweisAlsGesehen(ausfallLetzteDatenAt)
+                                    weggewischteHintergrundHinweise = settingsManager.hintergrundHinweisWeggewischt
+                                }
+                            } else {
+                                null
+                            },
                     )
                 }
             }

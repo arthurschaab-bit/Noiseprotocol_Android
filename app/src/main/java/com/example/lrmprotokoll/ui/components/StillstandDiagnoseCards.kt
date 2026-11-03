@@ -41,6 +41,7 @@ const val AUSFALL_NACHFRAGE_CARD_TAG = "card_ausfall_nachfrage"
 const val AUSFALL_NACHFRAGE_DISMISS_TAG = "btn_ausfall_nachfrage_dismiss"
 const val HINTERGRUNDBESCHRAENKUNG_CARD_TAG = "card_hintergrundbeschraenkung"
 const val HINTERGRUNDBESCHRAENKUNG_BUTTON_TAG = "btn_hintergrundbeschraenkung_oeffnen"
+const val HINTERGRUNDBESCHRAENKUNG_DISMISS_TAG = "btn_hintergrundbeschraenkung_dismiss"
 const val TOTMANNSCHALTUNG_WARNUNG_CARD_TAG = "card_totmannschaltung_warnung"
 const val TOTMANNSCHALTUNG_EINRICHTEN_BUTTON_TAG = "btn_totmannschaltung_einrichten"
 
@@ -172,6 +173,7 @@ fun AusfallNachfrageCard(
 fun HintergrundbeschraenkungHinweisCard(
     befund: HintergrundbeschraenkungBefund,
     onOeffneEinstellungen: () -> Unit,
+    onWegwischen: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (!befund.aktiv) return
@@ -188,20 +190,41 @@ fun HintergrundbeschraenkungHinweisCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.hintergrundbeschraenkung_titel),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.hintergrundbeschraenkung_titel),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+                if (onWegwischen != null) {
+                    IconButton(
+                        onClick = onWegwischen,
+                        modifier = Modifier.size(36.dp).testTag(HINTERGRUNDBESCHRAENKUNG_DISMISS_TAG),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.ausfall_nachfrage_wegwischen),
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(

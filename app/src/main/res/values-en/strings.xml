@@ -819,7 +819,7 @@
     <string name="ausfall_nachfrage_gespeichert">Answer saved</string>
     <string name="diagnose_unbeantwortete_luecken_header">Unanswered measurement gaps (%1$d)</string>
     <string name="hintergrundbeschraenkung_titel">Background execution restricted</string>
-    <string name="hintergrundbeschraenkung_waechter_text">The system stopped the app and its background jobs. On Huawei: Settings → Apps → App launch → Lärmprotokoll → Manage manually, turn on all three switches.</string>
+    <string name="hintergrundbeschraenkung_waechter_text">The app and its background jobs stood still while the phone was running. The system may have stopped them. On Huawei: Settings → Apps → App launch → Lärmprotokoll → Manage manually, turn on all three switches.</string>
     <string name="hintergrundbeschraenkung_allgemein_text">Background restriction or battery optimization is active. This may stop ongoing measurements and background jobs in standby.</string>
     <string name="hintergrundbeschraenkung_standby_bucket">Standby bucket: %1$s</string>
     <string name="hintergrundbeschraenkung_aktion_oeffnen">Open App launch / Settings</string>

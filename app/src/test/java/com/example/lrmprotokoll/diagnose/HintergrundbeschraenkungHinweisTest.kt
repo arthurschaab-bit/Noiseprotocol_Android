@@ -144,6 +144,56 @@ class HintergrundbeschraenkungHinweisTest {
     }
 
     @Test
+    fun indirekterNachweisVerfaelltNachSiebenTagenUndLoesstSichWegwischen() {
+        val unbeschraenkteSignale =
+            HintergrundbeschraenkungSignale(
+                hintergrundEingeschraenkt = false,
+                standbyBucket = 10,
+                batterieoptimierungIgnoriert = true,
+            )
+        val letzteDatenAt = 1_760_000_000_000L
+        val innerhalbSiebenTagen = letzteDatenAt + HintergrundbeschraenkungLogik.MAX_AUSFALL_ALTER_MS
+        val nachSiebenTagen = innerhalbSiebenTagen + 1L
+
+        val frisch =
+            HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
+                signale = unbeschraenkteSignale,
+                ausfallKlassifikationName = AusfallKlasse.STILLSTAND_GERAET_LIEF.name,
+                ausfallWaechterLiefName = "nein",
+                ausfallLetzteDatenAt = letzteDatenAt,
+                jetztMs = innerhalbSiebenTagen,
+            )
+        assertTrue(frisch.aktiv)
+        assertTrue(frisch.hatWaechterSpurBeleg)
+
+        val abgelaufen =
+            HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
+                signale = unbeschraenkteSignale,
+                ausfallKlassifikationName = AusfallKlasse.STILLSTAND_GERAET_LIEF.name,
+                ausfallWaechterLiefName = "nein",
+                ausfallLetzteDatenAt = letzteDatenAt,
+                jetztMs = nachSiebenTagen,
+            )
+        assertFalse(abgelaufen.aktiv)
+        assertFalse(abgelaufen.hatWaechterSpurBeleg)
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val container = AppContainer(context = context)
+        container.settingsManager.markiereHintergrundHinweisAlsGesehen(letzteDatenAt)
+        val weggewischt =
+            HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
+                signale = unbeschraenkteSignale,
+                ausfallKlassifikationName = AusfallKlasse.STILLSTAND_GERAET_LIEF.name,
+                ausfallWaechterLiefName = "nein",
+                ausfallLetzteDatenAt = letzteDatenAt,
+                jetztMs = innerhalbSiebenTagen,
+                weggewischteAusfaelle = container.settingsManager.hintergrundHinweisWeggewischt,
+            )
+        assertFalse(weggewischt.aktiv)
+        assertFalse(weggewischt.hatWaechterSpurBeleg)
+    }
+
+    @Test
     fun appContainerVerwendetInjizierteFakeHintergrundbeschraenkungQuelle() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val fakeSignale =

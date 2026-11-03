@@ -60,11 +60,31 @@ class AusfallNachfrageTest {
     }
 
     @Test
-    fun unter30MinutenOderNutzerStoppOderAkkuLeerWerdenNichtNachgefragt() {
+    fun unter30MinutenWirdNichtNachgefragt() {
         val eintraege =
             listOf(
                 ausfallEintrag(1_000_000L, 29L, AusfallKlasse.STILLSTAND_GERAET_LIEF),
+            )
+
+        assertNull(AusfallNachfrageLogik.offeneNachfrageFuerHauptbildschirm(eintraege, emptySet()))
+        assertTrue(AusfallNachfrageLogik.unbeantworteteLueckenFuerDiagnose(eintraege).isEmpty())
+    }
+
+    @Test
+    fun nutzerStoppWirdNichtNachgefragt() {
+        val eintraege =
+            listOf(
                 ausfallEintrag(2_000_000L, 120L, AusfallKlasse.NUTZER_STOPP),
+            )
+
+        assertNull(AusfallNachfrageLogik.offeneNachfrageFuerHauptbildschirm(eintraege, emptySet()))
+        assertTrue(AusfallNachfrageLogik.unbeantworteteLueckenFuerDiagnose(eintraege).isEmpty())
+    }
+
+    @Test
+    fun akkuLeerWirdNichtNachgefragt() {
+        val eintraege =
+            listOf(
                 ausfallEintrag(3_000_000L, 240L, AusfallKlasse.AKKU_LEER),
             )
 

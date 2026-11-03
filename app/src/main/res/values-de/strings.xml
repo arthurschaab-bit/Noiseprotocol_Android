@@ -823,7 +823,7 @@
     <string name="ausfall_nachfrage_gespeichert">Antwort gespeichert</string>
     <string name="diagnose_unbeantwortete_luecken_header">Offene Messlücken (%1$d)</string>
     <string name="hintergrundbeschraenkung_titel">Hintergrundbetrieb eingeschränkt</string>
-    <string name="hintergrundbeschraenkung_waechter_text">Das System hat die App und ihre Hintergrundjobs angehalten. Bei Huawei: Einstellungen → Apps → App-Start → Lärmprotokoll → Manuell verwalten, alle drei Schalter an.</string>
+    <string name="hintergrundbeschraenkung_waechter_text">Die App und ihre Hintergrundjobs standen still, obwohl das Handy lief. Möglicherweise hat das System sie angehalten. Bei Huawei: Einstellungen → Apps → App-Start → Lärmprotokoll → Manuell verwalten, alle drei Schalter an.</string>
     <string name="hintergrundbeschraenkung_allgemein_text">Hintergrundbeschränkung oder Akku-Optimierung ist aktiv. Dadurch können laufende Messungen und Hintergrundjobs im Standby angehalten werden.</string>
     <string name="hintergrundbeschraenkung_standby_bucket">Standby-Einstufung: %1$s</string>
     <string name="hintergrundbeschraenkung_aktion_oeffnen">App-Start / Einstellungen öffnen</string>

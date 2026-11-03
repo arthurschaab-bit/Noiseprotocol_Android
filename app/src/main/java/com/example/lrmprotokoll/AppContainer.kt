@@ -14,9 +14,11 @@ import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.data.letzteMessdatenAt
+import com.example.lrmprotokoll.diagnose.AndroidHintergrundbeschraenkungQuelle
 import com.example.lrmprotokoll.diagnose.AndroidSystemZustandQuelle
 import com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupCoordinator
 import com.example.lrmprotokoll.diagnose.DiagnosticLogger
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungQuelle
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.example.lrmprotokoll.drive.DriveApiClient
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
@@ -57,7 +59,7 @@ class AppContainer(
     internal val bleScanProviderOverride: (() -> Flow<BleDevice>)? = null,
     private val standortErmittlungOverride: com.example.lrmprotokoll.standort.StandortErmittlung? = null,
     private val wetterProviderOverride: com.example.lrmprotokoll.wetter.WetterProvider? = null,
-    private val hintergrundbeschraenkungQuelleOverride: com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungQuelle? = null,
+    private val hintergrundbeschraenkungQuelleOverride: HintergrundbeschraenkungQuelle? = null,
 ) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }
@@ -194,9 +196,9 @@ class AppContainer(
         )
     }
 
-    val hintergrundbeschraenkungQuelle: com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungQuelle by lazy {
+    val hintergrundbeschraenkungQuelle: HintergrundbeschraenkungQuelle by lazy {
         hintergrundbeschraenkungQuelleOverride
-            ?: com.example.lrmprotokoll.diagnose.AndroidHintergrundbeschraenkungQuelle(context.applicationContext)
+            ?: AndroidHintergrundbeschraenkungQuelle(context.applicationContext)
     }
 
     /** M12 Schritt 3 (Konzept 4, behebt Luecke L5): vollstaendige ExitInfo-Auswertung. */

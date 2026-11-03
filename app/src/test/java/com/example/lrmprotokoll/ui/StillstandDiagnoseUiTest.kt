@@ -19,6 +19,7 @@ import com.example.lrmprotokoll.ui.components.AUSFALL_NACHFRAGE_DISMISS_TAG
 import com.example.lrmprotokoll.ui.components.AusfallNachfrageCard
 import com.example.lrmprotokoll.ui.components.HINTERGRUNDBESCHRAENKUNG_BUTTON_TAG
 import com.example.lrmprotokoll.ui.components.HINTERGRUNDBESCHRAENKUNG_CARD_TAG
+import com.example.lrmprotokoll.ui.components.HINTERGRUNDBESCHRAENKUNG_DISMISS_TAG
 import com.example.lrmprotokoll.ui.components.HintergrundbeschraenkungHinweisCard
 import com.example.lrmprotokoll.ui.components.TOTMANNSCHALTUNG_EINRICHTEN_BUTTON_TAG
 import com.example.lrmprotokoll.ui.components.TOTMANNSCHALTUNG_WARNUNG_CARD_TAG
@@ -92,6 +93,7 @@ class StillstandDiagnoseUiTest {
     @Test
     fun hintergrundbeschraenkungCardZeigtHuaweiWortlautBeiWaechterSpur() {
         var geoeffnet = false
+        var weggewischt = false
         val befund =
             HintergrundbeschraenkungBefund(
                 aktiv = true,
@@ -104,6 +106,7 @@ class StillstandDiagnoseUiTest {
                 HintergrundbeschraenkungHinweisCard(
                     befund = befund,
                     onOeffneEinstellungen = { geoeffnet = true },
+                    onWegwischen = { weggewischt = true },
                 )
             }
         }
@@ -115,6 +118,8 @@ class StillstandDiagnoseUiTest {
         composeRule.onNodeWithText(erwarteterHuaweiText).assertIsDisplayed()
         composeRule.onNodeWithTag(HINTERGRUNDBESCHRAENKUNG_BUTTON_TAG).performClick()
         assertTrue(geoeffnet)
+        composeRule.onNodeWithTag(HINTERGRUNDBESCHRAENKUNG_DISMISS_TAG).performClick()
+        assertTrue(weggewischt)
     }
 
     @Test

@@ -123,4 +123,34 @@ class TotmannschaltungStatusTest {
             )
         assertEquals(TotmannschaltungZustand.SENDET_NICHT, zustand)
     }
+
+    @Test
+    fun geplantUnbekanntLiefertOk() {
+        val zustand =
+            TotmannschaltungStatus.bewerten(
+                aufnahmeLaeuft = true,
+                konfiguriert = true,
+                geplant = null,
+                letzterErfolgAt = 0L,
+                jetztMs = basisZeit,
+            )
+        assertEquals(TotmannschaltungZustand.OK, zustand)
+        assertFalse(TotmannschaltungStatus.zeigeImHauptbildschirm(zustand))
+        assertFalse(TotmannschaltungStatus.zeigeImDiagnoseBildschirm(zustand))
+    }
+
+    @Test
+    fun konfiguriertFalseMitGeplantUnbekanntLiefertNichtEingerichtet() {
+        val zustand =
+            TotmannschaltungStatus.bewerten(
+                aufnahmeLaeuft = true,
+                konfiguriert = false,
+                geplant = null,
+                letzterErfolgAt = basisZeit,
+                jetztMs = basisZeit,
+            )
+        assertEquals(TotmannschaltungZustand.NICHT_EINGERICHTET, zustand)
+        assertTrue(TotmannschaltungStatus.zeigeImHauptbildschirm(zustand))
+        assertTrue(TotmannschaltungStatus.zeigeImDiagnoseBildschirm(zustand))
+    }
 }

@@ -48,6 +48,7 @@ class SettingsManager(
         const val SCHLUESSEL_AUSFALL_KLASSIFIKATION = "ausfall_klassifikation"
         const val SCHLUESSEL_AUSFALL_WAECHTER = "ausfall_waechter_lief"
         const val SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT = "ausfall_nachfrage_weggewischt"
+        const val SCHLUESSEL_HINTERGRUND_HINWEIS_WEGGEWISCHT = "hintergrund_hinweis_weggewischt"
     }
 
     /**
@@ -392,6 +393,31 @@ class SettingsManager(
 
     fun markiereAusfallNachfrageAlsGesehen(letzteDatenAt: Long) {
         ausfallNachfrageWeggewischt = ausfallNachfrageWeggewischt + letzteDatenAt
+    }
+
+    /**
+     * `letzteDatenAt`-Schluessel der Ausfaelle, deren indirekter Hintergrundbeschraenkungs-Hinweis
+     * im Hauptbildschirm weggewischt wurde (Schritt 7).
+     */
+    var hintergrundHinweisWeggewischt: Set<Long>
+        get() =
+            (prefs.getStringSet(SCHLUESSEL_HINTERGRUND_HINWEIS_WEGGEWISCHT, emptySet()) ?: emptySet())
+                .mapNotNull { it.toLongOrNull() }
+                .toSet()
+        set(value) =
+            prefs
+                .edit()
+                .putStringSet(
+                    SCHLUESSEL_HINTERGRUND_HINWEIS_WEGGEWISCHT,
+                    value
+                        .toList()
+                        .takeLast(50)
+                        .map { it.toString() }
+                        .toSet(),
+                ).apply()
+
+    fun markiereHintergrundHinweisAlsGesehen(letzteDatenAt: Long) {
+        hintergrundHinweisWeggewischt = hintergrundHinweisWeggewischt + letzteDatenAt
     }
 
     // ---------------------------------------------------------------- M5: Alarmierung
@@ -946,6 +972,7 @@ class SettingsManager(
             SCHLUESSEL_AUSFALL_KLASSIFIKATION,
             SCHLUESSEL_AUSFALL_WAECHTER,
             SCHLUESSEL_AUSFALL_NACHFRAGE_WEGGEWISCHT,
+            SCHLUESSEL_HINTERGRUND_HINWEIS_WEGGEWISCHT,
         )
         return vorhandeneSchluessel.any { it !in ausgenommeneSchluessel }
     }
