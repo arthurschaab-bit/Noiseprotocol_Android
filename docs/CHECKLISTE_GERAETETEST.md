@@ -512,7 +512,7 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Handy neu starten, App öffnen, Bundle erzeugen | `log/lebenszyklus.jsonl` enthält den Eintrag „Gerät wurde neu gestartet“ | |
+| Nach mindestens fünf Minuten Datenlücke Handy neu starten, App öffnen, Bundle erzeugen | `state/ausfaelle.json` belegt den Kernel-Neustart; `log/lebenszyklus.jsonl` enthält dann „Gerät wurde neu gestartet“ | |
 | Einen Tag aufzeichnen | Das Protokoll reicht im Bundle trotzdem bis zum Vortag zurück | |
 
 ### F27 — Aufzeichnungslücken in Tages-CSV und Pegelverlauf sichtbar machen (08.10.2026, Befund G)

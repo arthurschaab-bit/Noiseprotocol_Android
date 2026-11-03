@@ -401,6 +401,8 @@ Die Trigger werden an Funktionsgrenzen gesetzt. Nicht jeder `catch`-Block erzeug
 |---|---|---|
 | `LaermprotokollApp` / `AppContainer` | App-Start, Konfigurationsstatus | Uncaught Exception, app-weite Coroutine-Exception, Fehler beim Start |
 | Prozessstart | vorherige Prozessbeendigung gelesen | verdächtiger `ApplicationExitInfo`-Grund beim nächsten Start |
+| `LetzterZustandErfasser` / `AusfallErfassung` | atomarer technischer Snapshot bei Lebenszeichen, Strom- und BLE-Wechsel; „Ausfall eingeordnet“ bei einer Datenlücke über fünf Minuten | Einordnung aus Snapshot, letztem dauerhaftem Messwert, Uptime, `BOOT_COUNT` und Wächter-Spur; `UNBEKANNT` bei fehlenden Belegen. `state/letzter_zustand.json` und `state/ausfaelle.json` stehen auch im periodischen Bundle |
+| `AufzeichnungsWaechterWorker` | Zeitstempel bei jedem Lauf, auch `LAEUFT` und `AUS` | `RECORDING_ENDED_UNEXPECTEDLY` enthält die beim Prozessstart belegte Klasse und Wächter-Spur, wenn der letzte Datenzeitpunkt übereinstimmt |
 | `AudioRecordingService` | Start, Stop, Foreground-Status | Audioinitialisierung, Read-Loop, Dateischreiben, Servicefehler |
 | `NoiseClassifier` | Modell geladen, Inferenzzeiten als Metrik | Modellinitialisierung, Inferenzexception, ungültige Ausgabe |
 | `BleScanner` | Scanstart/-ende, Ergebnis vorhanden | Scanfehler, fehlende Berechtigung während Betrieb |
