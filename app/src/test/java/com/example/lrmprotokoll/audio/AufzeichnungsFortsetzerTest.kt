@@ -146,6 +146,9 @@ class AufzeichnungsFortsetzerTest {
 
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.ausfallLetzteDatenAt = testLetzteDatenAt
+            settingsManager.ausfallKlassifikation = "STILLSTAND_GERAET_LIEF"
+            settingsManager.ausfallWaechterLief = "nein"
 
             val fortsetzer =
                 erstelleFortsetzer(
@@ -169,6 +172,8 @@ class AufzeichnungsFortsetzerTest {
             assertEquals(testJetzt, event.details["entdecktAt"])
             assertEquals("app_geoeffnet", event.details["quelle"])
             assertEquals(true, event.details["audioWarAktiv"])
+            assertEquals("STILLSTAND_GERAET_LIEF", event.details["klassifikation"])
+            assertEquals("nein", event.details["waechterLief"])
 
             // Unterbrechung wurde in SettingsManager hinterlegt
             val unterbrechungen = settingsManager.aktiveUnterbrechungen()

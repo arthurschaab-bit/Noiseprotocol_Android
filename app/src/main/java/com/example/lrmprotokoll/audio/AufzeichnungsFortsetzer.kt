@@ -142,7 +142,7 @@ class AufzeichnungsFortsetzer(
                                 "lueckeMinuten" to lueckeMinuten,
                                 "audioWarAktiv" to settingsManager.audioMonitoringWasActive,
                                 "quelle" to quelle,
-                            ),
+                            ) + ausfallDetails(settingsManager, letzteDatenAt),
                     )
 
                     lebenszyklusRingFile?.protokolliere(

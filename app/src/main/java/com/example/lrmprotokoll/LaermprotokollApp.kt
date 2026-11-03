@@ -3,11 +3,17 @@ package com.example.lrmprotokoll
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import com.example.lrmprotokoll.data.letzteMessdatenAt
+import com.example.lrmprotokoll.diagnose.AusfallErfassung
 import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.acra.AcraConfig
 import io.sentry.android.core.SentryAndroid
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.acra.ACRA
 
 class LaermprotokollApp : Application() {
@@ -66,11 +72,36 @@ class LaermprotokollApp : Application() {
         // Aufgabe 5 (Konzept 4.3): die Ringdatei wird genau einmal beim Start beschnitten,
         // falls sie durch einen frueheren Fehler die Obergrenze ueberschreitet.
         container.breadcrumbRingFile.beimStartBeschneiden()
+        val jetztMs = System.currentTimeMillis()
+        val uptimeJetztMs = SystemClock.elapsedRealtime()
+        val bootCount = runCatching { Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull()
+        val letzteDatenAt =
+            runCatching {
+                runBlocking(Dispatchers.IO) {
+                    withTimeoutOrNull(2_000L) { container.database.letzteMessdatenAt() }
+                }
+            }.getOrNull()
+        val ausfallErfassung =
+            AusfallErfassung(
+                datei = container.letzterZustandDatei,
+                ringFile = container.lebenszyklusRingFile,
+                settings = container.settingsManager,
+            )
+        val ausfall =
+            ausfallErfassung.beimProzessstart(
+                letzteDatenAt = listOfNotNull(letzteDatenAt, container.letzterZustandDatei.lesen()?.letzteDatenAt).maxOrNull(),
+                uptimeJetztMs = uptimeJetztMs,
+                bootCountJetzt = bootCount,
+                jetztMs = jetztMs,
+            )
         container.lebenszyklusRingFile.beimStartBeschneiden()
         com.example.lrmprotokoll.diagnose.LebenszyklusProzessUeberwachung.auswerten(
             settingsManager = container.settingsManager,
             lebenszyklusRingFile = container.lebenszyklusRingFile,
-            bootCount = runCatching { Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull(),
+            elapsedRealtimeMs = uptimeJetztMs,
+            jetztMs = jetztMs,
+            bootCount = bootCount,
+            ausfall = ausfall,
         )
         // M12 Schritt 3 (Konzept 6): die Auswertung liegt jetzt in ProcessExitCollector, nicht
         // mehr inline hier - Verhalten bleibt sonst gleich (Breadcrumb + Report bei CRASH/ANR),
