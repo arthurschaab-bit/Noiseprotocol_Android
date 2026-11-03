@@ -498,7 +498,7 @@ class SupportBundleExporter(
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
         json.put("aufnahmeAktiv", runCatching { aufnahmeAktivProvider() }.getOrDefault(false))
 
-        var heartbeatGeplant = false
+        var heartbeatGeplant: Boolean? = null
         runCatching {
             val workManager = workManagerProvider()
             if (workManager != null) {
@@ -525,7 +525,6 @@ class SupportBundleExporter(
                     name: String,
                     info: androidx.work.WorkInfo,
                 ) {
-                    if (name == "heartbeat" && !info.state.isFinished) heartbeatGeplant = true
                     gemeldeteIds += info.id
                     hintergrundJobs.put(
                         JSONObject().apply {
@@ -544,7 +543,9 @@ class SupportBundleExporter(
                     )
                 }
                 for (name in BEKANNTE_EINDEUTIGE_ARBEITEN) {
-                    abfragen(workManager.getWorkInfosForUniqueWork(name))?.forEach { melde(name, it) }
+                    val infos = abfragen(workManager.getWorkInfosForUniqueWork(name))
+                    if (name == "heartbeat") heartbeatGeplant = infos?.any { !it.state.isFinished }
+                    infos?.forEach { melde(name, it) }
                 }
                 // Dynamisch benannte Arbeiten (drive_sync_retry_<typ>_<kennung>, video-mux-<id>) und
                 // kuenftige Worker, die in der Liste oben fehlen: alle noch offenen Arbeiten, benannt
@@ -566,12 +567,16 @@ class SupportBundleExporter(
             }
         }
 
-        json.put("totmannschaltung", JSONObject().apply {
-            put("konfiguriert", HeartbeatPlanung.istKonfiguriert(settingsManager.heartbeatUrl))
-            put("geplant", heartbeatGeplant)
-            put("letzterErfolgAt", settingsManager.heartbeatLetzterErfolgAt)
-            put("letzterFehlerAt", settingsManager.heartbeatLetzterFehlerAt)
-        })
+        json.put(
+            "totmannschaltung",
+            JSONObject().apply {
+                put("konfiguriert", HeartbeatPlanung.istKonfiguriert(settingsManager.heartbeatUrl))
+                put("geplant", heartbeatGeplant ?: JSONObject.NULL)
+                put("geplantUnbekannt", heartbeatGeplant == null)
+                put("letzterErfolgAt", settingsManager.heartbeatLetzterErfolgAt)
+                put("letzterFehlerAt", settingsManager.heartbeatLetzterFehlerAt)
+            },
+        )
 
         return json.toString(2)
     }

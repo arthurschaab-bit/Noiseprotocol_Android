@@ -52,6 +52,8 @@ class AudioRecordingServiceStartupTest {
                     0,
                     2,
                 )
+                val nachStopp = WorkManager.getInstance(app).getWorkInfosForUniqueWork("heartbeat").get()
+                assertTrue("Heartbeat muss nach ausdruecklichem Stopp beendet sein", nachStopp.all { it.state.isFinished })
                 service.destroy()
             }
         } finally {

@@ -145,6 +145,25 @@ class SupportBundleExporterTest {
             }
         }
 
+    @Test
+    fun runtimeJsonKennzeichnetNichtAbfragbarenHeartbeatAlsUnbekannt() =
+        runTest {
+            val zipFile =
+                exporter(
+                    FakeDiagnosticLogDao(emptyList()),
+                    workManagerProvider = { null },
+                ).createBundle(BundleKontext(typ = BundleTyp.PERIODISCH, ausloeser = "Test"))
+            ZipFile(zipFile).use { zip ->
+                val runtime =
+                    org.json.JSONObject(
+                        zip.getInputStream(zip.getEntry("state/runtime.json")).bufferedReader().readText(),
+                    )
+                val status = runtime.getJSONObject("totmannschaltung")
+                assertTrue(status.isNull("geplant"))
+                assertTrue(status.getBoolean("geplantUnbekannt"))
+            }
+        }
+
     private class FakeDiagnosticLogDao(private val eintraege: List<DiagnosticLogEntity>) : DiagnosticLogDao {
         var abgefragteSeiten = 0
         var schlaegtFehl = false
@@ -180,6 +199,9 @@ class SupportBundleExporterTest {
             runCatching { context.packageManager.getPermissionInfo(name, 0) }.isSuccess
         },
         letzterZustandDatei: LetzterZustandDatei = LetzterZustandDatei(File(context.filesDir, "letzter_zustand.json")),
+        workManagerProvider: () -> androidx.work.WorkManager? = {
+            runCatching { androidx.work.WorkManager.getInstance(context) }.getOrNull()
+        },
     ) = SupportBundleExporter(
         context = context,
         reporter = reporter,
@@ -191,6 +213,7 @@ class SupportBundleExporterTest {
         traceVerzeichnis = traceVerzeichnis,
         berechtigungExistiertProvider = berechtigungExistiertProvider,
         letzterZustandDatei = letzterZustandDatei,
+        workManagerProvider = workManagerProvider,
     )
 
     private fun logEintrag(id: Long, nachricht: String) =
