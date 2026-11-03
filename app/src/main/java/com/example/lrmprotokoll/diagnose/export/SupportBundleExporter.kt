@@ -8,8 +8,8 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.FileProvider
 import com.example.lrmprotokoll.BuildConfig
-import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.Versionskennung
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.AppDatabase
 import com.example.lrmprotokoll.data.DiagnosticLogDao
 import com.example.lrmprotokoll.data.SettingsManager
@@ -22,6 +22,8 @@ import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
 import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -32,8 +34,6 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** Bundle-Typen (Konzept 4.4/4.7) - stehen im Dateinamen und in `manifest.json`. */
 enum class BundleTyp(val bezeichnung: String) {
@@ -473,7 +473,7 @@ class SupportBundleExporter(
         json.put("bleVerbindungszustand", runCatching { bleVerbindungszustandProvider() }.getOrDefault("UNBEKANNT"))
         json.put("aufnahmeAktiv", runCatching { aufnahmeAktivProvider() }.getOrDefault(false))
 
-        var heartbeatGeplant = false
+        var heartbeatGeplant: Boolean? = null
         runCatching {
             val workManager = workManagerProvider()
             if (workManager != null) {
@@ -500,7 +500,6 @@ class SupportBundleExporter(
                     name: String,
                     info: androidx.work.WorkInfo,
                 ) {
-                    if (name == "heartbeat" && !info.state.isFinished) heartbeatGeplant = true
                     gemeldeteIds += info.id
                     hintergrundJobs.put(
                         JSONObject().apply {
@@ -519,7 +518,9 @@ class SupportBundleExporter(
                     )
                 }
                 for (name in BEKANNTE_EINDEUTIGE_ARBEITEN) {
-                    abfragen(workManager.getWorkInfosForUniqueWork(name))?.forEach { melde(name, it) }
+                    val infos = abfragen(workManager.getWorkInfosForUniqueWork(name))
+                    if (name == "heartbeat") heartbeatGeplant = infos?.any { !it.state.isFinished }
+                    infos?.forEach { melde(name, it) }
                 }
                 // Dynamisch benannte Arbeiten (drive_sync_retry_<typ>_<kennung>, video-mux-<id>) und
                 // kuenftige Worker, die in der Liste oben fehlen: alle noch offenen Arbeiten, benannt
@@ -541,12 +542,16 @@ class SupportBundleExporter(
             }
         }
 
-        json.put("totmannschaltung", JSONObject().apply {
-            put("konfiguriert", HeartbeatPlanung.istKonfiguriert(settingsManager.heartbeatUrl))
-            put("geplant", heartbeatGeplant)
-            put("letzterErfolgAt", settingsManager.heartbeatLetzterErfolgAt)
-            put("letzterFehlerAt", settingsManager.heartbeatLetzterFehlerAt)
-        })
+        json.put(
+            "totmannschaltung",
+            JSONObject().apply {
+                put("konfiguriert", HeartbeatPlanung.istKonfiguriert(settingsManager.heartbeatUrl))
+                put("geplant", heartbeatGeplant ?: JSONObject.NULL)
+                put("geplantUnbekannt", heartbeatGeplant == null)
+                put("letzterErfolgAt", settingsManager.heartbeatLetzterErfolgAt)
+                put("letzterFehlerAt", settingsManager.heartbeatLetzterFehlerAt)
+            },
+        )
 
         return json.toString(2)
     }
