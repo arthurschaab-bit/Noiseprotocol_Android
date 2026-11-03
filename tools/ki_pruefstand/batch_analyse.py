@@ -139,14 +139,17 @@ def auftrag(arg):
     fehlend = sorted(gesucht)
     fkeys = list(feats[0].keys()) if feats else list(merkmale.alle_merkmale(np.zeros(16000, dtype=np.int16) + 1).keys())
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
-    tmp = ziel + ".tmp.npz"
+    tmp = f"{ziel}.{os.getpid()}.tmp.npz"  # eindeutig je Prozess: mehrere Instanzen koennen denselben Auftrag treffen
     np.savez(tmp, namen=np.array(namen, dtype=object), feat_namen=np.array(fkeys),
              feat=np.array([[f[k] for k in fkeys] for f in feats], dtype=np.float64).reshape(len(feats), len(fkeys)),
              emb=np.array(embs, dtype=np.float32).reshape(len(embs), 1024),
              score_mittel=np.array(smean, dtype=np.float32).reshape(len(smean), 521),
              score_max=np.array(smax, dtype=np.float32).reshape(len(smax), 521),
              fenster=np.array(nfenster), fehlend=np.array(fehlend, dtype=object), kaputt=np.array(kaputt, dtype=object))
-    os.replace(tmp, ziel)
+    try:
+        os.replace(tmp, ziel)
+    except OSError:  # anderer Prozess war schneller: dessen (gleichwertiges) Ergebnis gilt
+        os.remove(tmp)
     return tag, stunde, len(namen), len(fehlend), time.perf_counter() - t0
 
 
@@ -158,6 +161,8 @@ def main():
     ap.add_argument("--workers", type=int, default=5)
     ap.add_argument("--yamnet", default=os.path.join(os.path.dirname(__file__), "..", "..", "app", "src", "main", "assets", "yamnet.tflite"))
     ap.add_argument("--wartezeiten", default="60,300,600,3600", help="Sekunden zwischen Wiederholungen")
+    ap.add_argument("--nur-ereignisse", action="store_true", help="nur ereignisse.csv schreiben und beenden")
+    ap.add_argument("--rueckwaerts", action="store_true", help="offene Auftraege in umgekehrter Reihenfolge (zweite Instanz)")
     ap.add_argument("--max-shards", type=int, default=0)
     ap.add_argument("--von", default="")
     ap.add_argument("--bis", default="9999")
@@ -179,10 +184,16 @@ def main():
     with open(os.path.join(a.ausgabe, "ereignisse.csv"), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter=";")
         w.writerow(["zeit", "wav", "pegel", "label"])
-        for e in ereignisse:
-            w.writerow([e["zeit"].isoformat(), e["wav"], e["pegel"], e["label"]])
+        for e in alle:  # immer ALLE Ereignisse ab min-db, unabhaengig von --von/--bis
+            if e["pegel"] >= a.min_db:
+                w.writerow([e["zeit"].isoformat(), e["wav"], e["pegel"], e["label"]])
+    if a.nur_ereignisse:
+        print("ereignisse.csv geschrieben.")
+        return 0
     auftraege = [(a.wurzel, a.ausgabe, t, h, w) for (t, h), w in sorted(gruppen.items())]
     offen = [x for x in auftraege if not os.path.exists(os.path.join(a.ausgabe, "shards", f"{x[2]}_{x[3]}.npz"))]
+    if a.rueckwaerts:
+        offen.reverse()
     if a.max_shards:
         offen = offen[:a.max_shards]
     clips_offen = sum(len(x[4]) for x in offen)

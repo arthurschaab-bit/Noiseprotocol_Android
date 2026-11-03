@@ -92,6 +92,7 @@ def main():
     ap.add_argument("labels")
     ap.add_argument("--cluster", type=int, default=30)
     ap.add_argument("--min-db", type=float, default=60.0)
+    ap.add_argument("--cluster-ab-db", type=float, default=75.0, help="nur Clips ab diesem Pegel werden gruppiert (leisere: Gruppe -1)")
     ap.add_argument("--yamnet", default=os.path.join(os.path.dirname(__file__), "..", "..", "app", "src", "main", "assets", "yamnet.tflite"))
     a = ap.parse_args()
 
@@ -139,9 +140,13 @@ def main():
             j = int(d.argmin())
             nn_dist[i], nn_label[i] = d[j], labels[tn[j]]
     # --- Cluster --------------------------------------------------------------
-    km = MiniBatchKMeans(n_clusters=min(a.cluster, max(n // 5, 2)), random_state=0, n_init=5, batch_size=2048).fit(Ze)
-    cl = km.labels_
-    abstand_zentrum = np.linalg.norm(Ze - km.cluster_centers_[cl], axis=1)
+    pegel_arr = np.array([ereignis[nm]["pegel"] if nm in ereignis else 0.0 for nm in namen])
+    sel_c = pegel_arr >= a.cluster_ab_db
+    km = MiniBatchKMeans(n_clusters=min(a.cluster, max(int(sel_c.sum()) // 5, 2)), random_state=0, n_init=5, batch_size=2048).fit(Ze[sel_c])
+    cl = np.full(n, -1)
+    cl[sel_c] = km.labels_
+    abstand_zentrum = np.full(n, np.nan)
+    abstand_zentrum[sel_c] = np.linalg.norm(Ze[sel_c] - km.cluster_centers_[km.labels_], axis=1)
 
     # --- Tabelle ----------------------------------------------------------------
     gr_idx = {g: [idx[k] for k in ks if k in idx] for g, ks in GRUPPEN.items()}
@@ -165,12 +170,12 @@ def main():
             row += list(feat[i]) + [klassen[j] for j in top] + [float(smax[i][j]) for j in top] + gsum
             row += [p_ja[i], "ja" if train[i] else "nein", yk[i]]
             row += list(p_kl[i]) if p_kl is not None else []
-            row += [nn_dist[i], nn_label[i], int(cl[i]), float(abstand_zentrum[i])]
+            row += [nn_dist[i], nn_label[i], int(cl[i]), "" if np.isnan(abstand_zentrum[i]) else float(abstand_zentrum[i])]
             w.writerow([fmt(v) if not isinstance(v, (int, str)) else v for v in row])
 
     # --- Cluster-Uebersicht (Markdown) -----------------------------------------
     zeilen = ["# Gruppen nach Klang (Cluster)", "",
-              f"{n} Clips ab {a.min_db:g} dB, {km.n_clusters} Gruppen. Reihenfolge: groesste Gruppe zuerst.",
+              f"{int(sel_c.sum())} Clips ab {a.cluster_ab_db:g} dB (von {n} Clips ab {a.min_db:g} dB), {km.n_clusters} Gruppen. Leisere Clips haben in detail.csv die Gruppe -1. Reihenfolge: groesste Gruppe zuerst.",
               "`p_ja` = mittlere Baustelle-Wahrscheinlichkeit des Modells (nur Orientierung, siehe Hinweis in tabelle.py).", ""]
     for c in sorted(range(km.n_clusters), key=lambda c: -(cl == c).sum()):
         ix = np.where(cl == c)[0]
@@ -182,7 +187,7 @@ def main():
         spitzen = Counter(app_info(e["label"])[1] for e in infos if app_info(e["label"])[1]).most_common(3)
         std = Counter(e["zeit"].hour for e in infos)
         top_cls = np.argsort(-smax[ix].mean(axis=0))[:3]
-        bestaetigt = Counter(yk[i] for i in ix if yk[i])
+        bestaetigt = Counter(str(yk[i]) for i in ix if yk[i])
         typisch = ix[np.argsort(abstand_zentrum[ix])[:5]]
         zeilen += [f"## Gruppe {c}: {len(ix)} Clips", "",
                    f"- Pegel: Median {np.median(pegel):.1f} dB (Spanne {pegel.min():.1f}–{pegel.max():.1f}); Arbeitszeit-Anteil {np.mean([arbeitszeit(e) for e in infos]) * 100:.0f} %",
