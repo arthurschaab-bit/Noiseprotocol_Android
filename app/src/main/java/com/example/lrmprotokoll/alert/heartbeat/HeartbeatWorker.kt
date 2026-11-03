@@ -61,6 +61,8 @@ class HeartbeatWorker @JvmOverloads constructor(
 }
 
 object HeartbeatPlanung {
+    const val WORK_NAME = "heartbeat"
+
     fun istKonfiguriert(url: String): Boolean = url.isNotBlank() && HeartbeatPinger.istGueltigeUrl(url)
 
     fun aktualisiere(

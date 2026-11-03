@@ -57,6 +57,7 @@ class AppContainer(
     internal val bleScanProviderOverride: (() -> Flow<BleDevice>)? = null,
     private val standortErmittlungOverride: com.example.lrmprotokoll.standort.StandortErmittlung? = null,
     private val wetterProviderOverride: com.example.lrmprotokoll.wetter.WetterProvider? = null,
+    private val hintergrundbeschraenkungQuelleOverride: com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungQuelle? = null,
 ) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }
@@ -191,6 +192,11 @@ class AppContainer(
             mikrofonAktiv = { AudioRecordingService.audioAufnahmeAktiv.value },
             dienstLaeuft = { AudioRecordingService.laeuft.value },
         )
+    }
+
+    val hintergrundbeschraenkungQuelle: com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungQuelle by lazy {
+        hintergrundbeschraenkungQuelleOverride
+            ?: com.example.lrmprotokoll.diagnose.AndroidHintergrundbeschraenkungQuelle(context.applicationContext)
     }
 
     /** M12 Schritt 3 (Konzept 4, behebt Luecke L5): vollstaendige ExitInfo-Auswertung. */
