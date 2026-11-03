@@ -20,6 +20,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticRedactor
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
 import com.example.lrmprotokoll.diagnose.LaufzeitzustandJson
 import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
+import com.example.lrmprotokoll.diagnose.LetzterZustandDatei
 import com.example.lrmprotokoll.diagnose.NATIVE_TOMBSTONE_DATEINAME
 import com.example.lrmprotokoll.diagnose.ProcessExitInfo
 import org.json.JSONArray
@@ -138,6 +139,7 @@ class SupportBundleExporter(
     private val workManagerProvider: () -> androidx.work.WorkManager? = {
         runCatching { androidx.work.WorkManager.getInstance(context) }.getOrNull()
     },
+    private val letzterZustandDatei: LetzterZustandDatei = LetzterZustandDatei(File(context.filesDir, "letzter_zustand.json")),
 ) {
 
     suspend fun createBundle(kontext: BundleKontext): File {
@@ -235,6 +237,8 @@ class SupportBundleExporter(
 
             // state/
             schreibeEintrag("state/runtime.json") { it.write(buildRuntimeJson().toByteArray(StandardCharsets.UTF_8)) }
+            schreibeEintrag("state/letzter_zustand.json") { it.write(buildLetzterZustandJson().toByteArray(StandardCharsets.UTF_8)) }
+            schreibeEintrag("state/ausfaelle.json") { it.write(buildAusfaelleJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/settings.json") { it.write(buildSettingsJson().toByteArray(StandardCharsets.UTF_8)) }
             schreibeEintrag("state/db_stats.json") { it.write(buildDbStatsJson().toByteArray(StandardCharsets.UTF_8)) }
             kontext.healthMetricsJson?.let { inhalt ->
@@ -307,6 +311,36 @@ class SupportBundleExporter(
             array.put(json)
         }
         return array.toString(2)
+    }
+
+    private fun buildLetzterZustandJson(): String =
+        (letzterZustandDatei.lesen()?.alsJson() ?: JSONObject().put("vorhanden", false)).toString(2)
+
+    private fun buildAusfaelleJson(): String {
+        val ausfaelle = JSONArray()
+        val eintraege = lebenszyklusRingFile.lesen()
+        val waechterKorrekturen =
+            eintraege
+                .filter { it.ereignis == "Ausfall-Waechterspur korrigiert" }
+                .mapNotNull { eintrag ->
+                    val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
+                    datenAt?.let { it to eintrag.details }
+                }.toMap()
+        eintraege
+            .filter { it.ereignis == "Ausfall eingeordnet" }
+            .takeLast(20)
+            .forEach { eintrag ->
+                val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
+                val belege = eintrag.details + (waechterKorrekturen[datenAt] ?: emptyMap())
+                ausfaelle.put(
+                    JSONObject().apply {
+                        put("timestamp", eintrag.timestampMillis)
+                        put("klassifikation", belege["klassifikation"] ?: JSONObject.NULL)
+                        put("belege", JSONObject(belege))
+                    },
+                )
+            }
+        return ausfaelle.toString(2)
     }
 
     private fun schreibeLogcat(out: OutputStream, kontext: BundleKontext, maxBytes: Long) {

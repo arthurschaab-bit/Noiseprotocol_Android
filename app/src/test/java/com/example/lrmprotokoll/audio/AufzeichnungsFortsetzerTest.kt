@@ -117,11 +117,13 @@ class AufzeichnungsFortsetzerTest {
         kannInDenVordergrund: Boolean = true,
         jetztProvider: () -> Long = { 1_000_000L },
         dispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+        letzteDatenAtProvider: suspend () -> Long? = { fakeDao.maxAtWert },
     ): AufzeichnungsFortsetzer =
         AufzeichnungsFortsetzer(
             context = context,
             settingsManager = settingsManager,
             levelSampleDao = fakeDao,
+            letzteDatenAtProvider = letzteDatenAtProvider,
             diagnosticsReporter = fakeReporter,
             dienstLaeuftProvider = { dienstLaeuft },
             kannInVordergrundProvider = { kannInDenVordergrund },
@@ -130,6 +132,22 @@ class AufzeichnungsFortsetzerTest {
             ioDispatcher = dispatcher,
             hinweisZeiger = { text -> gezeigteHinweise.add(text) },
         )
+
+    @Test
+    fun fortsetzerNutztDauerhafteRohdatenFuerAusfallZuordnung() =
+        runTest {
+            settingsManager.monitoringWasActive = true
+            fakeDao.maxAtWert = 700_000L
+            settingsManager.ausfallLetzteDatenAt = 790_000L
+            settingsManager.ausfallKlassifikation = "STILLSTAND_GERAET_LIEF"
+            settingsManager.ausfallWaechterLief = "nein"
+
+            erstelleFortsetzer(letzteDatenAtProvider = { 800_000L }).pruefeUndSetzeFortSuspend()
+
+            val event = fakeReporter.events.single { it.code == DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY }
+            assertEquals(800_000L, event.details["letzteDatenAt"])
+            assertEquals("STILLSTAND_GERAET_LIEF", event.details["klassifikation"])
+        }
 
     /**
      * Test 2: Flags gesetzt, Dienst laeuft nicht:
@@ -146,6 +164,9 @@ class AufzeichnungsFortsetzerTest {
 
             settingsManager.monitoringWasActive = true
             settingsManager.audioMonitoringWasActive = true
+            settingsManager.ausfallLetzteDatenAt = testLetzteDatenAt
+            settingsManager.ausfallKlassifikation = "STILLSTAND_GERAET_LIEF"
+            settingsManager.ausfallWaechterLief = "nein"
 
             val fortsetzer =
                 erstelleFortsetzer(
@@ -169,6 +190,8 @@ class AufzeichnungsFortsetzerTest {
             assertEquals(testJetzt, event.details["entdecktAt"])
             assertEquals("app_geoeffnet", event.details["quelle"])
             assertEquals(true, event.details["audioWarAktiv"])
+            assertEquals("STILLSTAND_GERAET_LIEF", event.details["klassifikation"])
+            assertEquals("nein", event.details["waechterLief"])
 
             // Unterbrechung wurde in SettingsManager hinterlegt
             val unterbrechungen = settingsManager.aktiveUnterbrechungen()

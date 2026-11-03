@@ -78,6 +78,9 @@ class MeasurementRecorderTest {
 
     private class FakeMeasurementDao : MeasurementDao {
         val geschrieben = mutableListOf<MeasurementEntity>()
+
+        override suspend fun letzterMesswertAt(): Long? = geschrieben.filter { (it.flags and 8) == 0 }.maxOfOrNull { it.timestamp }
+
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) { geschrieben += messwerte }
         override suspend fun fuerSession(sessionId: Long) = geschrieben.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")

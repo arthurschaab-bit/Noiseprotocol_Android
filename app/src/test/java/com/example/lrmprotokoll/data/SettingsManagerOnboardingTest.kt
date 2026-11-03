@@ -97,4 +97,15 @@ class SettingsManagerOnboardingTest {
 
         assertFalse(settings.onboardingCompleted)
     }
+
+    @Test
+    fun automatischGeschriebeneDiagnosewerteMachenKeineBestandsinstallation() {
+        val settings = settings()
+        settings.waechterLetzterLaufAt = 1_000L
+        settings.ausfallLetzteDatenAt = 500L
+        settings.ausfallKlassifikation = "UNBEKANNT"
+        settings.ausfallWaechterLief = "nein"
+
+        assertFalse(settings.onboardingCompleted)
+    }
 }

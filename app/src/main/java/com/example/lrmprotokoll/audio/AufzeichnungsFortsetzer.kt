@@ -26,6 +26,7 @@ class AufzeichnungsFortsetzer(
     private val context: Context,
     private val settingsManager: SettingsManager,
     private val levelSampleDao: LevelSampleDao,
+    private val letzteDatenAtProvider: suspend () -> Long? = { levelSampleDao.maxAt() },
     private val diagnosticsReporter: DiagnosticsReporter,
     private val lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile? = null,
     private val dienstLaeuftProvider: () -> Boolean = { AudioRecordingService.laeuft.value },
@@ -119,7 +120,7 @@ class AufzeichnungsFortsetzer(
                 try {
                     val letzteDatenAt =
                         withContext(ioDispatcher) {
-                            runCatching { levelSampleDao.maxAt() }.getOrNull()
+                            runCatching { letzteDatenAtProvider() }.getOrNull()
                         }
                     val entdecktAt = jetzt
                     val lueckeMinuten =
@@ -142,7 +143,7 @@ class AufzeichnungsFortsetzer(
                                 "lueckeMinuten" to lueckeMinuten,
                                 "audioWarAktiv" to settingsManager.audioMonitoringWasActive,
                                 "quelle" to quelle,
-                            ),
+                            ) + ausfallDetails(settingsManager, letzteDatenAt),
                     )
 
                     lebenszyklusRingFile?.protokolliere(

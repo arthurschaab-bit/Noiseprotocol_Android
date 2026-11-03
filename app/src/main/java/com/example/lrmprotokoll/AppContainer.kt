@@ -10,10 +10,13 @@ import com.example.lrmprotokoll.alert.ChannelId
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPinger
 import com.example.lrmprotokoll.alert.local.LocalNotificationAlertChannel
 import com.example.lrmprotokoll.alert.ntfy.NtfyAlertChannel
+import com.example.lrmprotokoll.audio.AudioRecordingService
 import com.example.lrmprotokoll.data.AppDatabase
+import com.example.lrmprotokoll.data.SettingsManager
+import com.example.lrmprotokoll.data.letzteMessdatenAt
+import com.example.lrmprotokoll.diagnose.AndroidSystemZustandQuelle
 import com.example.lrmprotokoll.diagnose.DiagnosticLogCleanupCoordinator
 import com.example.lrmprotokoll.diagnose.DiagnosticLogger
-import com.example.lrmprotokoll.data.SettingsManager
 import com.example.lrmprotokoll.drive.AccessTokenProvider
 import com.example.lrmprotokoll.drive.DriveApiClient
 import com.example.lrmprotokoll.drive.DriveSyncCoordinator
@@ -23,8 +26,6 @@ import com.example.lrmprotokoll.drive.auth.DriveEinrichtung
 import com.example.lrmprotokoll.drive.auth.GoogleSignInAccessTokenProvider
 import com.example.lrmprotokoll.messreihe.MeasurementRecorder
 import com.example.lrmprotokoll.messreihe.RetentionCoordinator
-import java.time.Duration
-import okhttp3.OkHttpClient
 import com.example.lrmprotokoll.meter.ConnectionSupervisor
 import com.example.lrmprotokoll.meter.MeterAutoConnect
 import com.example.lrmprotokoll.meter.MeterTransport
@@ -37,12 +38,13 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import com.example.lrmprotokoll.audio.AudioRecordingService
+import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import java.time.Duration
 
 /**
  * Schlanker manueller Ersatz fuer ein DI-Framework (Plan Abschnitt 4.2): haelt die
@@ -172,6 +174,23 @@ class AppContainer(
     /** Auftrag 9 (docs/PROMPT_FIX_DIAGNOSEFENSTER_LEBENSZYKLUS.md): Lebenszyklus-Protokoll fuer Prozess- und Dienstereignisse. */
     val lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile by lazy {
         com.example.lrmprotokoll.diagnose.LebenszyklusRingFile(context.applicationContext.filesDir)
+    }
+
+    val letzterZustandDatei: com.example.lrmprotokoll.diagnose.LetzterZustandDatei by lazy {
+        com.example.lrmprotokoll.diagnose.LetzterZustandDatei(
+            java.io.File(context.applicationContext.filesDir, "letzter_zustand.json"),
+        )
+    }
+
+    val letzterZustandErfasser: com.example.lrmprotokoll.diagnose.LetzterZustandErfasser by lazy {
+        com.example.lrmprotokoll.diagnose.LetzterZustandErfasser(
+            datei = letzterZustandDatei,
+            system = AndroidSystemZustandQuelle(context.applicationContext),
+            settings = settingsManager,
+            bleZustand = { connectionSupervisor.state.value.name },
+            mikrofonAktiv = { AudioRecordingService.audioAufnahmeAktiv.value },
+            dienstLaeuft = { AudioRecordingService.laeuft.value },
+        )
     }
 
     /** M12 Schritt 3 (Konzept 4, behebt Luecke L5): vollstaendige ExitInfo-Auswertung. */
@@ -487,6 +506,11 @@ class AppContainer(
                     ),
                     timestampMillis = zeitstempel,
                 )
+                connectionSupervisorScope.launch {
+                    val letzteDatenAt = runCatching { database.letzteMessdatenAt() }.getOrNull()
+                    runCatching { letzterZustandErfasser.aktualisieren(letzteDatenAt = letzteDatenAt) }
+                        .onFailure { Log.w("AppContainer", "Letzten Zustand nicht gespeichert", it) }
+                }
             },
         )
     }
@@ -520,6 +544,7 @@ class AppContainer(
             context = context.applicationContext,
             settingsManager = settingsManager,
             levelSampleDao = database.levelSampleDao(),
+            letzteDatenAtProvider = { database.letzteMessdatenAt() },
             diagnosticsReporter = diagnosticsReporter,
             lebenszyklusRingFile = lebenszyklusRingFile,
         )

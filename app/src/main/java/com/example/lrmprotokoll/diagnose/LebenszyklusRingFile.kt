@@ -206,6 +206,7 @@ object LebenszyklusProzessUeberwachung {
         versionCode: Long = com.example.lrmprotokoll.BuildConfig.VERSION_CODE.toLong(),
         jetztMs: Long = System.currentTimeMillis(),
         bootCount: Int? = null,
+        ausfall: AusfallEinordnung? = null,
     ) {
         val vorherigerStartAt = settingsManager.letzterProzessStartAt
         val vorherigerElapsedRealtime = settingsManager.letzterProzessStartElapsedRealtime
@@ -219,14 +220,21 @@ object LebenszyklusProzessUeberwachung {
                 } else {
                     elapsedRealtimeMs < vorherigerElapsedRealtime
                 }
-            if (neugestartet) {
+            if (neugestartet || ausfall?.klasse in listOf(AusfallKlasse.AKKU_LEER, AusfallKlasse.KERNEL_NEUSTART)) {
+                val ereignis =
+                    when (ausfall?.klasse) {
+                        AusfallKlasse.AKKU_LEER, AusfallKlasse.KERNEL_NEUSTART -> "Gerät wurde neu gestartet"
+                        AusfallKlasse.FRAMEWORK_NEUSTART -> "Android-Framework neu gestartet (Kernel lief weiter)"
+                        else -> "BOOT_COUNT-Wechsel oder Uptime-Ruecksprung (Kernel-Neustart nicht belegt)"
+                    }
                 lebenszyklusRingFile.protokolliere(
-                    ereignis = "Gerät wurde neu gestartet",
+                    ereignis = ereignis,
                     details = mapOf(
                         "elapsedRealtimeMs" to elapsedRealtimeMs,
                         "abstandLetzterStartMs" to abstand,
                         "vorherigerStartAt" to vorherigerStartAt,
                         "bootCount" to bootCount,
+                        "klassifikation" to ausfall?.klasse?.name,
                     ),
                     timestampMillis = jetztMs,
                 )

@@ -43,6 +43,10 @@ class SettingsManager(
         const val SCHLUESSEL_LETZTER_PROZESS_START_AT = "letzter_prozess_start_at"
         const val SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED = "letzter_prozess_start_elapsed_realtime"
         const val SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT = "letzter_prozess_start_boot_count"
+        const val SCHLUESSEL_WAECHTER_LETZTER_LAUF = "waechter_letzter_lauf_at"
+        const val SCHLUESSEL_AUSFALL_LETZTE_DATEN = "ausfall_letzte_daten_at"
+        const val SCHLUESSEL_AUSFALL_KLASSIFIKATION = "ausfall_klassifikation"
+        const val SCHLUESSEL_AUSFALL_WAECHTER = "ausfall_waechter_lief"
     }
 
     /**
@@ -345,6 +349,24 @@ class SettingsManager(
     var waechterLetzterGemeldeterAusfallAt: Long
         get() = prefs.getLong("waechter_letzter_gemeldeter_ausfall_at", -1L)
         set(value) = prefs.edit().putLong("waechter_letzter_gemeldeter_ausfall_at", value).apply()
+
+    /** Jede Ausfuehrung des Jobs, auch wenn die Aufzeichnung unauffaellig laeuft oder aus ist. */
+    var waechterLetzterLaufAt: Long
+        get() = prefs.getLong(SCHLUESSEL_WAECHTER_LETZTER_LAUF, 0L)
+        set(value) = prefs.edit().putLong(SCHLUESSEL_WAECHTER_LETZTER_LAUF, value).apply()
+
+    /** Schluessel der zuletzt eingeordneten Luecke; verhindert doppelte Ring-Eintraege. */
+    var ausfallLetzteDatenAt: Long
+        get() = prefs.getLong(SCHLUESSEL_AUSFALL_LETZTE_DATEN, 0L)
+        set(value) = prefs.edit().putLong(SCHLUESSEL_AUSFALL_LETZTE_DATEN, value).apply()
+
+    var ausfallKlassifikation: String?
+        get() = prefs.getString(SCHLUESSEL_AUSFALL_KLASSIFIKATION, null)
+        set(value) = prefs.edit().putString(SCHLUESSEL_AUSFALL_KLASSIFIKATION, value).apply()
+
+    var ausfallWaechterLief: String?
+        get() = prefs.getString(SCHLUESSEL_AUSFALL_WAECHTER, null)
+        set(value) = prefs.edit().putString(SCHLUESSEL_AUSFALL_WAECHTER, value).apply()
 
     // ---------------------------------------------------------------- M5: Alarmierung
 
@@ -883,7 +905,8 @@ class SettingsManager(
      * hat sie ja noch nicht gesehen. Ebenso wenig machen die beim allerersten Start in
      * [com.example.lrmprotokoll.LaermprotokollApp.onCreate] automatisch gesetzten Lebenszyklus-
      * Zeitstempel ([SCHLUESSEL_LETZTER_PROZESS_START_AT], [SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED],
-     * [SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT]) eine frische Installation zur Bestandsinstallation.
+     * [SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT]) und die automatisch geschriebenen
+     * Waechter-/Ausfall-Diagnosewerte eine frische Installation zur Bestandsinstallation.
      */
     private fun istBestandsinstallation(): Boolean {
         val vorhandeneSchluessel = runCatching { prefs.all.keys }.getOrNull() ?: return true
@@ -892,6 +915,10 @@ class SettingsManager(
             SCHLUESSEL_LETZTER_PROZESS_START_AT,
             SCHLUESSEL_LETZTER_PROZESS_START_ELAPSED,
             SCHLUESSEL_LETZTER_PROZESS_START_BOOT_COUNT,
+            SCHLUESSEL_WAECHTER_LETZTER_LAUF,
+            SCHLUESSEL_AUSFALL_LETZTE_DATEN,
+            SCHLUESSEL_AUSFALL_KLASSIFIKATION,
+            SCHLUESSEL_AUSFALL_WAECHTER,
         )
         return vorhandeneSchluessel.any { it !in ausgenommeneSchluessel }
     }

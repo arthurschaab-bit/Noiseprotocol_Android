@@ -24,6 +24,9 @@ class RetentionCoordinatorTest {
 
     private class FakeMeasurementDao : MeasurementDao {
         val zeilen = mutableListOf<MeasurementEntity>()
+
+        override suspend fun letzterMesswertAt(): Long? = zeilen.filter { (it.flags and 8) == 0 }.maxOfOrNull { it.timestamp }
+
         override suspend fun insertAll(messwerte: List<MeasurementEntity>) { zeilen += messwerte }
         override suspend fun fuerSession(sessionId: Long) = zeilen.filter { it.sessionId == sessionId }
         override fun fuerSessionFlow(sessionId: Long) = throw NotImplementedError("im Test nicht benoetigt")

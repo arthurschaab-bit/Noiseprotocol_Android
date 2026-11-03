@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.data.letzteMessdatenAt
 import com.example.lrmprotokoll.alert.ntfy.sendeNtfyWaechterMeldung
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
@@ -54,6 +55,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
     private val kannInVordergrundProvider: (() -> Boolean)? = null,
     private val settingsManagerOverride: com.example.lrmprotokoll.data.SettingsManager? = null,
     private val levelSampleDaoOverride: com.example.lrmprotokoll.data.LevelSampleDao? = null,
+    private val letzteDatenAtProviderOverride: (suspend () -> Long?)? = null,
     private val diagnosticsReporterOverride: com.example.lrmprotokoll.diagnose.DiagnosticsReporter? = null,
     private val lebenszyklusRingFileOverride: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile? = null,
 ) : CoroutineWorker(context, parameter) {
@@ -68,6 +70,8 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
         val ringFile = lebenszyklusRingFileOverride ?: container?.lebenszyklusRingFile
 
         val zeitProvider = zeitProviderOverride ?: { System.currentTimeMillis() }
+        val zeitJetzt = zeitProvider()
+        settings.waechterLetzterLaufAt = zeitJetzt
         val sdkInt = sdkIntOverride ?: Build.VERSION.SDK_INT
         val starter = serviceStarter ?: { ctx, intent -> ContextCompat.startForegroundService(ctx, intent) }
         val notifier = notifierOverride ?: AufzeichnungsWaechterNotifier(applicationContext)
@@ -114,8 +118,16 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
 
             AufzeichnungsLage.SOLL_LAEUFT_NICHT -> {
                 settings.aufzeichnungNichtStartbarGemeldet = false
-                val jetzt = zeitProvider()
-                val letzteDatenAt = runCatching { dao?.maxAt() }.getOrNull()
+                val jetzt = zeitJetzt
+                val letzteDatenAt =
+                    runCatching {
+                        if (letzteDatenAtProviderOverride != null) {
+                            letzteDatenAtProviderOverride.invoke()
+                        } else {
+                            container?.database?.letzteMessdatenAt() ?: dao?.maxAt()
+                        }
+                    }.getOrNull()
+                korrigiereWaechterLauf(settings, ringFile, letzteDatenAt, jetzt)
                 val lueckeMinuten =
                     if (letzteDatenAt != null && letzteDatenAt < jetzt) {
                         (jetzt - letzteDatenAt) / (60 * 1000L)
@@ -146,7 +158,7 @@ class AufzeichnungsWaechterWorker @JvmOverloads constructor(
                                 "lueckeMinuten" to lueckeMinuten,
                                 "audioWarAktiv" to settings.audioMonitoringWasActive,
                                 "quelle" to "waechter",
-                            ),
+                            ) + ausfallDetails(settings, letzteDatenAt),
                     )
 
                     ringFile?.protokolliere(

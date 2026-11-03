@@ -512,7 +512,7 @@ Ausfälle vor dem Breadcrumb-/Event-Fenster und unklare Geräteneustarts ließen
 
 | Test | Erwartung | Ergebnis |
 |---|---|---|
-| Handy neu starten, App öffnen, Bundle erzeugen | `log/lebenszyklus.jsonl` enthält den Eintrag „Gerät wurde neu gestartet“ | |
+| Nach mindestens fünf Minuten Datenlücke Handy neu starten, App öffnen, Bundle erzeugen | `state/ausfaelle.json` belegt den Kernel-Neustart; `log/lebenszyklus.jsonl` enthält dann „Gerät wurde neu gestartet“ | |
 | Einen Tag aufzeichnen | Das Protokoll reicht im Bundle trotzdem bis zum Vortag zurück | |
 
 ### F27 — Aufzeichnungslücken in Tages-CSV und Pegelverlauf sichtbar machen (08.10.2026, Befund G)
@@ -553,6 +553,18 @@ auf echter Hardware gesehen**.
 | Nach dem Update eine Nacht im WLAN laufen lassen, danach Bundle erzeugen | Im Protokoll steht „Vollsicherung hochgeladen“ gegen 03:00; die Datei in Drive `BACKUP/laermprotokoll_datenbank.zip` ist deutlich kleiner als vorher (vorher ~300 MB) | |
 | Tagsüber | Alle ~30 min „Teilsicherung hochgeladen“ mit wenigen MB; kein „Datenbank-Sicherung hochgeladen“ mit mehreren hundert MB mehr | |
 | Wiederherstellung von Drive auf einem Testgerät | Meldung nennt „Teilsicherung vom …“; Aufnahmen bis zur letzten Teilsicherung sind da | |
+
+---
+
+### F31 — Stillstand-Diagnose auf dem Huawei (Lauf 2)
+
+Die Einordnung ist lokal getestet, das Verhalten auf dem ELE-L29 noch nicht beobachtet.
+
+| Test | Zu protokollieren | Ergebnis |
+|---|---|---|
+| Neustart nach `BOOT_COMPLETED` mit der großen Bestandsdatenbank | Zeit vom Prozessstart bis zur ersten Reaktion, etwaige ANR-Meldung und Dauer der Datenbanköffnung | |
+| Prozess während laufender Messung beenden und vom Wächter neu starten lassen | `waechterLief=ja` im unerwarteten Ende und in `state/ausfaelle.json`; tatsächliche JobScheduler-Latenz | |
+| Akku- und Standby-Zustand bei mehreren Lebenszeichen vergleichen | Ob `standbyBucket`, `hintergrundEingeschraenkt` und Stromquelle auf dem ELE-L29 verfügbar und plausibel sind | |
 
 ---
 

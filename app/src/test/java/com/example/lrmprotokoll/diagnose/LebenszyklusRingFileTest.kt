@@ -179,6 +179,7 @@ class LebenszyklusRingFileTest {
             elapsedRealtimeMs = uptime3,
             versionCode = 42L,
             jetztMs = t3,
+            ausfall = AusfallEinordnung(AusfallKlasse.KERNEL_NEUSTART, WaechterLief.UNBEKANNT, t2, t3, emptyMap()),
         )
         ring.wartenBisFertig()
 
@@ -248,7 +249,7 @@ class LebenszyklusRingFileTest {
     }
 
     @Test
-    fun geaenderterBootCountMeldetNeustartAuchBeiGroessererUptime() {
+    fun geaenderterBootCountBeiDurchlaufenderUptimeMeldetFrameworkNeustart() {
         val context: Context = ApplicationProvider.getApplicationContext()
         val settings = SettingsManager(context)
         val ring = LebenszyklusRingFile(verzeichnis)
@@ -267,10 +268,11 @@ class LebenszyklusRingFileTest {
             elapsedRealtimeMs = 600_000L,
             jetztMs = 5_000_000L,
             bootCount = 8,
+            ausfall = AusfallEinordnung(AusfallKlasse.FRAMEWORK_NEUSTART, WaechterLief.UNBEKANNT, 1_000_000L, 5_000_000L, emptyMap()),
         )
         ring.wartenBisFertig()
 
-        val neustart = ring.lesen().filter { it.ereignis == "Gerät wurde neu gestartet" }
+        val neustart = ring.lesen().filter { it.ereignis == "Android-Framework neu gestartet (Kernel lief weiter)" }
         assertEquals(1, neustart.size)
         assertEquals(8, (neustart[0].details["bootCount"] as Number).toInt())
         assertEquals(8, settings.letzterProzessStartBootCount)

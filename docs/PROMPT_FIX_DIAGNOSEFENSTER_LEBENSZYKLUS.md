@@ -91,8 +91,9 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
 1. Die Ringdatei rotiert an der Grenze, und die ältesten Einträge fallen weg. Wie
    `BreadcrumbRingFile`-Tests.
-2. Zwei Prozessstarts mit Fake-Uhr und Fake-`elapsedRealtime`: zweiter Start mit kleiner
-   Uptime → Eintrag „Gerät wurde neu gestartet“; große Uptime → kein solcher Eintrag.
+2. Zwei Prozessstarts mit Fake-Uhr und Fake-`elapsedRealtime`: ein durch Datenlücke und Uptime
+   belegter Kernel-Neustart → Eintrag „Gerät wurde neu gestartet“; ein bloßer `BOOT_COUNT`-Wechsel
+   bleibt als solcher gekennzeichnet.
 3. Das Bundle enthält `log/lebenszyklus.jsonl` auch bei Kürzungsstufe 2.
 4. Lebenszeichen höchstens alle 15 min und nur bei laufender Aufzeichnung.
 
@@ -118,8 +119,8 @@ Lies `AGENTS.md` vollständig, sie gilt unverändert. Besonders wichtig:
 
 ## 6 · Gerätecheck (macht der Owner nach dem Merge)
 
-1. Handy neu starten, App öffnen, Bundle erzeugen. `log/lebenszyklus.jsonl` enthält den Eintrag
-   „Gerät wurde neu gestartet“.
+1. Nach mehr als fünf Minuten Datenlücke Handy neu starten, App öffnen, Bundle erzeugen.
+   `log/lebenszyklus.jsonl` enthält bei belegtem Kernel-Neustart „Gerät wurde neu gestartet“.
 2. Einen Tag aufzeichnen. Das Protokoll reicht im Bundle trotzdem bis zum Vortag zurück.
 
 Trag diese Checks als neue Zeile in `docs/CHECKLISTE_GERAETETEST.md` Teil F ein, die
