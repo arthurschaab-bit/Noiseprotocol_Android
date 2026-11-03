@@ -97,6 +97,8 @@ enum class SettingsTab(val routeArg: String) {
 fun SettingsScreen(
     onBack: () -> Unit,
     initialTab: SettingsTab = SettingsTab.START,
+    /** Klappt beim Oeffnen direkt den Abschnitt Alarmierung / Totmannschaltung auf (Schritt 8). */
+    initialExpandAlarm: Boolean = false,
     /** Fuehrt zum In-App-Erklaerungsbildschirm der Laermerkennung. */
     onOpenKiErklaerung: (() -> Unit)? = null,
     onOpenDriveUploads: (() -> Unit)? = null,
@@ -285,7 +287,7 @@ fun SettingsScreen(
     var expKi by remember { mutableStateOf(false) }
     var expRuhezeiten by remember { mutableStateOf(false) }
     var expRetention by remember { mutableStateOf(false) }
-    var expAlarm by remember { mutableStateOf(false) }
+    var expAlarm by remember { mutableStateOf(initialExpandAlarm) }
     var expDrive by remember { mutableStateOf(false) }
     var expSystem by remember { mutableStateOf(false) }
     var expHilfe by remember { mutableStateOf(false) }

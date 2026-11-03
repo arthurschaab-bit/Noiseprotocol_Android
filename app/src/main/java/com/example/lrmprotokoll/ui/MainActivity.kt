@@ -60,9 +60,14 @@ import com.example.lrmprotokoll.audio.KiBatchPlanung
 import com.example.lrmprotokoll.data.DriveSyncState
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.ReferenceSound
+import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
+import com.example.lrmprotokoll.diagnose.AusfallNachfrageLogik
 import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
+import com.example.lrmprotokoll.diagnose.HintergrundbeschraenkungLogik
+import com.example.lrmprotokoll.diagnose.LebenszyklusEintrag
 import com.example.lrmprotokoll.diagnose.SystemHealthParams
+import com.example.lrmprotokoll.diagnose.TotmannschaltungStatus
 import com.example.lrmprotokoll.diagnose.bewerteSystemZustand
 import com.example.lrmprotokoll.messreihe.*
 import com.example.lrmprotokoll.messreihe.NICHT_ERKANNT_MARKER
@@ -72,12 +77,16 @@ import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.report.ReportManager
 import com.example.lrmprotokoll.report.messtagFuerStammdatenKorrektur
 import com.example.lrmprotokoll.report.messtagGrenzen
+import com.example.lrmprotokoll.ui.components.AusfallNachfrageCard
+import com.example.lrmprotokoll.ui.components.HintergrundbeschraenkungHinweisCard
 import com.example.lrmprotokoll.ui.components.NoiseCard
 import com.example.lrmprotokoll.ui.components.StatusPill
 import com.example.lrmprotokoll.ui.components.StatusPillType
+import com.example.lrmprotokoll.ui.components.TotmannschaltungWarnungZeile
 import com.example.lrmprotokoll.ui.theme.LaermprotokollTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -220,6 +229,10 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         navController.navigate("settings?tab=${tab.routeArg}") { launchSingleTop = true }
     }
 
+    fun navigiereZuTotmannschaltung() {
+        navController.navigate("settings?tab=${SettingsTab.START.routeArg}&expandAlarm=true") { launchSingleTop = true }
+    }
+
     // Bleibt auch auf Settings/Meter/Diagnose sichtbar (nicht nur den 3 Haupttabs selbst) - das
     // war schon vor dem Layout-Umbau so (Regressionsfix M7c: "Navileiste fehlt außerhalb von
     // Start") und soll es bleiben, damit man aus jeder Unterseite direkt in einen anderen
@@ -257,6 +270,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onNavigateToDiagnose = { navController.navigate("diagnose") },
                     onNavigateToVideo = { navController.navigate("video") },
                     onNavigateToDriveUploads = { navController.navigate("drive-uploads") },
+                    onNavigateToTotmannschaltung = { navigiereZuTotmannschaltung() },
                     onShowSnackbar = { msg, action, onAction ->
                         scope.launch {
                             val result =
@@ -284,12 +298,21 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 )
             }
             composable(
-                "settings?tab={tab}",
-                arguments = listOf(navArgument("tab") { defaultValue = SettingsTab.START.routeArg }),
+                "settings?tab={tab}&expandAlarm={expandAlarm}",
+                arguments =
+                    listOf(
+                        navArgument("tab") { defaultValue = SettingsTab.START.routeArg },
+                        navArgument("expandAlarm") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
+                    ),
             ) { backStackEntry ->
                 val tabArg = backStackEntry.arguments?.getString("tab") ?: SettingsTab.START.routeArg
+                val expandAlarm = backStackEntry.arguments?.getBoolean("expandAlarm") ?: false
                 SettingsScreen(
                     initialTab = SettingsTab.vonRouteArg(tabArg),
+                    initialExpandAlarm = expandAlarm,
                     onBack = { navController.popBackStack() },
                     onShowSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     onShowOnboarding = { onboardingErneutAnzeigen = true },
@@ -365,6 +388,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     onNavigateToMeter = {
                         navController.navigate("meter") { launchSingleTop = true }
                     },
+                    onNavigateToTotmannschaltung = { navigiereZuTotmannschaltung() },
                 )
             }
             composable("trash") {
@@ -438,9 +462,11 @@ fun NoiseProtocolApp(
     onNavigateToDiagnose: () -> Unit,
     onNavigateToVideo: () -> Unit,
     onNavigateToDriveUploads: () -> Unit = {},
+    onNavigateToTotmannschaltung: () -> Unit = onNavigateToSettings,
     onShowSnackbar: (String, String?, (() -> Unit)?) -> Unit = { _, _, _ -> },
     reportManager: ReportManager? = null,
     batchClassifyOverride: (suspend (List<NoiseRecord>, (Int, Int) -> Unit) -> Int)? = null,
+    heartbeatGeplantOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -670,6 +696,9 @@ fun NoiseProtocolApp(
     // Selbstpruefung nach der Rueckkehr weiter den alten Stand - also genau den Fehler, den F-04
     // beseitigen sollte, nur an anderer Stelle.
     var isBatteryOptimizationIgnored by remember { mutableStateOf(liestAkkuAusnahme(context)) }
+    var ringEintraege by remember { mutableStateOf<List<LebenszyklusEintrag>>(container.lebenszyklusRingFile.lesen()) }
+    var weggewischteNachfragen by remember { mutableStateOf(settingsManager.ausfallNachfrageWeggewischt) }
+    var hintergrundSignale by remember { mutableStateOf(container.hintergrundbeschraenkungQuelle.lesen()) }
 
     DisposableEffect(lifecycleOwner) {
         val observer =
@@ -687,6 +716,9 @@ fun NoiseProtocolApp(
                     hasBluetoothPermission = BluetoothPermissions.hasPermissions(context)
                     canScheduleExactAlarms = kannExakteAlarme()
                     isBatteryOptimizationIgnored = liestAkkuAusnahme(context)
+                    ringEintraege = container.lebenszyklusRingFile.lesen()
+                    weggewischteNachfragen = settingsManager.ausfallNachfrageWeggewischt
+                    hintergrundSignale = container.hintergrundbeschraenkungQuelle.lesen()
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -697,6 +729,49 @@ fun NoiseProtocolApp(
     val dienstAktiv by AudioRecordingService.laeuft.collectAsState()
     val verbindungszustand by container.connectionSupervisor.state.collectAsState()
     val isBluetoothAdapterEnabled by container.bluetoothAdapterStateObserver.enabled.collectAsState()
+    val heartbeatGeplantAusWorkManager by remember {
+        runCatching {
+            androidx.work.WorkManager
+                .getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(HeartbeatPlanung.WORK_NAME)
+                .map<List<androidx.work.WorkInfo>, Boolean?> { infos -> infos.any { !it.state.isFinished } }
+        }.getOrElse { kotlinx.coroutines.flow.flowOf(null) }
+    }.collectAsState(initial = null)
+    val effektivesHeartbeatGeplant = heartbeatGeplantOverride ?: heartbeatGeplantAusWorkManager
+    val totmannZustand =
+        remember(
+            dienstAktiv,
+            settingsManager.heartbeatUrl,
+            effektivesHeartbeatGeplant,
+            settingsManager.heartbeatLetzterErfolgAt,
+        ) {
+            TotmannschaltungStatus.bewertenMitUrl(
+                aufnahmeLaeuft = dienstAktiv,
+                heartbeatUrl = settingsManager.heartbeatUrl,
+                geplant = effektivesHeartbeatGeplant,
+                letzterErfolgAt = settingsManager.heartbeatLetzterErfolgAt,
+                jetztMs = System.currentTimeMillis(),
+            )
+        }
+    val offeneAusfallNachfrage =
+        remember(ringEintraege, weggewischteNachfragen) {
+            AusfallNachfrageLogik.offeneNachfrageFuerHauptbildschirm(
+                eintraege = ringEintraege,
+                bereitsGefragtOderWeggewischt = weggewischteNachfragen,
+            )
+        }
+    val hintergrundBefund =
+        remember(
+            hintergrundSignale,
+            settingsManager.ausfallKlassifikation,
+            settingsManager.ausfallWaechterLief,
+        ) {
+            HintergrundbeschraenkungLogik.bewertenAusEinstellungen(
+                signale = hintergrundSignale,
+                ausfallKlassifikationName = settingsManager.ausfallKlassifikation,
+                ausfallWaechterLiefName = settingsManager.ausfallWaechterLief,
+            )
+        }
     val healthOverview =
         remember(
             hasAudioPermission,
@@ -982,6 +1057,56 @@ fun NoiseProtocolApp(
                     }
                 },
             )
+        }
+
+        offeneAusfallNachfrage?.let { nachfrageEintrag ->
+            item(key = "ausfall_nachfrage_${nachfrageEintrag.letzteDatenAt}") {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    AusfallNachfrageCard(
+                        eintrag = nachfrageEintrag,
+                        onAntwort = { antwort ->
+                            val neuerEintrag =
+                                AusfallNachfrageLogik.speichereAntwort(
+                                    ringFile = container.lebenszyklusRingFile,
+                                    letzteDatenAt = nachfrageEintrag.letzteDatenAt,
+                                    antwort = antwort,
+                                )
+                            settingsManager.markiereAusfallNachfrageAlsGesehen(nachfrageEintrag.letzteDatenAt)
+                            ringEintraege = ringEintraege + neuerEintrag
+                            weggewischteNachfragen = settingsManager.ausfallNachfrageWeggewischt
+                            onShowSnackbar(context.getString(R.string.ausfall_nachfrage_gespeichert), null, null)
+                        },
+                        onWegwischen = {
+                            settingsManager.markiereAusfallNachfrageAlsGesehen(nachfrageEintrag.letzteDatenAt)
+                            weggewischteNachfragen = settingsManager.ausfallNachfrageWeggewischt
+                        },
+                    )
+                }
+            }
+        }
+
+        if (TotmannschaltungStatus.zeigeImHauptbildschirm(totmannZustand)) {
+            item(key = "totmannschaltung_warnung") {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    TotmannschaltungWarnungZeile(
+                        zustand = totmannZustand,
+                        onEinrichtenClick = onNavigateToTotmannschaltung,
+                    )
+                }
+            }
+        }
+
+        if (hintergrundBefund.aktiv) {
+            item(key = "hintergrundbeschraenkung_hinweis") {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    HintergrundbeschraenkungHinweisCard(
+                        befund = hintergrundBefund,
+                        onOeffneEinstellungen = {
+                            HintergrundbeschraenkungLogik.oeffneHuaweiAppStartOderAppInfo(context)
+                        },
+                    )
+                }
+            }
         }
 
         if (istBatchAktiv) {
