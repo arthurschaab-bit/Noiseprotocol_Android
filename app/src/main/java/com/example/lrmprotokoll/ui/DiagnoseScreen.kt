@@ -210,6 +210,7 @@ fun DiagnoseScreen(
     var ausfallKlassifikation by remember { mutableStateOf<String?>(null) }
     var ausfallWaechterLief by remember { mutableStateOf<String?>(null) }
     var resumeZaehler by remember { mutableIntStateOf(0) }
+    var einstellungenGeladen by remember { mutableStateOf(false) }
 
     LaunchedEffect(resumeZaehler) {
         val geladeneRingEintraege = withContext(Dispatchers.IO) { container.lebenszyklusRingFile.lesen() }
@@ -224,6 +225,7 @@ fun DiagnoseScreen(
         heartbeatLetzterErfolgAt = geladenerHeartbeatErfolg
         ausfallKlassifikation = geladeneKlassifikation
         ausfallWaechterLief = geladenerWaechter
+        einstellungenGeladen = true
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -301,12 +303,14 @@ fun DiagnoseScreen(
     val effektivesHeartbeatGeplant = heartbeatGeplantOverride ?: heartbeatGeplantAusWorkManager
     val totmannZustand =
         remember(
+            einstellungenGeladen,
             dienstAktiv,
             heartbeatUrl,
             effektivesHeartbeatGeplant,
             heartbeatLetzterErfolgAt,
         ) {
-            TotmannschaltungStatus.bewertenMitUrl(
+            TotmannschaltungStatus.bewertenWennGeladen(
+                geladen = einstellungenGeladen,
                 aufnahmeLaeuft = dienstAktiv,
                 heartbeatUrl = heartbeatUrl,
                 geplant = effektivesHeartbeatGeplant,

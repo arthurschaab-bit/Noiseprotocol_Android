@@ -74,6 +74,25 @@ object TotmannschaltungStatus {
         )
 
     /**
+     * Wie [bewertenMitUrl], aber erst nach dem ersten Laden der Einstellungen. Davor gilt
+     * [TotmannschaltungZustand.OK]: Die Startwerte (leere URL) duerfen keinen falschen Alarm
+     * "nicht eingerichtet" ausloesen, auch wenn die Totmannschaltung eingerichtet ist.
+     */
+    fun bewertenWennGeladen(
+        geladen: Boolean,
+        aufnahmeLaeuft: Boolean,
+        heartbeatUrl: String,
+        geplant: Boolean?,
+        letzterErfolgAt: Long,
+        jetztMs: Long,
+    ): TotmannschaltungZustand =
+        if (!geladen) {
+            TotmannschaltungZustand.OK
+        } else {
+            bewertenMitUrl(aufnahmeLaeuft, heartbeatUrl, geplant, letzterErfolgAt, jetztMs)
+        }
+
+    /**
      * Im Hauptbildschirm erscheint die Hinweiszeile mit Knopf "Einrichten" bei
      * [TotmannschaltungZustand.NICHT_EINGERICHTET] und [TotmannschaltungZustand.NICHT_GEPLANT].
      */

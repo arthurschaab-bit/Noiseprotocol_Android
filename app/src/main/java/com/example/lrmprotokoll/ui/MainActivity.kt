@@ -715,6 +715,7 @@ fun NoiseProtocolApp(
     var ausfallWaechterLief by remember { mutableStateOf<String?>(null) }
     var ausfallLetzteDatenAt by remember { mutableLongStateOf(0L) }
     var resumeZaehler by remember { mutableIntStateOf(0) }
+    var einstellungenGeladen by remember { mutableStateOf(false) }
 
     LaunchedEffect(resumeZaehler) {
         val geladeneRingEintraege = withContext(Dispatchers.IO) { container.lebenszyklusRingFile.lesen() }
@@ -735,6 +736,7 @@ fun NoiseProtocolApp(
         ausfallKlassifikation = geladeneKlassifikation
         ausfallWaechterLief = geladenerWaechter
         ausfallLetzteDatenAt = geladeneLetzteDatenAt
+        einstellungenGeladen = true
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -775,12 +777,14 @@ fun NoiseProtocolApp(
     val effektivesHeartbeatGeplant = heartbeatGeplantOverride ?: heartbeatGeplantAusWorkManager
     val totmannZustand =
         remember(
+            einstellungenGeladen,
             dienstAktiv,
             heartbeatUrl,
             effektivesHeartbeatGeplant,
             heartbeatLetzterErfolgAt,
         ) {
-            TotmannschaltungStatus.bewertenMitUrl(
+            TotmannschaltungStatus.bewertenWennGeladen(
+                geladen = einstellungenGeladen,
                 aufnahmeLaeuft = dienstAktiv,
                 heartbeatUrl = heartbeatUrl,
                 geplant = effektivesHeartbeatGeplant,
@@ -812,6 +816,8 @@ fun NoiseProtocolApp(
                 weggewischteAusfaelle = weggewischteHintergrundHinweise,
             )
         }
+    // Hauptbildschirm: ohne Akku-Optimierung, die zeigt dort schon die Systempruefung.
+    val hintergrundBefundHaupt = remember(hintergrundBefund) { hintergrundBefund.fuerHauptbildschirm() }
     val healthOverview =
         remember(
             hasAudioPermission,
@@ -1136,16 +1142,16 @@ fun NoiseProtocolApp(
             }
         }
 
-        if (hintergrundBefund.aktiv) {
+        if (hintergrundBefundHaupt.aktiv) {
             item(key = "hintergrundbeschraenkung_hinweis") {
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     HintergrundbeschraenkungHinweisCard(
-                        befund = hintergrundBefund,
+                        befund = hintergrundBefundHaupt,
                         onOeffneEinstellungen = {
                             HintergrundbeschraenkungLogik.oeffneHuaweiAppStartOderAppInfo(context)
                         },
                         onWegwischen =
-                            if (hintergrundBefund.hatWaechterSpurBeleg && ausfallLetzteDatenAt > 0L) {
+                            if (hintergrundBefundHaupt.hatWaechterSpurBeleg && ausfallLetzteDatenAt > 0L) {
                                 {
                                     settingsManager.markiereHintergrundHinweisAlsGesehen(ausfallLetzteDatenAt)
                                     weggewischteHintergrundHinweise = settingsManager.hintergrundHinweisWeggewischt

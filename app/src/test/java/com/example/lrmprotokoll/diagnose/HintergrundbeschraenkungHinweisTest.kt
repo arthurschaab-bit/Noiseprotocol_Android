@@ -237,4 +237,40 @@ class HintergrundbeschraenkungHinweisTest {
             starter = { throw ActivityNotFoundException("Kein Einstellungsdialog vorhanden") },
         )
     }
+
+    @Test
+    fun hauptbildschirmZeigtNurAkkuOptimierungNichtAlsEigeneKarte() {
+        val nurAkku =
+            HintergrundbeschraenkungBefund(
+                aktiv = true,
+                gruende = listOf(HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV),
+            )
+        val haupt = nurAkku.fuerHauptbildschirm()
+        assertFalse(haupt.aktiv)
+        assertTrue(haupt.gruende.isEmpty())
+        // Der Diagnose-Bildschirm benutzt den ungekuerzten Befund und zeigt weiter alle Gruende.
+        assertTrue(nurAkku.aktiv)
+        assertTrue(HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV in nurAkku.gruende)
+    }
+
+    @Test
+    fun hauptbildschirmBehaeltDieUebrigenGruendeUndLaesstDenAkkuGrundWeg() {
+        val gemischt =
+            HintergrundbeschraenkungBefund(
+                aktiv = true,
+                gruende =
+                    listOf(
+                        HintergrundbeschraenkungGrund.WAECHTER_BLOCKIERT_BEI_LAUFENDEM_GERAET,
+                        HintergrundbeschraenkungGrund.STANDBY_BUCKET_EINGESCHRAENKT,
+                        HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV,
+                    ),
+                standbyBucket = 45,
+            )
+        val haupt = gemischt.fuerHauptbildschirm()
+        assertTrue(haupt.aktiv)
+        assertTrue(haupt.hatWaechterSpurBeleg)
+        assertFalse(HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV in haupt.gruende)
+        assertTrue(HintergrundbeschraenkungGrund.STANDBY_BUCKET_EINGESCHRAENKT in haupt.gruende)
+        assertTrue(haupt.standbyBucket == 45)
+    }
 }

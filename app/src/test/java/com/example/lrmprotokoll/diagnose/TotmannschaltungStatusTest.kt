@@ -153,4 +153,29 @@ class TotmannschaltungStatusTest {
         assertTrue(TotmannschaltungStatus.zeigeImHauptbildschirm(zustand))
         assertTrue(TotmannschaltungStatus.zeigeImDiagnoseBildschirm(zustand))
     }
+
+    @Test
+    fun vorDemLadenDerEinstellungenGiltOkAuchBeiLeererStartUrl() {
+        val vorLaden =
+            TotmannschaltungStatus.bewertenWennGeladen(
+                geladen = false,
+                aufnahmeLaeuft = true,
+                heartbeatUrl = "",
+                geplant = null,
+                letzterErfolgAt = 0L,
+                jetztMs = basisZeit,
+            )
+        assertEquals(TotmannschaltungZustand.OK, vorLaden)
+
+        val nachLaden =
+            TotmannschaltungStatus.bewertenWennGeladen(
+                geladen = true,
+                aufnahmeLaeuft = true,
+                heartbeatUrl = "",
+                geplant = null,
+                letzterErfolgAt = 0L,
+                jetztMs = basisZeit,
+            )
+        assertEquals(TotmannschaltungZustand.NICHT_EINGERICHTET, nachLaden)
+    }
 }

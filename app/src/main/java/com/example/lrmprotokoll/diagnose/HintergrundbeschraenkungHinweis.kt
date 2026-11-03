@@ -81,6 +81,18 @@ data class HintergrundbeschraenkungBefund(
             hatWaechterSpurBeleg ||
                 HintergrundbeschraenkungGrund.HINTERGRUND_EINGESCHRAENKT in gruende ||
                 HintergrundbeschraenkungGrund.STANDBY_BUCKET_EINGESCHRAENKT in gruende
+
+    /**
+     * Sicht fuer den Hauptbildschirm: ohne [HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV].
+     * Diesen Fall deckt dort schon der Akku-Hinweis der Systempruefung ab. Die Karte trat sonst bei
+     * jeder Installation ohne Akku-Ausnahme zusaetzlich auf und schob die Filterleiste aus dem
+     * komponierten Bereich der LazyColumn (HomeScreenInstrumentedTest, panel_filter_header).
+     * Der Diagnose-Bildschirm zeigt weiter alle Gruende.
+     */
+    fun fuerHauptbildschirm(): HintergrundbeschraenkungBefund {
+        val uebrig = gruende.filter { it != HintergrundbeschraenkungGrund.BATTERIEOPTIMIERUNG_AKTIV }
+        return copy(aktiv = uebrig.isNotEmpty(), gruende = uebrig)
+    }
 }
 
 /**
