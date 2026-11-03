@@ -18,6 +18,7 @@ import com.example.lrmprotokoll.diagnose.DiagnosticCode
 import com.example.lrmprotokoll.diagnose.DiagnosticId
 import com.example.lrmprotokoll.diagnose.DiagnosticSeverity
 import com.example.lrmprotokoll.diagnose.DiagnosticsReporter
+import com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -141,6 +142,8 @@ class AufzeichnungsWaechterWorkerTest {
         kannInVordergrund: Boolean = true,
         zeitProvider: () -> Long = { 1_000_000L },
         okHttpClient: OkHttpClient = OkHttpClient(),
+        ringFile: LebenszyklusRingFile? = null,
+        letzteDatenAtProvider: suspend () -> Long? = { fakeDao.maxAtWert },
     ): AufzeichnungsWaechterWorker {
         return TestListenableWorkerBuilder<AufzeichnungsWaechterWorker>(context)
             .setWorkerFactory(
@@ -165,7 +168,9 @@ class AufzeichnungsWaechterWorkerTest {
                             kannInVordergrundProvider = { kannInVordergrund },
                             settingsManagerOverride = settingsManager,
                             levelSampleDaoOverride = fakeDao,
+                            letzteDatenAtProviderOverride = letzteDatenAtProvider,
                             diagnosticsReporterOverride = fakeReporter,
+                            lebenszyklusRingFileOverride = ringFile,
                         )
                     }
                 },
@@ -200,6 +205,30 @@ class AufzeichnungsWaechterWorkerTest {
                 assertTrue(ergebnis is Result.Success)
                 assertEquals(zeit, settingsManager.waechterLetzterLaufAt)
             }
+        }
+
+    @Test
+    fun vomWaechterGestarteterProzessKorrigiertVorlaeufigesNeinZuJa() =
+        runTest {
+            val ringDir = java.io.File(context.cacheDir, "waechter_korrektur_${System.nanoTime()}").apply { mkdirs() }
+            val ring = LebenszyklusRingFile(ringDir)
+            settingsManager.monitoringWasActive = true
+            fakeDao.maxAtWert = 700_000L
+            settingsManager.ausfallLetzteDatenAt = 790_000L
+            settingsManager.ausfallKlassifikation = "STILLSTAND_GERAET_LIEF"
+            settingsManager.ausfallWaechterLief = "nein"
+
+            val ergebnis = erstelleWorker(ringFile = ring, letzteDatenAtProvider = { 800_000L }).doWork()
+
+            assertTrue(ergebnis is Result.Success)
+            assertEquals("ja", settingsManager.ausfallWaechterLief)
+            val meldung = fakeReporter.events.first { it.code == DiagnosticCode.RECORDING_ENDED_UNEXPECTEDLY }
+            assertEquals("ja", meldung.details["waechterLief"])
+            ring.wartenBisFertig()
+            val korrektur = ring.lesen().single { it.ereignis == "Ausfall-Waechterspur korrigiert" }
+            assertEquals(790_000L, (korrektur.details["letzteDatenAt"] as Number).toLong())
+            assertEquals(800_000L, (korrektur.details["letzteDatenAtDatenbank"] as Number).toLong())
+            assertEquals("ja", korrektur.details["waechterLief"])
         }
 
     /**

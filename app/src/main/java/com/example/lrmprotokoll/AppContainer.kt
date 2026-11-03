@@ -544,6 +544,7 @@ class AppContainer(
             context = context.applicationContext,
             settingsManager = settingsManager,
             levelSampleDao = database.levelSampleDao(),
+            letzteDatenAtProvider = { database.letzteMessdatenAt() },
             diagnosticsReporter = diagnosticsReporter,
             lebenszyklusRingFile = lebenszyklusRingFile,
         )

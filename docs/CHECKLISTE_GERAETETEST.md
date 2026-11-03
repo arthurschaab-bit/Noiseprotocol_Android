@@ -556,6 +556,18 @@ auf echter Hardware gesehen**.
 
 ---
 
+### F31 — Stillstand-Diagnose auf dem Huawei (Lauf 2)
+
+Die Einordnung ist lokal getestet, das Verhalten auf dem ELE-L29 noch nicht beobachtet.
+
+| Test | Zu protokollieren | Ergebnis |
+|---|---|---|
+| Neustart nach `BOOT_COMPLETED` mit der großen Bestandsdatenbank | Zeit vom Prozessstart bis zur ersten Reaktion, etwaige ANR-Meldung und Dauer der Datenbanköffnung | |
+| Prozess während laufender Messung beenden und vom Wächter neu starten lassen | `waechterLief=ja` im unerwarteten Ende und in `state/ausfaelle.json`; tatsächliche JobScheduler-Latenz | |
+| Akku- und Standby-Zustand bei mehreren Lebenszeichen vergleichen | Ob `standbyBucket`, `hintergrundEingeschraenkt` und Stromquelle auf dem ELE-L29 verfügbar und plausibel sind | |
+
+---
+
 ## Was zurückgemeldet werden sollte
 
 1. Die ausgefüllte Tabelle, auch mit den Zeilen, die nicht wie erwartet liefen

@@ -118,8 +118,17 @@ class SupportBundleExporterTest {
                 ),
             )
             repeat(22) { i ->
-                ring.protokolliere("Ausfall eingeordnet", mapOf("klassifikation" to "UNBEKANNT", "nummer" to i), i.toLong())
+                ring.protokolliere(
+                    "Ausfall eingeordnet",
+                    mapOf("klassifikation" to "UNBEKANNT", "nummer" to i, "letzteDatenAt" to i.toLong(), "waechterLief" to "nein"),
+                    i.toLong(),
+                )
             }
+            ring.protokolliere(
+                "Ausfall-Waechterspur korrigiert",
+                mapOf("letzteDatenAt" to 21L, "waechterLief" to "ja", "waechterLetzterLaufAt" to 22L),
+                22L,
+            )
             ring.wartenBisFertig()
             val zipFile =
                 exporter(
@@ -134,6 +143,8 @@ class SupportBundleExporterTest {
                 assertEquals(239, snapshot.getInt("bootCount"))
                 assertEquals(20, ausfaelle.length())
                 assertEquals(2, ausfaelle.getJSONObject(0).getJSONObject("belege").getInt("nummer"))
+                assertEquals("ja", ausfaelle.getJSONObject(19).getJSONObject("belege").getString("waechterLief"))
+                assertEquals(22L, ausfaelle.getJSONObject(19).getJSONObject("belege").getLong("waechterLetzterLaufAt"))
                 val manifest = org.json.JSONObject(text("manifest.json"))
                 assertEquals("periodisch", manifest.getString("typ"))
                 val checksums = zip.getInputStream(zip.getEntry("checksums.sha256")).bufferedReader().readText()

@@ -2,6 +2,8 @@ package com.example.lrmprotokoll.diagnose
 
 import com.example.lrmprotokoll.data.SettingsManager
 
+const val EREIGNIS_DIENST_AUSDRUECKLICH_GESTOPPT = "Dienst ausdrücklich gestoppt"
+
 /** Liest das Vorher-Bild vor dem ersten neuen Dienststart und protokolliert jede Luecke einmal. */
 class AusfallErfassung(
     private val datei: LetzterZustandDatei,
@@ -17,7 +19,7 @@ class AusfallErfassung(
         val zustand = datei.lesen()
         val stopp =
             ringFile.lesen().any {
-                it.ereignis == "Dienst ausdrücklich gestoppt" &&
+                it.ereignis == EREIGNIS_DIENST_AUSDRUECKLICH_GESTOPPT &&
                     it.timestampMillis > (letzteDatenAt ?: Long.MAX_VALUE) &&
                     it.timestampMillis <= jetztMs
             }

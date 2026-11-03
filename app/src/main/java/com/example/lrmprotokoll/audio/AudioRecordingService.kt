@@ -21,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.lrmprotokoll.LaermprotokollApp
+import com.example.lrmprotokoll.diagnose.EREIGNIS_DIENST_AUSDRUECKLICH_GESTOPPT
 import com.example.lrmprotokoll.alert.AlarmCoordinator
 import com.example.lrmprotokoll.alert.heartbeat.HeartbeatPlanung
 import com.example.lrmprotokoll.data.LevelSource
@@ -201,6 +202,15 @@ class AudioRecordingService : LifecycleService() {
     private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
     private lateinit var lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
     private lateinit var letzterZustandErfasser: com.example.lrmprotokoll.diagnose.LetzterZustandErfasser
+    private val zustandSchreibPlanung by lazy {
+        com.example.lrmprotokoll.diagnose.LetzterZustandSchreibPlanung(
+            scope = serviceScope,
+            schreiben = { sauberBeendet ->
+                runCatching { letzterZustandErfasser.aktualisieren(sauberBeendet = sauberBeendet) }
+                    .onFailure { Log.w("AudioRecordingService", "Letzten Zustand nicht gespeichert", it) }
+            },
+        )
+    }
 
     @Volatile private var letzterMeterFrame: com.example.lrmprotokoll.meter.MeterFrame? = null
     private var stromReceiver: com.example.lrmprotokoll.diagnose.StromversorgungEmpfaenger? = null
@@ -409,7 +419,7 @@ class AudioRecordingService : LifecycleService() {
             expliziterServiceStopAngefordert = true
             if (::lebenszyklusRingFile.isInitialized) {
                 lebenszyklusRingFile.protokolliere(
-                    ereignis = "Dienst ausdrücklich gestoppt",
+                    ereignis = EREIGNIS_DIENST_AUSDRUECKLICH_GESTOPPT,
                     details = mapOf(
                         "action" to action,
                         "audioMonitoringWasActive" to settingsManager.audioMonitoringWasActive,
@@ -1600,8 +1610,7 @@ class AudioRecordingService : LifecycleService() {
 
     private fun aktualisiereLetztenZustand(sauberBeendet: Boolean? = null) {
         if (::letzterZustandErfasser.isInitialized) {
-            runCatching { letzterZustandErfasser.aktualisieren(sauberBeendet = sauberBeendet) }
-                .onFailure { Log.w("AudioRecordingService", "Letzten Zustand nicht gespeichert", it) }
+            zustandSchreibPlanung.aktualisieren(sauberBeendet)
         }
     }
 }

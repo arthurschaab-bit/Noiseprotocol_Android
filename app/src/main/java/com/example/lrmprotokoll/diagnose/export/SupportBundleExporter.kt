@@ -318,16 +318,25 @@ class SupportBundleExporter(
 
     private fun buildAusfaelleJson(): String {
         val ausfaelle = JSONArray()
-        lebenszyklusRingFile
-            .lesen()
+        val eintraege = lebenszyklusRingFile.lesen()
+        val waechterKorrekturen =
+            eintraege
+                .filter { it.ereignis == "Ausfall-Waechterspur korrigiert" }
+                .mapNotNull { eintrag ->
+                    val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
+                    datenAt?.let { it to eintrag.details }
+                }.toMap()
+        eintraege
             .filter { it.ereignis == "Ausfall eingeordnet" }
             .takeLast(20)
             .forEach { eintrag ->
+                val datenAt = (eintrag.details["letzteDatenAt"] as? Number)?.toLong()
+                val belege = eintrag.details + (waechterKorrekturen[datenAt] ?: emptyMap())
                 ausfaelle.put(
                     JSONObject().apply {
                         put("timestamp", eintrag.timestampMillis)
-                        put("klassifikation", eintrag.details["klassifikation"] ?: JSONObject.NULL)
-                        put("belege", JSONObject(eintrag.details))
+                        put("klassifikation", belege["klassifikation"] ?: JSONObject.NULL)
+                        put("belege", JSONObject(belege))
                     },
                 )
             }

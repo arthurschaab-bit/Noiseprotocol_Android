@@ -12,12 +12,13 @@ class AusfallKlassifikatorTest {
         bootCount: Int? = 239,
         akku: Int? = 80,
         strom: String? = Stromzustand.Quelle.KEINE.name,
+        akkuStatus: String = Stromzustand.Status.ENTLAEDT.name,
         sauber: Boolean = false,
     ) = LetzterZustand(
         zeitpunkt = datenAt,
         akkuProzent = akku,
         stromquelle = strom,
-        akkuStatus = Stromzustand.Status.ENTLAEDT.name,
+        akkuStatus = akkuStatus,
         uptimeMs = 1_000_000L,
         bootCount = bootCount,
         letzteDatenAt = datenAt,
@@ -50,9 +51,9 @@ class AusfallKlassifikatorTest {
         ausdruecklicherStoppProtokolliert = stopp,
     )
 
-    @Test fun realeKurzeUptimeBelegtKernelNeustart() {
-        assertEquals(AusfallKlasse.KERNEL_NEUSTART, einordnen(873, 369_039L)?.klasse)
-        assertEquals(AusfallKlasse.KERNEL_NEUSTART, einordnen(429, 1_502_292L)?.klasse)
+    @Test fun realeKurzeUptimeUndNeunProzentAkkuBelegenAkkuLeer() {
+        assertEquals(AusfallKlasse.AKKU_LEER, einordnen(873, 369_039L, vorher = zustand(jetzt - 873 * 60_000L, akku = 9))?.klasse)
+        assertEquals(AusfallKlasse.AKKU_LEER, einordnen(429, 1_502_292L, vorher = zustand(jetzt - 429 * 60_000L, akku = 9))?.klasse)
     }
 
     @Test fun bootCountWechselBeiLangerUptimeIstFrameworkNeustart() {
@@ -63,10 +64,15 @@ class AusfallKlassifikatorTest {
 
     @Test fun niedrigerAkkuOhneLadungBelegtAkkuLeerNurMitKernelNeustart() {
         val datenAt = jetzt - 873 * 60_000L
-        assertEquals(AusfallKlasse.AKKU_LEER, einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 5))?.klasse)
+        assertEquals(AusfallKlasse.AKKU_LEER, einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 10))?.klasse)
+        assertEquals(AusfallKlasse.KERNEL_NEUSTART, einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 11))?.klasse)
         assertEquals(
             AusfallKlasse.KERNEL_NEUSTART,
-            einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 5, strom = Stromzustand.Quelle.NETZTEIL.name))?.klasse,
+            einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 9, strom = Stromzustand.Quelle.NETZTEIL.name))?.klasse,
+        )
+        assertEquals(
+            AusfallKlasse.KERNEL_NEUSTART,
+            einordnen(873, 369_039L, vorher = zustand(datenAt, akku = 9, akkuStatus = Stromzustand.Status.LAEDT.name))?.klasse,
         )
     }
 
@@ -94,5 +100,19 @@ class AusfallKlassifikatorTest {
 
     @Test fun grosseUhrverstellungWirdNichtAlsKernelNeustartAusgegeben() {
         assertEquals(AusfallKlasse.UNBEKANNT, einordnen(500, 500 * 60_000L + 2 * 60 * 60_000L)?.klasse)
+    }
+
+    @Test fun durchlaufenderKernelBleibtBeiUhrspruengenErkennbar() {
+        for (uhrSprungMinuten in listOf(-120L, -10L, 10L, 120L)) {
+            val lueckeMinuten = 500L + uhrSprungMinuten
+            assertEquals(
+                AusfallKlasse.STILLSTAND_GERAET_LIEF,
+                einordnen(lueckeMinuten, 100 * 60 * 60_000L)?.klasse,
+            )
+            assertEquals(
+                AusfallKlasse.FRAMEWORK_NEUSTART,
+                einordnen(lueckeMinuten, 100 * 60 * 60_000L, bootJetzt = 240)?.klasse,
+            )
+        }
     }
 }

@@ -17,6 +17,58 @@ import java.io.File
 class AusfallErfassungTest {
     @get:Rule val temp = TemporaryFolder()
 
+    @Test fun ausdruecklicherStoppGiltNurNachDenLetztenMessdaten() {
+        val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
+        val settings = app.container.settingsManager
+        val datenAt = 2_000_000_000_000L
+        val jetzt = datenAt + 60 * 60_000L
+
+        fun erfasse(
+            stoppAt: Long,
+            ordner: String,
+        ): AusfallKlasse? {
+            val verzeichnis = temp.newFolder(ordner)
+            val datei = LetzterZustandDatei(File(verzeichnis, "letzter_zustand.json"))
+            datei.schreiben(
+                LetzterZustand(
+                    zeitpunkt = datenAt,
+                    akkuProzent = 80,
+                    stromquelle = Stromzustand.Quelle.KEINE.name,
+                    akkuStatus = Stromzustand.Status.ENTLAEDT.name,
+                    uptimeMs = 100_000_000L,
+                    bootCount = 239,
+                    letzteDatenAt = datenAt,
+                    bleZustand = "GETRENNT",
+                    mikrofonAktiv = false,
+                    dienstLaeuft = false,
+                    sauberBeendet = true,
+                    dozeAktiv = false,
+                    energiesparModus = false,
+                    hintergrundEingeschraenkt = false,
+                    standbyBucket = null,
+                    waechterLetzterLaufAt = null,
+                    heartbeatLetzterErfolgAt = null,
+                ),
+            )
+            val ring = LebenszyklusRingFile(verzeichnis)
+            ring.protokolliere("Dienst ausdrücklich gestoppt", timestampMillis = stoppAt)
+            ring.wartenBisFertig()
+            settings.ausfallLetzteDatenAt = 0L
+            return AusfallErfassung(datei, ring, settings)
+                .beimProzessstart(datenAt, 100_000_000L, 239, jetzt)
+                ?.klasse
+        }
+
+        try {
+            assertEquals(AusfallKlasse.NUTZER_STOPP, erfasse(datenAt + 1_000L, "stopp_nach_daten"))
+            assertEquals(AusfallKlasse.UNBEKANNT, erfasse(datenAt - 1_000L, "stopp_vor_daten"))
+        } finally {
+            settings.ausfallLetzteDatenAt = 0L
+            settings.ausfallKlassifikation = null
+            settings.ausfallWaechterLief = null
+        }
+    }
+
     @Test fun prozessOhneAbschlussErzeugtNurEinenBeleg() {
         val app = ApplicationProvider.getApplicationContext<LaermprotokollApp>()
         val settings = app.container.settingsManager
