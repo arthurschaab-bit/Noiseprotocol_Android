@@ -126,3 +126,78 @@ Die optionale Fusion wurde nicht gerechnet.
   stärksten Klassen (`Rail transport`/`Train` 0,59, `Vehicle` 0,50, `Engine` 0,33,
   `Jackhammer` unter 0,01) mit den Werten aus der Vorsitzung überein.
 - Kein Fehlalarmschwellenwert wurde festgelegt.
+
+---
+
+# Zweiter Durchgang: Klanggruppen und Owner-Urteile (Stand 04.11.2026)
+
+Der erste Durchgang (oben) beruhte auf 43 Clips. Danach wurden **alle 86 079 Ereignisse ab 60 dB** des
+Drive (14.09.–03.11.2026) durch die DSP-Merkmale und YAMNet geschickt (`batch_analyse.py`, 77 266 Clips
+mit WAV, 8 813 ohne WAV im Zip, keiner unlesbar). Ab 75 dB sind es 4 581 Clips. Diese wurden nach
+YAMNet-Embedding in 30 Klanggruppen eingeteilt (`tabelle.py`). Der Owner hat je Gruppe 5 typische Clips
+angehört und jede der 30 Gruppen beurteilt, dazu 19 Einzelclips. Die Geräusche wurden nach **Geräuschart**
+eingeteilt (statt nach Gerät), weil das für den Zweck tragfähiger ist.
+
+## Verteilung der beurteilten Clips ab 75 dB (4 562 Clips, ohne Einzelurteile)
+
+| Geräuschart | Clips | Baustelle |
+|---|---|---|
+| Motor (Bagger, Tiefbohrer) | 2 131 | ja |
+| Hämmernd (u. a. Drucklufthammer) | 1 219 | ja |
+| Gemischt (Gruppen 5, 6, 18, 26) | 666 | ja |
+| Schlag | 314 | ja |
+| Motor mit sägend/schleifend | 84 | ja |
+| Bohren | 49 | ja |
+| Signal (Rückfahrwarner) | 25 | ja (angenommen) |
+| Messgerät anbringen | 64 | nein |
+| Sirene | 10 | nein |
+
+Hinweis: Die Gruppen 12, 2 (sehr schnelles Hämmern oder knallender Motor), 23 (Schlag, laut Owner keine
+Musik) und 17 (Bohren) weichen von dem ab, was App und YAMNet in der Gruppe sehen. Das Urteil des Owners gilt.
+
+## Befund zur App-Erkennung
+
+Von den 4 497 Clips, die der Owner als Baustelle eingestuft hat, hat die App nur
+**760 (17 %) als „Baulärm“**, 1 076 (24 %) als „möglich“ und **2 652 (59 %) als „kein Baulärm“** gewertet.
+Alle 74 Nicht-Baustellen-Clips hat sie richtig als „nein“ eingestuft. Besonders verpasst werden
+Motorgeräusche (Bagger beim Verfahren, Tiefbohrer): in den Gruppen 3, 24, 27 sagt die App bei 1 244 Clips
+nur 40 Mal etwas anderes als „kein Baulärm“.
+
+## Test auf direkt gehörten Clips (unabhängig von der Gruppenbildung)
+
+Training: 3 870 Clips mit übertragenem Gruppenurteil (3 800 Baustelle, 70 nicht). Test: 54 direkt gehörte Clips
+(die 43 früher bestätigten ohne UNKLAR plus die Einzelurteile; 45 Baustelle, 9 nicht).
+
+| Ansatz | Baustelle erkannt (von 45) | Fehlalarme (von 9) |
+|---|---|---|
+| App streng („Baulärm“) | 4 | 0 |
+| App weit (auch „möglich“) | 19 | 0 |
+| Nur Pegel, Baum Tiefe 2 | 45 | 7 |
+| DSP + Pegel, Baum Tiefe 3 | 43 | 4 |
+| YAMNet-Embedding + kNN (k=5) | 45 | 7 |
+| YAMNet-Embedding + LogReg | 44 | 3 |
+
+Geräuschart (Motor / Hämmernd / Schlag), 25 Testclips: LogReg 13 richtig, kNN 10 richtig. Das liegt nahe am
+Raten (drei Klassen, 33 %) und reicht nicht für eine belastbare Aussage zur Geräuschart.
+
+## Grenzen dieses Durchgangs
+
+- **Die Nicht-Baustellen-Seite ist dünn.** Es gibt nur 79 Gegenbeispiele (64 Messgerät anbringen, 10 Sirene,
+  9 frühere Clips vor 07 Uhr bzw. Wochenende). Verkehr, Zug, Nachbarn und Wind zur Arbeitszeit fehlen.
+  Die Fehlalarmzahlen sagen deshalb nur wenig. **Alle leiseren Clips (60–75 dB, 72 685 Stück) sind ungelabelt.**
+- **Kreuzvalidierung auf den Trainingsdaten ist hier nicht aussagekräftig.** Die Labels folgen Klangclustern
+  der Embeddings, Embedding-Ansätze finden sie fast zwangsläufig wieder. Belegt ist nur der Test auf direkt
+  gehörten Clips, und der hat 54 Stück.
+- Das Urteil „Gruppe“ gilt für alle Clips der Gruppe, die der Owner nur zu 5 Stück gehört hat. Die
+  Einzelurteile (19 Stück) zeigen, dass Gruppen Ausnahmen enthalten (z. B. Hydraulikhammer in einer
+  Bagger-Gruppe).
+- Offen aus der Abstimmung: Gruppe 6 (Mischgruppe, Auslegung des Owners ungeprüft), Signal als Baustelle
+  (angenommen).
+
+## Zwischenfazit (Vorschlag, keine Entscheidung)
+
+1. Der Hauptmangel der App ist **Erkennungsschwäche bei Motorgeräuschen**, nicht Fehlalarm.
+2. Ein Pegel- oder Embedding-Filter findet die Baustellenclips fast vollständig, aber ob er auch Nicht-Baustelle
+   unterscheidet, ist mit den vorhandenen Gegenbeispielen nicht zu sagen.
+3. Als nächster Schritt fehlen **Gegenbeispiele zur Arbeitszeit** (Straße, Zug, Nachbarn, Wind) und eine
+   Stichprobe der leisen 60–75-dB-Clips. Ohne sie ist die Fehlalarmfrage nicht beantwortbar.
