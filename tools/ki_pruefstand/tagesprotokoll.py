@@ -45,6 +45,12 @@ TITEL = {
     "B07": "Baustellenfahrzeug", "B08": "Warnsignal", "B09": "Materialimpuls (Schlag, Klirren)",
     "U01": "Straßenverkehr", "U02": "Sprache/Menschen", "U03": "Natur/Wetter", "U04": "Sonstige Umgebung",
 }
+KURZ = {
+    "B01": "Tief-/Drehbohrgerät", "B02": "Hämmern (Schlagmaschine)", "B03": "Bohren/Fräsen/Schleifen",
+    "B04": "Säge/Trennschleifer", "B05": "Motorgeräusche Bagger/schweres Gerät", "B06": "Motor/Aggregat",
+    "B07": "Baustellenfahrzeuge", "B08": "Warnsignale", "B09": "Schläge/Klirren", "U01": "Straßenverkehr",
+    "U02": "Sprache", "U03": "Natur/Wetter", "U04": "Sonstige Umgebung",
+}
 PHRASE = {
     "B01": "Geräusche des Tief-/Drehbohrgeräts", "B02": "hämmernde Geräusche (Abbruch-/Schlagmaschine)",
     "B03": "Bohr-, Fräs- und Schleifgeräusche", "B04": "Säge- und Trennschleifgeräusche",
@@ -160,6 +166,7 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
+    ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
     ap.add_argument("--blockluecke", type=float, default=1800, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
     ap.add_argument("--pegel-minimum", type=float, default=60.0)
@@ -311,14 +318,20 @@ def main():
                     return "immer wieder"
                 return "gelegentlich"
 
-            phrase = " und ".join(PHRASE.get(x, TITEL[x]) for x in k.split("+"))
+            kurz = " + ".join(KURZ.get(x, TITEL[x]) for x in k.split("+"))
             lang = [bl for bl in bloecke if bl["n"] > 1 or (bl["ende"] - bl["beginn"]).total_seconds() >= 300]
             einzel = [bl for bl in bloecke if bl not in lang]
-            teile = [f"{bl['beginn']:%H:%M} bis {bl['ende']:%H:%M} {dichte(bl)} {phrase} (ca. {minuten(bl['aktiv'])} aktiv)" for bl in lang]
-            if einzel:
-                zeiten = ", ".join(f"{bl['beginn']:%H:%M}" for bl in einzel[:6]) + (" …" if len(einzel) > 6 else "")
-                teile.append(f"vereinzelt {phrase} ({len(einzel)} Mal, z. B. {zeiten})")
-            satz = "- " + "; ".join(teile) + f". Zusammen ca. {minuten(aktiv if ep_laeq else aktiv_clips)}{'' if ep_laeq else ' (nur nach Aufnahmen, Mindestwert)'}."
+            gesamt_min = (aktiv if ep_laeq else aktiv_clips) / 60
+            if gesamt_min < a.min_klasse_minuten and not lang:
+                continue  # wirklich kurz: nur in der CSV
+            teile = [f"{bl['beginn']:%H:%M}–{bl['ende']:%H:%M} {dichte(bl)} ({minuten(bl['aktiv'])})" for bl in lang]
+            if len(einzel) >= 3:
+                zeiten = ", ".join(f"{bl['beginn']:%H:%M}" for bl in einzel[:5]) + (" …" if len(einzel) > 5 else "")
+                teile.append(f"vereinzelt {len(einzel)} Mal (z. B. {zeiten})")
+            if not teile:
+                continue
+            zusatz = "" if ep_laeq else ", Mindestwert"
+            satz = f"- **{kurz}** (zusammen ca. {minuten(aktiv if ep_laeq else aktiv_clips)}{zusatz}): " + "; ".join(teile) + "."
             zeilen.append(satz)
         text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messzeitraum {erfasst} Uhr.", ""]
         text += zeilen or ["- Keine Aufnahme ab {:g} dB.".format(a.min_db_klassifizieren)]
