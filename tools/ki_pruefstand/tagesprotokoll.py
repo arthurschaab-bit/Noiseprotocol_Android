@@ -152,6 +152,7 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
+    ap.add_argument("--blockluecke", type=float, default=600, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Block im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
     ap.add_argument("--pegel-minimum", type=float, default=60.0)
     ap.add_argument("--max-erweiterung", type=int, default=30)
@@ -273,35 +274,42 @@ def main():
             pausen = [(ep[i + 1][0] - ep[i][1]).total_seconds() for i in range(len(ep) - 1)]
             st = Counter(status[r["clip"]] for r in cl)
             namen_k = " + ".join(f"{TITEL[x]}" for x in k.split("+"))
-            fenster = ", ".join((f"{b:%H:%M}" if f"{b:%H:%M}" == f"{e:%H:%M}" else f"{b:%H:%M}–{e:%H:%M}") for b, e, _ in ep[:12]) + (" …" if len(ep) > 12 else "")
-            csv_zeilen.append([tag, WOCHENTAG[d.weekday()], k, namen_k, len(ep), round(aktiv / 60, 1), round(aktiv_clips / 60, 1), len(cl),
+            fenster = ", ".join((f"{b:%H:%M}" if f"{b:%H:%M}" == f"{e:%H:%M}" else f"{b:%H:%M}–{e:%H:%M}") for b, e, _ in ep)
+            bloecke = []  # Episoden mit Abstand <= --blocklücke zu einem Block zusammenfassen
+            for b, e, n_ in ep:
+                if bloecke and (b - bloecke[-1]["ende"]).total_seconds() <= a.blockluecke:
+                    bl = bloecke[-1]
+                    bl["pause"] = max(bl["pause"], (b - bl["ende"]).total_seconds())
+                    bl["aktiv"] += (e - b).total_seconds()
+                    bl["ende"] = e
+                    bl["n"] += 1
+                else:
+                    bloecke.append({"beginn": b, "ende": e, "aktiv": (e - b).total_seconds(), "pause": 0.0, "n": 1})
+            csv_zeilen.append([tag, WOCHENTAG[d.weekday()], k, namen_k, len(ep), len(bloecke), round(aktiv / 60, 1), round(aktiv_clips / 60, 1), len(cl),
                                f"{ep[0][0]:%H:%M}", f"{ep[-1][1]:%H:%M}", round(max((e - b).total_seconds() for b, e, _ in ep) / 60, 1),
                                round(median(pausen) / 60, 1) if pausen else "", round(max(pausen) / 60, 1) if pausen else "",
                                round(median(pegel), 1), round(max(pegel), 1),
                                round(laeq_ges, 1) if ep_laeq else "", round(max(ep_max), 1) if ep_max else "",
                                st.get("bestaetigt", 0), st.get("wahrscheinlich", 0), st.get("vorhergesagt", 0), fenster])
-            aufn = f"{len(cl)} Aufnahme{'n' if len(cl) != 1 else ''}"
+
+            def block_text(bl):
+                zeitraum = f"{bl['beginn']:%H:%M}–{bl['ende']:%H:%M}"
+                if bl["n"] == 1:
+                    return f"{zeitraum} (ca. {minuten(bl['aktiv'])})"
+                return f"{zeitraum} (ca. {minuten(bl['aktiv'])} aktiv, Pausen bis {minuten(bl['pause'])})"
+            sichtbar = ", ".join(block_text(bl) for bl in bloecke[:8]) + (f" und {len(bloecke) - 8} weitere Blöcke (siehe CSV)" if len(bloecke) > 8 else "")
             if ep_laeq:
-                dauer = f"ca. {minuten(aktiv)} nach Pegelverlauf (die Aufnahmen belegen mindestens {minuten(aktiv_clips)})"
+                satz = f"- {namen_k}: insgesamt ca. {minuten(aktiv)} aktiv in {len(bloecke)} {'Block' if len(bloecke) == 1 else 'Blöcken'}: {sichtbar}."
             else:
-                dauer = f"mindestens {minuten(aktiv_clips)} (nur nach Aufnahmen, kein Pegelverlauf)"
-            satz = f"- {namen_k}: {dauer}, {len(ep)} Episode{'n' if len(ep) != 1 else ''}, {aufn}"
-            if len(ep) > 1:
-                satz += f", mit Pausen zwischen {minuten(min(pausen))} und {minuten(max(pausen))}"
-            if ep_laeq:
-                satz += f"; {fenster}; Pegelverlauf: LAeq {laeq_ges:.0f} dB(A), Maximum {max(ep_max):.0f} dB(A), Aufnahmen Median {median(pegel):.0f} dB."
-            else:
-                satz += f"; {fenster}; Aufnahmen Pegel Median {median(pegel):.0f} dB, Maximum {max(pegel):.0f} dB."
+                satz = f"- {namen_k}: mindestens {minuten(aktiv_clips)} (nach Aufnahmen) in {len(bloecke)} {'Block' if len(bloecke) == 1 else 'Blöcken'}: {sichtbar}."
             zeilen.append(satz)
-        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Aufzeichnungen von {erfasst} Uhr ({len(rs)} Ereignisse ab 60 dB).", ""]
-        if tagespegel:
-            text += [tagespegel, ""]
+        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messzeitraum {erfasst} Uhr.", ""]
         text += zeilen or ["- Keine Aufnahme ab {:g} dB.".format(a.min_db_klassifizieren)]
         if unsicher:
             text.append(f"- Nicht zuordenbar: {unsicher} Aufnahmen ab {a.min_db_klassifizieren:g} dB.")
         text += [f"- Leisere Ereignisse (60–{a.min_db_klassifizieren:g} dB), nicht beurteilt: {leise} Aufnahmen.", ""]
 
-    kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
+    kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "bloecke", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
             "laengste_episode_min", "pause_median_min", "pause_max_min", "clip_pegel_median_db", "clip_pegel_max_db",
             "verlauf_laeq_db", "verlauf_lmax_db", "n_bestaetigt", "n_wahrscheinlich", "n_vorhergesagt", "zeitfenster"]
     with open(os.path.join(a.ausgabe, "tagesprotokoll.csv"), "w", encoding="utf-8-sig", newline="") as f:
@@ -310,7 +318,7 @@ def main():
         for z in csv_zeilen:
             w.writerow([str(v).replace(".", ",") if isinstance(v, float) else v for v in z])
     hinweis = ["# Lärm-Tagesprotokoll (Prototyp)", "",
-               f"Parameter: Lücke zwischen Aufnahmen derselben Klasse bis {a.luecke:g} s = gleiche Episode; Aufnahmelänge {a.clip_sekunden:g} s.",
+               f"Parameter: Aufnahmen derselben Klasse bis {a.luecke:g} s Abstand = eine Episode; Episoden bis {a.blockluecke:g} s Abstand = ein Block im Text; Aufnahmelänge {a.clip_sekunden:g} s. Pegelwerte stehen im Schallbericht und in der CSV.",
                "Die Zeiten sind Mindestwerte: Die App nimmt nur auf, wenn der Pegel die Schwelle überschreitet.",
                "Klassen: Feinklassen aus Baul-rm. Einordnung: Gruppenurteile des Owners auf alle Clips der Gruppe übertragen (wahrscheinlich),",
                "Mischgruppen per Modell (vorhergesagt). Aufnahmen unter 75 dB sind noch nicht beurteilt.", ""]
