@@ -22,3 +22,12 @@ Ergebnisse und Bewertung: `docs/BERICHT_KI_PRUEFSTAND.md`.
    schreibt `ereignisse.csv` (Metadaten) und `shards/*.npz` (nur Zahlen). Messung: ca. 3,3 Clips/s mit 5 Prozessen.
 10. `tabelle.py <Drive-Wurzel> <Ausgabeordner> <labels.json> [--cluster 30]` — `detail.csv` (eine Zeile je Clip, 48 Spalten)
     und `cluster_uebersicht.md` (Gruppen nach Klang mit typischen Clips zum Anhören). Braucht den Drive nicht, wenn `ereignisse.csv` vorhanden ist.
+
+## Weitere Werkzeuge
+
+11. `gruppen_seiten.py` — Hörseiten je Klanggruppe (Artifact-Seiten, WAVs eingebettet).
+12. `urteile_auswerten.py` — Auswertung auf den Owner-Urteilen (Test auf direkt gehörten Clips).
+13. `batch_alt.py <Schallmessung-Ordner> <Ausgabe>` — ältere Aufnahmen (Zips Juni–August) mit PCE-Pegel; läuft in Durchgängen bis alles fertig und geprüft ist, passt die Prozesszahl alle 10 Minuten an CPU und Speicher an.
+14. `tagesprotokoll.py` — Tagesprotokoll als Text und CSV (Zeiträume mit Dichte-Wörtern, Dauer nach dB(A)-Verlauf).
+
+Ausführliche Anleitung, Klassenabbildung und Grenzen: `docs/KI_PRUEFSTAND_ANLEITUNG.md`.

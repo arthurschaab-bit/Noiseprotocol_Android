@@ -87,10 +87,10 @@ def pegel_am(serien, t):
 
 
 def auftrag(arg):
-    kennung, quelle_art, pfad, wavs, ausgabe = arg
-    ziel = os.path.join(ausgabe, "shards", f"{kennung}.npz")
+    kennung, quelle_art, pfad, wavs, ausgabe, chunk = arg
+    ziel = os.path.join(ausgabe, "shards", f"{chunk}.npz")
     if os.path.exists(ziel):
-        return kennung, -1, 0.0
+        return chunk, -1, 0.0
     t0 = time.perf_counter()
     namen, feats, embs, smean, smax, nf, kaputt = [], [], [], [], [], [], []
     try:
@@ -120,7 +120,7 @@ def auftrag(arg):
             z.close()
     except ba.Zurueckgestellt as ex:
         ba.log(f"ZURUECKGESTELLT {kennung}: {ex}")
-        return kennung, -2, time.perf_counter() - t0
+        return chunk, -2, time.perf_counter() - t0
     fkeys = list(feats[0].keys()) if feats else list(merkmale.alle_merkmale(np.zeros(16000, dtype=np.int16) + 1).keys())
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
     tmp = f"{ziel}.{os.getpid()}.tmp.npz"
@@ -134,7 +134,167 @@ def auftrag(arg):
         os.replace(tmp, ziel)
     except OSError:
         os.remove(tmp)
-    return kennung, len(namen), time.perf_counter() - t0
+    return chunk, len(namen), time.perf_counter() - t0
+
+
+import ctypes
+import json
+import multiprocessing as mp
+
+
+class _MEM(ctypes.Structure):
+    _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong), ("sullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+
+def ram_frei_gb():
+    """Freier Arbeitsspeicher in GB (Windows), sonst None."""
+    try:
+        m = _MEM()
+        m.dwLength = ctypes.sizeof(_MEM)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+        return m.ullAvailPhys / 2 ** 30
+    except Exception:
+        return None
+
+
+def _cpu_zeiten():
+    try:
+        class FT(ctypes.Structure):
+            _fields_ = [("lo", ctypes.c_ulong), ("hi", ctypes.c_ulong)]
+        i, k, u = FT(), FT(), FT()
+        ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(i), ctypes.byref(k), ctypes.byref(u))
+        z = lambda f: (f.hi << 32) | f.lo
+        return z(i), z(k), z(u)
+    except Exception:
+        return None
+
+
+def cpu_auslastung(vorher, jetzt):
+    """CPU-Auslastung 0..1 zwischen zwei _cpu_zeiten()-Messungen."""
+    if not vorher or not jetzt:
+        return None
+    didle, dkern, duser = jetzt[0] - vorher[0], jetzt[1] - vorher[1], jetzt[2] - vorher[2]
+    gesamt = dkern + duser  # Kernel-Zeit enthaelt die Leerlaufzeit
+    return max(0.0, min(1.0, 1 - didle / gesamt)) if gesamt > 0 else None
+
+
+def _worker(arg, yamnet, wartezeiten, q):
+    try:
+        ba._init(yamnet, wartezeiten)
+        q.put(auftrag(arg))
+    except BaseException as ex:  # noqa: BLE001 - der Controller entscheidet ueber Wiederholung
+        q.put((arg[5], -3, 0.0, str(ex)))
+
+
+def shard_ok(pfad, erwartet):
+    """Shard vorhanden, lesbar und vollstaendig (analysiert + defekt == erwartete Clips)."""
+    try:
+        z = np.load(pfad, allow_pickle=True)
+        n = len(z["namen"])
+        return n + len(z["kaputt"]) == erwartet and z["emb"].shape == (n, 1024) and bool(np.isfinite(z["emb"]).all())
+    except Exception:
+        return False
+
+
+def chunks_von(jobs, ausgabe, groesse):
+    """Alle Chunks als (kennung, art, pfad, wavs, ausgabe, chunk-name); fertige Shards (auch alte Quellen-Shards) fehlen."""
+    liste = []
+    for kennung, art, pfad, wavs, _ in jobs:
+        if not wavs or os.path.exists(os.path.join(ausgabe, "shards", f"{kennung}.npz")):
+            continue  # ganze Quelle schon im alten Format erledigt
+        for i in range(0, len(wavs), groesse):
+            teil = wavs[i:i + groesse]
+            name = f"{kennung}__{i // groesse:03d}"
+            p = os.path.join(ausgabe, "shards", f"{name}.npz")
+            if os.path.exists(p) and shard_ok(p, len(teil)):
+                continue
+            if os.path.exists(p):
+                os.remove(p)  # unvollstaendig oder defekt -> neu rechnen
+            liste.append((kennung, art, pfad, teil, ausgabe, name))
+    return liste
+
+
+def lauf(offen, a, ziel_status):
+    """Controller: Chunks mit dynamischer Prozesszahl abarbeiten. Gibt (fertig_clips, fehlgeschlagen) zurueck."""
+    ctx = mp.get_context("spawn")
+    ausstehend = list(offen)
+    laufend = {}  # name -> (proc, queue, job, start)
+    versuche = {}
+    fehler = []
+    ziel = max(a.min_workers, min(a.workers, a.max_workers))
+    fertig = 0
+    gesamt_clips = sum(len(j[3]) for j in offen)
+    letzte_pruefung = time.perf_counter()
+    cpu_vorher = _cpu_zeiten()
+    t0 = time.perf_counter()
+    while ausstehend or laufend:
+        for name in list(laufend):
+            proc, q, job, start = laufend[name]
+            res = None
+            try:
+                res = q.get_nowait()
+            except Exception:
+                pass
+            if res is None and proc.is_alive() and (time.perf_counter() - start) > a.job_timeout_min * 60:
+                ba.log(f"ZEITUEBERSCHREITUNG {name} nach {a.job_timeout_min} min, Prozess wird beendet")
+                proc.terminate()
+                proc.join(10)
+                res = (name, -3, 0.0, "Zeitueberschreitung")
+            elif res is None and not proc.is_alive():
+                try:
+                    res = q.get(timeout=2)
+                except Exception:
+                    res = (name, -3, 0.0, f"Prozess beendet ohne Ergebnis (Exit {proc.exitcode})")
+            if res is None:
+                continue
+            proc.join(5)
+            del laufend[name]
+            n = res[1]
+            if n >= -1:
+                fertig += max(n, 0)
+                vergangen = time.perf_counter() - t0
+                rest = vergangen / fertig * (gesamt_clips - fertig) / 60 if fertig else float("nan")
+                ba.log(f"fertig {name}: {n} Clips, {res[2]:.0f}s | {fertig}/{gesamt_clips}, Rest ca. {rest:.0f} min, Prozesse {len(laufend)}/{ziel}")
+            else:
+                versuche[name] = versuche.get(name, 0) + 1
+                grund = res[3] if len(res) > 3 else "zurueckgestellt (Drive-Zugriff)"
+                ba.log(f"FEHLER {name} (Versuch {versuche[name]}/{a.max_versuche}): {grund}")
+                if versuche[name] < a.max_versuche:
+                    ausstehend.append(job)
+                else:
+                    fehler.append(name)
+        # Auslastung alle --pruef-minuten pruefen und Prozesszahl anpassen
+        if time.perf_counter() - letzte_pruefung >= a.pruef_minuten * 60:
+            jetzt = _cpu_zeiten()
+            cpu = cpu_auslastung(cpu_vorher, jetzt)
+            ram = ram_frei_gb()
+            alt = ziel
+            if ram is not None and ram < a.ram_min_frei_gb:
+                ziel = max(a.min_workers, ziel - 2)
+            elif cpu is not None and cpu > 0.93:
+                ziel = max(a.min_workers, ziel - 1)
+            elif ram is not None and cpu is not None and ram > a.ram_gut_frei_gb and cpu < 0.80:
+                ziel = min(a.max_workers, ziel + (2 if cpu < 0.60 else 1))
+            ba.log(f"Auslastungspruefung: CPU {('%.0f%%' % (cpu * 100)) if cpu is not None else '?'}, frei {('%.1f GB' % ram) if ram is not None else '?'} -> Prozesse {alt} -> {ziel}")
+            letzte_pruefung, cpu_vorher = time.perf_counter(), jetzt
+        while ausstehend and len(laufend) < ziel:
+            job = ausstehend.pop(0)
+            name = job[5]
+            q = ctx.Queue()
+            proc = ctx.Process(target=_worker, args=(job, os.path.abspath(a.yamnet), ba.WARTEZEITEN, q), daemon=True)
+            proc.start()
+            laufend[name] = (proc, q, job, time.perf_counter())
+        try:
+            with open(ziel_status, "w", encoding="utf-8") as f:
+                json.dump({"zeit": time.strftime("%Y-%m-%d %H:%M:%S"), "ziel_prozesse": ziel, "laufend": len(laufend),
+                           "ausstehend": len(ausstehend), "fertig_clips": fertig, "gesamt_clips": gesamt_clips, "fehler": fehler}, f)
+        except OSError:
+            pass
+        time.sleep(2)
+    return fertig, fehler
 
 
 def main():
@@ -147,8 +307,15 @@ def main():
     ap.add_argument("--wartezeiten", default="60,300,600,3600")
     ap.add_argument("--max-zips", type=int, default=0)
     ap.add_argument("--nur-ereignisse", action="store_true")
-    ap.add_argument("--start-anteil", type=float, default=0.0, help="bei diesem Anteil der offenen Quellen beginnen (dritte Instanz: 0.5)")
-    ap.add_argument("--rueckwaerts", action="store_true", help="offene Quellen in umgekehrter Reihenfolge (zweite Instanz)")
+    ap.add_argument("--chunk", type=int, default=300, help="Clips je Arbeitspaket (kleinere Pakete = feinere Steuerung der Prozesszahl)")
+    ap.add_argument("--min-workers", type=int, default=2)
+    ap.add_argument("--max-workers", type=int, default=10)
+    ap.add_argument("--pruef-minuten", type=float, default=10.0, help="Intervall der Auslastungspruefung")
+    ap.add_argument("--ram-min-frei-gb", type=float, default=2.5, help="darunter wird die Prozesszahl um 2 gesenkt")
+    ap.add_argument("--ram-gut-frei-gb", type=float, default=4.0, help="darueber (und CPU < 80 %) wird die Prozesszahl erhoeht")
+    ap.add_argument("--job-timeout-min", type=float, default=90.0, help="haengende Pakete werden nach dieser Zeit beendet und wiederholt")
+    ap.add_argument("--max-versuche", type=int, default=4, help="Versuche je Paket innerhalb eines Durchgangs")
+    ap.add_argument("--max-durchgaenge", type=int, default=6, help="Durchgaenge mit Wartezeit dazwischen, bis aufgegeben wird")
     a = ap.parse_args()
     ba.WARTEZEITEN = tuple(int(x) for x in a.wartezeiten.split(","))
     os.makedirs(os.path.join(a.ausgabe, "shards"), exist_ok=True)
@@ -206,26 +373,50 @@ def main():
           f"({sum(1 for x in ausgelassen if 'PCE' in x[3])} ohne PCE-Messwert)", flush=True)
     if a.nur_ereignisse:
         return 0
-    offen = [j for j in jobs if j[3] and not os.path.exists(os.path.join(a.ausgabe, "shards", f"{j[0]}.npz"))]
-    offen = offen[int(len(offen) * a.start_anteil):]
-    if a.rueckwaerts:
-        offen.reverse()
-    if a.max_zips:
-        offen = offen[:a.max_zips]
-    clips_offen = sum(len(j[3]) for j in offen)
-    print(f"offen: {len(offen)} Quellen / {clips_offen} Clips; {a.workers} Prozesse", flush=True)
-    t0 = time.perf_counter()
-    fertig = zurueck = 0
-    with Pool(a.workers, initializer=ba._init, initargs=(os.path.abspath(a.yamnet), ba.WARTEZEITEN)) as pool:
-        for i, (kennung, n, sek) in enumerate(pool.imap_unordered(auftrag, offen), 1):
-            if n == -2:
-                zurueck += 1
-            fertig += max(n, 0)
-            rest = (time.perf_counter() - t0) / fertig * (clips_offen - fertig) if fertig else float("nan")
-            print(f"[{i}/{len(offen)}] {kennung}: {n} Clips, {sek:.0f}s | gesamt {fertig}/{clips_offen}, Rest ca. {rest / 60:.0f} min", flush=True)
-    if zurueck:
-        print(f"ACHTUNG: {zurueck} Quellen zurueckgestellt - denselben Aufruf spaeter erneut starten.", flush=True)
-    print(f"Fertig: {fertig} Clips in {(time.perf_counter() - t0) / 60:.1f} min")
+    status_pfad = os.path.join(a.ausgabe, "status.json")
+    marker = os.path.join(a.ausgabe, "FERTIG.txt")
+    if os.path.exists(marker):
+        os.remove(marker)
+    erwartet = sum(len(j[3]) for j in jobs)
+    durchgang = 0
+    while True:
+        offen = chunks_von(jobs, a.ausgabe, a.chunk)
+        if a.max_zips:
+            offen = offen[:a.max_zips]
+        if not offen:
+            break
+        durchgang += 1
+        print(f"Durchgang {durchgang}: offen {len(offen)} Pakete / {sum(len(j[3]) for j in offen)} Clips; "
+              f"Start mit {a.workers} Prozessen (Bereich {a.min_workers}-{a.max_workers}, Pruefung alle {a.pruef_minuten:g} min)", flush=True)
+        fertig, fehler = lauf(offen, a, status_pfad)
+        rest = chunks_von(jobs, a.ausgabe, a.chunk)
+        if a.max_zips or not rest:
+            break
+        if durchgang >= a.max_durchgaenge:
+            print(f"ABGEBROCHEN: {len(rest)} Pakete nach {durchgang} Durchgaengen nicht fertig: {[r_[5] for r_ in rest][:10]}", flush=True)
+            return 2
+        warte = ba.WARTEZEITEN[min(durchgang - 1, len(ba.WARTEZEITEN) - 1)]
+        print(f"Noch {len(rest)} Pakete offen ({len(fehler)} fehlgeschlagen). Neuer Durchgang in {warte // 60} min.", flush=True)
+        time.sleep(warte)
+    # Abschlusspruefung: alle erwarteten Clips muessen in gueltigen Shards stehen
+    analysiert = 0
+    for j in jobs:
+        muster_ = [os.path.join(a.ausgabe, "shards", f"{glob.escape(j[0])}.npz"),
+                   os.path.join(a.ausgabe, "shards", f"{glob.escape(j[0])}__*.npz")]
+        for p_ in [x for m_ in muster_ for x in glob.glob(m_)]:
+            if ".tmp." in p_:
+                continue
+            try:
+                z = np.load(p_, allow_pickle=True)
+                analysiert += len(z["namen"]) + len(z["kaputt"])
+            except Exception:
+                pass
+    if not a.max_zips and analysiert < erwartet:
+        print(f"ABGEBROCHEN: nur {analysiert} von {erwartet} Clips in gueltigen Shards", flush=True)
+        return 2
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(f"fertig {time.strftime('%Y-%m-%d %H:%M:%S')}: {analysiert} von {erwartet} Clips in gueltigen Shards\n")
+    print(f"FERTIG: {analysiert} von {erwartet} Clips in gueltigen Shards ({marker})", flush=True)
     return 0
 
 

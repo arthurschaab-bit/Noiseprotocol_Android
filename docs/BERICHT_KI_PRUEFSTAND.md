@@ -1,7 +1,7 @@
 # Bericht: KI-Prüfstand (Stand 02.11.2026)
 
 Auftrag: `docs/PROMPT_KI_PRUEFSTAND.md` (Abschnitt 4). Es wurde **kein App-Code** geändert.
-Skripte: `tools/ki_pruefstand/`. Alle Zahlen stammen aus einem Lauf auf 43 Clips, von denen der
+Skripte: `tools/ki_pruefstand/`, Anleitung und Stand der Werkzeuge: `docs/KI_PRUEFSTAND_ANLEITUNG.md`. Alle Zahlen stammen aus einem Lauf auf 43 Clips, von denen der
 Owner 37 bewertet hat (6 mal `UNKLAR`). Das ist ein **Stimmungsbild, keine Statistik**.
 
 ## 1 · Datensatz
