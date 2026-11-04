@@ -147,6 +147,8 @@ def main():
     ap.add_argument("--wartezeiten", default="60,300,600,3600")
     ap.add_argument("--max-zips", type=int, default=0)
     ap.add_argument("--nur-ereignisse", action="store_true")
+    ap.add_argument("--start-anteil", type=float, default=0.0, help="bei diesem Anteil der offenen Quellen beginnen (dritte Instanz: 0.5)")
+    ap.add_argument("--rueckwaerts", action="store_true", help="offene Quellen in umgekehrter Reihenfolge (zweite Instanz)")
     a = ap.parse_args()
     ba.WARTEZEITEN = tuple(int(x) for x in a.wartezeiten.split(","))
     os.makedirs(os.path.join(a.ausgabe, "shards"), exist_ok=True)
@@ -205,6 +207,9 @@ def main():
     if a.nur_ereignisse:
         return 0
     offen = [j for j in jobs if j[3] and not os.path.exists(os.path.join(a.ausgabe, "shards", f"{j[0]}.npz"))]
+    offen = offen[int(len(offen) * a.start_anteil):]
+    if a.rueckwaerts:
+        offen.reverse()
     if a.max_zips:
         offen = offen[:a.max_zips]
     clips_offen = sum(len(j[3]) for j in offen)

@@ -45,6 +45,14 @@ TITEL = {
     "B07": "Baustellenfahrzeug", "B08": "Warnsignal", "B09": "Materialimpuls (Schlag, Klirren)",
     "U01": "Straßenverkehr", "U02": "Sprache/Menschen", "U03": "Natur/Wetter", "U04": "Sonstige Umgebung",
 }
+PHRASE = {
+    "B01": "Geräusche des Tief-/Drehbohrgeräts", "B02": "hämmernde Geräusche (Abbruch-/Schlagmaschine)",
+    "B03": "Bohr-, Fräs- und Schleifgeräusche", "B04": "Säge- und Trennschleifgeräusche",
+    "B05": "Motorgeräusche schwerer Baugeräte (Bagger)", "B06": "Motor- und Aggregatgeräusche",
+    "B07": "Baustellenfahrzeuge", "B08": "Warnsignale (z. B. Rückfahrwarner)",
+    "B09": "Schläge und Klirren (Materialimpulse)", "U01": "Straßenverkehr", "U02": "Sprache",
+    "U03": "Natur und Wetter", "U04": "sonstige Umgebungsgeräusche",
+}
 WOCHENTAG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
 
@@ -152,7 +160,7 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
-    ap.add_argument("--blockluecke", type=float, default=600, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Block im Text")
+    ap.add_argument("--blockluecke", type=float, default=1800, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
     ap.add_argument("--pegel-minimum", type=float, default=60.0)
     ap.add_argument("--max-erweiterung", type=int, default=30)
@@ -247,7 +255,7 @@ def main():
             else:
                 unsicher += 1
         zeilen = []
-        for k in sorted(je, key=lambda k: -len(je[k])):
+        for k in sorted(je, key=lambda k: (k.startswith("U"), -len(je[k]))):
             cl = je[k]
             ep = episoden([datetime.fromisoformat(r["zeit"]) for r in cl], a.clip_sekunden, a.luecke)
             pegel = [zahl(r["pegel_db"]) for r in cl]
@@ -292,16 +300,25 @@ def main():
                                round(laeq_ges, 1) if ep_laeq else "", round(max(ep_max), 1) if ep_max else "",
                                st.get("bestaetigt", 0), st.get("wahrscheinlich", 0), st.get("vorhergesagt", 0), fenster])
 
-            def block_text(bl):
-                zeitraum = f"{bl['beginn']:%H:%M}–{bl['ende']:%H:%M}"
-                if bl["n"] == 1:
-                    return f"{zeitraum} (ca. {minuten(bl['aktiv'])})"
-                return f"{zeitraum} (ca. {minuten(bl['aktiv'])} aktiv, Pausen bis {minuten(bl['pause'])})"
-            sichtbar = ", ".join(block_text(bl) for bl in bloecke[:8]) + (f" und {len(bloecke) - 8} weitere Blöcke (siehe CSV)" if len(bloecke) > 8 else "")
-            if ep_laeq:
-                satz = f"- {namen_k}: insgesamt ca. {minuten(aktiv)} aktiv in {len(bloecke)} {'Block' if len(bloecke) == 1 else 'Blöcken'}: {sichtbar}."
-            else:
-                satz = f"- {namen_k}: mindestens {minuten(aktiv_clips)} (nach Aufnahmen) in {len(bloecke)} {'Block' if len(bloecke) == 1 else 'Blöcken'}: {sichtbar}."
+            def dichte(bl):
+                spanne = max((bl["ende"] - bl["beginn"]).total_seconds(), 1.0)
+                anteil = bl["aktiv"] / spanne
+                if anteil >= 0.5:
+                    return "nahezu durchgehend"
+                if anteil >= 0.12:
+                    return "ständig wiederkehrend"
+                if anteil >= 0.03:
+                    return "immer wieder"
+                return "gelegentlich"
+
+            phrase = " und ".join(PHRASE.get(x, TITEL[x]) for x in k.split("+"))
+            lang = [bl for bl in bloecke if bl["n"] > 1 or (bl["ende"] - bl["beginn"]).total_seconds() >= 300]
+            einzel = [bl for bl in bloecke if bl not in lang]
+            teile = [f"{bl['beginn']:%H:%M} bis {bl['ende']:%H:%M} {dichte(bl)} {phrase} (ca. {minuten(bl['aktiv'])} aktiv)" for bl in lang]
+            if einzel:
+                zeiten = ", ".join(f"{bl['beginn']:%H:%M}" for bl in einzel[:6]) + (" …" if len(einzel) > 6 else "")
+                teile.append(f"vereinzelt {phrase} ({len(einzel)} Mal, z. B. {zeiten})")
+            satz = "- " + "; ".join(teile) + f". Zusammen ca. {minuten(aktiv if ep_laeq else aktiv_clips)}{'' if ep_laeq else ' (nur nach Aufnahmen, Mindestwert)'}."
             zeilen.append(satz)
         text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messzeitraum {erfasst} Uhr.", ""]
         text += zeilen or ["- Keine Aufnahme ab {:g} dB.".format(a.min_db_klassifizieren)]
@@ -312,7 +329,13 @@ def main():
     kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "bloecke", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
             "laengste_episode_min", "pause_median_min", "pause_max_min", "clip_pegel_median_db", "clip_pegel_max_db",
             "verlauf_laeq_db", "verlauf_lmax_db", "n_bestaetigt", "n_wahrscheinlich", "n_vorhergesagt", "zeitfenster"]
-    with open(os.path.join(a.ausgabe, "tagesprotokoll.csv"), "w", encoding="utf-8-sig", newline="") as f:
+    ziel_csv = os.path.join(a.ausgabe, "tagesprotokoll.csv")
+    try:
+        open(ziel_csv, "a").close()
+    except PermissionError:  # z. B. in Excel geoeffnet
+        ziel_csv = os.path.join(a.ausgabe, f"tagesprotokoll_{datetime.now():%H%M%S}.csv")
+        print("tagesprotokoll.csv ist gesperrt, schreibe nach", ziel_csv)
+    with open(ziel_csv, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f, delimiter=";")
         w.writerow(kopf)
         for z in csv_zeilen:
