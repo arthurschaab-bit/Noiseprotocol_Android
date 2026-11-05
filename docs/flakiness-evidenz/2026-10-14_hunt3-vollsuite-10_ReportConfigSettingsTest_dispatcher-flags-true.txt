@@ -1,0 +1,171 @@
+ECHTER HAENGER MIT DISPATCHER-MESSUNG - 14.10.2026, Hunt-Lauf 38612376761, Job "Arm A vollsuite #10"
+(Head 2c84ceb, Artefakt hunt-vollsuite-10, Runner-Image ubuntu24 20261004.327.1, 4 Kerne)
+
+Stand beim Ablegen: 11 von 12 Jobs ausgewertet (Job #9 lief noch), 1 davon rot. Die 10 anderen sauber.
+
+Befund (gemessen, 100 von 100 Stichproben):
+  GlobalSnapshotManager.sent                      true   100 / 100
+  AndroidUiDispatcher.Main.scheduledTrampolineDispatch  true   100 / 100
+  AndroidUiDispatcher.Main.scheduledFrameDispatch       true   100 / 100
+  AndroidUiDispatcher.Main.toRunTrampolined       nicht leer 100 / 100 (genau 1 Eintrag)
+  Main-Looper-Warteschlange: im Schnitt 0,3 Nachrichten, "Handler ? what=0" nur in 9 von 100 Stichproben
+  hadSnapshotChanges 100 / 100, die anderen vier Gruende 0 / 100
+
+Lesart: Der Dispatcher haelt eine Fortsetzung (der Konsument des GlobalSnapshotManager) in seiner
+Warteschlange und GLAUBT, die Dispatch-Nachricht (Handler) und der Frame-Callback (Choreographer)
+seien unterwegs. In der Main-Looper-Warteschlange steht aber keine dauerhaft anliegende Nachricht
+(sonst waeren es 100 von 100 Stichproben). Das passt zu Mechanismus (b) "Dispatch-Nachricht verloren"
+und NICHT zu (a) "Konsument tot" (dann waeren die Flags false und die Warteschlange leer).
+
+Was damit NICHT belegt ist:
+  - WARUM die Nachricht fehlt (zwischen Tests geleerte Warteschlange? Nachricht liegt in einem anderen,
+    nie geleerten Looper?). Die Messung unterscheidet "geloescht" und "woanders" noch nicht.
+  - Was das letzte Schreiben ausgeloest hat und warum immer dieser Test (4 von 4 echte Haenger).
+  - Ob die uebrigen Haengertypen (15-s-Timeout in BerichtScreenS4Test, der Lauf mit 14 Haengern) dasselbe sind.
+
+Rohausgabe (Zeitwaechter-Diagnose aus dem Artefakt, unveraendert):
+------------------------------------------------------------------------------------------
+
+=== ZEITWAECHTER: com.example.lrmprotokoll.ui.ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden ===
+wartet seit ueber 50 s - Stacks folgen, der Test laeuft weiter.
+
+--- "SDK 29 Main Thread" WAITING ---
+	at java.base@21.0.12.1/jdk.internal.misc.Unsafe.park(Native Method)
+	at java.base@21.0.12.1/java.util.concurrent.locks.LockSupport.park(LockSupport.java:371)
+	at java.base@21.0.12.1/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionNode.block(AbstractQueuedSynchronizer.java:519)
+	at java.base@21.0.12.1/java.util.concurrent.ForkJoinPool.unmanagedBlock(ForkJoinPool.java:3780)
+	at java.base@21.0.12.1/java.util.concurrent.ForkJoinPool.managedBlock(ForkJoinPool.java:3725)
+	at java.base@21.0.12.1/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(AbstractQueuedSynchronizer.java:1746)
+	at java.base@21.0.12.1/java.util.concurrent.LinkedBlockingQueue.take(LinkedBlockingQueue.java:435)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor.getTask(ThreadPoolExecutor.java:1070)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1130)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base@21.0.12.1/java.lang.Thread.runWith(Thread.java:1596)
+	at java.base@21.0.12.1/java.lang.Thread.run(Thread.java:1583)
+
+--- "SDK 34 Main Thread" RUNNABLE ---
+	at androidx.compose.ui.test.junit4.ComposeIdlingResource.isIdleNow(ComposeIdlingResource.android.kt:73)
+	at androidx.compose.ui.test.junit4.RobolectricIdlingStrategy$runUntilIdle$1.invoke(RobolectricIdlingStrategy.android.kt:70)
+	at androidx.compose.ui.test.junit4.RobolectricIdlingStrategy$runUntilIdle$1.invoke(RobolectricIdlingStrategy.android.kt:48)
+	at androidx.compose.ui.test.junit4.AndroidSynchronization_androidKt.runOnUiThread(AndroidSynchronization.android.kt:33)
+	at androidx.compose.ui.test.junit4.RobolectricIdlingStrategy.runUntilIdle(RobolectricIdlingStrategy.android.kt:48)
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment.waitForIdle(ComposeUiTest.android.kt:340)
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment.access$waitForIdle(ComposeUiTest.android.kt:230)
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidTestOwner.getRoots(ComposeUiTest.android.kt:533)
+	at androidx.compose.ui.test.TestContext.getAllSemanticsNodes$ui_test_release(TestOwner.kt:86)
+	at androidx.compose.ui.test.TestContext.getAllSemanticsNodes$ui_test_release$default(TestOwner.kt:81)
+	at androidx.compose.ui.test.SemanticsNodeInteractionCollection.fetchSemanticsNodes(SemanticsNodeInteraction.kt:256)
+	at androidx.compose.ui.test.SemanticsNodeInteractionCollection.fetchSemanticsNodes$default(SemanticsNodeInteraction.kt:249)
+	at com.example.lrmprotokoll.ui.ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden$lambda$2(ReportConfigSettingsTest.kt:121)
+	at com.example.lrmprotokoll.ui.ReportConfigSettingsTest$$Lambda/0x00007f4d95dd7da0.invoke(Unknown Source)
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:424)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)
+	at com.example.lrmprotokoll.ui.ReportConfigSettingsTest.ungepruefteGebieteKoennenNichtAusgewaehltWerden(ReportConfigSettingsTest.kt:119)
+	at java.base@21.0.12.1/java.lang.invoke.DirectMethodHandle$Holder.invokeSpecial(DirectMethodHandle$Holder)
+	at java.base@21.0.12.1/java.lang.invoke.LambdaForm$MH/0x00007f4d94108800.invoke(LambdaForm$MH)
+	at java.base@21.0.12.1/java.lang.invoke.Invokers$Holder.invokeExact_MT(Invokers$Holder)
+	at java.base@21.0.12.1/jdk.internal.reflect.DirectMethodHandleAccessor.invokeImpl(DirectMethodHandleAccessor.java:153)
+	at java.base@21.0.12.1/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base@21.0.12.1/java.lang.reflect.Method.invoke(Method.java:580)
+	at app//org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at app//org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	... 46 weitere Rahmen
+
+--- "Test worker" WAITING ---
+	at java.base@21.0.12.1/jdk.internal.misc.Unsafe.park(Native Method)
+	at java.base@21.0.12.1/java.util.concurrent.locks.LockSupport.park(LockSupport.java:221)
+	at java.base@21.0.12.1/java.util.concurrent.FutureTask.awaitDone(FutureTask.java:500)
+	at java.base@21.0.12.1/java.util.concurrent.FutureTask.get(FutureTask.java:190)
+	at app//org.robolectric.internal.bytecode.Sandbox.runOnMainThread(Sandbox.java:130)
+	at app//org.robolectric.internal.bytecode.Sandbox.runOnMainThread(Sandbox.java:99)
+	at app//org.robolectric.internal.SandboxTestRunner$5.evaluate(SandboxTestRunner.java:311)
+	at app//org.robolectric.internal.SandboxTestRunner$1.evaluate(SandboxTestRunner.java:176)
+	at app//org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at app//org.robolectric.RobolectricTestRunner.run(RobolectricTestRunner.java:142)
+	at app//org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at app//org.junit.runner.JUnitCore.run(JUnitCore.java:115)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestExecutor.runRequest(JUnitTestExecutor.java:175)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestExecutor.accept(JUnitTestExecutor.java:84)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestExecutor.accept(JUnitTestExecutor.java:47)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestDefinitionProcessor.processTestDefinition(AbstractJUnitTestDefinitionProcessor.java:65)
+	at org.gradle.api.internal.tasks.testing.SuiteTestDefinitionProcessor.processTestDefinition(SuiteTestDefinitionProcessor.java:53)
+	at java.base@21.0.12.1/java.lang.invoke.LambdaForm$DMH/0x00007f4d94009000.invokeInterface(LambdaForm$DMH)
+	at java.base@21.0.12.1/java.lang.invoke.LambdaForm$MH/0x00007f4d94ea4400.invoke(LambdaForm$MH)
+	at java.base@21.0.12.1/java.lang.invoke.Invokers$Holder.invokeExact_MT(Invokers$Holder)
+	at java.base@21.0.12.1/jdk.internal.reflect.DirectMethodHandleAccessor.invokeImpl(DirectMethodHandleAccessor.java:154)
+	at java.base@21.0.12.1/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base@21.0.12.1/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.MethodInvocation.invokeOn(MethodInvocation.java:77)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:28)
+	... 13 weitere Rahmen
+
+--- "SDK 34 Main Thread" WAITING ---
+	at java.base@21.0.12.1/jdk.internal.misc.Unsafe.park(Native Method)
+	at java.base@21.0.12.1/java.util.concurrent.locks.LockSupport.park(LockSupport.java:371)
+	at java.base@21.0.12.1/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionNode.block(AbstractQueuedSynchronizer.java:519)
+	at java.base@21.0.12.1/java.util.concurrent.ForkJoinPool.unmanagedBlock(ForkJoinPool.java:3780)
+	at java.base@21.0.12.1/java.util.concurrent.ForkJoinPool.managedBlock(ForkJoinPool.java:3725)
+	at java.base@21.0.12.1/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(AbstractQueuedSynchronizer.java:1746)
+	at java.base@21.0.12.1/java.util.concurrent.LinkedBlockingQueue.take(LinkedBlockingQueue.java:435)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor.getTask(ThreadPoolExecutor.java:1070)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1130)
+	at java.base@21.0.12.1/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base@21.0.12.1/java.lang.Thread.runWith(Thread.java:1596)
+	at java.base@21.0.12.1/java.lang.Thread.run(Thread.java:1583)
+
+--- Stichproben "SDK 34 Main Thread": 100 x alle 50 ms, Treffer je Rahmen ---
+App-Rahmen:
+	(keiner getroffen)
+Compose-Rahmen:
+	(keiner getroffen)
+
+--- Main-Looper-Warteschlange: 100 Stichproben, im Schnitt 0.3 Nachrichten, in wie vielen Stichproben je Nachrichtenart ---
+	9  Handler ? what=0
+
+--- Zweig der Idle-Schleife, in wie vielen von 100 Stichproben ---
+	47  Frames pumpen (advanceDispatcher)
+	30  Looper leeren (Espresso.onIdle)
+	19  isIdleNow (ohne Pump)
+	4  Layout anfordern
+--- Aufgaben, die der TestCoroutineScheduler beim Pumpen ausfuehrt ---
+	27  Scheduler selbst am Blatt (keine Aufgabe)
+	10  kotlin.time.DurationKt.durationOfNanos
+
+--- Idling-Gruende (ComposeIdlingResource, 100 von 100 Stichproben lesbar), in wie vielen Stichproben wahr ---
+	hadAwaitersOnMainClock     0 / 100
+	hadSnapshotChanges         100 / 100
+	hadRecomposerChanges       0 / 100
+	hadPendingSetContent       0 / 100
+	hadPendingMeasureLayout    0 / 100
+--- GlobalSnapshotManager (Singleton): in wie vielen Stichproben wahr ---
+	started                   100 / 100
+	sent                      100 / 100
+--- AndroidUiDispatcher.Main (Singleton): in wie vielen Stichproben wahr ---
+	initialisiert                100 / 100
+	scheduledTrampolineDispatch  100 / 100
+	scheduledFrameDispatch        100 / 100
+	toRunTrampolined nicht leer   100 / 100 (hoechstens 1 Eintraege)
+--- Testuhr: virtuell 5087185616 -> 5618257280 ms (+531071664 ms) in 5011 ms Wanduhr ---
+--- Compose-Roots (letzte Stichprobe): 1 ---
+	AndroidComposeView 411x100 angehaengt=true sichtbarkeit=0 messenOderLayoutOffen=false
+
+--- Zustand der Test-JVM (alle Tests laufen in dieser einen JVM) ---
+	JVM-Laufzeit:   2.4 min (Ende der Stichproben: 2.5 min)
+	Heap genutzt:   307 MB -> 348 MB von maximal 512 MB
+	Garbage Collector: 291 Laeufe, 2457 ms gesamt; waehrend der Stichproben +8 Laeufe, +53 ms
+	Threads:        87 -> 80
+	CPU-Kerne:      4, Systemlast 1.55
+	Threads nach Namen (Ziffern zusammengefasst):
+		40  pool-#-thread-#
+		8  DefaultDispatcher-worker-#
+		8  arch_disk_io_#
+		3  queued-work-looper
+		2  /#.#.#.#:# to /#.#.#.#:# workers Thread #
+		2  Cleaner-#
+		2  SDK 34 Main Thread
+		2  kotlinx.coroutines.DefaultExecutor
+		1  /#.#.#.#:# to /#.#.#.#:# workers
+		1  Common-Cleaner
+		1  Finalizer
+		1  Java#D Disposer
+=== ZEITWAECHTER Ende ===

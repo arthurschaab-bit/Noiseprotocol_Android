@@ -23,6 +23,7 @@ import com.example.lrmprotokoll.report.MessreiheExport
 import com.example.lrmprotokoll.report.PeriodenBericht
 import com.example.lrmprotokoll.report.PeriodenBerichtExport
 import com.example.lrmprotokoll.report.ReportManager
+import com.example.lrmprotokoll.testhilfen.ZeitwaechterRegel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -55,6 +56,14 @@ import java.util.concurrent.atomic.AtomicReference
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ExportFehlerbehandlungComposeTest {
+    /**
+     * Macht den Leerlauf-Haenger sichtbar und repariert zu Beginn jedes Tests einen festgefahrenen
+     * Dispatcher der Sandbox (PR #280). CI-Fund 14.10.2026: der 6. Test dieser Klasse lief nach fuenf
+     * gesunden in `ComposeTimeoutException`; dieselbe Klasse war in einer Hunt-Kaskade der erste rote Test.
+     */
+    @get:Rule
+    val zeitwaechter = ZeitwaechterRegel()
+
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 

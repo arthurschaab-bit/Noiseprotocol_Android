@@ -1,0 +1,77 @@
+POSITIVKONTROLLE zu Hypothese C-H9 (PR #280) - 14.10.2026, lokal, Sandbox SDK 34 / GraphicsMode.NATIVE
+
+Was das ist: Ein Wegwerf-Test (nicht eingecheckt) hat in einer frischen Robolectric-Sandbox
+`GlobalSnapshotManager.sent` per Reflexion auf `true` gesetzt (= "das Wecken ist verloren gegangen"),
+danach global in einen `mutableIntStateOf` geschrieben und `waitForIdle()` gerufen.
+Ergebnis: AppNotIdleException nach 60 021 ms, Signatur wie im echten CI-Haenger
+(nur `hadSnapshotChanges` wahr, Scheduler leer, virtuelle Zeit laeuft davon).
+
+Was das belegt: Der Mechanismus "sent == true => hadSnapshotChanges fuer immer wahr => 60-s-Haenger"
+ist moeglich, und die neue Messung (Abschnitt "GlobalSnapshotManager") erkennt ihn.
+Was das NICHT belegt: dass genau das in der CI passiert. `sent` wurde hier kuenstlich gesetzt.
+Vorhersage zum Pruefen: im naechsten echten Haenger ist `sent == true`. Ist es `false`, ist C-H9 widerlegt.
+
+Rohausgabe (Wegwerf-Test GsmSondeTest, Zeitwaechter-Diagnose):
+------------------------------------------------------------------------------------------
+SONDE vorher: sent=false
+SONDE kontrolle: nach 60021 ms ausnahme=AppNotIdleException
+
+=== ZEITWAECHTER: com.example.lrmprotokoll.testhilfen.GsmSondeTest.platzhalter ===
+wartet seit ueber 3 s - Stacks folgen, der Test laeuft weiter.
+
+--- "Test worker" WAITING ---
+	... 13 weitere Rahmen
+
+--- "SDK 34 Main Thread" RUNNABLE ---
+	... 45 weitere Rahmen
+
+--- Stichproben "SDK 34 Main Thread": 100 x alle 50 ms, Treffer je Rahmen ---
+App-Rahmen:
+	100  com.example.lrmprotokoll.testhilfen.GsmSondeTest$verlorenesWeckenHaeltAusstehendeAenderungenFest$statement$1.evaluate
+Compose-Rahmen:
+	(keiner getroffen)
+
+--- Main-Looper-Warteschlange: 100 Stichproben, im Schnitt 0.1 Nachrichten, in wie vielen Stichproben je Nachrichtenart ---
+	3  Handler ? what=0
+
+--- Zweig der Idle-Schleife, in wie vielen von 100 Stichproben ---
+	65  Frames pumpen (advanceDispatcher)
+	19  isIdleNow (ohne Pump)
+	16  Looper leeren (Espresso.onIdle)
+--- Aufgaben, die der TestCoroutineScheduler beim Pumpen ausfuehrt ---
+	30  Scheduler selbst am Blatt (keine Aufgabe)
+	10  kotlin.time.DurationKt.durationOfNanos
+
+--- Idling-Gruende (ComposeIdlingResource, 100 von 100 Stichproben lesbar), in wie vielen Stichproben wahr ---
+	hadAwaitersOnMainClock     0 / 100
+	hadSnapshotChanges         100 / 100
+	hadRecomposerChanges       0 / 100
+	hadPendingSetContent       0 / 100
+	hadPendingMeasureLayout    0 / 100
+--- GlobalSnapshotManager (Singleton): in wie vielen Stichproben wahr ---
+	started                   100 / 100
+	sent                      100 / 100
+--- Testuhr: virtuell 132456944 -> 441612800 ms (+309155856 ms) in 5069 ms Wanduhr ---
+--- Compose-Roots (letzte Stichprobe): 1 ---
+	AndroidComposeView 24x16 angehaengt=true sichtbarkeit=0 messenOderLayoutOffen=false
+
+--- Zustand der Test-JVM (alle Tests laufen in dieser einen JVM) ---
+	JVM-Laufzeit:   0.3 min (Ende der Stichproben: 0.4 min)
+	Heap genutzt:   125 MB -> 145 MB von maximal 512 MB
+	Garbage Collector: 75 Laeufe, 547 ms gesamt; waehrend der Stichproben +24 Laeufe, +99 ms
+	Threads:        16 -> 16
+	CPU-Kerne:      4, Systemlast 2.93
+	Threads nach Namen (Ziffern zusammengefasst):
+		2  /#.#.#.#:# to /#.#.#.#:# workers Thread #
+		2  pool-#-thread-#
+		1  /#.#.#.#:# to /#.#.#.#:# workers
+		1  Cleaner-#
+		1  Common-Cleaner
+		1  Finalizer
+		1  Notification Thread
+		1  Reference Handler
+		1  SDK 34 Main Thread
+		1  Signal Dispatcher
+		1  SurfaceSyncGroupTimer
+		1  Test worker
+=== ZEITWAECHTER Ende ===
