@@ -105,22 +105,20 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 
 ## 7 · Protokollformat
 
-Je Tag und Geräuschart eine Zeile. Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 30 Minuten
-Abstand einen Zeitraum (`--blockluecke`). Die Dichte steht als Wort:
+Der Text soll sich wie von Hand geschrieben lesen: gerundete Zeiten (Viertelstunden), "ca."-Angaben, keine Stoppuhr-Werte
+und keine Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es einen Überblick und, für Geräuschklassen mit mindestens
+15 Minuten Dauer, eine Zeile mit den Zeiträumen:
 
-- nahezu durchgehend: aktive Zeit mindestens 50 % des Zeitraums
-- ständig wiederkehrend: 12 bis 50 %
-- immer wieder: 3 bis 12 %
-- gelegentlich: unter 3 %
+> Hauptsächlich Arbeiten des Tiefbohrgeräts (ca. 2,5 Stunden), dazu Bohr- und Schleifgeräusche (ca. 15 min), außerdem kurz sonstige Baustellengeräusche.
+> Arbeiten des Tiefbohrgeräts: vormittags von ca. 9:45 bis ca. 12 Uhr ständig wiederkehrend; mittags von ca. 12:45 bis ca. 16:15 Uhr nahezu ununterbrochen. Dazwischen eine längere Pause von ca. 55 min.
 
-Die Dauer folgt dem dB(A)-Verlauf des PCE-323: Jede Episode wird nach beiden Seiten verlängert, solange der Pegel höchstens
-8 dB unter dem typischen Clip-Pegel der Klasse liegt (mindestens 60 dB, höchstens 30 s je Seite). Der Mindestwert aus den
-reinen Aufnahmen steht in der CSV. Klassen mit weniger als 1,5 Minuten aktiver Zeit erscheinen nur in der CSV. Tage ohne
-PCE-Messwerte werden nicht bearbeitet.
-
-Beispiel:
-
-> **Tief-/Drehbohrgerät** (zusammen ca. 119 min): 09:08–09:15 nahezu durchgehend (3,9 min); 09:51–11:01 nahezu durchgehend (50 min); …
+- Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 45 Minuten Abstand einen Zeitraum (`--blockluecke`).
+- Die Dichte steht als Wort: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder (3 bis 12 %), gelegentlich (darunter).
+- Die Dauer folgt dem dB(A)-Verlauf des PCE-323: Jede Episode wird nach beiden Seiten verlängert, solange der Pegel höchstens 8 dB unter
+  dem typischen Clip-Pegel der Klasse liegt (mindestens 60 dB, höchstens 30 s je Seite).
+- Klassen mit weniger als 1,5 Minuten aktiver Zeit stehen nur in der CSV. Die CSV (`tagesprotokoll.csv`) enthält die genauen Werte
+  (Minuten, Zeitfenster, Pausen, Pegel) und die Anzahl bestätigter, wahrscheinlicher und vorhergesagter Aufnahmen je Zeile.
+- Tage ohne PCE-Messwerte werden nicht bearbeitet.
 
 ## 8 · Bekannte Grenzen (Stand 04.11.2026)
 

@@ -157,6 +157,111 @@ def minuten(sek):
     return f"{m:.0f} min" if m >= 10 else f"{m:.1f} min".replace(".", ",")
 
 
+SUBJEKT = {
+    "B00": "sonstige Baustellengeräusche", "B01": "Arbeiten des Tiefbohrgeräts", "B02": "Hämmern (Schlagmaschine)",
+    "B03": "Bohr- und Schleifgeräusche", "B04": "Säge- und Trennschleifgeräusche", "B05": "Baggergeräusche (Motor)",
+    "B06": "Motor- und Aggregatgeräusche", "B07": "Baustellenfahrzeuge", "B08": "Warntöne (z. B. Rückfahrwarner)",
+    "B09": "Schläge und Klirren", "U01": "Straßenverkehr", "U02": "Stimmen", "U03": "Wind und Wetter",
+    "U04": "sonstige Umgebungsgeräusche", "B04+B06": "Säge- und Schleifgeräusche mit Motor",
+    "B02+B06": "Motorgeräusche mit Hämmern",
+}
+TAGESZEITEN = [(0, 7, "früh morgens"), (7, 9, "morgens"), (9, 11, "vormittags"), (11, 13, "mittags"),
+               (13, 17, "nachmittags"), (17, 24, "abends")]
+
+
+def tageszeit(dt):
+    return next(n for a_, b_, n in TAGESZEITEN if a_ <= dt.hour < b_)
+
+
+def viertel(dt):
+    m = int(round((dt.hour * 60 + dt.minute) / 15.0)) * 15
+    return (m // 60) % 24, m % 60
+
+
+def uhrzeit(h, m):
+    return f"{h}" if m == 0 else f"{h}:{m:02d}"
+
+
+def zeitraum_text(b, e):
+    minuten_ = (e - b).total_seconds() / 60
+    hb, mb = viertel(b)
+    he, me = viertel(e)
+    if minuten_ < 20 or (hb, mb) == (he, me):
+        h, m = viertel(b + (e - b) / 2)
+        return f"gegen {uhrzeit(h, m)} Uhr"
+    return f"von ca. {uhrzeit(hb, mb)} bis ca. {uhrzeit(he, me)} Uhr"
+
+
+def dauer_text(sek):
+    m = sek / 60
+    if m < 2:
+        return "nur kurz"
+    if m < 60:
+        return f"ca. {max(int(round(m / 5.0)) * 5, 5)} min"
+    h = round(m / 30.0) / 2
+    zahl_ = f"{int(h)}" if h == int(h) else f"{h:.1f}".replace(".", ",")
+    return f"ca. {zahl_} {'Stunde' if h == 1 else 'Stunden'}"
+
+
+def dichte_wort(anteil, i):
+    if anteil >= 0.5:
+        return ("fast durchgehend", "nahezu ununterbrochen")[i % 2]
+    if anteil >= 0.12:
+        return "ständig wiederkehrend"
+    if anteil >= 0.03:
+        return "immer wieder"
+    return "gelegentlich"
+
+
+def subjekt(k):
+    return SUBJEKT.get(k) or " und ".join(SUBJEKT.get(x, x) for x in k.split("+"))
+
+
+def _aufzaehlung(teile):
+    if len(teile) <= 1:
+        return "".join(teile)
+    return ", ".join(teile[:-1]) + " und " + teile[-1]
+
+
+def menschlich(infos):
+    """Informationen je Klasse (aktiv in Sekunden, Bloecke) in einen lesbaren Tagestext umsetzen."""
+    if not infos:
+        return []
+    infos = sorted(infos, key=lambda x: -x["aktiv"])
+    zeilen = []
+    kurze = [x for x in infos if x["aktiv"] < 600]
+    lange = [x for x in infos if x["aktiv"] >= 600]
+    if not lange:
+        namen_ = [subjekt(x["k"]) for x in kurze[:3]]
+        zeilen.append("Nur vereinzelt laute Phasen: " + _aufzaehlung(namen_) + ".")
+    else:
+        ueber = [f"Hauptsächlich {subjekt(lange[0]['k'])} ({dauer_text(lange[0]['aktiv'])})"]
+        for x in lange[1:3]:
+            ueber.append(f"dazu {subjekt(x['k'])} ({dauer_text(x['aktiv'])})")
+        satz_ = ", ".join(ueber)
+        if kurze:
+            satz_ += ", außerdem kurz " + _aufzaehlung([subjekt(x["k"]) for x in kurze[:3]])
+        zeilen.append(satz_ + ".")
+    for i, x in enumerate(infos):
+        if x["aktiv"] < 900:
+            continue
+        bl = sorted(x["bloecke"], key=lambda b: b["beginn"])
+        gross = [b for b in bl if b["aktiv"] >= 300]
+        auswahl = sorted(sorted(gross, key=lambda b: -b["aktiv"])[:4], key=lambda b: b["beginn"])
+        teile = []
+        for j, b in enumerate(auswahl):
+            spanne = max((b["ende"] - b["beginn"]).total_seconds(), 1.0)
+            teile.append(f"{tageszeit(b['beginn'])} {zeitraum_text(b['beginn'], b['ende'])} {dichte_wort(b['aktiv'] / spanne, i + j)}")
+        satz = f"{subjekt(x['k'])}: " + "; ".join(teile)
+        if len(gross) > len(auswahl) or len(bl) > len(gross):
+            satz += "; dazu einzelne kürzere Phasen"
+        luecken = [(bl[n + 1]["beginn"] - bl[n]["ende"]).total_seconds() for n in range(len(bl) - 1)]
+        if luecken and max(luecken) >= 1800:
+            satz += f". Dazwischen eine längere Pause von {dauer_text(max(luecken))}"
+        zeilen.append(satz + ".")
+    return zeilen
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("voll")
@@ -170,7 +275,7 @@ def main():
     ap.add_argument("--drive", default="")
     ap.add_argument("--shards", default="", help="Ordner mit den Ergebnisdateien (Standard: <voll>/shards)")
     ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
-    ap.add_argument("--blockluecke", type=float, default=1800, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
+    ap.add_argument("--blockluecke", type=float, default=2700, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
     ap.add_argument("--pegel-minimum", type=float, default=60.0)
     ap.add_argument("--max-erweiterung", type=int, default=30)
@@ -265,6 +370,7 @@ def main():
             else:
                 unsicher += 1
         zeilen = []
+        infos = []
         for k in sorted(je, key=lambda k: (k.startswith("U"), -len(je[k]))):
             cl = je[k]
             ep = episoden([datetime.fromisoformat(r["zeit"]) for r in cl], a.clip_sekunden, a.luecke)
@@ -310,37 +416,16 @@ def main():
                                round(laeq_ges, 1) if ep_laeq else "", round(max(ep_max), 1) if ep_max else "",
                                st.get("bestaetigt", 0), st.get("wahrscheinlich", 0), st.get("vorhergesagt", 0), fenster])
 
-            def dichte(bl):
-                spanne = max((bl["ende"] - bl["beginn"]).total_seconds(), 1.0)
-                anteil = bl["aktiv"] / spanne
-                if anteil >= 0.5:
-                    return "nahezu durchgehend"
-                if anteil >= 0.12:
-                    return "ständig wiederkehrend"
-                if anteil >= 0.03:
-                    return "immer wieder"
-                return "gelegentlich"
-
-            kurz = " + ".join(KURZ.get(x, TITEL[x]) for x in k.split("+"))
             lang = [bl for bl in bloecke if bl["n"] > 1 or (bl["ende"] - bl["beginn"]).total_seconds() >= 300]
-            einzel = [bl for bl in bloecke if bl not in lang]
-            gesamt_min = (aktiv if ep_laeq else aktiv_clips) / 60
-            if gesamt_min < a.min_klasse_minuten and not lang:
+            gesamt_sek = aktiv if ep_laeq else aktiv_clips
+            if gesamt_sek / 60 < a.min_klasse_minuten and not lang:
                 continue  # wirklich kurz: nur in der CSV
-            teile = [f"{bl['beginn']:%H:%M}–{bl['ende']:%H:%M} {dichte(bl)} ({minuten(bl['aktiv'])})" for bl in lang]
-            if len(einzel) >= 3:
-                zeiten = ", ".join(f"{bl['beginn']:%H:%M}" for bl in einzel[:5]) + (" …" if len(einzel) > 5 else "")
-                teile.append(f"vereinzelt {len(einzel)} Mal (z. B. {zeiten})")
-            if not teile:
-                continue
-            zusatz = "" if ep_laeq else ", Mindestwert"
-            satz = f"- **{kurz}** (zusammen ca. {minuten(aktiv if ep_laeq else aktiv_clips)}{zusatz}): " + "; ".join(teile) + "."
-            zeilen.append(satz)
-        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messzeitraum {erfasst} Uhr.", ""]
-        text += zeilen or ["- Keine Aufnahme ab {:g} dB.".format(a.min_db_klassifizieren)]
-        if unsicher:
-            text.append(f"- Nicht zuordenbar: {unsicher} Aufnahmen ab {a.min_db_klassifizieren:g} dB.")
-        text += [f"- Leisere Ereignisse (60–{a.min_db_klassifizieren:g} dB), nicht beurteilt: {leise} Aufnahmen.", ""]
+            infos.append({"k": k, "aktiv": gesamt_sek, "bloecke": bloecke})
+        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messung von ca. {uhrzeit(*viertel(datetime.fromisoformat(rs[0]['zeit'])))} bis ca. {uhrzeit(*viertel(datetime.fromisoformat(rs[-1]['zeit'])))} Uhr.", ""]
+        text += menschlich(infos) or ["Keine auffälligen lauten Geräusche zugeordnet."]
+        if unsicher >= 10:
+            text.append(f"({unsicher} laute Aufnahmen ließen sich nicht sicher zuordnen.)")
+        text.append("")
 
     kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "bloecke", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
             "laengste_episode_min", "pause_median_min", "pause_max_min", "clip_pegel_median_db", "clip_pegel_max_db",
@@ -357,10 +442,8 @@ def main():
         for z in csv_zeilen:
             w.writerow([str(v).replace(".", ",") if isinstance(v, float) else v for v in z])
     hinweis = ["# Lärm-Tagesprotokoll (Prototyp)", "",
-               f"Parameter: Aufnahmen derselben Klasse bis {a.luecke:g} s Abstand = eine Episode; Episoden bis {a.blockluecke:g} s Abstand = ein Block im Text; Aufnahmelänge {a.clip_sekunden:g} s. Pegelwerte stehen im Schallbericht und in der CSV.",
-               "Die Zeiten sind Mindestwerte: Die App nimmt nur auf, wenn der Pegel die Schwelle überschreitet.",
-               "Klassen: Feinklassen aus Baul-rm. Einordnung: Gruppenurteile des Owners auf alle Clips der Gruppe übertragen (wahrscheinlich),",
-               "Mischgruppen per Modell (vorhergesagt). Aufnahmen unter 75 dB sind noch nicht beurteilt.", ""]
+               "Zeiten sind auf Viertelstunden gerundet, Dauern als ca.-Angaben. Es sind Mindestwerte: Die App nimmt nur auf, wenn der Pegel die Schwelle überschreitet.",
+               "Zugeordnet sind bisher nur Aufnahmen ab 75 dB. Leisere Aufnahmen sind noch nicht ausgewertet. Pegelwerte stehen im Schallbericht und in der CSV.", ""]
     with open(os.path.join(a.ausgabe, "tagesprotokoll.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(hinweis + text))
     gesamt = Counter(status.get(r["clip"], "leise" if zahl(r["pegel_db"]) < a.min_db_klassifizieren else "zu_unsicher") for r in rows)
