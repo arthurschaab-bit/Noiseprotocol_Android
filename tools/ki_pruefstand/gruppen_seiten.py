@@ -27,16 +27,24 @@ MENGEN = {
     "AQ": "Ältere Aufnahmen (Juni–August), 60–75 dB · ",
 }
 KLASSEN = [
-    ("HYD_HAMMER", "Hydraulikhammer am CAT-Bagger"),
-    ("DRUCKLUFT", "Manueller Drucklufthammer"),
-    ("ANKERBOHR", "Wöhrl-Ankerbohrgerät"),
-    ("DREHBOHR", "Großdrehbohrgerät"),
-    ("VERLADUNG", "Betonbruch-Verladung"),
-    ("BAU_SONST", "Baustelle, anderes"),
-    ("KEINE_BAU", "Keine Baustelle"),
+    ("MOTOR", "Motorgeräusch (dauerhaft, Leerlauf, Fahren)"),
+    ("HAEMMERND", "Wiederholte Schläge (Hämmern)"),
+    ("SCHLAG", "Einzelner Schlag, Aufprall, Poltern"),
+    ("BOHREND", "Bohren"),
+    ("SAEGEND_SCHLEIFEND", "Sägen, Schleifen, Trennen"),
+    ("KLIRREN", "Klirren, Metall auf Metall"),
+    ("SIGNAL", "Warnsignal, Piepen"),
+    ("SPRACHE_MUSIK", "Sprache, Musik"),
+    ("VERKEHR_EXTERN", "Straße, Zug, Flugzeug"),
+    ("SIRENE", "Sirene"),
+    ("WIND_RAUSCHEN", "Wind, Rauschen, Hintergrund"),
+    ("STILLE", "Stille, Grundpegel"),
+    ("MESSGERAET", "Messgerät, Handhabung"),
     ("UNKLAR", "Unklar"),
     ("GEMISCHT", "Gruppe ist gemischt"),
 ]
+QUELLEN = ["", "Bagger", "Tiefbohrer / Drehbohrgerät", "Ankerbohrgerät", "Drucklufthammer", "Hydraulikhammer",
+           "Handhammer", "Betonbruch-Verladung", "Baustellenfahrzeug (Lkw, Radlader)", "Kran", "Pumpe / Aggregat", "Sonstiges"]
 
 
 def zahl(s):
@@ -136,6 +144,7 @@ details summary{cursor:pointer}
 audio{width:100%}
 select,input[type=text]{box-sizing:border-box;padding:5px 7px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);font:inherit;max-width:100%}
 input[type=text]{width:100%}
+.zeile{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:13px}
 .opts{display:flex;flex-wrap:wrap;gap:6px}
 .opts label{border:1px solid var(--line);border-radius:4px;padding:6px 9px;cursor:pointer;font-size:13px;display:flex;flex-direction:column;min-width:0;position:relative}
 .opts label small{color:var(--mut);font-size:11px}
@@ -148,7 +157,8 @@ textarea{width:100%;box-sizing:border-box;height:120px;background:var(--card);co
 """
 
 JS = r"""
-const KLASSEN=%KLASSEN%, GRUPPEN=%GRUPPEN%;
+const KLASSEN=%KLASSEN%, QUELLEN=%QUELLEN%, GRUPPEN=%GRUPPEN%;
+const KEINE=['SPRACHE_MUSIK','VERKEHR_EXTERN','SIRENE','WIND_RAUSCHEN','STILLE','MESSGERAET'];
 const urteil={}, clipUrteil={}; let db=null;
 const $=s=>document.querySelector(s);
 function render(){
@@ -172,22 +182,36 @@ function render(){
       s.onchange=()=>speichernClip(c.id,s.value);
       w.append(t,a,s); cl.append(w);
     });
+    const gid='g'+g.id;
     const o=document.createElement('div'); o.className='opts';
     KLASSEN.forEach(k=>{
       const lb=document.createElement('label'); const r=document.createElement('input');
-      r.type='radio'; r.name='g'+g.id; r.id='r'+g.id+'_'+k[0]; r.value=k[0]; r.checked=u.klasse===k[0];
-      r.onchange=()=>speichern('g'+g.id,{klasse:k[0],notiz:(urteil['g'+g.id]||{}).notiz||''});
+      r.type='radio'; r.name=gid; r.id='r'+g.id+'_'+k[0]; r.value=k[0]; r.checked=u.klasse===k[0];
+      r.onchange=()=>upd(gid,{klasse:k[0],baustelle:(urteil[gid]||{}).baustelle||(KEINE.includes(k[0])?'nein':'ja')});
       lb.append(r,document.createTextNode(k[0])); const sm2=document.createElement('small'); sm2.textContent=k[1]; lb.append(sm2); o.append(lb);
     });
+    const zeile=document.createElement('div'); zeile.className='zeile';
+    const ql=document.createElement('label'); ql.append(document.createTextNode('Quelle (optional) '));
+    const qs=document.createElement('select'); qs.id='q'+g.id;
+    QUELLEN.forEach(q=>{ const op=document.createElement('option'); op.value=q; op.textContent=q||'unbekannt / keine Angabe'; qs.append(op); });
+    qs.value=u.quelle||''; qs.onchange=()=>upd(gid,{quelle:qs.value}); ql.append(qs);
+    const bl=document.createElement('span'); bl.append(document.createTextNode('Baustelle: '));
+    ['ja','nein','unklar'].forEach(b=>{
+      const l2=document.createElement('label'); const r2=document.createElement('input');
+      r2.type='radio'; r2.name='b'+g.id; r2.id='b'+g.id+'_'+b; r2.value=b; r2.checked=u.baustelle===b;
+      r2.onchange=()=>upd(gid,{baustelle:b}); l2.append(r2,document.createTextNode(' '+b+'  ')); bl.append(l2);
+    });
+    zeile.append(ql,bl);
     const n=document.createElement('input'); n.type='text'; n.id='n'+g.id; n.placeholder='Notiz zur Gruppe (optional)'; n.value=u.notiz||'';
-    n.onchange=()=>speichern('g'+g.id,{klasse:(urteil['g'+g.id]||{}).klasse||'',notiz:n.value});
-    d.append(h,f,cl,det,o,n); root.append(d);
+    n.onchange=()=>upd(gid,{notiz:n.value});
+    d.append(h,f,cl,det,o,zeile,n); root.append(d);
   });
   const fertig=GRUPPEN.filter(g=>(urteil['g'+g.id]||{}).klasse).length;
   $('#zaehler').textContent=fertig+' / '+GRUPPEN.length+' Gruppen'; $('#fort').value=fertig;
   $('#export').value=JSON.stringify({gruppen:urteil,clips:clipUrteil},null,1);
 }
 function neu(){ const y=window.scrollY; render(); window.scrollTo(0,y); }
+function upd(id,patch){ const alt=urteil[id]||{klasse:'',quelle:'',baustelle:'',notiz:''}; speichern(id,Object.assign({},alt,patch)); }
 async function speichern(id,data){
   urteil[id]=data; neu();
   if(db){ try{ await db.collection('gruppen').doc(id).set(data); $('#msg').textContent='Gespeichert.'; }catch(e){ $('#msg').textContent='Speichern fehlgeschlagen, bitte unten den Export kopieren.'; } }
@@ -210,7 +234,7 @@ $('#kopie').onclick=async()=>{ const t=$('#export'); try{ await navigator.clipbo
 
 
 def seite_html(nr, gesamt, gruppen, navigation):
-    js = JS.replace("%KLASSEN%", json.dumps(KLASSEN)).replace("%GRUPPEN%", json.dumps(gruppen))
+    js = JS.replace("%KLASSEN%", json.dumps(KLASSEN)).replace("%QUELLEN%", json.dumps(QUELLEN)).replace("%GRUPPEN%", json.dumps(gruppen))
     nav = " · ".join(navigation)
     return f"""<title>{TITEL} Teil {nr}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -218,7 +242,7 @@ def seite_html(nr, gesamt, gruppen, navigation):
 <style>{CSS}</style>
 <div class="wrap">
 <h1>{TITEL} Teil {nr} von {gesamt}</h1>
-<p class="lead">Je Gruppe 5 typische Clips anhören und eine Klasse für die ganze Gruppe wählen. Klingt ein Clip anders, wähle unter dem Player eine eigene Klasse. Die Hinweise von App und YAMNet sind eingeklappt, damit sie dein Urteil nicht lenken. Alles wird automatisch gespeichert.</p>
+<p class="lead">Je Gruppe 5 typische Clips anhören und die Geräuschart der ganzen Gruppe wählen. Die Quelle (Gerät) ist optional, „Baustelle“ ist vorbelegt und änderbar. Klingt ein Clip anders, wähle unter dem Player eine eigene Klasse. Die Hinweise von App und YAMNet sind eingeklappt, damit sie dein Urteil nicht lenken. Alles wird automatisch gespeichert.</p>
 <nav>{nav}</nav>
 <div class="bar"><span class="mono" id="zaehler"></span><progress id="fort" value="0" max="{len(gruppen)}"></progress><span id="msg"></span></div>
 <div id="liste"></div>
