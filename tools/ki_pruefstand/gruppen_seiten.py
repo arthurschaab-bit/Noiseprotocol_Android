@@ -20,6 +20,12 @@ import zipfile
 from collections import Counter, defaultdict
 from statistics import median
 
+TITEL = "Klanggruppen"
+MENGEN = {
+    "AL": "Ältere Aufnahmen (Juni–August), ab 75 dB · ",
+    "NQ": "Neue Aufnahmen (ab 14.09.), 60–75 dB · ",
+    "AQ": "Ältere Aufnahmen (Juni–August), 60–75 dB · ",
+}
 KLASSEN = [
     ("HYD_HAMMER", "Hydraulikhammer am CAT-Bagger"),
     ("DRUCKLUFT", "Manueller Drucklufthammer"),
@@ -41,8 +47,8 @@ def lade_gruppen(detail):
     gr = defaultdict(list)
     with open(detail, encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f, delimiter=";"):
-            c = int(r["cluster"])
-            if c >= 0:
+            c = r["cluster"]
+            if c not in ("", "-1"):
                 gr[c].append(r)
     return gr
 
@@ -69,6 +75,27 @@ def hole_wav(wurzel, zielordner, r):
     if os.path.exists(ziel):
         return ziel
     name = r["clip"] + ".wav"
+    quelle = r.get("quelle_pfad", "")
+    if quelle:  # aeltere Aufnahmen: Zip oder Ordner im Bautagebuch
+        for versuch in range(4):
+            try:
+                if quelle.lower().endswith(".zip"):
+                    with zipfile.ZipFile(quelle) as z:
+                        vorh = {os.path.basename(n): n for n in z.namelist()}
+                        if name in vorh:
+                            with open(ziel, "wb") as f:
+                                f.write(z.read(vorh[name]))
+                            return ziel
+                else:
+                    p = os.path.join(quelle, name)
+                    if os.path.exists(p):
+                        with open(p, "rb") as src, open(ziel, "wb") as dst:
+                            dst.write(src.read())
+                        return ziel
+                return None
+            except (OSError, zipfile.BadZipFile):
+                time.sleep(5 * (versuch + 1))
+        return None
     muster = os.path.join(glob.escape(wurzel), r["tag"], "WAV", f"audio_{r['tag']}_{int(r['stunde']):02d}-00*.zip")
     for versuch in range(4):
         try:
@@ -185,12 +212,12 @@ $('#kopie').onclick=async()=>{ const t=$('#export'); try{ await navigator.clipbo
 def seite_html(nr, gesamt, gruppen, navigation):
     js = JS.replace("%KLASSEN%", json.dumps(KLASSEN)).replace("%GRUPPEN%", json.dumps(gruppen))
     nav = " · ".join(navigation)
-    return f"""<title>Klanggruppen Teil {nr}</title>
+    return f"""<title>{TITEL} Teil {nr}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <style>{CSS}</style>
 <div class="wrap">
-<h1>Klanggruppen Teil {nr} von {gesamt}</h1>
+<h1>{TITEL} Teil {nr} von {gesamt}</h1>
 <p class="lead">Je Gruppe 5 typische Clips anhören und eine Klasse für die ganze Gruppe wählen. Klingt ein Clip anders, wähle unter dem Player eine eigene Klasse. Die Hinweise von App und YAMNet sind eingeklappt, damit sie dein Urteil nicht lenken. Alles wird automatisch gespeichert.</p>
 <nav>{nav}</nav>
 <div class="bar"><span class="mono" id="zaehler"></span><progress id="fort" value="0" max="{len(gruppen)}"></progress><span id="msg"></span></div>
@@ -212,14 +239,20 @@ def main():
     ap.add_argument("--je-gruppe", type=int, default=5)
     ap.add_argument("--gruppen-je-seite", type=int, default=6)
     ap.add_argument("--zuerst", default="3,24,27,0,22,9,15,11,14,6")
+    ap.add_argument("--titel", default="Klanggruppen")
     ap.add_argument("--nav", default="", help="Zeilen 'Teil N=URL' getrennt durch |, werden als Navigation eingebaut")
     a = ap.parse_args()
     os.makedirs(a.wavordner, exist_ok=True)
     os.makedirs(a.ausgabe, exist_ok=True)
 
     gr = lade_gruppen(a.detail)
-    zuerst = [int(x) for x in a.zuerst.split(",") if x]
-    reihenfolge = [g for g in zuerst if g in gr] + sorted((g for g in gr if g not in zuerst), key=lambda g: -len(gr[g]))
+    global TITEL
+    TITEL = a.titel
+    zuerst = [x for x in a.zuerst.split(",") if x]
+    if all("rang" in v[0] for v in gr.values()):  # Reihenfolge steht in der Eingabe
+        reihenfolge = sorted(gr, key=lambda g: int(gr[g][0]["rang"]))
+    else:
+        reihenfolge = [g for g in zuerst if g in gr] + sorted((g for g in gr if g not in zuerst), key=lambda g: -len(gr[g]))
     nav_links = dict(p.split("=", 1) for p in a.nav.split("|") if "=" in p)
 
     daten = []
@@ -238,14 +271,16 @@ def main():
                               audio="data:audio/wav;base64," + b))
         pegel = [zahl(r["pegel_db"]) for r in m]
         app = Counter(r["app_baulaerm"] for r in m)
+        app_text = ("Keine App-Klassifikation (ältere Aufnahmen)" if app.get("-")
+                    else f"App-Label: Baulärm {app['ja']}, möglich {app['möglich']}, nein {app['nein']}")
         top = Counter(r["yamnet_top1"] for r in m).most_common(3)
         spitzen = Counter(r["app_spitze"] for r in m if r["app_spitze"]).most_common(3)
         tage = len({r["tag"] for r in m})
         std = Counter(int(r["stunde"]) for r in m).most_common(3)
         daten.append(dict(
             id=g, anzahl=len(m), median=f"{median(pegel):.1f}".replace(".", ","),
-            fakten=f"Pegel {min(pegel):.0f}–{max(pegel):.0f} dB · {tage} Tage · häufigste Stunden: " + ", ".join(f"{h} Uhr" for h, _ in std),
-            hinweis=(f"App-Label: Baulärm {app['ja']}, möglich {app['möglich']}, nein {app['nein']}"
+            fakten=MENGEN.get(m[0].get("menge", ""), "") + f"Pegel {min(pegel):.0f}–{max(pegel):.0f} dB · {tage} Tage · häufigste Stunden: " + ", ".join(f"{h} Uhr" for h, _ in std),
+            hinweis=(app_text
                      + (f"; App-Spitzen: {', '.join(f'{k} ({v})' for k, v in spitzen)}" if spitzen else "")
                      + f". Häufigste YAMNet-Klasse: {', '.join(f'{k} ({v})' for k, v in top)}."),
             clips=clips))
