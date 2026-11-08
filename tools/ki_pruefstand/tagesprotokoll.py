@@ -40,12 +40,14 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 TITEL = {
+    "B00": "Baustelle, nicht näher bestimmt",
     "B01": "Tief-/Drehbohrgerät", "B02": "Abbruch-/Schlagmaschine (hämmernd)", "B03": "Bohren/Fräsen/Schleifen",
     "B04": "Säge/Trennschleifer", "B05": "Schweres Baugerät (Bagger)", "B06": "Motor/Aggregat",
     "B07": "Baustellenfahrzeug", "B08": "Warnsignal", "B09": "Materialimpuls (Schlag, Klirren)",
     "U01": "Straßenverkehr", "U02": "Sprache/Menschen", "U03": "Natur/Wetter", "U04": "Sonstige Umgebung",
 }
 KURZ = {
+    "B00": "Baustelle (nicht näher bestimmt)",
     "B01": "Tief-/Drehbohrgerät", "B02": "Hämmern (Schlagmaschine)", "B03": "Bohren/Fräsen/Schleifen",
     "B04": "Säge/Trennschleifer", "B05": "Motorgeräusche Bagger/schweres Gerät", "B06": "Motor/Aggregat",
     "B07": "Baustellenfahrzeuge", "B08": "Warnsignale", "B09": "Schläge/Klirren", "U01": "Straßenverkehr",
@@ -75,7 +77,7 @@ def abbilden(art, quelle):
         if "bagger" in q:
             return "B05"
         return "B06"
-    return {"HAEMMERND": "B02", "SCHLAG": "B09", "KLIRREN": "B09", "BOHREND": "B03", "SIGNAL": "B08",
+    return {"BAU_SONST": "B00", "HAEMMERND": "B02", "SCHLAG": "B09", "KLIRREN": "B09", "BOHREND": "B03", "SIGNAL": "B08",
             "MOTOR+SAEGEND_SCHLEIFEND": "B04+B06", "MOTOR+HAEMMERND": "B02+B06",
             "SIRENE": "U04", "MESSGERAET_HANDHABUNG": "U04", "KEINE_BAU": "U04"}.get(art)
 
@@ -166,6 +168,7 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
+    ap.add_argument("--shards", default="", help="Ordner mit den Ergebnisdateien (Standard: <voll>/shards)")
     ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
     ap.add_argument("--blockluecke", type=float, default=1800, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
@@ -201,7 +204,7 @@ def main():
     ziel_ids = [r["clip"] for r in rows if zahl(r["pegel_db"]) >= a.min_db_klassifizieren]
     gebraucht = set(ziel_ids)
     namen, E = [], []
-    for p in sorted(glob.glob(os.path.join(a.voll, "shards", "*.npz"))):
+    for p in sorted(glob.glob(os.path.join(a.shards or os.path.join(a.voll, "shards"), "*.npz"))):
         z = np.load(p, allow_pickle=True)
         n = [str(x) for x in z["namen"]]
         idx = [i for i, x in enumerate(n) if x in gebraucht]
