@@ -213,8 +213,38 @@ def dichte_wort(anteil, i):
     return "gelegentlich"
 
 
-def subjekt(k):
-    return SUBJEKT.get(k) or " und ".join(SUBJEKT.get(x, x) for x in k.split("+"))
+ART_WORT = {
+    "B00": "sonstige Baustellengeräusche", "B01": "Motorgeräusche", "B02": "Hämmern", "B03": "Bohr- und Schleifgeräusche",
+    "B04": "Säge- und Trennschleifgeräusche", "B05": "Motorgeräusche", "B06": "Motor- und Aggregatgeräusche",
+    "B07": "Fahrzeuggeräusche", "B08": "Warntöne", "B09": "Schläge und Klirren", "U01": "Straßenverkehr",
+    "U02": "Stimmen", "U03": "Wind und Wetter", "U04": "sonstige Umgebungsgeräusche",
+}
+STANDARD_GERAET = {"B01": "Tiefbohrgerät", "B05": "Bagger"}
+
+
+def geraet_kurz(quelle):
+    q = quelle.lower()
+    for stichwort, name in (("tiefbohr", "Tiefbohrgerät"), ("drehbohr", "Tiefbohrgerät"), ("anker", "Ankerbohrgerät"),
+                            ("druckluft", "Drucklufthammer"), ("hydraulik", "Hydraulikhammer"), ("handhammer", "Handhammer"),
+                            ("bagger", "Bagger"), ("verladung", "Verladung")):
+        if stichwort in q:
+            return name
+    return quelle.strip()
+
+
+def subjekt(k, quellen=None):
+    """Geraeuschart und, falls bekannt, das Geraet: 'Motorgeräusche (Tiefbohrgerät)'."""
+    art = ART_WORT.get(k) or SUBJEKT.get(k) or " und ".join(ART_WORT.get(x, x) for x in k.split("+"))
+    zaehler = Counter()
+    for q, n in (quellen or {}).items():
+        for teil in q.split(" / "):
+            if geraet_kurz(teil):
+                zaehler[geraet_kurz(teil)] += n
+    gesamt = sum(zaehler.values())
+    namen = [g for g, n in zaehler.most_common(2) if gesamt and n / gesamt >= 0.3]
+    if not namen and k in STANDARD_GERAET:
+        namen = [STANDARD_GERAET[k]]
+    return f"{art} ({' / '.join(namen)})" if namen else art
 
 
 def _aufzaehlung(teile):
@@ -224,41 +254,25 @@ def _aufzaehlung(teile):
 
 
 def menschlich(infos):
-    """Informationen je Klasse (aktiv in Sekunden, Bloecke) in einen lesbaren Tagestext umsetzen."""
+    """Ein knapper Tagestext: je Klasse mit mindestens 15 Minuten ein Satz, Kleineres in einem Halbsatz."""
     if not infos:
         return []
     infos = sorted(infos, key=lambda x: -x["aktiv"])
+    grosse = [x for x in infos if x["aktiv"] >= 900]
+    kleine = [x for x in infos if x["aktiv"] < 900]
     zeilen = []
-    kurze = [x for x in infos if x["aktiv"] < 600]
-    lange = [x for x in infos if x["aktiv"] >= 600]
-    if not lange:
-        namen_ = [subjekt(x["k"]) for x in kurze[:3]]
-        zeilen.append("Nur vereinzelt laute Phasen: " + _aufzaehlung(namen_) + ".")
-    else:
-        ueber = [f"Hauptsächlich {subjekt(lange[0]['k'])} ({dauer_text(lange[0]['aktiv'])})"]
-        for x in lange[1:3]:
-            ueber.append(f"dazu {subjekt(x['k'])} ({dauer_text(x['aktiv'])})")
-        satz_ = ", ".join(ueber)
-        if kurze:
-            satz_ += ", außerdem kurz " + _aufzaehlung([subjekt(x["k"]) for x in kurze[:3]])
-        zeilen.append(satz_ + ".")
-    for i, x in enumerate(infos):
-        if x["aktiv"] < 900:
-            continue
+    for i, x in enumerate(grosse):
         bl = sorted(x["bloecke"], key=lambda b: b["beginn"])
-        gross = [b for b in bl if b["aktiv"] >= 300]
-        auswahl = sorted(sorted(gross, key=lambda b: -b["aktiv"])[:4], key=lambda b: b["beginn"])
+        gross = [b for b in bl if b["aktiv"] >= 300] or bl
+        auswahl = sorted(sorted(gross, key=lambda b: -b["aktiv"])[:3], key=lambda b: b["beginn"])
         teile = []
         for j, b in enumerate(auswahl):
             spanne = max((b["ende"] - b["beginn"]).total_seconds(), 1.0)
             teile.append(f"{tageszeit(b['beginn'])} {zeitraum_text(b['beginn'], b['ende'])} {dichte_wort(b['aktiv'] / spanne, i + j)}")
-        satz = f"{subjekt(x['k'])}: " + "; ".join(teile)
-        if len(gross) > len(auswahl) or len(bl) > len(gross):
-            satz += "; dazu einzelne kürzere Phasen"
-        luecken = [(bl[n + 1]["beginn"] - bl[n]["ende"]).total_seconds() for n in range(len(bl) - 1)]
-        if luecken and max(luecken) >= 1800:
-            satz += f". Dazwischen eine längere Pause von {dauer_text(max(luecken))}"
-        zeilen.append(satz + ".")
+        zeilen.append(f"{subjekt(x['k'], x.get('quellen'))}: " + "; ".join(teile) + ".")
+    if kleine:
+        namen_ = _aufzaehlung([subjekt(x["k"], x.get("quellen")) for x in kleine[:3]])
+        zeilen.append(("Außerdem kurz: " if grosse else "Nur vereinzelt laute Phasen: ") + namen_ + ".")
     return zeilen
 
 
@@ -293,17 +307,20 @@ def main():
 
     # --- Klassen je Clip -----------------------------------------------------------------
     klasse, status = {}, {}
+    quelle_clip = {}
     for r in rows:
         cid, c = r["clip"], r["cluster"]
         if cid in C:
             k = abbilden(C[cid]["art"], C[cid].get("quelle", ""))
             if k:
                 klasse[cid], status[cid] = k, "bestaetigt"
+                quelle_clip[cid] = C[cid].get("quelle", "")
         elif c in G and G[c]["art"] != "GEMISCHT":
             k = abbilden(G[c]["art"], G[c].get("quelle", ""))
             if k:
                 klasse[cid] = k
                 status[cid] = "bestaetigt" if cid in gehoert else "wahrscheinlich"
+                quelle_clip[cid] = G[c].get("quelle", "")
 
     # --- Modell für die übrigen Clips ab Schwelle ----------------------------------------
     ziel_ids = [r["clip"] for r in rows if zahl(r["pegel_db"]) >= a.min_db_klassifizieren]
@@ -420,8 +437,11 @@ def main():
             gesamt_sek = aktiv if ep_laeq else aktiv_clips
             if gesamt_sek / 60 < a.min_klasse_minuten and not lang:
                 continue  # wirklich kurz: nur in der CSV
-            infos.append({"k": k, "aktiv": gesamt_sek, "bloecke": bloecke})
-        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y}", "", f"Messung von ca. {uhrzeit(*viertel(datetime.fromisoformat(rs[0]['zeit'])))} bis ca. {uhrzeit(*viertel(datetime.fromisoformat(rs[-1]['zeit'])))} Uhr.", ""]
+            infos.append({"k": k, "aktiv": gesamt_sek, "bloecke": bloecke,
+                          "quellen": Counter(quelle_clip[r_["clip"]] for r_ in cl if quelle_clip.get(r_["clip"]))})
+        von_ = uhrzeit(*viertel(datetime.fromisoformat(rs[0]["zeit"])))
+        bis_ = uhrzeit(*viertel(datetime.fromisoformat(rs[-1]["zeit"])))
+        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} (Messung ca. {von_} bis {bis_} Uhr)", ""]
         text += menschlich(infos) or ["Keine auffälligen lauten Geräusche zugeordnet."]
         if unsicher >= 10:
             text.append(f"({unsicher} laute Aufnahmen ließen sich nicht sicher zuordnen.)")

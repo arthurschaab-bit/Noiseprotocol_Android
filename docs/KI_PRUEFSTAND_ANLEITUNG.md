@@ -105,12 +105,16 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 
 ## 7 · Protokollformat
 
-Der Text soll sich wie von Hand geschrieben lesen: gerundete Zeiten (Viertelstunden), "ca."-Angaben, keine Stoppuhr-Werte
-und keine Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es einen Überblick und, für Geräuschklassen mit mindestens
-15 Minuten Dauer, eine Zeile mit den Zeiträumen:
+Der Text soll sich wie von Hand geschrieben lesen: gerundete Zeiten (Viertelstunden), "ca."-Angaben, keine Stoppuhr-Werte und keine
+Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es höchstens drei Zeilen: je Geräuschklasse mit mindestens 15 Minuten ein Satz
+mit Geräuschart und, falls bekannt, dem Gerät, dazu ein Halbsatz für Kurzes.
 
-> Hauptsächlich Arbeiten des Tiefbohrgeräts (ca. 2,5 Stunden), dazu Bohr- und Schleifgeräusche (ca. 15 min), außerdem kurz sonstige Baustellengeräusche.
-> Arbeiten des Tiefbohrgeräts: vormittags von ca. 9:45 bis ca. 12 Uhr ständig wiederkehrend; mittags von ca. 12:45 bis ca. 16:15 Uhr nahezu ununterbrochen. Dazwischen eine längere Pause von ca. 55 min.
+> ## Dienstag, 09.06.2026 (Messung ca. 6:15 bis 16:15 Uhr)
+> Motorgeräusche (Tiefbohrgerät): vormittags von ca. 9:45 bis ca. 12 Uhr ständig wiederkehrend; mittags von ca. 12:45 bis ca. 16:15 Uhr nahezu ununterbrochen.
+> Bohr- und Schleifgeräusche (Ankerbohrgerät): nachmittags von ca. 14:45 bis ca. 16 Uhr ständig wiederkehrend.
+> Außerdem kurz: sonstige Baustellengeräusche.
+
+Das Gerät steht, wenn die Klasse mindestens zu 30 % aus Clips mit bekannter Quelle besteht (Owner-Urteil), sonst gibt es nur die Art.
 
 - Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 45 Minuten Abstand einen Zeitraum (`--blockluecke`).
 - Die Dichte steht als Wort: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder (3 bis 12 %), gelegentlich (darunter).
