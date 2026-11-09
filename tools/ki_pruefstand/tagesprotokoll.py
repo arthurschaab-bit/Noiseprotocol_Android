@@ -260,8 +260,8 @@ def menschlich(infos):
     if not infos:
         return []
     infos = sorted(infos, key=lambda x: -x["aktiv"])
-    grosse = [x for x in infos if x["aktiv"] >= 900]
-    kleine = [x for x in infos if x["aktiv"] < 900]
+    grosse = [x for x in infos if x["aktiv"] >= 300]
+    kleine = [x for x in infos if x["aktiv"] < 300]
     zeilen = []
     for i, x in enumerate(grosse):
         bl = sorted(x["bloecke"], key=lambda b: b["beginn"])
@@ -292,7 +292,7 @@ def main():
     ap.add_argument("--drive", default="")
     ap.add_argument("--shards", default="", help="Ordner mit den Ergebnisdateien (Standard: <voll>/shards)")
     ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
-    ap.add_argument("--blockluecke", type=float, default=2700, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
+    ap.add_argument("--blockluecke", type=float, default=3600, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
     ap.add_argument("--pegel-abstand", type=float, default=8.0)
     ap.add_argument("--pegel-minimum", type=float, default=60.0)
     ap.add_argument("--max-erweiterung", type=int, default=30)
@@ -445,7 +445,7 @@ def main():
         von_ = uhrzeit(*viertel(datetime.fromisoformat(rs[0]["zeit"])))
         bis_ = uhrzeit(*viertel(datetime.fromisoformat(rs[-1]["zeit"])))
         text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} (Messung ca. {von_} bis {bis_} Uhr)", ""]
-        text += menschlich(infos) or ["Keine auffälligen lauten Geräusche zugeordnet."]
+        text += menschlich(infos) or ["Keine größeren Lärmphasen zugeordnet."]
         if unsicher >= 10:
             text.append(f"({unsicher} laute Aufnahmen ließen sich nicht sicher zuordnen.)")
         text.append("")

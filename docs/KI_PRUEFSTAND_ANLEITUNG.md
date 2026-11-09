@@ -106,7 +106,7 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 ## 7 · Protokollformat
 
 Der Text soll sich wie von Hand geschrieben lesen: gerundete Zeiten (Viertelstunden), "ca."-Angaben, keine Stoppuhr-Werte und keine
-Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es höchstens drei Zeilen: je Geräuschklasse mit mindestens 15 Minuten ein Satz
+Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es höchstens drei Zeilen: je Geräuschklasse mit mindestens 5 Minuten aktiver Zeit ein Satz
 mit Geräuschart und, falls bekannt, dem Gerät, dazu ein Halbsatz für Kurzes.
 
 > ## Dienstag, 09.06.2026 (Messung ca. 6:15 bis 16:15 Uhr)
@@ -116,7 +116,7 @@ mit Geräuschart und, falls bekannt, dem Gerät, dazu ein Halbsatz für Kurzes.
 
 Das Gerät steht, wenn die Klasse mindestens zu 30 % aus Clips mit bekannter Quelle besteht (Owner-Urteil), sonst gibt es nur die Art.
 
-- Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 45 Minuten Abstand einen Zeitraum (`--blockluecke`).
+- Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 60 Minuten Abstand einen Zeitraum (`--blockluecke`).
 - Die Dichte steht als Wort: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder (3 bis 12 %), gelegentlich (darunter).
 - Die Dauer folgt dem dB(A)-Verlauf des PCE-323: Jede Episode wird nach beiden Seiten verlängert, solange der Pegel höchstens 8 dB unter
   dem typischen Clip-Pegel der Klasse liegt (mindestens 60 dB, höchstens 30 s je Seite).
