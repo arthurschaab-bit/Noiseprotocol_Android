@@ -71,10 +71,10 @@ def zahl(s):
 def abbilden(art, quelle):
     """Owner-Urteil (Geräuschart + Quelle) -> Feinklassen-Schlüssel wie 'B05' oder 'B04+B06'; None = ausschließen."""
     q = (quelle or "").lower()
-    if ("tiefbohr" in q or "drehbohr" in q) and "anker" not in q:
+    if "tiefbohr" in q or "drehbohr" in q or "anker" in q:
         return "B01"  # Motor-, Saege-/Schleif- und Klirrgeraeusche sowie metallische Schlaege
     if art == "MOTOR":
-        if "bohr" in q and "anker" not in q:
+        if "bohr" in q or "anker" in q:
             return "B01"
         if "bagger" in q:
             return "B05"
@@ -226,7 +226,7 @@ STANDARD_GERAET = {"B01": "Tief-/Drehbohrgerät", "B05": "Bagger"}
 
 def geraet_kurz(quelle):
     q = quelle.lower()
-    for stichwort, name in (("tiefbohr", "Tief-/Drehbohrgerät"), ("drehbohr", "Tief-/Drehbohrgerät"), ("anker", "Ankerbohrgerät"),
+    for stichwort, name in (("tiefbohr", "Tief-/Drehbohrgerät"), ("drehbohr", "Tief-/Drehbohrgerät"), ("anker", "Tief-/Drehbohrgerät"),
                             ("druckluft", "Drucklufthammer"), ("hydraulik", "Hydraulikhammer"), ("handhammer", "Handhammer"),
                             ("bagger", "Bagger"), ("verladung", "Verladung")):
         if stichwort in q:
@@ -270,11 +270,12 @@ def menschlich(infos):
         teile = []
         for j, b in enumerate(auswahl):
             spanne = max((b["ende"] - b["beginn"]).total_seconds(), 1.0)
-            teile.append(f"{tageszeit(b['beginn'])} {zeitraum_text(b['beginn'], b['ende'])} {dichte_wort(b['aktiv'] / spanne, i + j)}")
-        zeilen.append(f"{subjekt(x['k'], x.get('quellen'))}: " + "; ".join(teile) + ".")
-    if kleine:
-        namen_ = _aufzaehlung([subjekt(x["k"], x.get("quellen")) for x in kleine[:3]])
-        zeilen.append(("Außerdem kurz: " if grosse else "Nur vereinzelt laute Phasen: ") + namen_ + ".")
+            zt = f"{tageszeit(b['beginn'])} " if spanne <= 3 * 3600 else ""  # bei langen Zeiträumen keine Tageszeit
+            teile.append(f"{zt}{zeitraum_text(b['beginn'], b['ende'])} {dichte_wort(b['aktiv'] / spanne, i + j)}")
+        kopf_ = subjekt(x['k'], x.get('quellen'))
+        zeilen.append(f"{kopf_[0].upper()}{kopf_[1:]}: " + "; ".join(teile) + ".")
+    if not grosse:
+        return ["Keine größeren Lärmphasen zugeordnet."]
     return zeilen
 
 

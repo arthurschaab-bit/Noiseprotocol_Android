@@ -20,7 +20,7 @@ from collections import Counter
 # Hoerseiten-Klasse (Teil 1-3: Geraet) -> (Geraeuschart, Quelle) wie in gruppen_urteile.json
 UEBERSETZUNG = {
     "DREHBOHR": ("MOTOR", "Tiefbohrer (Drehbohrgerät)"),
-    "ANKERBOHR": ("BOHREND", "Ankerbohrgerät"),
+    "ANKERBOHR": ("MOTOR", "Tiefbohrer (Drehbohrgerät)"),  # Owner: kein eigenes Ankerbohrgerät, zusammengefasst
     "HYD_HAMMER": ("HAEMMERND", "Hydraulikhammer"),
     "DRUCKLUFT": ("HAEMMERND", "Drucklufthammer"),
     "VERLADUNG": ("SCHLAG", "Betonbruch-Verladung"),
