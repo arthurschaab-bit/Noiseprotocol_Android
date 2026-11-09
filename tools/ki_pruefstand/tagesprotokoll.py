@@ -71,8 +71,10 @@ def zahl(s):
 def abbilden(art, quelle):
     """Owner-Urteil (Geräuschart + Quelle) -> Feinklassen-Schlüssel wie 'B05' oder 'B04+B06'; None = ausschließen."""
     q = (quelle or "").lower()
+    if ("tiefbohr" in q or "drehbohr" in q) and "anker" not in q:
+        return "B01"  # Motor-, Saege-/Schleif- und Klirrgeraeusche sowie metallische Schlaege
     if art == "MOTOR":
-        if "bohr" in q:
+        if "bohr" in q and "anker" not in q:
             return "B01"
         if "bagger" in q:
             return "B05"
@@ -214,17 +216,17 @@ def dichte_wort(anteil, i):
 
 
 ART_WORT = {
-    "B00": "sonstige Baustellengeräusche", "B01": "Motorgeräusche", "B02": "Hämmern", "B03": "Bohr- und Schleifgeräusche",
+    "B00": "sonstige Baustellengeräusche", "B01": "Motor-, Schleif- und Klirrgeräusche", "B02": "Hämmern", "B03": "Bohr- und Schleifgeräusche",
     "B04": "Säge- und Trennschleifgeräusche", "B05": "Motorgeräusche", "B06": "Motor- und Aggregatgeräusche",
     "B07": "Fahrzeuggeräusche", "B08": "Warntöne", "B09": "Schläge und Klirren", "U01": "Straßenverkehr",
     "U02": "Stimmen", "U03": "Wind und Wetter", "U04": "sonstige Umgebungsgeräusche",
 }
-STANDARD_GERAET = {"B01": "Tiefbohrgerät", "B05": "Bagger"}
+STANDARD_GERAET = {"B01": "Tief-/Drehbohrgerät", "B05": "Bagger"}
 
 
 def geraet_kurz(quelle):
     q = quelle.lower()
-    for stichwort, name in (("tiefbohr", "Tiefbohrgerät"), ("drehbohr", "Tiefbohrgerät"), ("anker", "Ankerbohrgerät"),
+    for stichwort, name in (("tiefbohr", "Tief-/Drehbohrgerät"), ("drehbohr", "Tief-/Drehbohrgerät"), ("anker", "Ankerbohrgerät"),
                             ("druckluft", "Drucklufthammer"), ("hydraulik", "Hydraulikhammer"), ("handhammer", "Handhammer"),
                             ("bagger", "Bagger"), ("verladung", "Verladung")):
         if stichwort in q:
