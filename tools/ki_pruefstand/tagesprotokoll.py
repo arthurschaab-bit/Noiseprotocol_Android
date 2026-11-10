@@ -355,7 +355,7 @@ def _aehnlich(a_, b_):
 
 
 def menschlich(infos, tag="", datum=""):
-    """Tagestext im Stil des Bautagebuchs: Hauptquelle, 'Zusätzlich ...', 'Zeitweise ...', 'Messwerte s. Schallbericht'.
+    """Tagestext im Stil des Bautagebuchs: Hauptquelle, 'Zusätzlich ...', 'Zeitweise ...'.
 
     Gibt (Zeilen, Wahrnehmungszeitraum) zurueck. Nur Baustellenklassen (B*, ohne 'sonstige'); Umgebungsgeraeusche,
     Messgeraet-Handhabung und nicht naeher bestimmte Baustellengeraeusche stehen nur in der CSV.
@@ -387,8 +387,6 @@ def menschlich(infos, tag="", datum=""):
         auswahl = sorted(sorted(_auswahl(x), key=lambda b: -b["aktiv"])[:2], key=lambda b: b["beginn"])
         spanne_ges += auswahl
         saetze.append(f"Zeitweise {quelle_tb(x['k'], x.get('quellen'), False)} (z. B. {zeit_tb(auswahl)}).")
-    if datum:
-        saetze.append(f"Messwerte s. Schallbericht {datum[:5]}.")
     wahrn = (min(b["beginn"] for b in spanne_ges), max(b["ende"] for b in spanne_ges)) if spanne_ges else None
     return [" ".join(saetze)], wahrn
 

@@ -82,6 +82,9 @@ def main():
     ap.add_argument("--version", default="25")
     ap.add_argument("--stand", default=datetime.now().strftime("%d.%m.%Y"))
     ap.add_argument("--phase", default="Phase 3: Tiefbau")
+    ap.add_argument("--bereinigung", help="JSON {'dd.mm.yyyy|Spalte': Text} - Zellen ersetzen (Spalten: Zeit, Text, Einschränkung, Belege)")
+    ap.add_argument("--ergaenzungen", help="JSON {'dd.mm.yyyy': Satz} - wird an die Beschreibung angehaengt (lauteste Phase)")
+    ap.add_argument("--abgleich-ausgabe", help="Abgleich-Blaetter in diese separate xlsx schreiben statt ins Tagebuch")
     a = ap.parse_args()
 
     bt = json.load(open(os.path.join(a.bericht, "bericht_tage.json"), encoding="utf-8"))
@@ -110,7 +113,39 @@ def main():
             entfernt += k
         if x["fill"] in ("00000000", None) and x["werte"][3].startswith("Phase 3"):
             x["stil"], x["hoehe"] = vorlage["stil"], None  # uneinheitlich formatierte Zeilen angleichen
+    # --- Zellen ersetzen (lokale Liste, enthaelt keine Pegelwerte / Berichtsverweise) -----------------
+    spalte_idx = {"Zeit": 2, "Text": 4, "Einschränkung": 5, "Belege": 6}
+    if a.bereinigung:
+        for schluessel, neuer in json.load(open(a.bereinigung, encoding="utf-8")).items():
+            datum, spalte = schluessel.split("|")
+            for x in orig:
+                if x["werte"][0] == datum:
+                    x["werte"][spalte_idx[spalte]] = neuer or None
+    # --- doppelte Datumszeilen zu einer Zeile zusammenfassen (Zeitraum bleibt je Teil erkennbar) ----
+    nach_datum = {}
+    for x in orig:
+        nach_datum.setdefault(x["werte"][0], []).append(x)
+    zusammengefasst = 0
+    for datum, gruppe in nach_datum.items():
+        if len(gruppe) < 2:
+            continue
+        erste = gruppe[0]
+        erste["werte"][2] = f"{gruppe[0]['werte'][2].split('–')[0]}–{gruppe[-1]['werte'][2].split('–')[-1]}"
+        for i in (4, 5, 6):
+            teile = []
+            for g in gruppe:
+                t = g["werte"][i]
+                if t:
+                    teile.append(f"{g['werte'][2]} Uhr: {t}" if i == 4 else t)
+            erste["werte"][i] = " ".join(teile) if i == 4 else " ".join(dict.fromkeys(teile)) or None
+        for g in gruppe[1:]:
+            orig.remove(g)
+        zusammengefasst += 1
     vorhanden = {x["werte"][0]: x for x in orig}
+    if a.ergaenzungen:
+        for datum, satz in json.load(open(a.ergaenzungen, encoding="utf-8")).items():
+            w = vorhanden[datum]["werte"]
+            w[4] = (w[4] + " " + satz).strip()
 
     # --- Vorschlag einlesen ---------------------------------------------------------------------------
     vorschlag = {}
@@ -120,7 +155,7 @@ def main():
     ergaenzt = zusaetze = 0
     neu = []
     for datum, z in vorschlag.items():
-        text = z["Beschreibung / Geräusche"]
+        text = re.sub(r"\s*Messwerte s\. Schallbericht \d\d\.\d\d\.?", "", z["Beschreibung / Geräusche"])
         if datum in vorhanden:
             if datum in kein_zusatz:
                 continue
@@ -144,12 +179,7 @@ def main():
         t = bt.get(datum)
         ein = bs.get(datum, [{}])[0].get("einordnung", "")
         m = re.match(r"\+(\d+,\d) dB", ein)
-        teile = []
-        if m:
-            teile.append(f"+{m.group(1)} dB über AVV-Richtwert (55 dB(A)).")
-        if t and t["stufe"] in ("(M)", "(U)"):
-            teile.append(f"Teilerfassung (Abdeckung {t['abd']}), kein Tageswert.")
-        teile.append("[Nachträglicher Eintrag auf Basis der Auswertung der Tonaufnahmen]")
+        teile = ["[Nachträglicher Eintrag auf Basis der Auswertung der Tonaufnahmen]"]  # keine Pegelwerte im Tagebuch
         neu.append(dict(werte=[datum, z["Wochentag"], z["Wahrnehmungszeitraum"], a.phase, text, " ".join(teile), "WAV-Aufnahmen vorhanden."],
                         stil=vorlage["stil"], hoehe=None, fill=vorlage["fill"]))
         ergaenzt += 1
@@ -160,8 +190,8 @@ def main():
             continue
         t = bt[tag]
         neu.append(dict(werte=[tag, WOCHENTAG[d(tag).weekday()], "-", a.phase,
-                               f"Bauruhe-Referenzmessung (Wochenende), {ort}: LAeq 07–20 Uhr {t['laeq']} dB(A), Abdeckung {t['abd']}. Messwerte s. Schallbericht {tag[:5]}.",
-                               "Referenz Bauruhe (Basislinie). [Nachträglicher Eintrag auf Basis des Gesamtberichts]", ""],
+                               f"Wochenende, keine Bautätigkeit festgestellt (Bauruhe, {ort}); keine Lärmereignisse der Baustelle aufgezeichnet.",
+                               "Referenz Bauruhe (Basislinie). [Nachträglicher Eintrag auf Basis der Auswertung der Tonaufnahmen]", ""],
                         stil=gruen["stil"], hoehe=None, fill=gruen["fill"]))
         referenz += 1
 
@@ -189,7 +219,8 @@ def main():
         ("Zusammenführung", f"{ergaenzt} Tage aus der Auswertung der Tonaufnahmen ergänzt (gekennzeichnet als nachträgliche Einträge); {referenz} Referenztage (Bauruhe) aus dem Gesamtbericht ergänzt; bei {zusaetze} vorhandenen Einträgen steht ergänzend 'Aus den Aufnahmen zusätzlich'."),
         ("Platzhalter", f"{entfernt} Platzhalter ('[bitte ergänzen]') entfernt. Fehlende Angaben zu betroffenen Räumen, Uhrzeiten und Einschränkungen können jederzeit ergänzt werden."),
         ("Ergänzte Einträge", f"Bauphase für ergänzte Tage nach dem 03.07.2026 angenommen ({a.phase}); Einträge beschreiben das Lärmgeschehen laut Tonaufnahmen und Pegelverlauf, nicht die persönliche Wahrnehmung. Zeiten gerundet (ca.)."),
-        ("Abgleich", f"Blatt 'Abgleich Gesamtbericht': {len(wid)} Punkte, in denen Tagebuch und Gesamtbericht nicht übereinstimmen oder sich nicht ergänzen. Blatt 'Berichtstage ohne Eintrag': Messtage des Berichts ohne Tagebucheintrag."),
+        ("Bereinigung", "Messwerte (Pegelangaben) und Verweise auf Messberichte aus den Einträgen entfernt; Verweise auf Fotos und Videos bleiben. Doppelte Datumszeilen zusammengefasst" + f" ({zusammengefasst})." + " Bei Tagen mit Bauschuttabholung ist die lauteste Phase laut Tonaufnahmen ergänzt."),
+        ("Abgleich", f"Der Abgleich mit dem Gesamtbericht ({len(wid)} Punkte) liegt als separate Datei vor und gehört nicht ins Tagebuch."),
         ("Formatierung", "Filter und Fixierung der Kopfzeile korrigiert, uneinheitlich formatierte Zeilen ab Mai 2026 angeglichen."),
     ]
     for i, (k, v) in enumerate(zeilen):
@@ -200,7 +231,8 @@ def main():
     kopf_stil = dict(font=Font(bold=True, name="Calibri", size=10), fill=PatternFill("solid", fgColor="FFD9D9D9"))
     farbe = {"Widerspruch": "FFFCE4D6", "Intern": "FFFCE4D6", "Hinweis": "FFFFF2CC", "Lücke im Tagebuch": "FFE2EFDA",
              "Lücke im Bericht": "FFE2EFDA", "Offen": "FFDDEBF7"}
-    ab = wb.create_sheet("Abgleich Gesamtbericht")
+    wb_ab = openpyxl.Workbook() if a.abgleich_ausgabe else wb
+    ab = wb_ab.create_sheet("Abgleich Gesamtbericht")
     ab.append(["Nr", "Datum", "Art", "Thema", "Aussage im Tagebuch", "Aussage im Gesamtbericht", "Vorschlag"])
     for w in wid:
         ab.append([w["nr"], w["datum"], w["typ"], w["thema"], w["tagebuch"], w["bericht"], w["vorschlag"]])
@@ -217,7 +249,7 @@ def main():
     ab.auto_filter.ref = f"A1:G{ab.max_row}"
 
     im_tagebuch = {x["werte"][0] for x in alle}
-    bo = wb.create_sheet("Berichtstage ohne Eintrag")
+    bo = wb_ab.create_sheet("Berichtstage ohne Eintrag")
     bo.append(["Datum", "Wt", "Stufe", "LAeq dB(A)", "Maximum dB(A)", "Phasen ≥60 dB/10 min", "Abdeckung", "Messort", "Einordnung"])
     for dat in sorted(bt, key=d):
         if dat in im_tagebuch:
@@ -231,6 +263,9 @@ def main():
     bo.freeze_panes = "A2"
 
     wb.save(a.ausgabe)
+    if a.abgleich_ausgabe:
+        del wb_ab[wb_ab.worksheets[0].title]
+        wb_ab.save(a.abgleich_ausgabe)
     print(f"{len(alle)} Eintraege ({len(orig)} vorhanden, {ergaenzt} ergaenzt, {referenz} Referenztage, {zusaetze} mit Zusatz), "
           f"{entfernt} Platzhalter entfernt, {bo.max_row - 1} Berichtstage ohne Eintrag -> {a.ausgabe}")
 

@@ -108,11 +108,11 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 ## 7 · Protokollformat
 
 Der Text folgt dem Schreibstil des Bautagebuchs des Owners (`Bautagebuch_Schaab_V24.xlsx`): knappe Einträge, Quelle zuerst, Uhrzeiten
-als "ca. 07:15", "ganztägig", "Zusätzlich …", "Zeitweise …" und am Ende "Messwerte s. Schallbericht TT.MM.". Benennung wie dort:
+als "ca. 07:15", "ganztägig", "Zusätzlich …", "Zeitweise …" (ohne Pegelangaben und ohne Verweis auf den Schallbericht, Owner-Vorgabe 10.11.2026). Benennung wie dort:
 Tiefbohrer, Presslufthammer, Baggergeräusche, Rückfahrwarner. Pegelzahlen stehen nicht im Text (siehe Schallbericht).
 
 > **Mittwoch, 17.06.2026 (Messzeit ca. 06:45 bis 18:00 Uhr)**
-> Tiefbohrer (Motor-, Schleif- und Klirrgeräusche) ganztägig (ca. 06:45–16:30 Uhr), nahezu ununterbrochen. Zusätzlich Baggergeräusche ganztägig (ca. 07:00–16:15 Uhr), ständig wiederkehrend. Messwerte s. Schallbericht 17.06.
+> Tiefbohrer (Motor-, Schleif- und Klirrgeräusche) ganztägig (ca. 06:45–16:30 Uhr), nahezu ununterbrochen. Zusätzlich Baggergeräusche ganztägig (ca. 07:00–16:15 Uhr), ständig wiederkehrend.
 
 Zusätzlich entsteht `bautagebuch_vorschlag.csv` in den Spalten des Bautagebuchs (Datum; Wochentag; Wahrnehmungszeitraum; Bauphase;
 Beschreibung / Geräusche; Einschränkung; Sonderbelege). Bauphase, Einschränkung und Sonderbelege bleiben leer, sie sind persönliche
@@ -144,7 +144,7 @@ Angaben des Owners ("[bitte ergänzen]").
   dem Vorschlag ergänzt (gekennzeichnet als nachträglicher Eintrag), Referenztage (Bauruhe) aus dem Gesamtbericht ergänzt. Bei vorhandenen
   Einträgen steht höchstens "Aus den Aufnahmen zusätzlich: …" für Quellen, die im Eintrag noch nicht vorkommen. Tage, die in der
   Widerspruchsliste als offen geführt sind, bleiben unverändert.
-- Blatt "Abgleich Gesamtbericht": Punkte, in denen Tagebuch und Bericht nicht übereinstimmen (Zahlen, Zeiten, Belege, Quellenzuordnung).
+- Separate Datei `Abgleich_Gesamtbericht_V<n>.xlsx` (Blätter "Abgleich Gesamtbericht" und "Berichtstage ohne Eintrag"; das Tagebuch selbst enthält keine dB-Werte und keine Schallbericht-Verweise, Fotos/Videos bleiben): Punkte, in denen Tagebuch und Bericht nicht übereinstimmen (Zahlen, Zeiten, Belege, Quellenzuordnung).
   Die Liste (`widersprueche.json`) enthält private Inhalte und gehört nicht ins Repo. Blatt "Berichtstage ohne Eintrag": Messtage des Berichts,
   zu denen das Tagebuch nichts sagt.
 - Das Skript ändert keine Aussagen des Tagebuchs. Widersprüche werden nur gemeldet, die Entscheidung liegt beim Owner.
@@ -162,3 +162,7 @@ Angaben des Owners ("[bitte ergänzen]").
 - **Fehlalarme** sind kaum messbar: Es gibt nur wenige Gegenbeispiele (kein Verkehr, Zug oder Nachbarn zur Arbeitszeit).
 - Die Juni–August-Daten stammen von anderer Position und älterer App-Version. Cluster aus beiden Quellen sind getrennt zu betrachten.
 - `Baul-rm` hat eigene, noch nicht vom Owner geprüfte Cluster für Juni und Juli. Ein Abgleich mit dieser Arbeit steht aus.
+
+Aufruf-Optionen V26: `--bereinigung <json>` (Zellen ersetzen, lokal), `--ergaenzungen <json>` (lauteste Phase mit Quelle, ohne Pegel),
+`--abgleich-ausgabe <xlsx>`. Doppelte Datumszeilen (18.05.) werden zu einer Zeile mit Zeitabschnitten zusammengefasst; Referenztage
+27./28.06. stehen als "keine Bautätigkeit festgestellt".
