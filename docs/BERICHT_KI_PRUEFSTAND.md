@@ -210,7 +210,7 @@ Raten (drei Klassen, 33 %) und reicht nicht für eine belastbare Aussage zur Ger
 - **Datenbasis:** 150 290 Aufnahmen ab 60 dB: 77 266 neue (14.09.–03.11.) und 73 024 ältere (08.06.–06.08.), alle mit YAMNet-Embedding.
   Gruppiert wurden sie in 90 Klanggruppen (30 für die lauten neuen, je 20 für leise neue, laute ältere und leise ältere Aufnahmen).
 - **Owner-Urteile:** Alle Gruppen bis auf sieben der leisen älteren (`AQ12`, `AQ13`, `AQ15`–`AQ19`, 6 924 Clips) wurden angehört und beurteilt,
-  dazu 115 Einzelclips.
+  dazu mehr als 100 Einzelclips.
 - **Befund:** Die leisen Aufnahmen (60–75 dB) sind überwiegend Motorgeräusche von Bagger und Tiefbohrgerät. Die App erkennt solchen
   Dauerlärm nicht als Baulärm. Das Drehbohrgerät macht Motor-, Schleif- und Klirrgeräusche, das Ankerbohrgerät gibt es laut Owner nicht
   eigenständig (mit dem Tiefbohrgerät zusammengefasst). Rückfahrwarner zählen zur Baustelle.
