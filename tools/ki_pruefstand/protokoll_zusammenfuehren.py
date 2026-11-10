@@ -52,6 +52,26 @@ def main(ausgabe, *ordner):
             w.writerow(kopf_csv)
         for key in sorted(zeilen):
             w.writerow(zeilen[key])
+    # Tabelle im Spaltenformat des Bautagebuchs (Datum;Wochentag;Wahrnehmungszeitraum;Bauphase;Beschreibung;...)
+    tb = {}
+    kopf_tb = None
+    for o in ordner:
+        pfad_tb = os.path.join(o, "bautagebuch_vorschlag.csv")
+        if os.path.exists(pfad_tb):
+            with open(pfad_tb, encoding="utf-8-sig", newline="") as f:
+                rd = csv.reader(f, delimiter=";")
+                kopf_tb = kopf_tb or next(rd)
+                if kopf_tb and rd.line_num == 1:
+                    pass
+                for z in rd:
+                    if z and z[0] != "Datum":
+                        tb.setdefault(datetime.strptime(z[0], "%d.%m.%Y").date(), z)
+    if kopf_tb:
+        with open(os.path.join(ausgabe, "bautagebuch_vorschlag.csv"), "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(kopf_tb)
+            for k in sorted(tb):
+                w.writerow(tb[k])
     print(f"{len(alle)} Tage ({min(alle)} bis {max(alle)}), {len(zeilen)} Tag-Klasse-Zeilen")
 
 

@@ -257,36 +257,9 @@ def _aufzaehlung(teile):
     return ", ".join(teile[:-1]) + " und " + teile[-1]
 
 
-ADJ_PL = {"fast durchgehend": "fast durchgehende", "ständig wiederkehrend": "ständig wiederkehrende",
-          "immer wieder": "immer wieder auftretende", "gelegentlich": "gelegentliche"}
-ADJ_SG = {"fast durchgehend": "fast durchgehendes", "ständig wiederkehrend": "ständig wiederkehrendes",
-          "immer wieder": "immer wieder auftretendes", "gelegentlich": "gelegentliches"}
-ADV = {"fast durchgehend": "fast durchgehend", "ständig wiederkehrend": "ständig",
-       "immer wieder": "immer wieder", "gelegentlich": "gelegentlich"}
-
-
-def nomen(k, quellen):
-    """Nomen ohne Dichteangabe (Baustellenklassen)."""
-    if k == "B01":
-        return "Geräusche des Tiefbohrgeräts"
-    if k == "B05":
-        return "Motorgeräusche des Baggers"
-    if k == "B08":
-        return "Warntöne (Rückfahrwarner)"
-    if k == "B09":
-        return "Schläge und Klirren"
-    if k == "B02+B06":
-        return "Hämmern mit Motorgeräuschen"
-    return subjekt(k, quellen)
-
-
-def mit_dichte(k, quellen, d):
-    """(Satzteil mit Dichte, Mehrzahl?) fuer 'waren/kamen ... zu hören'."""
-    if k == "B01":
-        return f"{ADJ_PL[d]} Geräusche des Tiefbohrgeräts (Motor, Schleifen, Klirren)", True
-    if k in ("B02", "B02+B06"):
-        return f"{ADJ_SG[d]} {nomen(k, quellen)}", False
-    return f"{ADJ_PL[d]} {nomen(k, quellen)}", True
+DICHTE_TB = {"fast durchgehend": "nahezu ununterbrochen", "ständig wiederkehrend": "ständig wiederkehrend",
+             "immer wieder": "immer wieder", "gelegentlich": "gelegentlich"}
+GERAETE_TB = {"druckluft": "Presslufthammer", "hydraulik": "Hydraulikhammer", "handhammer": "Handhammer"}
 
 
 def bilde_bloecke(ep, luecke, rand_luecke=1200, rand_aktiv=120):
@@ -309,35 +282,6 @@ def bilde_bloecke(ep, luecke, rand_luecke=1200, rand_aktiv=120):
     return bloecke
 
 
-def _variante(tag, k):
-    return zlib.crc32(f"{tag}{k}".encode()) % 4
-
-
-def _zeiten(bloecke, v, mit_tageszeit=True):
-    """'von ca. 9 bis 11 Uhr und nachmittags zwischen ca. 14 und 14:45 Uhr'; kurze Zeitpunkte: 'gegen 12, 14 und 15:45 Uhr'."""
-    teile, punkte = [], []
-    for n, b in enumerate(bloecke):
-        spanne = (b["ende"] - b["beginn"]).total_seconds()
-        hb, mb = viertel(b["beginn"])
-        he, me = viertel(b["ende"])
-        ende_ = "24" if (he, me) == (0, 0) and (hb, mb) != (0, 0) else uhrzeit(he, me)
-        if spanne < 20 * 60 or (hb, mb) == (he, me):
-            h, m = viertel(b["beginn"] + (b["ende"] - b["beginn"]) / 2)
-            punkte.append(uhrzeit(h, m))
-            teile.append(None)
-            continue
-        z = f"von ca. {uhrzeit(hb, mb)} bis {ende_} Uhr" if (v + n) % 2 == 0 else f"zwischen ca. {uhrzeit(hb, mb)} und {ende_} Uhr"
-        if mit_tageszeit and spanne <= 3 * 3600 and len(bloecke) > 1:
-            z = f"{tageszeit(b['beginn'])} {z}"
-        teile.append(z)
-    if punkte:
-        p = "gegen " + (punkte[0] if len(punkte) == 1 else ", ".join(punkte[:-1]) + " und " + punkte[-1]) + " Uhr"
-        teile = [x for x in teile if x] + [p]
-    else:
-        teile = [x for x in teile if x]
-    return teile[0] if len(teile) == 1 else ", ".join(teile[:-1]) + " und " + teile[-1]
-
-
 def _dichte(auswahl):
     spanne = sum(max((b["ende"] - b["beginn"]).total_seconds(), 1.0) for b in auswahl)
     anteil = sum(b["aktiv"] for b in auswahl) / spanne
@@ -356,57 +300,97 @@ def _auswahl(x):
     return sorted(sorted(gross, key=lambda b: -b["aktiv"])[:3], key=lambda b: b["beginn"])
 
 
+def _hm(dt, ende=False, anfang=None):
+    h, m = viertel(dt)
+    if ende and (h, m) == (0, 0) and anfang != (0, 0):
+        return "24:00"
+    return f"{h:02d}:{m:02d}"
+
+
+def quelle_tb(k, quellen, erste):
+    """Benennung wie im Bautagebuch des Owners (Tiefbohrer, Presslufthammer, Baggergeräusche)."""
+    if k == "B01":
+        return "Tiefbohrer (Motor-, Schleif- und Klirrgeräusche)" if erste else "Tiefbohrer"
+    if k == "B05":
+        return "Baggergeräusche"
+    if k in ("B02", "B02+B06"):
+        namen = []
+        for q in (quellen or {}):
+            for teil in q.split(" / "):
+                for stichwort, name in GERAETE_TB.items():
+                    if stichwort in teil.lower() and name not in namen:
+                        namen.append(name)
+        if len(namen) == 1:
+            return namen[0]
+        return "Hämmern (" + "/".join(namen) + ")" if namen else "Hämmern"
+    return {"B08": "Rückfahrwarner", "B09": "Schläge und Klirren", "B03": "Bohr- und Schleifgeräusche",
+            "B04": "Säge- und Trennschleifgeräusche", "B04+B06": "Säge- und Schleifgeräusche mit Motor",
+            "B07": "Baustellenfahrzeuge"}.get(k, k)
+
+
+def zeit_tb(bloecke):
+    """'ganztägig (ca. 07:00–20:00 Uhr)', 'vormittags ca. 09:15–11:45 Uhr und mittags ca. 13:00–14:30 Uhr', 'gegen 14:00 und 15:45 Uhr'."""
+    if len(bloecke) == 1 and (bloecke[0]["ende"] - bloecke[0]["beginn"]).total_seconds() >= 8 * 3600:
+        b = bloecke[0]
+        s = _hm(b["beginn"])
+        return f"ganztägig (ca. {s}–{_hm(b['ende'], True, viertel(b['beginn']))} Uhr)"
+    teile, punkte = [], []
+    for b in bloecke:
+        spanne = (b["ende"] - b["beginn"]).total_seconds()
+        if spanne < 20 * 60 or viertel(b["beginn"]) == viertel(b["ende"]):
+            punkte.append(_hm(b["beginn"] + (b["ende"] - b["beginn"]) / 2))
+            continue
+        z = f"ca. {_hm(b['beginn'])}–{_hm(b['ende'], True, viertel(b['beginn']))} Uhr"
+        if len(bloecke) > 1 and spanne <= 3 * 3600:
+            z = f"{tageszeit(b['beginn'])} {z}"
+        teile.append(z)
+    if punkte:
+        teile.append("gegen " + (punkte[0] if len(punkte) == 1 else ", ".join(punkte[:-1]) + " und " + punkte[-1]) + " Uhr")
+    return teile[0] if len(teile) == 1 else ", ".join(teile[:-1]) + " und " + teile[-1]
+
+
 def _aehnlich(a_, b_):
-    """Zwei Auswahlen mit je einem Zeitraum, deren Anfang und Ende hoechstens 30 Minuten abweichen."""
     return (len(a_) == 1 and len(b_) == 1 and abs((a_[0]["beginn"] - b_[0]["beginn"]).total_seconds()) <= 1800
             and abs((a_[0]["ende"] - b_[0]["ende"]).total_seconds()) <= 1800)
 
 
-def menschlich(infos, tag=""):
-    """Tagestext als kurzer Absatz: Hauptgeraeusch, dazu weitere Geraeusche, zeitweise Kleineres.
+def menschlich(infos, tag="", datum=""):
+    """Tagestext im Stil des Bautagebuchs: Hauptquelle, 'Zusätzlich ...', 'Zeitweise ...', 'Messwerte s. Schallbericht'.
 
-    Nur Baustellenklassen (B*, ohne 'sonstige') erscheinen im Text. Umgebungsgeraeusche (U*), Messgeraet-Handhabung und
-    nicht naeher bestimmte Baustellengeraeusche bleiben in der CSV.
+    Gibt (Zeilen, Wahrnehmungszeitraum) zurueck. Nur Baustellenklassen (B*, ohne 'sonstige'); Umgebungsgeraeusche,
+    Messgeraet-Handhabung und nicht naeher bestimmte Baustellengeraeusche stehen nur in der CSV.
     """
     infos = sorted([x for x in infos if x["k"].startswith("B") and x["k"] != "B00"], key=lambda x: -x["aktiv"])
     grosse = [x for x in infos if x["aktiv"] >= 900][:3]
     kleine = [x for x in infos if x["aktiv"] < 900][:2]
-    saetze = []
+    if not grosse and not kleine:
+        return [], None
+    saetze, genannt, spanne_ges = [], set(), []
     start = 0
     if len(grosse) >= 2:
         a1, a2 = _auswahl(grosse[0]), _auswahl(grosse[1])
-        if _aehnlich(a1, a2):  # gleicher Zeitraum: ein gemeinsamer Satz
-            v = _variante(tag, grosse[0]["k"])
-            z = _zeiten(a1, v)
-            d = _dichte(a1)
-            d2 = _dichte(a2)
-            k1, k2 = grosse[0]["k"], grosse[1]["k"]
-            if d == d2 and k1 not in ("B02", "B02+B06") and k2 not in ("B02", "B02+B06"):
-                def detail(k_, q_):
-                    return nomen(k_, q_) + (" (Motor, Schleifen, Klirren)" if k_ == "B01" else "")
-                gemeinsam = f"{ADJ_PL[d]} {detail(k1, grosse[0].get('quellen'))} und {detail(k2, grosse[1].get('quellen'))}"
-            else:
-                t1, _ = mit_dichte(k1, grosse[0].get("quellen"), d)
-                t2, _ = mit_dichte(k2, grosse[1].get("quellen"), d2)
-                gemeinsam = f"{t1} und {t2}"
-            saetze.append(f"{z[0].upper()}{z[1:]} waren {gemeinsam} zu hören.")
+        if _aehnlich(a1, a2) and _dichte(a1) == _dichte(a2):
+            q1 = quelle_tb(grosse[0]["k"], grosse[0].get("quellen"), True)
+            q2 = quelle_tb(grosse[1]["k"], grosse[1].get("quellen"), False if grosse[1]["k"] == "B01" else True)
+            saetze.append(f"{q1} und {q2} {zeit_tb(a1)}, {DICHTE_TB[_dichte(a1)]}.")
+            genannt |= {grosse[0]["k"], grosse[1]["k"]}
+            spanne_ges += a1 + a2
             start = 2
     for i, x in enumerate(grosse[start:], start):
         auswahl = _auswahl(x)
-        z = _zeiten(auswahl, _variante(tag, x["k"]))
-        text_k, plural = mit_dichte(x["k"], x.get("quellen"), _dichte(auswahl))
-        if i == 0:
-            saetze.append(f"{z[0].upper()}{z[1:]} {'waren' if plural else 'war'} {text_k} zu hören.")
-        elif i == 1 or (i == 2 and start == 2):
-            saetze.append(f"Dazu {'kamen' if plural else 'kam'} {text_k}, {z}.")
-        else:
-            saetze.append(f"Außerdem {'kamen' if plural else 'kam'} {text_k}, {z}.")
-    for n, x in enumerate(kleine):
+        spanne_ges += auswahl
+        q = quelle_tb(x["k"], x.get("quellen"), x["k"] not in genannt)
+        genannt.add(x["k"])
+        einl = "" if i == 0 else ("Zusätzlich " if (i == 1 or (start == 2 and i == 2)) else "Außerdem ")
+        saetze.append(f"{einl}{q} {zeit_tb(auswahl)}, {DICHTE_TB[_dichte(auswahl)]}.")
+    for x in kleine:
         auswahl = sorted(sorted(_auswahl(x), key=lambda b: -b["aktiv"])[:2], key=lambda b: b["beginn"])
-        z = _zeiten(auswahl, _variante(tag, x["k"]), mit_tageszeit=False)
-        einleitung = "Zeitweise" if (n == 0 and not grosse) else "Zeitweise außerdem"
-        saetze.append(f"{einleitung} {nomen(x['k'], x.get('quellen'))}, z. B. {z}.")
-    return [" ".join(saetze)] if saetze else []
+        spanne_ges += auswahl
+        saetze.append(f"Zeitweise {quelle_tb(x['k'], x.get('quellen'), False)} (z. B. {zeit_tb(auswahl)}).")
+    if datum:
+        saetze.append(f"Messwerte s. Schallbericht {datum[:5]}.")
+    wahrn = (min(b["beginn"] for b in spanne_ges), max(b["ende"] for b in spanne_ges)) if spanne_ges else None
+    return [" ".join(saetze)], wahrn
 
 
 def main():
@@ -506,6 +490,7 @@ def main():
         tage[r["tag"]].append(r)
     csv_zeilen, text = [], []
     uebersprungen = []
+    tagebuch_zeilen = []
     for tag in sorted(tage):
         rs = sorted(tage[tag], key=lambda r: r["zeit"])
         d = datetime.fromisoformat(rs[0]["zeit"])
@@ -585,12 +570,17 @@ def main():
             von_dt, bis_dt = mitternacht + timedelta(seconds=int(gv[0])), mitternacht + timedelta(seconds=int(gv[-1]))
         else:
             von_dt, bis_dt = datetime.fromisoformat(rs[0]["zeit"]), datetime.fromisoformat(rs[-1]["zeit"])
-        von_, bis_ = uhrzeit(*viertel(von_dt)), uhrzeit(*viertel(bis_dt))
-        if bis_ == '0':
-            bis_ = '24'
+        von_, bis_ = _hm(von_dt), _hm(bis_dt, True, viertel(von_dt))
         messzeit = "ganztägig gemessen" if (bis_dt - von_dt).total_seconds() >= 20 * 3600 else f"Messzeit ca. {von_} bis {bis_} Uhr"
         text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} ({messzeit})", ""]
-        text += menschlich(sorted(infos, key=lambda x: -x['aktiv']), tag) or ["Keine nennenswerten Baustellengeräusche festgestellt."]
+        zeilen_, wahrn = menschlich(sorted(infos, key=lambda x: -x['aktiv']), tag, f"{d:%d.%m.%Y}")
+        text += zeilen_ or ["Keine nennenswerten Baustellengeräusche festgestellt."]
+        if wahrn:
+            wz = f"ab ca. {_hm(wahrn[0])} – ca. {_hm(wahrn[1], True, viertel(wahrn[0]))}"
+        else:
+            wz = "-"
+        tagebuch_zeilen.append([f"{d:%d.%m.%Y}", WOCHENTAG[d.weekday()], wz, "",
+                                " ".join(zeilen_) or "Keine nennenswerten Baustellengeräusche festgestellt.", "", ""])
         text.append("")
 
     kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "bloecke", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
@@ -607,6 +597,10 @@ def main():
         w.writerow(kopf)
         for z in csv_zeilen:
             w.writerow([str(v).replace(".", ",") if isinstance(v, float) else v for v in z])
+    with open(os.path.join(a.ausgabe, "bautagebuch_vorschlag.csv"), "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["Datum", "Wochentag", "Wahrnehmungszeitraum", "Bauphase", "Beschreibung / Geräusche", "Einschränkung", "Sonderbelege"])
+        w.writerows(tagebuch_zeilen)
     hinweis = ["# Lärm-Tagesprotokoll (Prototyp)", "",
                "Zeiten sind auf Viertelstunden gerundet, Dauern als ca.-Angaben. Es sind Mindestwerte: Die App nimmt nur auf, wenn der Pegel die Schwelle überschreitet.",
                f"Zugeordnet sind Aufnahmen ab {a.min_db_klassifizieren:g} dB, soweit die Klanggruppe beurteilt wurde. Pegelwerte stehen im Schallbericht und in der CSV.", ""]

@@ -107,25 +107,30 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 
 ## 7 · Protokollformat
 
-Der Text soll sich wie ein von Hand geschriebener Bautagebuch-Eintrag lesen: kurze zusammenhängende Sätze, Uhrzeiten auf Viertelstunden
-gerundet, "ca."-Angaben, keine Stoppuhr-Werte und keine Pegelzahlen (die stehen im Schallbericht). Je Tag ein Absatz: zuerst das
-Hauptgeräusch, dann "Dazu kamen …", "Außerdem …" und "Zeitweise außerdem …, z. B. …".
+Der Text folgt dem Schreibstil des Bautagebuchs des Owners (`Bautagebuch_Schaab_V24.xlsx`): knappe Einträge, Quelle zuerst, Uhrzeiten
+als "ca. 07:15", "ganztägig", "Zusätzlich …", "Zeitweise …" und am Ende "Messwerte s. Schallbericht TT.MM.". Benennung wie dort:
+Tiefbohrer, Presslufthammer, Baggergeräusche, Rückfahrwarner. Pegelzahlen stehen nicht im Text (siehe Schallbericht).
 
-> **Dienstag, 20.10.2026 (Messzeit ca. 7 bis 24 Uhr)**
-> Von ca. 7 bis 20 Uhr waren fast durchgehende Motorgeräusche des Baggers zu hören. Dazu kam ständig wiederkehrendes Hämmern (Drucklufthammer), zwischen ca. 10 und 12:45 Uhr. Außerdem kamen ständig wiederkehrende Schläge und Klirren, zwischen ca. 10 und 16:15 Uhr. Zeitweise außerdem Warntöne (Rückfahrwarner), z. B. gegen 14 und 15:45 Uhr.
+> **Mittwoch, 17.06.2026 (Messzeit ca. 06:45 bis 18:00 Uhr)**
+> Tiefbohrer (Motor-, Schleif- und Klirrgeräusche) ganztägig (ca. 06:45–16:30 Uhr), nahezu ununterbrochen. Zusätzlich Baggergeräusche ganztägig (ca. 07:00–16:15 Uhr), ständig wiederkehrend. Messwerte s. Schallbericht 17.06.
+
+Zusätzlich entsteht `bautagebuch_vorschlag.csv` in den Spalten des Bautagebuchs (Datum; Wochentag; Wahrnehmungszeitraum; Bauphase;
+Beschreibung / Geräusche; Einschränkung; Sonderbelege). Bauphase, Einschränkung und Sonderbelege bleiben leer, sie sind persönliche
+Angaben des Owners ("[bitte ergänzen]").
 
 - Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 60 Minuten Abstand einen Zeitraum (`--blockluecke`);
-  vereinzelte kurze Episoden am Rand eines Zeitraums werden abgeschnitten (kein "bis 0 Uhr" wegen einer einzelnen Nachtaufnahme).
-- Die Dichte steht als Adjektiv: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder
-  auftretend (3 bis 12 %), gelegentlich (darunter).
+  vereinzelte kurze Episoden am Rand werden abgeschnitten (kein "bis 24:00" wegen einer einzelnen Nachtaufnahme).
+- Die Dichte steht als Ausdruck: nahezu ununterbrochen (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %),
+  immer wieder (3 bis 12 %), gelegentlich (darunter). "Ganztägig" steht, wenn ein Zeitraum mindestens 8 Stunden dauert.
 - Die Dauer folgt dem dB(A)-Verlauf des PCE-323: Jede Episode wird nach beiden Seiten verlängert, solange der Pegel höchstens 8 dB unter
   dem typischen Clip-Pegel der Klasse liegt (mindestens 60 dB, höchstens 30 s je Seite).
 - Im Text stehen nur Baustellenklassen. Umgebungsgeräusche, "Anbringen des Messgerätes" und nicht näher bestimmte Baustellengeräusche
-  stehen nur in der CSV (`tagesprotokoll.csv`), ebenso die genauen Werte (Minuten, Zeitfenster, Pausen, Pegel).
-- Das Tiefbohrgerät steht als "Geräusche des Tiefbohrgeräts (Motor, Schleifen, Klirren)", Warnsignale (Rückfahrwarner) zählen zur
-  Baustelle (Owner-Entscheidung 10.11.2026).
-- Die Kopfzeile nennt die Messzeit aus dem PCE-Verlauf ("ganztägig gemessen", wenn das Gerät mindestens 20 Stunden lief).
+  stehen nur in der CSV (`tagesprotokoll.csv`), ebenso die genauen Werte. Rückfahrwarner zählen zur Baustelle (Owner, 10.11.2026).
 - **Tage ohne nennenswerte PCE-Messwerte (unter 30 Minuten) werden nicht bearbeitet.** Das betraf 14 Tage zwischen 15.09. und 06.10.2026.
+- Vergleich mit dem Bautagebuch (15 gemeinsame Tage, 08.06.–03.07.2026): Bis 25.06. stimmen Tiefbohrer-Tage und Zeiten gut überein. Der Eintrag
+  des Owners beschreibt die Wahrnehmung (zu Hause), das Protokoll den ganzen Baustellenbetrieb. Abweichungen am 08.06. (Pause bis 13:00
+  im Tagebuch, im Protokoll durchgehend) und 29.06.–03.07. (Tagebuch: morgens Bauschuttabholung mit Bagger, Protokoll: Tiefbohrer fast
+  ganztägig) sind zu prüfen.
 
 ## 8 · Bekannte Grenzen (Stand 10.11.2026)
 
