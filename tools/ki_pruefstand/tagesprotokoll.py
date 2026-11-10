@@ -29,6 +29,7 @@ import json
 import math
 import os
 import time
+import zlib
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from statistics import median
@@ -256,28 +257,156 @@ def _aufzaehlung(teile):
     return ", ".join(teile[:-1]) + " und " + teile[-1]
 
 
-def menschlich(infos):
-    """Ein knapper Tagestext: je Klasse mit mindestens 15 Minuten ein Satz, Kleineres in einem Halbsatz."""
-    if not infos:
-        return []
-    infos = sorted(infos, key=lambda x: -x["aktiv"])
-    grosse = [x for x in infos if x["aktiv"] >= 300]
-    kleine = [x for x in infos if x["aktiv"] < 300]
-    zeilen = []
-    for i, x in enumerate(grosse):
-        bl = sorted(x["bloecke"], key=lambda b: b["beginn"])
-        gross = [b for b in bl if b["aktiv"] >= 300] or bl
-        auswahl = sorted(sorted(gross, key=lambda b: -b["aktiv"])[:3], key=lambda b: b["beginn"])
-        teile = []
-        for j, b in enumerate(auswahl):
-            spanne = max((b["ende"] - b["beginn"]).total_seconds(), 1.0)
-            zt = f"{tageszeit(b['beginn'])} " if spanne <= 3 * 3600 else ""  # bei langen Zeiträumen keine Tageszeit
-            teile.append(f"{zt}{zeitraum_text(b['beginn'], b['ende'])} {dichte_wort(b['aktiv'] / spanne, i + j)}")
-        kopf_ = subjekt(x['k'], x.get('quellen'))
-        zeilen.append(f"{kopf_[0].upper()}{kopf_[1:]}: " + "; ".join(teile) + ".")
-    if not grosse:
-        return ["Keine größeren Lärmphasen zugeordnet."]
-    return zeilen
+ADJ_PL = {"fast durchgehend": "fast durchgehende", "ständig wiederkehrend": "ständig wiederkehrende",
+          "immer wieder": "immer wieder auftretende", "gelegentlich": "gelegentliche"}
+ADJ_SG = {"fast durchgehend": "fast durchgehendes", "ständig wiederkehrend": "ständig wiederkehrendes",
+          "immer wieder": "immer wieder auftretendes", "gelegentlich": "gelegentliches"}
+ADV = {"fast durchgehend": "fast durchgehend", "ständig wiederkehrend": "ständig",
+       "immer wieder": "immer wieder", "gelegentlich": "gelegentlich"}
+
+
+def nomen(k, quellen):
+    """Nomen ohne Dichteangabe (Baustellenklassen)."""
+    if k == "B01":
+        return "Geräusche des Tiefbohrgeräts"
+    if k == "B05":
+        return "Motorgeräusche des Baggers"
+    if k == "B08":
+        return "Warntöne (Rückfahrwarner)"
+    if k == "B09":
+        return "Schläge und Klirren"
+    if k == "B02+B06":
+        return "Hämmern mit Motorgeräuschen"
+    return subjekt(k, quellen)
+
+
+def mit_dichte(k, quellen, d):
+    """(Satzteil mit Dichte, Mehrzahl?) fuer 'waren/kamen ... zu hören'."""
+    if k == "B01":
+        return f"{ADJ_PL[d]} Geräusche des Tiefbohrgeräts (Motor, Schleifen, Klirren)", True
+    if k in ("B02", "B02+B06"):
+        return f"{ADJ_SG[d]} {nomen(k, quellen)}", False
+    return f"{ADJ_PL[d]} {nomen(k, quellen)}", True
+
+
+def bilde_bloecke(ep, luecke, rand_luecke=1200, rand_aktiv=120):
+    """Episoden zu Zeitraeumen zusammenfassen; vereinzelte kurze Episoden am Rand werden abgeschnitten."""
+    gruppen = []
+    for b, e, _ in ep:
+        if gruppen and (b - gruppen[-1][-1][1]).total_seconds() <= luecke:
+            gruppen[-1].append((b, e))
+        else:
+            gruppen.append([(b, e)])
+    bloecke = []
+    for g in gruppen:
+        while len(g) > 1 and (g[0][1] - g[0][0]).total_seconds() < rand_aktiv and (g[1][0] - g[0][1]).total_seconds() > rand_luecke:
+            g = g[1:]
+        while len(g) > 1 and (g[-1][1] - g[-1][0]).total_seconds() < rand_aktiv and (g[-1][0] - g[-2][1]).total_seconds() > rand_luecke:
+            g = g[:-1]
+        pausen = [(g[i + 1][0] - g[i][1]).total_seconds() for i in range(len(g) - 1)]
+        bloecke.append({"beginn": g[0][0], "ende": g[-1][1], "aktiv": sum((e - b).total_seconds() for b, e in g),
+                        "pause": max(pausen) if pausen else 0.0, "n": len(g)})
+    return bloecke
+
+
+def _variante(tag, k):
+    return zlib.crc32(f"{tag}{k}".encode()) % 4
+
+
+def _zeiten(bloecke, v, mit_tageszeit=True):
+    """'von ca. 9 bis 11 Uhr und nachmittags zwischen ca. 14 und 14:45 Uhr'; kurze Zeitpunkte: 'gegen 12, 14 und 15:45 Uhr'."""
+    teile, punkte = [], []
+    for n, b in enumerate(bloecke):
+        spanne = (b["ende"] - b["beginn"]).total_seconds()
+        hb, mb = viertel(b["beginn"])
+        he, me = viertel(b["ende"])
+        ende_ = "24" if (he, me) == (0, 0) and (hb, mb) != (0, 0) else uhrzeit(he, me)
+        if spanne < 20 * 60 or (hb, mb) == (he, me):
+            h, m = viertel(b["beginn"] + (b["ende"] - b["beginn"]) / 2)
+            punkte.append(uhrzeit(h, m))
+            teile.append(None)
+            continue
+        z = f"von ca. {uhrzeit(hb, mb)} bis {ende_} Uhr" if (v + n) % 2 == 0 else f"zwischen ca. {uhrzeit(hb, mb)} und {ende_} Uhr"
+        if mit_tageszeit and spanne <= 3 * 3600 and len(bloecke) > 1:
+            z = f"{tageszeit(b['beginn'])} {z}"
+        teile.append(z)
+    if punkte:
+        p = "gegen " + (punkte[0] if len(punkte) == 1 else ", ".join(punkte[:-1]) + " und " + punkte[-1]) + " Uhr"
+        teile = [x for x in teile if x] + [p]
+    else:
+        teile = [x for x in teile if x]
+    return teile[0] if len(teile) == 1 else ", ".join(teile[:-1]) + " und " + teile[-1]
+
+
+def _dichte(auswahl):
+    spanne = sum(max((b["ende"] - b["beginn"]).total_seconds(), 1.0) for b in auswahl)
+    anteil = sum(b["aktiv"] for b in auswahl) / spanne
+    if anteil >= 0.5:
+        return "fast durchgehend"
+    if anteil >= 0.12:
+        return "ständig wiederkehrend"
+    if anteil >= 0.03:
+        return "immer wieder"
+    return "gelegentlich"
+
+
+def _auswahl(x):
+    bl = sorted(x["bloecke"], key=lambda b: b["beginn"])
+    gross = [b for b in bl if b["aktiv"] >= 300] or bl
+    return sorted(sorted(gross, key=lambda b: -b["aktiv"])[:3], key=lambda b: b["beginn"])
+
+
+def _aehnlich(a_, b_):
+    """Zwei Auswahlen mit je einem Zeitraum, deren Anfang und Ende hoechstens 30 Minuten abweichen."""
+    return (len(a_) == 1 and len(b_) == 1 and abs((a_[0]["beginn"] - b_[0]["beginn"]).total_seconds()) <= 1800
+            and abs((a_[0]["ende"] - b_[0]["ende"]).total_seconds()) <= 1800)
+
+
+def menschlich(infos, tag=""):
+    """Tagestext als kurzer Absatz: Hauptgeraeusch, dazu weitere Geraeusche, zeitweise Kleineres.
+
+    Nur Baustellenklassen (B*, ohne 'sonstige') erscheinen im Text. Umgebungsgeraeusche (U*), Messgeraet-Handhabung und
+    nicht naeher bestimmte Baustellengeraeusche bleiben in der CSV.
+    """
+    infos = sorted([x for x in infos if x["k"].startswith("B") and x["k"] != "B00"], key=lambda x: -x["aktiv"])
+    grosse = [x for x in infos if x["aktiv"] >= 900][:3]
+    kleine = [x for x in infos if x["aktiv"] < 900][:2]
+    saetze = []
+    start = 0
+    if len(grosse) >= 2:
+        a1, a2 = _auswahl(grosse[0]), _auswahl(grosse[1])
+        if _aehnlich(a1, a2):  # gleicher Zeitraum: ein gemeinsamer Satz
+            v = _variante(tag, grosse[0]["k"])
+            z = _zeiten(a1, v)
+            d = _dichte(a1)
+            d2 = _dichte(a2)
+            k1, k2 = grosse[0]["k"], grosse[1]["k"]
+            if d == d2 and k1 not in ("B02", "B02+B06") and k2 not in ("B02", "B02+B06"):
+                def detail(k_, q_):
+                    return nomen(k_, q_) + (" (Motor, Schleifen, Klirren)" if k_ == "B01" else "")
+                gemeinsam = f"{ADJ_PL[d]} {detail(k1, grosse[0].get('quellen'))} und {detail(k2, grosse[1].get('quellen'))}"
+            else:
+                t1, _ = mit_dichte(k1, grosse[0].get("quellen"), d)
+                t2, _ = mit_dichte(k2, grosse[1].get("quellen"), d2)
+                gemeinsam = f"{t1} und {t2}"
+            saetze.append(f"{z[0].upper()}{z[1:]} waren {gemeinsam} zu hören.")
+            start = 2
+    for i, x in enumerate(grosse[start:], start):
+        auswahl = _auswahl(x)
+        z = _zeiten(auswahl, _variante(tag, x["k"]))
+        text_k, plural = mit_dichte(x["k"], x.get("quellen"), _dichte(auswahl))
+        if i == 0:
+            saetze.append(f"{z[0].upper()}{z[1:]} {'waren' if plural else 'war'} {text_k} zu hören.")
+        elif i == 1 or (i == 2 and start == 2):
+            saetze.append(f"Dazu {'kamen' if plural else 'kam'} {text_k}, {z}.")
+        else:
+            saetze.append(f"Außerdem {'kamen' if plural else 'kam'} {text_k}, {z}.")
+    for n, x in enumerate(kleine):
+        auswahl = sorted(sorted(_auswahl(x), key=lambda b: -b["aktiv"])[:2], key=lambda b: b["beginn"])
+        z = _zeiten(auswahl, _variante(tag, x["k"]), mit_tageszeit=False)
+        einleitung = "Zeitweise" if (n == 0 and not grosse) else "Zeitweise außerdem"
+        saetze.append(f"{einleitung} {nomen(x['k'], x.get('quellen'))}, z. B. {z}.")
+    return [" ".join(saetze)] if saetze else []
 
 
 def main():
@@ -291,7 +420,7 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
-    ap.add_argument("--max-zeilen", type=int, default=5, help="hoechstens so viele Klassenzeilen je Tag im Text (Rest nur in der CSV)")
+    ap.add_argument("--max-zeilen-unbenutzt", type=int, default=5, help="hoechstens so viele Klassenzeilen je Tag im Text (Rest nur in der CSV)")
     ap.add_argument("--cv", action="store_true", help="Kreuzvalidierung nach Tag ausfuehren (langsam)")
     ap.add_argument("--shards", default="", help="Ordner mit den Ergebnisdateien (Standard: <voll>/shards)")
     ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
@@ -376,6 +505,7 @@ def main():
     for r in rows:
         tage[r["tag"]].append(r)
     csv_zeilen, text = [], []
+    uebersprungen = []
     for tag in sorted(tage):
         rs = sorted(tage[tag], key=lambda r: r["zeit"])
         d = datetime.fromisoformat(rs[0]["zeit"])
@@ -383,6 +513,9 @@ def main():
         serie = lade_serie(a.drive, tag, os.path.join(a.ausgabe, "pegel_cache")) if a.drive else None
         if serie is not None and np.all(np.isnan(serie)):
             serie = None
+        if a.drive and (serie is None or int((~np.isnan(serie)).sum()) < 1800):
+            uebersprungen.append(tag)
+            continue
         tagespegel = ""
         if serie is not None:
             gueltig = ~np.isnan(serie)
@@ -432,16 +565,7 @@ def main():
             st = Counter(status[r["clip"]] for r in cl)
             namen_k = " + ".join(f"{TITEL[x]}" for x in k.split("+"))
             fenster = ", ".join((f"{b:%H:%M}" if f"{b:%H:%M}" == f"{e:%H:%M}" else f"{b:%H:%M}–{e:%H:%M}") for b, e, _ in ep)
-            bloecke = []  # Episoden mit Abstand <= --blocklücke zu einem Block zusammenfassen
-            for b, e, n_ in ep:
-                if bloecke and (b - bloecke[-1]["ende"]).total_seconds() <= a.blockluecke:
-                    bl = bloecke[-1]
-                    bl["pause"] = max(bl["pause"], (b - bl["ende"]).total_seconds())
-                    bl["aktiv"] += (e - b).total_seconds()
-                    bl["ende"] = e
-                    bl["n"] += 1
-                else:
-                    bloecke.append({"beginn": b, "ende": e, "aktiv": (e - b).total_seconds(), "pause": 0.0, "n": 1})
+            bloecke = bilde_bloecke(ep, a.blockluecke)
             csv_zeilen.append([tag, WOCHENTAG[d.weekday()], k, namen_k, len(ep), len(bloecke), round(aktiv / 60, 1), round(aktiv_clips / 60, 1), len(cl),
                                f"{ep[0][0]:%H:%M}", f"{ep[-1][1]:%H:%M}", round(max((e - b).total_seconds() for b, e, _ in ep) / 60, 1),
                                round(median(pausen) / 60, 1) if pausen else "", round(max(pausen) / 60, 1) if pausen else "",
@@ -455,12 +579,18 @@ def main():
                 continue  # wirklich kurz: nur in der CSV
             infos.append({"k": k, "aktiv": gesamt_sek, "bloecke": bloecke,
                           "quellen": Counter(quelle_clip[r_["clip"]] for r_ in cl if quelle_clip.get(r_["clip"]))})
-        von_ = uhrzeit(*viertel(datetime.fromisoformat(rs[0]["zeit"])))
-        bis_ = uhrzeit(*viertel(datetime.fromisoformat(rs[-1]["zeit"])))
-        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} (Messung ca. {von_} bis {bis_} Uhr)", ""]
-        text += menschlich(sorted(infos, key=lambda x: -x['aktiv'])[:a.max_zeilen]) or ["Keine größeren Lärmphasen zugeordnet."]
-        if unsicher >= 10:
-            text.append(f"({unsicher} laute Aufnahmen ließen sich nicht sicher zuordnen.)")
+        mitternacht = datetime.fromisoformat(rs[0]["zeit"]).replace(hour=0, minute=0, second=0, microsecond=0)
+        if serie is not None:
+            gv = np.where(~np.isnan(serie))[0]
+            von_dt, bis_dt = mitternacht + timedelta(seconds=int(gv[0])), mitternacht + timedelta(seconds=int(gv[-1]))
+        else:
+            von_dt, bis_dt = datetime.fromisoformat(rs[0]["zeit"]), datetime.fromisoformat(rs[-1]["zeit"])
+        von_, bis_ = uhrzeit(*viertel(von_dt)), uhrzeit(*viertel(bis_dt))
+        if bis_ == '0':
+            bis_ = '24'
+        messzeit = "ganztägig gemessen" if (bis_dt - von_dt).total_seconds() >= 20 * 3600 else f"Messzeit ca. {von_} bis {bis_} Uhr"
+        text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} ({messzeit})", ""]
+        text += menschlich(sorted(infos, key=lambda x: -x['aktiv']), tag) or ["Keine nennenswerten Baustellengeräusche festgestellt."]
         text.append("")
 
     kopf = ["tag", "wochentag", "klasse", "klasse_text", "episoden", "bloecke", "aktive_minuten_pegelverlauf", "aktive_minuten_aufnahmen_min", "aufnahmen", "erste", "letzte",
@@ -484,7 +614,8 @@ def main():
         f.write("\n".join(hinweis + text))
     gesamt = Counter(status.get(r["clip"], "leise" if zahl(r["pegel_db"]) < a.min_db_klassifizieren else "zu_unsicher") for r in rows)
     print("Aufnahmen nach Quelle der Klasse:", dict(gesamt))
-    print(f"{len(tage)} Tage, {len(csv_zeilen)} Tag-Klasse-Zeilen -> tagesprotokoll.csv / .md")
+    print(f"{len(tage) - len(uebersprungen)} Tage, {len(csv_zeilen)} Tag-Klasse-Zeilen -> tagesprotokoll.csv / .md; "
+          f"ohne PCE-Messwerte übersprungen: {len(uebersprungen)} Tage {uebersprungen}")
 
 
 if __name__ == "__main__":

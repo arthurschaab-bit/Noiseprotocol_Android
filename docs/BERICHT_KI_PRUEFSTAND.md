@@ -201,3 +201,21 @@ Raten (drei Klassen, 33 %) und reicht nicht für eine belastbare Aussage zur Ger
    unterscheidet, ist mit den vorhandenen Gegenbeispielen nicht zu sagen.
 3. Als nächster Schritt fehlen **Gegenbeispiele zur Arbeitszeit** (Straße, Zug, Nachbarn, Wind) und eine
    Stichprobe der leisen 60–75-dB-Clips. Ohne sie ist die Fehlalarmfrage nicht beantwortbar.
+
+
+---
+
+# Dritter Durchgang: Tagesprotokoll für alle Aufnahmen (Stand 10.11.2026)
+
+- **Datenbasis:** 150 290 Aufnahmen ab 60 dB: 77 266 neue (14.09.–03.11.) und 73 024 ältere (08.06.–06.08.), alle mit YAMNet-Embedding.
+  Gruppiert wurden sie in 90 Klanggruppen (30 für die lauten neuen, je 20 für leise neue, laute ältere und leise ältere Aufnahmen).
+- **Owner-Urteile:** Alle Gruppen bis auf sieben der leisen älteren (`AQ12`, `AQ13`, `AQ15`–`AQ19`, 6 924 Clips) wurden angehört und beurteilt,
+  dazu 115 Einzelclips.
+- **Befund:** Die leisen Aufnahmen (60–75 dB) sind überwiegend Motorgeräusche von Bagger und Tiefbohrgerät. Die App erkennt solchen
+  Dauerlärm nicht als Baulärm. Das Drehbohrgerät macht Motor-, Schleif- und Klirrgeräusche, das Ankerbohrgerät gibt es laut Owner nicht
+  eigenständig (mit dem Tiefbohrgerät zusammengefasst). Rückfahrwarner zählen zur Baustelle.
+- **Ergebnis:** Ein Tagesprotokoll mit 57 Tagen (`protokoll_gesamt.md`) und die zugehörige CSV. Tage ohne PCE-Messwerte (14 Tage im
+  September/Anfang Oktober) sind nicht enthalten. Der Text wurde in fünf Durchgängen überarbeitet, bis er sich wie ein von Hand
+  geschriebener Bautagebuch-Eintrag liest (siehe `docs/KI_PRUEFSTAND_ANLEITUNG.md`, Abschnitt 7).
+- **Grenzen:** Gruppenurteile gelten für alle Clips einer Gruppe (nur je fünf wurden gehört). Mischgruppen ordnet ein Modell zu. Die Zeiten
+  sind Schätzungen. Fehlalarme sind weiter kaum messbar, weil Gegenbeispiele zur Arbeitszeit fehlen.

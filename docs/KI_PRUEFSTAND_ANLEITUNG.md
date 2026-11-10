@@ -107,24 +107,25 @@ Gruppenurteile gelten für alle Clips der Gruppe als **wahrscheinlich**, direkt 
 
 ## 7 · Protokollformat
 
-Der Text soll sich wie von Hand geschrieben lesen: gerundete Zeiten (Viertelstunden), "ca."-Angaben, keine Stoppuhr-Werte und keine
-Pegelzahlen (die stehen im Schallbericht). Je Tag gibt es höchstens drei Zeilen: je Geräuschklasse mit mindestens 5 Minuten aktiver Zeit ein Satz
-mit Geräuschart und, falls bekannt, dem Gerät, dazu ein Halbsatz für Kurzes.
+Der Text soll sich wie ein von Hand geschriebener Bautagebuch-Eintrag lesen: kurze zusammenhängende Sätze, Uhrzeiten auf Viertelstunden
+gerundet, "ca."-Angaben, keine Stoppuhr-Werte und keine Pegelzahlen (die stehen im Schallbericht). Je Tag ein Absatz: zuerst das
+Hauptgeräusch, dann "Dazu kamen …", "Außerdem …" und "Zeitweise außerdem …, z. B. …".
 
-> ## Dienstag, 09.06.2026 (Messung ca. 6:15 bis 16:15 Uhr)
-> Motorgeräusche (Tiefbohrgerät): vormittags von ca. 9:45 bis ca. 12 Uhr ständig wiederkehrend; mittags von ca. 12:45 bis ca. 16:15 Uhr nahezu ununterbrochen.
-> Bohr- und Schleifgeräusche (Ankerbohrgerät): nachmittags von ca. 14:45 bis ca. 16 Uhr ständig wiederkehrend.
-> Außerdem kurz: sonstige Baustellengeräusche.
+> **Dienstag, 20.10.2026 (Messzeit ca. 7 bis 24 Uhr)**
+> Von ca. 7 bis 20 Uhr waren fast durchgehende Motorgeräusche des Baggers zu hören. Dazu kam ständig wiederkehrendes Hämmern (Drucklufthammer), zwischen ca. 10 und 12:45 Uhr. Außerdem kamen ständig wiederkehrende Schläge und Klirren, zwischen ca. 10 und 16:15 Uhr. Zeitweise außerdem Warntöne (Rückfahrwarner), z. B. gegen 14 und 15:45 Uhr.
 
-Das Gerät steht, wenn die Klasse mindestens zu 30 % aus Clips mit bekannter Quelle besteht (Owner-Urteil), sonst gibt es nur die Art.
-
-- Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 60 Minuten Abstand einen Zeitraum (`--blockluecke`).
-- Die Dichte steht als Wort: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder (3 bis 12 %), gelegentlich (darunter).
+- Aufnahmen derselben Klasse bis 60 s Abstand bilden eine Episode, Episoden bis 60 Minuten Abstand einen Zeitraum (`--blockluecke`);
+  vereinzelte kurze Episoden am Rand eines Zeitraums werden abgeschnitten (kein "bis 0 Uhr" wegen einer einzelnen Nachtaufnahme).
+- Die Dichte steht als Adjektiv: fast durchgehend (aktive Zeit ab 50 % des Zeitraums), ständig wiederkehrend (12 bis 50 %), immer wieder
+  auftretend (3 bis 12 %), gelegentlich (darunter).
 - Die Dauer folgt dem dB(A)-Verlauf des PCE-323: Jede Episode wird nach beiden Seiten verlängert, solange der Pegel höchstens 8 dB unter
   dem typischen Clip-Pegel der Klasse liegt (mindestens 60 dB, höchstens 30 s je Seite).
-- Klassen mit weniger als 1,5 Minuten aktiver Zeit stehen nur in der CSV. Die CSV (`tagesprotokoll.csv`) enthält die genauen Werte
-  (Minuten, Zeitfenster, Pausen, Pegel) und die Anzahl bestätigter, wahrscheinlicher und vorhergesagter Aufnahmen je Zeile.
-- Tage ohne PCE-Messwerte werden nicht bearbeitet.
+- Im Text stehen nur Baustellenklassen. Umgebungsgeräusche, "Anbringen des Messgerätes" und nicht näher bestimmte Baustellengeräusche
+  stehen nur in der CSV (`tagesprotokoll.csv`), ebenso die genauen Werte (Minuten, Zeitfenster, Pausen, Pegel).
+- Das Tiefbohrgerät steht als "Geräusche des Tiefbohrgeräts (Motor, Schleifen, Klirren)", Warnsignale (Rückfahrwarner) zählen zur
+  Baustelle (Owner-Entscheidung 10.11.2026).
+- Die Kopfzeile nennt die Messzeit aus dem PCE-Verlauf ("ganztägig gemessen", wenn das Gerät mindestens 20 Stunden lief).
+- **Tage ohne nennenswerte PCE-Messwerte (unter 30 Minuten) werden nicht bearbeitet.** Das betraf 14 Tage zwischen 15.09. und 06.10.2026.
 
 ## 8 · Bekannte Grenzen (Stand 10.11.2026)
 
