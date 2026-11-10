@@ -81,7 +81,8 @@ def abbilden(art, quelle):
         return "B06"
     return {"BAU_SONST": "B00", "HAEMMERND": "B02", "SCHLAG": "B09", "KLIRREN": "B09", "BOHREND": "B03", "SIGNAL": "B08",
             "MOTOR+SAEGEND_SCHLEIFEND": "B04+B06", "MOTOR+HAEMMERND": "B02+B06",
-            "SIRENE": "U04", "MESSGERAET_HANDHABUNG": "U04", "KEINE_BAU": "U04"}.get(art)
+            "SIRENE": "U04", "MESSGERAET_HANDHABUNG": "U04", "KEINE_BAU": "U04", "SPRACHE_MUSIK": "U02",
+            "VERKEHR_EXTERN": "U01", "WIND_RAUSCHEN": "U03"}.get(art)
 
 
 def lade_labels(urteile, zuordnung):
@@ -290,6 +291,8 @@ def main():
     ap.add_argument("--min-db-klassifizieren", type=float, default=75.0)
     ap.add_argument("--schwelle", type=float, default=0.6)
     ap.add_argument("--drive", default="")
+    ap.add_argument("--max-zeilen", type=int, default=5, help="hoechstens so viele Klassenzeilen je Tag im Text (Rest nur in der CSV)")
+    ap.add_argument("--cv", action="store_true", help="Kreuzvalidierung nach Tag ausfuehren (langsam)")
     ap.add_argument("--shards", default="", help="Ordner mit den Ergebnisdateien (Standard: <voll>/shards)")
     ap.add_argument("--min-klasse-minuten", type=float, default=1.5, help="Klassen mit weniger aktiver Zeit erscheinen nur in der CSV")
     ap.add_argument("--blockluecke", type=float, default=3600, help="Episoden mit Abstand bis zu dieser Sekundenzahl bilden einen Zeitraum im Text")
@@ -315,11 +318,15 @@ def main():
         cid, c = r["clip"], r["cluster"]
         if cid in C:
             k = abbilden(C[cid]["art"], C[cid].get("quelle", ""))
+            k = "B05" if k == "B06" else k
             if k:
                 klasse[cid], status[cid] = k, "bestaetigt"
                 quelle_clip[cid] = C[cid].get("quelle", "")
+        elif c in G and G[c]["art"] == "OFFEN":
+            status[cid] = "ohne_urteil"
         elif c in G and G[c]["art"] != "GEMISCHT":
             k = abbilden(G[c]["art"], G[c].get("quelle", ""))
+            k = "B05" if k == "B06" else k
             if k:
                 klasse[cid] = k
                 status[cid] = "bestaetigt" if cid in gehoert else "wahrscheinlich"
@@ -344,13 +351,17 @@ def main():
     tr = [i for i in tr if klasse[i] in häufig]
     Xtr, ytr, gtr = E[[pos[i] for i in tr]], np.array([klasse[i] for i in tr]), np.array([tag_von[i] for i in tr])
     modell = lambda: make_pipeline(StandardScaler(), LogisticRegression(C=0.1, max_iter=3000, class_weight="balanced"))
-    treffer = 0
-    for x, y in LeaveOneGroupOut().split(Xtr, ytr, gtr):
-        if len(set(ytr[x])) >= 2:
-            treffer += int((modell().fit(Xtr[x], ytr[x]).predict(Xtr[y]) == ytr[y]).sum())
-    print(f"Klassen im Modell: {sorted(häufig)}; Tag-Kreuzvalidierung (zirkulär, nur Orientierung): {treffer}/{len(ytr)}")
-    m = modell().fit(Xtr, ytr)
-    offen = [i for i in namen if i not in klasse]
+    if a.cv:
+        treffer = 0
+        for x, y in LeaveOneGroupOut().split(Xtr, ytr, gtr):
+            if len(set(ytr[x])) >= 2:
+                treffer += int((modell().fit(Xtr[x], ytr[x]).predict(Xtr[y]) == ytr[y]).sum())
+        print(f"Tag-Kreuzvalidierung (zirkulär, nur Orientierung): {treffer}/{len(ytr)}")
+    rng = np.random.default_rng(0)
+    behalten = np.concatenate([rng.permutation(np.where(ytr == k)[0])[:4000] for k in sorted(set(ytr))])
+    print(f"Klassen im Modell: {sorted(häufig)}; Training mit {len(behalten)} von {len(ytr)} Clips")
+    m = modell().fit(Xtr[behalten], ytr[behalten])
+    offen = [i for i in namen if i not in klasse and status.get(i) != "ohne_urteil"]
     if offen:
         P = m.predict_proba(E[[pos[i] for i in offen]])
         for i, p in zip(offen, P):
@@ -387,6 +398,8 @@ def main():
                 leise += 1
             elif cid in klasse:
                 je[klasse[cid]].append(r)
+            elif status.get(cid) == "ohne_urteil":
+                continue
             else:
                 unsicher += 1
         zeilen = []
@@ -445,7 +458,7 @@ def main():
         von_ = uhrzeit(*viertel(datetime.fromisoformat(rs[0]["zeit"])))
         bis_ = uhrzeit(*viertel(datetime.fromisoformat(rs[-1]["zeit"])))
         text += [f"## {WOCHENTAG[d.weekday()]}, {d:%d.%m.%Y} (Messung ca. {von_} bis {bis_} Uhr)", ""]
-        text += menschlich(infos) or ["Keine größeren Lärmphasen zugeordnet."]
+        text += menschlich(sorted(infos, key=lambda x: -x['aktiv'])[:a.max_zeilen]) or ["Keine größeren Lärmphasen zugeordnet."]
         if unsicher >= 10:
             text.append(f"({unsicher} laute Aufnahmen ließen sich nicht sicher zuordnen.)")
         text.append("")
@@ -466,7 +479,7 @@ def main():
             w.writerow([str(v).replace(".", ",") if isinstance(v, float) else v for v in z])
     hinweis = ["# Lärm-Tagesprotokoll (Prototyp)", "",
                "Zeiten sind auf Viertelstunden gerundet, Dauern als ca.-Angaben. Es sind Mindestwerte: Die App nimmt nur auf, wenn der Pegel die Schwelle überschreitet.",
-               "Zugeordnet sind bisher nur Aufnahmen ab 75 dB. Leisere Aufnahmen sind noch nicht ausgewertet. Pegelwerte stehen im Schallbericht und in der CSV.", ""]
+               f"Zugeordnet sind Aufnahmen ab {a.min_db_klassifizieren:g} dB, soweit die Klanggruppe beurteilt wurde. Pegelwerte stehen im Schallbericht und in der CSV.", ""]
     with open(os.path.join(a.ausgabe, "tagesprotokoll.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(hinweis + text))
     gesamt = Counter(status.get(r["clip"], "leise" if zahl(r["pegel_db"]) < a.min_db_klassifizieren else "zu_unsicher") for r in rows)

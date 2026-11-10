@@ -24,7 +24,9 @@ Pegelwerte selbst stehen im Schallbericht und werden im Text nicht wiederholt.
 | Detailtabelle und Klanggruppen | `tabelle.py` | `detail.csv`, `cluster_uebersicht.md` |
 | Hörseiten je Klanggruppe | `gruppen_seiten.py` | 5 Artifact-Seiten à 30 Clips |
 | Auswertung der Ansätze | `auswerten.py`, `urteile_auswerten.py` | Kennzahlen (JSON) |
-| Tagesprotokoll | `tagesprotokoll.py` | `tagesprotokoll.md`, `tagesprotokoll.csv` |
+| Gruppen für leise und ältere Aufnahmen | `gruppen_bilden.py`, `gruppen_seiten.py` | 10 Hörseiten (60 Gruppen) |
+| Urteile in Protokolleingaben übersetzen | `protokoll_vorbereiten.py` | `detail.csv`, `gruppen_urteile.json` |
+| Tagesprotokoll | `tagesprotokoll.py`, `protokoll_zusammenfuehren.py` | `tagesprotokoll.md`, `.csv`, `protokoll_gesamt.md` |
 
 Alle Rohdaten, Embeddings, WAVs, Urteile und Protokolle liegen **lokal** unter `%LOCALAPPDATA%\ki_pruefstand`
 und nicht im Repo (Aufnahmenamen, Standortbezug).
@@ -124,17 +126,16 @@ Das Gerät steht, wenn die Klasse mindestens zu 30 % aus Clips mit bekannter Que
   (Minuten, Zeitfenster, Pausen, Pegel) und die Anzahl bestätigter, wahrscheinlicher und vorhergesagter Aufnahmen je Zeile.
 - Tage ohne PCE-Messwerte werden nicht bearbeitet.
 
-## 8 · Bekannte Grenzen (Stand 04.11.2026)
+## 8 · Bekannte Grenzen (Stand 10.11.2026)
 
-- Nur Aufnahmen **ab 75 dB** sind klassifiziert. Die 72 685 leiseren Ereignisse (60–75 dB) brauchen noch eine Hörrunde.
+- **Klassifiziert sind alle Aufnahmen ab 60 dB, soweit die Klanggruppe beurteilt wurde.** Sieben Gruppen der leisen älteren Aufnahmen
+  (`AQ12`, `AQ13`, `AQ15`–`AQ19`, zusammen 6 924 Clips) haben noch kein Urteil und werden nicht klassifiziert.
 - Die Zeiten sind **Schätzungen**. Die App zeichnet nur auf, wenn der Pegel die Schwelle überschreitet. Dauergeräusche mehrerer
   Klassen überlappen in der Zeit, die Summe über Klassen kann die tatsächlich laute Zeit übersteigen.
-- Die **Geräuschart** trennen die Modelle nur schwach (13 von 25 Testclips). Verlässlich ist die Zuordnung dort, wo der Owner eine
-  ganze Klanggruppe gehört hat.
-- **Fehlalarme** sind kaum messbar: Es gibt nur 79 Gegenbeispiele (kein Verkehr, Zug oder Nachbarn zur Arbeitszeit).
-- Die Juni–August-Daten stammen von anderer Position und älterer App-Version. Cluster aus beiden Quellen sind getrennt zu
-  betrachten.
-- `batch_alt.py` wurde mit echten Prozessen noch nicht über den neuen Paket-Controller getestet. Getestet sind nur die Hilfsfunktionen
-  (Paketbildung, Vollständigkeitsprüfung, Wiederholungen, Messung von CPU und Speicher).
-- `Baul-rm` hat eigene, noch nicht vom Owner geprüfte Cluster für Juni und Juli (`Cluster_Verifikation`, alle 120 Cluster "offen").
-  Ein Abgleich mit dieser Arbeit steht aus.
+- Das Gruppenurteil des Owners gilt für alle Clips der Gruppe (nur 5 Clips je Gruppe wurden gehört). Mischgruppen ordnet ein Modell zu
+  (logistische Regression auf YAMNet-Embeddings, Schwelle 0,6, Training mit höchstens 4 000 Clips je Klasse).
+- Motorgruppen ohne bekanntes Gerät werden mit dem Bagger-Motor zusammen dargestellt ("Motorgeräusche (Bagger)").
+- Im Text stehen höchstens fünf Klassenzeilen je Tag (`--max-zeilen`), der Rest nur in der CSV.
+- **Fehlalarme** sind kaum messbar: Es gibt nur wenige Gegenbeispiele (kein Verkehr, Zug oder Nachbarn zur Arbeitszeit).
+- Die Juni–August-Daten stammen von anderer Position und älterer App-Version. Cluster aus beiden Quellen sind getrennt zu betrachten.
+- `Baul-rm` hat eigene, noch nicht vom Owner geprüfte Cluster für Juni und Juli. Ein Abgleich mit dieser Arbeit steht aus.
