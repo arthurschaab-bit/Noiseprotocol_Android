@@ -227,6 +227,16 @@ def main():
         lg.cell(start + i, 1, k).font = Font(bold=True)
         lg.cell(start + i, 2, v).alignment = Alignment(wrap_text=True, vertical="top")
 
+    # Legende: ebenfalls ohne dB-Werte und Pegelbegriffe (Owner-Vorgabe 10.11.2026)
+    for (alt, neu_) in (("Beweisrelevante Messwerte (Richtwertüberschreitung, Spitzenwerte, LAeq)", "Beweisrelevante Tage (Richtwertüberschreitung)"),
+                        (" Richtwert WA tags 55 dB(A) (TA Lärm / AVV Baulärm). Innenraum-Tagrichtwert Wohn-/Schlafräume ca. 35–40 dB(A).",
+                         " Richtwerte nach TA Lärm / AVV Baulärm."),
+                        ("; LAeq als Beurteilungspegel klargestellt", ""),
+                        (" und Pegelverlauf", "")):
+        for zeile in lg.iter_rows():
+            for z in zeile:
+                if isinstance(z.value, str) and alt in z.value:
+                    z.value = z.value.replace(alt, neu_)
     # --- neue Blaetter ----------------------------------------------------------------------------------------
     kopf_stil = dict(font=Font(bold=True, name="Calibri", size=10), fill=PatternFill("solid", fgColor="FFD9D9D9"))
     farbe = {"Widerspruch": "FFFCE4D6", "Intern": "FFFCE4D6", "Hinweis": "FFFFF2CC", "Lücke im Tagebuch": "FFE2EFDA",
