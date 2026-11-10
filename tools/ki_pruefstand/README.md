@@ -31,3 +31,6 @@ Ergebnisse und Bewertung: `docs/BERICHT_KI_PRUEFSTAND.md`.
 14. `tagesprotokoll.py` — Tagesprotokoll als Text und CSV (Zeiträume mit Dichte-Wörtern, Dauer nach dB(A)-Verlauf).
 
 Ausführliche Anleitung, Klassenabbildung und Grenzen: `docs/KI_PRUEFSTAND_ANLEITUNG.md`.
+15. `protokoll_vorbereiten.py`, `protokoll_zusammenfuehren.py`, `pruefseite_tage.py` — Eingaben für das Protokoll aus den Hörrunden, Zusammenführung mehrerer Protokolle, gezielte Prüfseite für einzelne Tage.
+16. `bericht_lesen.py` — liest den Gesamtbericht (PDF) ein: Tageswerte und Tagesseiten als JSON.
+17. `tagebuch_zusammenfuehren.py` — führt das Bautagebuch (xlsx) mit dem Vorschlag zusammen, entfernt Platzhalter und ergänzt ein Blatt mit dem Abgleich gegen den Gesamtbericht.

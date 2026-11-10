@@ -132,6 +132,23 @@ Angaben des Owners ("[bitte ergänzen]").
   im Tagebuch, im Protokoll durchgehend) und 29.06.–03.07. (Tagebuch: morgens Bauschuttabholung mit Bagger, Protokoll: Tiefbohrer fast
   ganztägig) sind zu prüfen.
 
+## 7a · Zusammenführung mit dem Bautagebuch und Abgleich mit dem Gesamtbericht
+
+```powershell
+& $PY bericht_lesen.py "<Gesamtbericht.pdf>" "$P	agebuchericht"      # Tageswerte und Tagesseiten als JSON
+& $PY tagebuch_zusammenfuehren.py "<Bautagebuch_Vxx.xlsx>" "$P\protokoll_gesamtautagebuch_vorschlag.csv" `
+      "$P	agebuchericht" "$P	agebuch\widersprueche.json" "$P	agebuch\Bautagebuch_V25.xlsx" --version 25
+```
+
+- Die Quelldatei bleibt unverändert, die Ausgabe ist eine neue Datei. Platzhalter ("[bitte ergänzen]") werden entfernt, Tage ohne Eintrag aus
+  dem Vorschlag ergänzt (gekennzeichnet als nachträglicher Eintrag), Referenztage (Bauruhe) aus dem Gesamtbericht ergänzt. Bei vorhandenen
+  Einträgen steht höchstens "Aus den Aufnahmen zusätzlich: …" für Quellen, die im Eintrag noch nicht vorkommen. Tage, die in der
+  Widerspruchsliste als offen geführt sind, bleiben unverändert.
+- Blatt "Abgleich Gesamtbericht": Punkte, in denen Tagebuch und Bericht nicht übereinstimmen (Zahlen, Zeiten, Belege, Quellenzuordnung).
+  Die Liste (`widersprueche.json`) enthält private Inhalte und gehört nicht ins Repo. Blatt "Berichtstage ohne Eintrag": Messtage des Berichts,
+  zu denen das Tagebuch nichts sagt.
+- Das Skript ändert keine Aussagen des Tagebuchs. Widersprüche werden nur gemeldet, die Entscheidung liegt beim Owner.
+
 ## 8 · Bekannte Grenzen (Stand 10.11.2026)
 
 - **Klassifiziert sind alle Aufnahmen ab 60 dB, soweit die Klanggruppe beurteilt wurde.** Sieben Gruppen der leisen älteren Aufnahmen
