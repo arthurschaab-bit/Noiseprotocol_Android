@@ -64,7 +64,10 @@ class AppContainer(
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val settingsManager: SettingsManager by lazy { SettingsManager(context) }
     val meterTransport: MeterTransport by lazy {
-        meterTransportOverride ?: BleMeterTransport(context.applicationContext)
+        meterTransportOverride ?: BleMeterTransport(
+            context.applicationContext,
+            onBreadcrumb = { nachricht, daten -> diagnosticsReporter.breadcrumb("BleTransport", nachricht, daten) },
+        )
     }
 
     val bluetoothAdapterStateObserver by lazy {
@@ -505,6 +508,7 @@ class AppContainer(
             // eine reine Mikrofon-Session ueberhaupt Ausfallbaender/eine ehrliche
             // Datenverfuegbarkeit statt strukturell immer 100%.
             mikrofonAktiv = com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv,
+            onBreadcrumb = { nachricht, daten -> diagnosticsReporter.breadcrumb("Messung", nachricht, daten) },
             onLebenszeichen = { zeitstempel ->
                 lebenszyklusRingFile.protokolliere(
                     ereignis = "Lebenszeichen",

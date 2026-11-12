@@ -616,6 +616,27 @@ class MeasurementRecorderTest {
     }
 
     @Test
+    fun mikrofonSessionMeldetEinenBreadcrumbMitMessvorgangId() = runTest(UnconfinedTestDispatcher()) {
+        // Analysehilfe: In den Support-Bundles war nicht zu sehen, wann welcher Messvorgang
+        // entsteht - und damit nicht, warum ein Popup zweimal oder verspaetet kam.
+        val meldungen = mutableListOf<Pair<String, Map<String, Any?>>>()
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr,
+            onBreadcrumb = { text, daten -> meldungen += text to daten },
+        )
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        val (text, daten) = meldungen.single()
+        val session = sessionDao.zeilen.values.single()
+        assertEquals("Mikrofon-Session eroeffnet", text)
+        assertEquals(session.id, daten["sessionId"])
+        assertEquals(session.messvorgangId, daten["messvorgangId"])
+        assertEquals(false, daten["messvorgangVonMikrofonUebernommen"])
+    }
+
+    @Test
     fun mikrofonPegelWirdAlsMesswertDerLaufendenSessionGeschrieben() = runTest(UnconfinedTestDispatcher()) {
         // Der Kern des Fehlers, den dieser Test absichert: Ohne Messwerte war die
         // Mikrofon-Session als juengste Session zwar die, die der Pegelverlauf auf der Startseite

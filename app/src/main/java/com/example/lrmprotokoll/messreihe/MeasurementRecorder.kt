@@ -68,6 +68,8 @@ class MeasurementRecorder(
     private val mikrofonAktiv: Flow<Boolean>? = null,
     private val lebenszeichenIntervall: Duration = Duration.ofMinutes(15),
     private val onLebenszeichen: ((Long) -> Unit)? = null,
+    /** Analysehilfe (Support-Bundle): wann welche Session mit welchem Messvorgang entsteht. */
+    private val onBreadcrumb: ((String, Map<String, Any?>) -> Unit)? = null,
 ) {
 
     private val pufferMutex = Mutex()
@@ -232,6 +234,7 @@ class MeasurementRecorder(
                 )
                 aktiveSessionIstMikrofon = true
                 letztesLebenszeichenAt = now.now().toEpochMilli()
+                meldeSession("Mikrofon-Session eroeffnet", aktiveSessionId, null)
             }
             warMikrofonJeAktiv = false
             zuletztMikrofonImAusfall = false
@@ -333,6 +336,21 @@ class MeasurementRecorder(
                 bestehenderMessvorgangId = messvorgangId,
             )
             letztesLebenszeichenAt = now.now().toEpochMilli()
+            meldeSession("Messgeraet-Session eroeffnet", aktiveSessionId, messvorgangId)
+        }
+    }
+
+    private suspend fun meldeSession(nachricht: String, sessionId: Long?, uebernommenerMessvorgang: Long?) {
+        val messvorgang = sessionId?.let { runCatching { sessionDao.byId(it)?.messvorgangId }.getOrNull() }
+        runCatching {
+            onBreadcrumb?.invoke(
+                nachricht,
+                mapOf(
+                    "sessionId" to sessionId,
+                    "messvorgangId" to messvorgang,
+                    "messvorgangVonMikrofonUebernommen" to (uebernommenerMessvorgang != null),
+                ),
+            )
         }
     }
 

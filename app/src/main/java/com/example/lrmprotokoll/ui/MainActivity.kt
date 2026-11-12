@@ -507,6 +507,18 @@ fun NoiseProtocolApp(
                 .any { it.photoPromptCompleted }
             val hatFoto = container.database.dokumentationsFotoDao().fuerMessvorgang(messvorgangId)
                 .isNotEmpty()
+            // Analysehilfe: ohne diese Zeile war in Bundles nicht zu sehen, WANN (oder ob) das
+            // Popup zu welcher Session ausgeloest wurde und warum nicht.
+            container.diagnosticsReporter.breadcrumb(
+                "Popup",
+                if (!bereitsAbgeschlossen && !hatFoto) "Foto-Popup wird angezeigt" else "Foto-Popup nicht noetig",
+                data = mapOf(
+                    "sessionId" to session.id,
+                    "messvorgangId" to messvorgangId,
+                    "bereitsAbgeschlossen" to bereitsAbgeschlossen,
+                    "hatFoto" to hatFoto,
+                ),
+            )
             if (!bereitsAbgeschlossen && !hatFoto) {
                 fotoSheetFuerSession = session.id
                 fotoSheetFuerMessvorgang = messvorgangId
@@ -520,6 +532,10 @@ fun NoiseProtocolApp(
             messvorgangId = messvorgangId,
             onFertig = {
                 scope.launch {
+                    container.diagnosticsReporter.breadcrumb(
+                        "Popup", "Foto-Popup beendet",
+                        data = mapOf("sessionId" to id, "messvorgangId" to messvorgangId),
+                    )
                     container.database.sessionDao().fotoAbfrageAbgeschlossen(messvorgangId)
                     fotoSheetFuerSession = null
                     fotoSheetFuerMessvorgang = null
@@ -562,9 +578,21 @@ fun NoiseProtocolApp(
                 it.metadataPromptCompleted && it.startedAt in von until bis
             } ?: false
             val hatStammdaten = stammdaten.any { it.erstelltAm in von until bis && it.giltFuerTagStart == null }
-            if (!settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von) &&
+            val stammdatenNoetig = !settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von) &&
                 !ersterTagBereitsAbgeschlossen && !hatStammdaten && stammdatenSheetTagStart != von
-            ) {
+            container.diagnosticsReporter.breadcrumb(
+                "Popup",
+                if (stammdatenNoetig) "Konfigurations-Popup wird angezeigt" else "Konfigurations-Popup nicht noetig",
+                data = mapOf(
+                    "sessionId" to session.id,
+                    "messvorgangId" to messvorgangId,
+                    "tagAbgeschlossen" to settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von),
+                    "ersterTagBereitsAbgeschlossen" to ersterTagBereitsAbgeschlossen,
+                    "hatStammdaten" to hatStammdaten,
+                    "sheetBereitsFuerTag" to (stammdatenSheetTagStart == von),
+                ),
+            )
+            if (stammdatenNoetig) {
                 stammdatenSheetFuerSession = session.id
                 stammdatenSheetFuerMessvorgang = messvorgangId
                 stammdatenSheetTagStart = von
@@ -579,6 +607,10 @@ fun NoiseProtocolApp(
             messvorgangId = messvorgangId,
             onFertig = {
                 scope.launch {
+                    container.diagnosticsReporter.breadcrumb(
+                        "Popup", "Konfigurations-Popup beendet",
+                        data = mapOf("sessionId" to id, "messvorgangId" to messvorgangId),
+                    )
                     if (tagStart != null) settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, tagStart)
                     container.database.sessionDao().stammdatenAbfrageAbgeschlossen(messvorgangId)
                     stammdatenSheetFuerSession = null
