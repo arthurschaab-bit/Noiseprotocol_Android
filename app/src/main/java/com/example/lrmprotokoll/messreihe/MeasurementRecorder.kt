@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -70,6 +71,12 @@ class MeasurementRecorder(
     private val onLebenszeichen: ((Long) -> Unit)? = null,
     /** Analysehilfe (Support-Bundle): wann welche Session mit welchem Messvorgang entsteht. */
     private val onBreadcrumb: ((String, Map<String, Any?>) -> Unit)? = null,
+    /**
+     * `true`, solange Kalibrier- oder Aufbauphase laufen ([MessphasenSteuerung]): Dann werden
+     * weder Messgeraet- noch Mikrofonwerte in die Messreihe geschrieben. `null` (Default) laesst
+     * bestehende Aufrufer und Tests unveraendert.
+     */
+    private val erfassungPausiert: StateFlow<Boolean>? = null,
 ) {
 
     private val pufferMutex = Mutex()
@@ -280,6 +287,7 @@ class MeasurementRecorder(
      * Messgeraet-Session: Deren kalibrierte Messreihe darf keine unkalibrierten Werte enthalten.
      */
     fun mikrofonPegel(dbWert: Double) {
+        if (erfassungPausiert?.value == true) return
         if (!aktiveSessionIstMikrofon) return
         val sessionId = aktiveSessionId ?: return
         val jetzt = now.now().toEpochMilli()
@@ -476,6 +484,9 @@ class MeasurementRecorder(
     }
 
     private suspend fun onFrame(frame: MeterFrame) {
+        // Kalibrier-/Aufbauphase: Frames gehoeren nicht in die Messreihe und eroeffnen noch keine
+        // Session - sie entsteht mit dem ersten Frame nach der Phase.
+        if (erfassungPausiert?.value == true) return
         // Wie in [onState]: Ein eintreffender Frame IST der Beleg, dass das Geraet liefert.
         eroeffneMessgeraetSession()
         val sessionId = aktiveSessionId ?: return

@@ -637,6 +637,30 @@ class MeasurementRecorderTest {
     }
 
     @Test
+    fun waehrendDerKalibrierphaseWerdenWederMikrofonNochGeraetewerteGespeichert() = runTest(UnconfinedTestDispatcher()) {
+        // Der Kalibrierton darf nicht in der Messreihe landen (Owner-Auftrag 12.11.2026).
+        val pausiert = kotlinx.coroutines.flow.MutableStateFlow(true)
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, erfassungPausiert = pausiert,
+        )
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        recorder.mikrofonPegel(94.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+        assertTrue("Waehrend der Phase wird nichts geschrieben", measurementDao.geschrieben.isEmpty())
+
+        pausiert.value = false
+        uhr.vor(Duration.ofSeconds(2))
+        recorder.mikrofonPegel(55.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+        assertEquals(55.0, measurementDao.geschrieben.single().levelDb, 0.001)
+    }
+
+    @Test
     fun mikrofonPegelWirdAlsMesswertDerLaufendenSessionGeschrieben() = runTest(UnconfinedTestDispatcher()) {
         // Der Kern des Fehlers, den dieser Test absichert: Ohne Messwerte war die
         // Mikrofon-Session als juengste Session zwar die, die der Pegelverlauf auf der Startseite

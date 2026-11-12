@@ -554,11 +554,33 @@ val MIGRATION_25_26 = object : Migration(25, 26) {
     }
 }
 
+/** Neue Tabellen fuer die Kalibrierphase; bestehende Tabellen und Daten bleiben unveraendert. */
+val MIGRATION_26_27 = object : Migration(26, 27) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // SQL deckungsgleich mit app/schemas/.../27.json (createSql), Room prueft das beim Oeffnen.
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `kalibrierphasen` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `sollwertDb` REAL NOT NULL, " +
+                "`abweichungVorherDb` REAL, `abweichungNachherDb` REAL, " +
+                "`abweichungKorrigiert` INTEGER NOT NULL, `endeGrund` TEXT)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_kalibrierphasen_startedAt` ON `kalibrierphasen` (`startedAt`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `kalibrier_messwerte` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`phaseId` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, `levelDb` REAL NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_kalibrier_messwerte_phaseId_timestamp` " +
+                "ON `kalibrier_messwerte` (`phaseId`, `timestamp`)",
+        )
+    }
+}
+
 val ALLE_MIGRATIONEN = arrayOf(
     MIGRATION_4_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
     MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24,
-    MIGRATION_24_25, MIGRATION_25_26,
+    MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27,
 )
 
 @Database(
@@ -568,9 +590,9 @@ val ALLE_MIGRATIONEN = arrayOf(
         SessionEntity::class, MeasurementEntity::class, ConnectionEventEntity::class,
         MinuteAggregateEntity::class, DiagnosticLogEntity::class, KlassifikationsRohdaten::class,
         DokumentationsFotoEntity::class, BeweisVideoEntity::class, StammdatenVerlaufEntity::class,
-        ReportConfigEntity::class,
+        ReportConfigEntity::class, KalibrierphaseEntity::class, KalibrierMesswertEntity::class,
     ],
-    version = 26,
+    version = 27,
     exportSchema = true,
 )
 @TypeConverters(RohdatenConverters::class)
@@ -602,6 +624,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun stammdatenVerlaufDao(): StammdatenVerlaufDao
 
     abstract fun reportConfigDao(): ReportConfigDao
+
+    abstract fun kalibrierphaseDao(): KalibrierphaseDao
 
     companion object {
         @Volatile

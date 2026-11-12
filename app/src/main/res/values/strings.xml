@@ -831,4 +831,33 @@
     <string name="totmann_warnung_nicht_geplant">Totmannschaltung eingerichtet, aber nicht aktiv. Messung neu starten.</string>
     <string name="totmann_warnung_sendet_nicht">Totmannschaltung sendet nicht (Netz?)</string>
     <string name="totmann_aktion_einrichten">Einrichten</string>
+
+    <!-- Kalibrier- und Aufbauphase (12.11.2026) -->
+    <string name="kalib_titel">Kalibrierung</string>
+    <string name="kalib_hinweis">Kalibrator (PCE-SC 43, 94 dB) auf das Messgerät setzen. Diese Werte zählen nicht für die Messung.</string>
+    <string name="kalib_warte_geraet">Warte auf das Messgerät …</string>
+    <string name="kalib_pegel">Aktueller Pegel: %1$s dB</string>
+    <string name="kalib_werte_hinweis">Erkannte Abweichung zum Kalibratorpegel – bei Bedarf korrigieren.</string>
+    <string name="kalib_vorher">Abweichung vorher (dB)</string>
+    <string name="kalib_nachher">Abweichung nachher (dB)</string>
+    <string name="kalib_ende_erkannt">Kalibrierung beendet? Der Pegel ist abgefallen.</string>
+    <string name="kalib_ungueltig">Bitte eine Zahl eingeben, z. B. -0,4</string>
+    <string name="kalib_btn_beendet">Kalibrierung beendet</string>
+    <string name="kalib_btn_ja_beendet">Ja, beendet</string>
+    <string name="kalib_btn_ueberspringen">Ohne Kalibrierung weiter</string>
+    <string name="aufbau_titel">Messaufbau</string>
+    <string name="aufbau_hinweis_phase">Die Messung beginnt erst mit „Messung starten“.</string>
+    <string name="aufbau_hinweis_bearbeiten">Angaben von heute prüfen oder ändern. Die Messung läuft dabei weiter.</string>
+    <string name="aufbau_konfig">Konfiguration</string>
+    <string name="aufbau_fotos">Fotos (Messaufbau, Kalibrierung)</string>
+    <string name="aufbau_erfasst">heute erfasst</string>
+    <string name="aufbau_fotos_anzahl">%1$d Foto(s) heute</string>
+    <string name="aufbau_offen">noch offen</string>
+    <string name="aufbau_btn_erfassen">Erfassen</string>
+    <string name="aufbau_btn_aendern">Ändern</string>
+    <string name="aufbau_btn_start">Messung starten</string>
+    <string name="aufbau_btn_fertig">Fertig</string>
+    <string name="aufbau_ohne_sitzung">Konfiguration und Fotos folgen nach dem Start.</string>
+    <string name="aufbau_uebernommen">Aufbau von heute übernommen</string>
+    <string name="menu_aufbau_aendern">Konfiguration &amp; Fotos ändern</string>
 </resources>

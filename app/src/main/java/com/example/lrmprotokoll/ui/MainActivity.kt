@@ -496,17 +496,26 @@ fun NoiseProtocolApp(
         .collectAsState(initial = null)
     var fotoSheetFuerSession by remember { mutableStateOf<Long?>(null) }
     var fotoSheetFuerMessvorgang by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv) {
+    // Kalibrier-/Aufbauphase (Owner-Auftrag 12.11.2026): Waehrenddessen fragt der Vorbereitungs-
+    // Dialog selbst nach Konfiguration und Fotos - die Einzel-Popups warten, bis die Phase endet.
+    val messphase by container.messphasen.phase.collectAsState()
+    LaunchedEffect(offeneSession?.id, settingsManager.fotoDokuAktiv, messphase) {
         val session = offeneSession
         if (!settingsManager.fotoDokuAktiv || session == null) {
             fotoSheetFuerSession = null
             fotoSheetFuerMessvorgang = null
+        } else if (messphase != com.example.lrmprotokoll.messreihe.Messphase.KEINE) {
+            return@LaunchedEffect
         } else if (fotoSheetFuerMessvorgang != session.messvorgangId) {
             val messvorgangId = session.messvorgangId
             val bereitsAbgeschlossen = container.database.sessionDao().fuerMessvorgang(messvorgangId)
                 .any { it.photoPromptCompleted }
+            // Fotos von heute (egal zu welchem Messvorgang) genuegen: kein erneutes Popup nach
+            // einem Wechsel Mikrofon -> Messgeraet oder einem Neustart am selben Tag.
+            val fotoZone = ZoneId.systemDefault()
+            val (fotoVon, fotoBis) = messtagGrenzen(LocalDate.now(fotoZone), fotoZone)
             val hatFoto = container.database.dokumentationsFotoDao().fuerMessvorgang(messvorgangId)
-                .isNotEmpty()
+                .isNotEmpty() || container.database.dokumentationsFotoDao().anzahlZwischen(fotoVon, fotoBis) > 0
             // Analysehilfe: ohne diese Zeile war in Bundles nicht zu sehen, WANN (oder ob) das
             // Popup zu welcher Session ausgeloest wurde und warum nicht.
             container.diagnosticsReporter.breadcrumb(
@@ -560,12 +569,14 @@ fun NoiseProtocolApp(
             delay(60_000)
         }
     }
-    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv, heutigerMesstag) {
+    LaunchedEffect(offeneSession?.id, settingsManager.stammdatenAbfrageAktiv, heutigerMesstag, messphase) {
         val session = offeneSession
         if (!settingsManager.stammdatenAbfrageAktiv) {
             stammdatenSheetFuerSession = null
             stammdatenSheetFuerMessvorgang = null
             stammdatenSheetTagStart = null
+        } else if (messphase != com.example.lrmprotokoll.messreihe.Messphase.KEINE) {
+            return@LaunchedEffect
         } else if (session != null) {
             val zone = ZoneId.systemDefault()
             val (von, bis) = messtagGrenzen(heutigerMesstag, zone)
@@ -577,7 +588,39 @@ fun NoiseProtocolApp(
             val ersterTagBereitsAbgeschlossen = ersteSession?.let {
                 it.metadataPromptCompleted && it.startedAt in von until bis
             } ?: false
-            val hatStammdaten = stammdaten.any { it.erstelltAm in von until bis && it.giltFuerTagStart == null }
+            // Angaben von heute (egal zu welchem Messvorgang) genuegen - siehe TagesErfassung.
+            val hatStammdaten = stammdaten.any { it.erstelltAm in von until bis && it.giltFuerTagStart == null } ||
+                withContext(Dispatchers.IO) {
+                    container.database.stammdatenVerlaufDao().fuerTag(von, bis).any { it.giltFuerTagStart == null }
+                }
+            // Owner-Entscheidung 12.11.2026: Laeuft die Messung ueber Mitternacht und gibt es fuer
+            // den neuen Tag noch nichts, werden die letzten Angaben still uebernommen (ohne
+            // Popup). Tagesabhaengiges (Kalibrierung, Wetter, Hinweis) bleibt dabei leer.
+            if (!hatStammdaten && ersteSession != null && ersteSession.startedAt < von) {
+                val vorlage = withContext(Dispatchers.IO) { container.database.stammdatenVerlaufDao().letzte(1) }
+                    .firstOrNull()
+                if (vorlage != null) {
+                    withContext(Dispatchers.IO) {
+                        container.database.stammdatenVerlaufDao().insert(
+                            vorlage.copy(
+                                id = 0,
+                                erstelltAm = System.currentTimeMillis(),
+                                giltFuerTagStart = null,
+                                messvorgangId = messvorgangId,
+                                geraetKalibrierung = "",
+                                wetter = "",
+                                datenqualitaetHinweis = "",
+                            ),
+                        )
+                    }
+                    settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, von)
+                    container.diagnosticsReporter.breadcrumb(
+                        "Popup", "Konfiguration ueber Mitternacht still uebernommen",
+                        data = mapOf("messvorgangId" to messvorgangId),
+                    )
+                    return@LaunchedEffect
+                }
+            }
             val stammdatenNoetig = !settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, von) &&
                 !ersterTagBereitsAbgeschlossen && !hatStammdaten && stammdatenSheetTagStart != von
             container.diagnosticsReporter.breadcrumb(
@@ -620,6 +663,11 @@ fun NoiseProtocolApp(
             },
         )
     }
+    var aufbauBearbeiten by remember { mutableStateOf(false) }
+    MessvorbereitungHost(
+        aufbauBearbeiten = aufbauBearbeiten,
+        onAufbauBearbeitenEnde = { aufbauBearbeiten = false },
+    )
     korrekturZiel?.let { (sessionId, messvorgangId, messtag) ->
         GesamtberichtStammdatenSheet(
             sessionId = sessionId,
@@ -1040,6 +1088,15 @@ fun NoiseProtocolApp(
                                     showOverflowMenu = false
                                 },
                                 modifier = Modifier.testTag("menu_item_filter"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_aufbau_aendern)) },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    aufbauBearbeiten = true
+                                },
+                                modifier = Modifier.testTag("menu_item_aufbau_aendern"),
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.action_ai_batch)) },

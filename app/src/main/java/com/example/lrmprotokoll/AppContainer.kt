@@ -44,6 +44,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.time.Duration
@@ -310,6 +311,16 @@ class AppContainer(
         }
     val connectionSupervisor: ConnectionSupervisor by connectionSupervisorLazy
 
+    /** Kalibrier- und Aufbauphase am manuellen Messstart (Owner-Auftrag 12.11.2026). */
+    val messphasen: com.example.lrmprotokoll.messreihe.MessphasenSteuerung by lazy {
+        com.example.lrmprotokoll.messreihe.MessphasenSteuerung(
+            dao = database.kalibrierphaseDao(),
+            messgeraetPegel = meterTransport.frames.map { it.receivedAt.toEpochMilli() to it.level },
+            scope = connectionSupervisorScope,
+            onBreadcrumb = { nachricht, daten -> diagnosticsReporter.breadcrumb("Messphase", nachricht, daten) },
+        )
+    }
+
     /**
      * [connectionSupervisor], aber NUR wenn es schon gebaut wurde - loest das `lazy` selbst nicht
      * aus. Fuer den Absturzmoment (Bugfix docs/PROMPT_FIX_LAUFZEITZUSTAND_ABSTURZ.md, Befund C /
@@ -510,6 +521,7 @@ class AppContainer(
             // Datenverfuegbarkeit statt strukturell immer 100%.
             mikrofonAktiv = com.example.lrmprotokoll.audio.AudioRecordingService.audioAufnahmeAktiv,
             onBreadcrumb = { nachricht, daten -> diagnosticsReporter.breadcrumb("Messung", nachricht, daten) },
+            erfassungPausiert = messphasen.erfassungPausiert,
             onLebenszeichen = { zeitstempel ->
                 lebenszyklusRingFile.protokolliere(
                     ereignis = "Lebenszeichen",

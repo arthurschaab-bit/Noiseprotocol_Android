@@ -199,6 +199,7 @@ class AudioRecordingService : LifecycleService() {
     private var isBufferFull = false
 
     private lateinit var measurementRecorder: com.example.lrmprotokoll.messreihe.MeasurementRecorder
+    private lateinit var messphasen: com.example.lrmprotokoll.messreihe.MessphasenSteuerung
     private lateinit var videoTonMitschnitt: com.example.lrmprotokoll.video.VideoTonMitschnitt
     private lateinit var lebenszyklusRingFile: com.example.lrmprotokoll.diagnose.LebenszyklusRingFile
     private lateinit var letzterZustandErfasser: com.example.lrmprotokoll.diagnose.LetzterZustandErfasser
@@ -223,6 +224,7 @@ class AudioRecordingService : LifecycleService() {
         alarmCoordinator = container.alarmCoordinator
         meterTransport = container.meterTransport
         levelSampleCollector = container.levelSampleCollector
+        messphasen = container.messphasen
         diagnosticsReporter = container.diagnosticsReporter
         classifier = NoiseClassifier(applicationContext)
         measurementRecorder = container.measurementRecorder
@@ -244,7 +246,7 @@ class AudioRecordingService : LifecycleService() {
         lifecycleScope.launch {
             meterTransport.frames.collect { frame ->
                 letzterMeterFrame = frame
-                if (settingsManager.driveSyncEnabled) {
+                if (settingsManager.driveSyncEnabled && !messphasen.erfassungPausiert.value) {
                     levelSampleCollector.pegel(LevelSource.PCE_323, frame.level, frame.receivedAt)
                 }
                 pruefeSchwellenwertUndTrigger(meterFrame = frame, mikrofonDb = null)
@@ -885,7 +887,7 @@ class AudioRecordingService : LifecycleService() {
                         letzteMikrofonPegelVeroeffentlichungMs = jetztMs
                         veroeffentlicheMikrofonPegel(currentDb)
                     }
-                    if (settingsManager.driveSyncEnabled) {
+                    if (settingsManager.driveSyncEnabled && !messphasen.erfassungPausiert.value) {
                         levelSampleCollector.pegel(LevelSource.MIKROFON, currentDb, Instant.now())
                     }
                     measurementRecorder.mikrofonPegel(currentDb)
@@ -1020,6 +1022,13 @@ class AudioRecordingService : LifecycleService() {
         mikrofonDb: Double?,
         maxAmplitude: Double = 0.0,
     ) {
+        // Kalibrier-/Aufbauphase: der Kalibrierton darf weder Ereignisse noch Aufnahmen ausloesen.
+        // Der Wachhund bekommt "unter Schwelle", damit die Pause nicht als Ausfall der
+        // Pegelerfassung gemeldet wird.
+        if (messphasen.erfassungPausiert.value) {
+            triggerWachhund.pegelGesehen(System.currentTimeMillis(), false)
+            return
+        }
         val mikrofonLaeuft = isRunning && _audioAufnahmeAktiv.value
         val messgeraetStreamt = connectionSupervisor.state.value == ConnectionState.STREAMING
         if (!mikrofonLaeuft && !messgeraetStreamt) return

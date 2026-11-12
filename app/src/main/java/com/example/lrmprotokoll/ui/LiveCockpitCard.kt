@@ -938,6 +938,9 @@ fun LiveCockpitCard(
                             val frei = freierSpeicherBytes(context)?.let { formatiereBytes(it) } ?: "?"
                             onShowSnackbar?.invoke(context.getString(R.string.cockpit_speicher_knapp, frei))
                         }
+                        // Nur der manuelle Start oeffnet Kalibrier-/Aufbauphase; Wiederaufnahmen nach
+                        // Absturz oder Neustart (kein Mensch am Display) messen sofort.
+                        container.messphasen.startManuell(messgeraetErwartet = settings.meterDeviceAddress != null)
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
                             putExtra(EXTRA_START_AUDIO_MONITORING, true)
                         }
