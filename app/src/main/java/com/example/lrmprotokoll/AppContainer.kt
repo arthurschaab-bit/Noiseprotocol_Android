@@ -305,6 +305,7 @@ class AppContainer(
                 diagnosticLogger = diagnosticLogger,
                 diagnosticsReporter = diagnosticsReporter,
                 dienstAktiv = AudioRecordingService.laeuft,
+                failedRetryIntervalAktiv = Duration.ofSeconds(10),
             )
         }
     val connectionSupervisor: ConnectionSupervisor by connectionSupervisorLazy

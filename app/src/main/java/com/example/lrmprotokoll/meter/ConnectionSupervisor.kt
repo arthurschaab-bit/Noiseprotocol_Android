@@ -35,8 +35,11 @@ fun interface InstantSource {
     }
 }
 
-private val BACKOFF_STEPS_SECONDS = longArrayOf(1, 2, 4, 8, 16, 30)
-private const val BACKOFF_CONSTANT_SECONDS = 60L
+// Owner-Vorgabe 12.11.2026: feine Kaskade statt 1/2/4/8/16/30/60 s. Das Messgeraet-Bluetooth wird fuer
+// die Kalibrierung bewusst ausgeschaltet; nach dem Wiedereinschalten soll die Verbindung binnen
+// Sekunden stehen, nicht nach bis zu 58 s Wartezeit (Support-Bundles 10.-12.11.2026).
+private val BACKOFF_STEPS_MILLIS = longArrayOf(100, 200, 500, 1_000, 2_000, 5_000, 10_000)
+private const val BACKOFF_CONSTANT_MILLIS = 10_000L
 private const val BACKOFF_JITTER_FRACTION = 0.2
 private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 
@@ -72,9 +75,9 @@ private const val MAX_FRAMES_PER_BURST = 2
  * GATT-Disconnect (direkt von [transport]), Staleness (kein Frame seit [staleAfter]),
  * Bluetooth-Adapter aus ([adapterEnabled]) und Fehlerrate ueber [errorRateWindow] > [errorRateThreshold].
  *
- * [maxAttempts] = 8: durchlaeuft die komplette Backoff-Folge (1,2,4,8,16,30 s) einmal vollstaendig
- * plus zwei weitere Versuche im konstanten 60-s-Takt, bevor [ConnectionState.FAILED] gemeldet wird -
- * in Summe rund zwei Minuten Wartezeit ueber acht Versuche. Kein Wert aus Plan/Prompt vorgegeben,
+ * [maxAttempts] = 8: durchlaeuft die komplette Backoff-Folge (0,1/0,2/0,5/1/2/5/10 s) einmal
+ * vollstaendig plus einen weiteren Versuch im konstanten 10-s-Takt, bevor
+ * [ConnectionState.FAILED] gemeldet wird. Kein Wert aus Plan/Prompt vorgegeben,
  * eigene Abwaegung (nicht einer der sieben in Plan Abschnitt 13 als offen markierten Punkte).
  * Ein Reconnect NACH mindestens [minStableSession] erfolgreich gestreamter Zeit setzt den
  * Zaehler zurueck - eine flatternde, aber grundsaetzlich erreichbare Verbindung darf nie FAILED
@@ -112,6 +115,16 @@ class ConnectionSupervisor(
      * [erneutVersuchen] sofort ab.
      */
     private val failedRetryInterval: Duration = Duration.ofMinutes(15),
+    /**
+     * Abstand zwischen zwei Anlaeufen nach [ConnectionState.FAILED], solange der Messdienst
+     * laeuft ([dienstAktiv]). `null` (Default) nimmt [failedRetryInterval].
+     *
+     * Owner-Vorgabe 12.11.2026: Waehrend einer laufenden Messung darf die App nicht 15 Minuten
+     * lang aufgeben - wer das Geraete-Bluetooth fuer die Kalibrierung ausschaltet und wieder
+     * einschaltet, muss binnen Sekunden verbunden sein. Der Leerlauf ([dienstAktiv] = false)
+     * behaelt die langen Abstaende ([failedRetryInterval], [failedRetryIntervalLeerlauf]).
+     */
+    private val failedRetryIntervalAktiv: Duration? = null,
     /**
      * Stream-Plausibilisierung als Spoofing-Erkennung (Plan Abschnitt 6): `null` (Default)
      * schaltet die Pruefung ab - ohne eine geraetespezifische Erwartung (nur AppContainer kennt
@@ -351,7 +364,7 @@ class ConnectionSupervisor(
                             consecutiveFailedRounds++
                             val warteDauer = if (dienstAktiv.value) {
                                 consecutiveFailedRounds = 0
-                                failedRetryInterval
+                                failedRetryIntervalAktiv ?: failedRetryInterval
                             } else {
                                 val multiplikator = 1 shl (consecutiveFailedRounds - 1).coerceIn(0, 2)
                                 val dauer = failedRetryInterval.multipliedBy(multiplikator.toLong())
@@ -652,8 +665,8 @@ class ConnectionSupervisor(
         // sonst wuerde schnelles Flattern (Plan 7.1, PROMPT_M3-Testfall) zu einem Reconnect-
         // Sturm ohne jede Verzoegerung fuehren.
         val stepIndex = (consecutiveFailures - 1).coerceAtLeast(0)
-        val baseSeconds = BACKOFF_STEPS_SECONDS.getOrElse(stepIndex) { BACKOFF_CONSTANT_SECONDS }
+        val baseMillis = BACKOFF_STEPS_MILLIS.getOrElse(stepIndex) { BACKOFF_CONSTANT_MILLIS }
         val jitter = 1.0 + random.nextDouble(-BACKOFF_JITTER_FRACTION, BACKOFF_JITTER_FRACTION)
-        return (baseSeconds * 1000 * jitter).toLong().coerceAtLeast(0)
+        return (baseMillis * jitter).toLong().coerceAtLeast(0)
     }
 }

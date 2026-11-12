@@ -109,6 +109,7 @@ class ConnectionSupervisorTest {
         failedRetryInterval: Duration = Duration.ofMinutes(15),
         dienstAktiv: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
         failedRetryIntervalLeerlauf: Duration = Duration.ofHours(1),
+        failedRetryIntervalAktiv: Duration? = null,
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -128,6 +129,7 @@ class ConnectionSupervisorTest {
             diagnosticsReporter = diagnosticsReporter,
             dienstAktiv = dienstAktiv,
             failedRetryIntervalLeerlauf = failedRetryIntervalLeerlauf,
+            failedRetryIntervalAktiv = failedRetryIntervalAktiv,
         )
     }
 
@@ -250,8 +252,7 @@ class ConnectionSupervisorTest {
         override suspend fun send(command: MeterCommand): Result<Unit> = Result.success(Unit)
     }
 
-    private fun assertBackoffGap(expectedSeconds: Long, actualMillis: Long, label: String) {
-        val expectedMillis = expectedSeconds * 1000
+    private fun assertBackoffGap(expectedMillis: Long, actualMillis: Long, label: String) {
         val lower = (expectedMillis * 0.8).toLong() - 30
         val upper = (expectedMillis * 1.2).toLong() + 30
         assertTrue(
@@ -295,7 +296,7 @@ class ConnectionSupervisorTest {
         runCurrent()
         assertEquals(ConnectionState.RECONNECTING, supervisor.state.value)
 
-        advanceTimeBy(1_300) // erster Backoff-Schritt: 1s ± 20% = max. 1,2s
+        advanceTimeBy(1_300) // erster Backoff-Schritt: 100ms ± 20% = max. 120ms (reichlich Luft)
         runCurrent()
         assertEquals(ConnectionState.STREAMING, supervisor.state.value)
     }
@@ -303,8 +304,8 @@ class ConnectionSupervisorTest {
     @Test
     fun backoffFolgtDefinierterSequenzMitJitter() = runTest {
         val transport = NeverStreamingTransport(testScheduler)
-        // maxAttempts = 9: durchlaeuft alle 6 Backoff-Stufen plus zwei weitere im konstanten
-        // 60s-Takt, ohne vorher FAILED zu erreichen - liefert 8 messbare Luecken.
+        // maxAttempts = 9: durchlaeuft alle 7 Backoff-Stufen (100ms ... 10s) plus eine weitere im
+        // konstanten 10s-Takt, ohne vorher FAILED zu erreichen - liefert 8 messbare Luecken.
         val supervisor = newSupervisor(
             transport,
             staleAfter = Duration.ofMillis(1),
@@ -313,16 +314,16 @@ class ConnectionSupervisorTest {
 
         supervisor.start(device)
         runCurrent()
-        // Obergrenze fuer 8 Luecken (1+2+4+8+16+30+60+60=181s) mit max. +20% Jitter, plus Puffer.
-        advanceTimeBy(220_000)
+        // Obergrenze fuer 8 Luecken (0,1+0,2+0,5+1+2+5+10+10=28,8s) mit max. +20% Jitter, plus Puffer.
+        advanceTimeBy(40_000)
         runCurrent()
 
         val timestamps = transport.connectTimestampsMillis
         assertEquals(9, timestamps.size)
         val gaps = timestamps.zipWithNext { a, b -> b - a }
-        val expectedSeconds = longArrayOf(1, 2, 4, 8, 16, 30, 60, 60)
+        val expectedMillis = longArrayOf(100, 200, 500, 1_000, 2_000, 5_000, 10_000, 10_000)
         gaps.forEachIndexed { index, gap ->
-            assertBackoffGap(expectedSeconds[index], gap, "Luecke #${index + 1}")
+            assertBackoffGap(expectedMillis[index], gap, "Luecke #${index + 1}")
         }
         assertEquals(ConnectionState.FAILED, supervisor.state.value)
     }
@@ -370,6 +371,39 @@ class ConnectionSupervisorTest {
 
         assertTrue(
             "Nach der Wartezeit muss ein neuer Verbindungsversuch laufen, nicht bloss FAILED stehen bleiben",
+            transport.connectTimestampsMillis.size > nachErstemAnlauf,
+        )
+    }
+
+    /**
+     * Owner-Vorgabe 12.11.2026: Laeuft der Messdienst, wartet die App nach FAILED nur
+     * [failedRetryIntervalAktiv] - wer das Geraete-Bluetooth fuer die Kalibrierung aus- und wieder
+     * einschaltet, muss binnen Sekunden verbunden sein, nicht erst nach 15 Minuten.
+     */
+    @Test
+    fun beiLaufendemDienstFuehrtFailedNachKurzerWartezeitZuEinemNeuenAnlauf() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 3,
+                failedRetryInterval = Duration.ofHours(1),
+                failedRetryIntervalAktiv = Duration.ofSeconds(10),
+            )
+
+        supervisor.start(device)
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(ConnectionState.FAILED, supervisor.state.value)
+        val nachErstemAnlauf = transport.connectTimestampsMillis.size
+
+        advanceTimeBy(11_000) // weit unter failedRetryInterval (1 h), aber ueber den 10 s
+        runCurrent()
+
+        assertTrue(
+            "Bei laufendem Dienst muss der neue Anlauf nach ~10 s kommen, nicht erst nach 1 h",
             transport.connectTimestampsMillis.size > nachErstemAnlauf,
         )
     }
@@ -643,7 +677,7 @@ class ConnectionSupervisorTest {
         assertEquals(ConnectionState.STREAMING, supervisor.state.value)
 
         // Jede Session bricht sofort wieder ab - weit unter minStableSession.
-        val nominalBackoffsMs = longArrayOf(1_000, 2_000, 4_000)
+        val nominalBackoffsMs = longArrayOf(100, 200, 500)
         nominalBackoffsMs.forEach { backoff ->
             transport.simulateConnectionLoss()
             runCurrent()
@@ -653,7 +687,7 @@ class ConnectionSupervisorTest {
 
         assertEquals(3, reconnectingAtMillis.size)
         val gaps = reconnectingAtMillis.zipWithNext { a, b -> b - a }
-        assertEquals(listOf(1_000L, 2_000L), gaps)
+        assertEquals(listOf(100L, 200L), gaps)
     }
 
     @Test
