@@ -81,7 +81,10 @@ class BleMeterTransport(
     private var debugFrameCount = 0
     private var verbindungsStartMs = 0L
 
-    private fun meldeGatt(nachricht: String, daten: Map<String, Any?> = emptyMap()) {
+    private fun meldeGatt(
+        nachricht: String,
+        daten: Map<String, Any?> = emptyMap(),
+    ) {
         val dauer = if (verbindungsStartMs > 0) System.currentTimeMillis() - verbindungsStartMs else null
         runCatching { onBreadcrumb?.invoke(nachricht, daten + ("seitVerbindungsstartMs" to dauer)) }
     }

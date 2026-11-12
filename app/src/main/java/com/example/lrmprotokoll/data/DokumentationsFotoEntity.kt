@@ -92,7 +92,10 @@ interface DokumentationsFotoDao {
 
     /** Anzahl der in [von, bis) aufgenommenen Fotos - fuer "heute schon erfasst" ueber Messvorgaenge hinweg. */
     @Query("SELECT COUNT(*) FROM dokumentationsfotos WHERE aufgenommenAm >= :von AND aufgenommenAm < :bis")
-    suspend fun anzahlZwischen(von: Long, bis: Long): Int
+    suspend fun anzahlZwischen(
+        von: Long,
+        bis: Long,
+    ): Int
 
     @Query("SELECT COUNT(*) FROM dokumentationsfotos WHERE sessionId = :sessionId AND kategorie = :kategorie")
     suspend fun anzahlFuerKategorie(sessionId: Long, kategorie: String): Int

@@ -75,7 +75,11 @@ class MessvorbereitungDialogTest {
         assertEquals(true, app.container.messphasen.erfassungPausiert.value)
 
         composeRule.onNodeWithTag("button_aufbau_abschliessen").performClick()
-        composeRule.waitForIdle()
+        // Der Abschluss schreibt vorher im Hintergrund die beantworteten Abfragen weg - nicht
+        // auf waitForIdle verlassen (in der CI war der Test sonst zu frueh fertig).
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            app.container.messphasen.phase.value == Messphase.KEINE
+        }
 
         assertEquals(Messphase.KEINE, app.container.messphasen.phase.value)
         assertEquals(false, app.container.messphasen.erfassungPausiert.value)

@@ -176,7 +176,7 @@ class MainActivityNavigationAndroidTest {
     }
 
     @Test
-    fun mehrtaegigeMessungFragtAmDrittenTagErneutNachStammdaten() {
+    fun mehrtaegigeMessungUebernimmtAmDrittenTagDieAngabenStillOhnePopup() {
         app.container.settingsManager.stammdatenAbfrageAktiv = true
         val zone = ZoneId.systemDefault()
         val tagEins = LocalDate.now(zone).minusDays(2)
@@ -223,13 +223,17 @@ class MainActivityNavigationAndroidTest {
         app.container.settingsManager.stammdatenAbfrageFuerTagAbschliessen(messvorgangId, tagZweiVon)
 
         setNavigationContent()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText(app.getString(R.string.report_metadata_skip)).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).performClick()
+        // Owner-Entscheidung 12.11.2026: Laeuft die Messung ueber Mitternacht, werden die letzten
+        // Angaben fuer den neuen Tag still uebernommen - kein Popup mehr am dritten Tag.
         composeRule.waitUntil(10_000) {
             app.container.settingsManager.stammdatenAbfrageFuerTagAbgeschlossen(messvorgangId, tagDreiVon)
         }
+        composeRule.onNodeWithText(app.getString(R.string.report_metadata_skip)).assertDoesNotExist()
+        val (heuteVon, heuteBis) = messtagGrenzen(tagDrei, zone)
+        val heute = runBlocking { app.container.database.stammdatenVerlaufDao().fuerTag(heuteVon, heuteBis) }
+        assertEquals("Genau ein stiller Eintrag fuer den neuen Tag", 1, heute.size)
+        assertEquals("Tag eins", heute.single().messort)
+        assertEquals(messvorgangId, heute.single().messvorgangId)
     }
 
     @Test

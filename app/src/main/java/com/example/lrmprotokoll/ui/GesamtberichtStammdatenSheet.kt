@@ -159,11 +159,11 @@ fun GesamtberichtStammdatenSheet(
             }
             // Ergebnis der Kalibrierphase von heute vorschlagen, solange das Feld noch leer ist.
             if (geraetKalibrierung.isBlank()) {
-                val vorschlag = withContext(Dispatchers.IO) {
-                    container.database.kalibrierphaseDao().zwischen(von, bis)
-                        .lastOrNull { kalibrierBerichtText(it) != null }
-                        ?.let { kalibrierBerichtText(it) }
-                }
+                val phasen =
+                    withContext(Dispatchers.IO) {
+                        container.database.kalibrierphaseDao().zwischen(von, bis)
+                    }
+                val vorschlag = phasen.mapNotNull { kalibrierBerichtText(it) }.lastOrNull()
                 if (vorschlag != null) geraetKalibrierung = vorschlag
             }
             bereitsInitialisiert = true

@@ -13,13 +13,22 @@ import java.time.ZoneId
  * Gezaehlt wird ueber alle Messvorgaenge des Tages: Ein Wechsel vom Mikrofon auf das Messgeraet
  * oder ein Neustart am selben Tag macht die Angaben nicht ungueltig.
  */
-data class TagesErfassung(val konfigurationErfasst: Boolean, val fotoAnzahl: Int) {
+data class TagesErfassung(
+    val konfigurationErfasst: Boolean,
+    val fotoAnzahl: Int,
+) {
     /** `true`, wenn fuer alle benoetigten Bereiche schon etwas vorliegt. */
-    fun vollstaendig(konfigurationNoetig: Boolean, fotosNoetig: Boolean): Boolean =
-        (!konfigurationNoetig || konfigurationErfasst) && (!fotosNoetig || fotoAnzahl > 0)
+    fun vollstaendig(
+        konfigurationNoetig: Boolean,
+        fotosNoetig: Boolean,
+    ): Boolean = (!konfigurationNoetig || konfigurationErfasst) && (!fotosNoetig || fotoAnzahl > 0)
 
     companion object {
-        suspend fun fuerTag(db: AppDatabase, jetzt: Long, zone: ZoneId = ZoneId.systemDefault()): TagesErfassung {
+        suspend fun fuerTag(
+            db: AppDatabase,
+            jetzt: Long,
+            zone: ZoneId = ZoneId.systemDefault(),
+        ): TagesErfassung {
             val (von, bis) = messtagGrenzen(lokalerMesstag(jetzt, zone), zone)
             // giltFuerTagStart != null sind Nachtraege fuer andere Tage und gelten nicht als "heute".
             val konfiguration = db.stammdatenVerlaufDao().fuerTag(von, bis).any { it.giltFuerTagStart == null }

@@ -32,17 +32,17 @@ import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.KalibrierEnde
 import com.example.lrmprotokoll.messreihe.KalibrierAnzeige
-import com.example.lrmprotokoll.messreihe.MessphasenSteuerung
 import com.example.lrmprotokoll.messreihe.Messphase
+import com.example.lrmprotokoll.messreihe.MessphasenSteuerung
 import com.example.lrmprotokoll.messreihe.TagesErfassung
 import com.example.lrmprotokoll.report.lokalerMesstag
 import com.example.lrmprotokoll.report.messtagGrenzen
-import java.time.ZoneId
-import java.util.Locale
-import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.ZoneId
+import java.util.Locale
+import kotlin.math.abs
 
 /**
  * Oberflaeche der Kalibrier- und Aufbauphase am manuellen Messstart (Owner-Auftrag 12.11.2026).
@@ -52,7 +52,10 @@ import kotlinx.coroutines.withContext
  * von heute zu aendern - die Messung laeuft dabei weiter.
  */
 @Composable
-fun MessvorbereitungHost(aufbauBearbeiten: Boolean, onAufbauBearbeitenEnde: () -> Unit) {
+fun MessvorbereitungHost(
+    aufbauBearbeiten: Boolean,
+    onAufbauBearbeitenEnde: () -> Unit,
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val steuerung = container.messphasen
@@ -71,7 +74,10 @@ internal fun formatiereDb(wert: Double): String = String.format(Locale.getDefaul
 internal fun leseDb(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
 
 @Composable
-private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAnzeige) {
+private fun KalibrierDialog(
+    steuerung: MessphasenSteuerung,
+    anzeige: KalibrierAnzeige,
+) {
     var vorherText by rememberSaveable { mutableStateOf("") }
     var nachherText by rememberSaveable { mutableStateOf("") }
     var vorherBearbeitet by rememberSaveable { mutableStateOf(false) }
@@ -86,7 +92,10 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
     val nachher = leseDb(nachherText)
     val eingabeGueltig = (vorherText.isBlank() || vorher != null) && (nachherText.isBlank() || nachher != null)
 
-    fun weicht(a: Double?, b: Double?) = (a == null) != (b == null) || (a != null && b != null && abs(a - b) > 0.05)
+    fun weicht(
+        a: Double?,
+        b: Double?,
+    ) = (a == null) != (b == null) || (a != null && b != null && abs(a - b) > 0.05)
 
     AlertDialog(
         onDismissRequest = { },
@@ -96,8 +105,9 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.kalib_hinweis), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    text = anzeige.pegelDb?.let { stringResource(R.string.kalib_pegel, formatiereDb(it)) }
-                        ?: stringResource(R.string.kalib_warte_geraet),
+                    text =
+                        anzeige.pegelDb?.let { stringResource(R.string.kalib_pegel, formatiereDb(it)) }
+                            ?: stringResource(R.string.kalib_warte_geraet),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.testTag("kalibrierung_pegel"),
                 )
@@ -112,7 +122,10 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
                 Text(stringResource(R.string.kalib_werte_hinweis), style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = vorherText,
-                    onValueChange = { vorherText = it; vorherBearbeitet = true },
+                    onValueChange = {
+                        vorherText = it
+                        vorherBearbeitet = true
+                    },
                     label = { Text(stringResource(R.string.kalib_vorher)) },
                     singleLine = true,
                     isError = vorherText.isNotBlank() && vorher == null,
@@ -120,7 +133,10 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
                 )
                 OutlinedTextField(
                     value = nachherText,
-                    onValueChange = { nachherText = it; nachherBearbeitet = true },
+                    onValueChange = {
+                        nachherText = it
+                        nachherBearbeitet = true
+                    },
                     label = { Text(stringResource(R.string.kalib_nachher)) },
                     singleLine = true,
                     isError = nachherText.isNotBlank() && nachher == null,
@@ -139,8 +155,9 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
             TextButton(
                 enabled = eingabeGueltig,
                 onClick = {
-                    val korrigiert = weicht(vorher, anzeige.abweichungVorherDb) ||
-                        weicht(nachher, anzeige.abweichungNachherDb)
+                    val korrigiert =
+                        weicht(vorher, anzeige.abweichungVorherDb) ||
+                            weicht(nachher, anzeige.abweichungNachherDb)
                     steuerung.kalibrierungBeenden(
                         vorher = vorher,
                         nachher = nachher,
@@ -169,13 +186,19 @@ private fun KalibrierDialog(steuerung: MessphasenSteuerung, anzeige: KalibrierAn
 private enum class AufbauSheet { KONFIGURATION, FOTOS }
 
 @Composable
-private fun AufbauDialog(phaseModus: Boolean, onEnde: () -> Unit) {
+private fun AufbauDialog(
+    phaseModus: Boolean,
+    onEnde: () -> Unit,
+) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
     val settings = container.settingsManager
     val steuerung = container.messphasen
     val scope = rememberCoroutineScope()
-    val offeneSession by container.database.sessionDao().offeneSessionFlow().collectAsState(initial = null)
+    val offeneSession by container.database
+        .sessionDao()
+        .offeneSessionFlow()
+        .collectAsState(initial = null)
 
     val konfigurationNoetig = settings.stammdatenAbfrageAktiv
     val fotosNoetig = settings.fotoDokuAktiv
@@ -229,24 +252,29 @@ private fun AufbauDialog(phaseModus: Boolean, onEnde: () -> Unit) {
     offenesSheet?.let { sheet ->
         if (session != null) {
             when (sheet) {
-                AufbauSheet.KONFIGURATION -> GesamtberichtStammdatenSheet(
-                    sessionId = session.id,
-                    messvorgangId = session.messvorgangId,
-                    onFertig = { offenesSheet = null; aktualisieren++ },
-                )
-                AufbauSheet.FOTOS -> FotoDokumentationSheet(
-                    sessionId = session.id,
-                    messvorgangId = session.messvorgangId,
-                    onFertig = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                container.database.sessionDao().fotoAbfrageAbgeschlossen(session.messvorgangId)
-                            }
+                AufbauSheet.KONFIGURATION ->
+                    GesamtberichtStammdatenSheet(
+                        sessionId = session.id,
+                        messvorgangId = session.messvorgangId,
+                        onFertig = {
                             offenesSheet = null
                             aktualisieren++
-                        }
-                    },
-                )
+                        },
+                    )
+                AufbauSheet.FOTOS ->
+                    FotoDokumentationSheet(
+                        sessionId = session.id,
+                        messvorgangId = session.messvorgangId,
+                        onFertig = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    container.database.sessionDao().fotoAbfrageAbgeschlossen(session.messvorgangId)
+                                }
+                                offenesSheet = null
+                                aktualisieren++
+                            }
+                        },
+                    )
             }
         }
     }
@@ -266,11 +294,12 @@ private fun AufbauDialog(phaseModus: Boolean, onEnde: () -> Unit) {
                 if (konfigurationNoetig) {
                     AufbauZeile(
                         titel = stringResource(R.string.aufbau_konfig),
-                        status = if (stand?.konfigurationErfasst == true) {
-                            stringResource(R.string.aufbau_erfasst)
-                        } else {
-                            stringResource(R.string.aufbau_offen)
-                        },
+                        status =
+                            if (stand?.konfigurationErfasst == true) {
+                                stringResource(R.string.aufbau_erfasst)
+                            } else {
+                                stringResource(R.string.aufbau_offen)
+                            },
                         erledigt = stand?.konfigurationErfasst == true,
                         aktiv = session != null,
                         tag = "aufbau_konfiguration",
@@ -281,11 +310,12 @@ private fun AufbauDialog(phaseModus: Boolean, onEnde: () -> Unit) {
                     val anzahl = stand?.fotoAnzahl ?: 0
                     AufbauZeile(
                         titel = stringResource(R.string.aufbau_fotos),
-                        status = if (anzahl > 0) {
-                            stringResource(R.string.aufbau_fotos_anzahl, anzahl)
-                        } else {
-                            stringResource(R.string.aufbau_offen)
-                        },
+                        status =
+                            if (anzahl > 0) {
+                                stringResource(R.string.aufbau_fotos_anzahl, anzahl)
+                            } else {
+                                stringResource(R.string.aufbau_offen)
+                            },
                         erledigt = anzahl > 0,
                         aktiv = session != null,
                         tag = "aufbau_fotos",

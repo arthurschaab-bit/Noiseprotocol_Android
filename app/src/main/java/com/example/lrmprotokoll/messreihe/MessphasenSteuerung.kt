@@ -5,7 +5,6 @@ import com.example.lrmprotokoll.data.KalibrierEnde
 import com.example.lrmprotokoll.data.KalibrierMesswertEntity
 import com.example.lrmprotokoll.data.KalibrierphaseDao
 import com.example.lrmprotokoll.data.KalibrierphaseEntity
-import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -15,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Duration
 
 /** Vorbereitungsphase vor dem eigentlichen Messen (Owner-Auftrag 12.11.2026). */
 enum class Messphase {
@@ -83,26 +83,27 @@ class MessphasenSteuerung(
         gestartetAm = jetzt()
         meldeKurz("Kalibrierphase gestartet", emptyMap())
         val erkennung = KalibrierErkennung()
-        kalibrierJob = scope.launch {
-            val phaseIdNeu = dao.insert(KalibrierphaseEntity(startedAt = gestartetAm))
-            phaseId = phaseIdNeu
-            val puffer = mutableListOf<KalibrierMesswertEntity>()
-            try {
-                messgeraetPegel.collect { (zeit, db) ->
-                    erkennung.nimm(zeit, db)
-                    _anzeige.value = erkennung.anzeige()
-                    puffer += KalibrierMesswertEntity(phaseId = phaseIdNeu, timestamp = zeit, levelDb = db)
-                    if (puffer.size >= FLUSH_GROESSE) {
-                        dao.insertMesswerte(puffer.toList())
-                        puffer.clear()
+        kalibrierJob =
+            scope.launch {
+                val phaseIdNeu = dao.insert(KalibrierphaseEntity(startedAt = gestartetAm))
+                phaseId = phaseIdNeu
+                val puffer = mutableListOf<KalibrierMesswertEntity>()
+                try {
+                    messgeraetPegel.collect { (zeit, db) ->
+                        erkennung.nimm(zeit, db)
+                        _anzeige.value = erkennung.anzeige()
+                        puffer += KalibrierMesswertEntity(phaseId = phaseIdNeu, timestamp = zeit, levelDb = db)
+                        if (puffer.size >= FLUSH_GROESSE) {
+                            dao.insertMesswerte(puffer.toList())
+                            puffer.clear()
+                        }
                     }
+                } finally {
+                    // Auch bei Abbruch (Phase beendet) bleibt der Rest erhalten. NonCancellable ist nicht
+                    // noetig: [beenden] wartet per cancelAndJoin und schreibt danach selbst.
+                    restPuffer = puffer.toList()
                 }
-            } finally {
-                // Auch bei Abbruch (Phase beendet) bleibt der Rest erhalten. NonCancellable ist nicht
-                // noetig: [beenden] wartet per cancelAndJoin und schreibt danach selbst.
-                restPuffer = puffer.toList()
             }
-        }
         starteZeitwaechter(Messphase.KALIBRIERUNG, hoechstdauerKalibrierung)
     }
 
@@ -119,7 +120,12 @@ class MessphasenSteuerung(
      * bestaetigten oder korrigierten Abweichungen in dB (Anzeige minus Kalibratorpegel);
      * [korrigiert] vermerkt, dass sie von der Erkennung abweichen.
      */
-    fun kalibrierungBeenden(vorher: Double?, nachher: Double?, korrigiert: Boolean, grund: String) {
+    fun kalibrierungBeenden(
+        vorher: Double?,
+        nachher: Double?,
+        korrigiert: Boolean,
+        grund: String,
+    ) {
         if (_phase.value != Messphase.KALIBRIERUNG) return
         beendeKalibrierJob(vorher, nachher, korrigiert, grund)
         beginneAufbau("NACH_KALIBRIERUNG")
@@ -140,7 +146,12 @@ class MessphasenSteuerung(
         meldeKurz("Messung beginnt", emptyMap())
     }
 
-    private fun beendeKalibrierJob(vorher: Double?, nachher: Double?, korrigiert: Boolean, grund: String) {
+    private fun beendeKalibrierJob(
+        vorher: Double?,
+        nachher: Double?,
+        korrigiert: Boolean,
+        grund: String,
+    ) {
         val job = kalibrierJob
         val id = phaseId
         val ende = jetzt()
@@ -173,17 +184,21 @@ class MessphasenSteuerung(
         }
     }
 
-    private fun starteZeitwaechter(fuerPhase: Messphase, dauer: Duration) {
+    private fun starteZeitwaechter(
+        fuerPhase: Messphase,
+        dauer: Duration,
+    ) {
         zeitwaechter?.cancel()
-        zeitwaechter = scope.launch {
-            delay(dauer.toMillis())
-            if (_phase.value != fuerPhase) return@launch
-            meldeKurz("Phase nach Hoechstdauer beendet - Messung laeuft weiter", mapOf("phase" to fuerPhase.name))
-            if (fuerPhase == Messphase.KALIBRIERUNG) {
-                beendeKalibrierJob(null, null, false, KalibrierEnde.ZEITUEBERSCHREITUNG)
+        zeitwaechter =
+            scope.launch {
+                delay(dauer.toMillis())
+                if (_phase.value != fuerPhase) return@launch
+                meldeKurz("Phase nach Hoechstdauer beendet - Messung laeuft weiter", mapOf("phase" to fuerPhase.name))
+                if (fuerPhase == Messphase.KALIBRIERUNG) {
+                    beendeKalibrierJob(null, null, false, KalibrierEnde.ZEITUEBERSCHREITUNG)
+                }
+                setzePhase(Messphase.KEINE)
             }
-            setzePhase(Messphase.KEINE)
-        }
     }
 
     private fun setzePhase(neu: Messphase) {
@@ -191,7 +206,10 @@ class MessphasenSteuerung(
         _erfassungPausiert.value = neu != Messphase.KEINE
     }
 
-    private fun meldeKurz(text: String, daten: Map<String, Any?>) {
+    private fun meldeKurz(
+        text: String,
+        daten: Map<String, Any?>,
+    ) {
         runCatching { onBreadcrumb?.invoke(text, daten) }
     }
 

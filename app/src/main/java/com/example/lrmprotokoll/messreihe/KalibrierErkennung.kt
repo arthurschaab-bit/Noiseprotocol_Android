@@ -43,7 +43,10 @@ class KalibrierErkennung(
     private var endeErkannt = false
     private var aktuell: Double? = null
 
-    fun nimm(zeitMs: Long, pegelDb: Double) {
+    fun nimm(
+        zeitMs: Long,
+        pegelDb: Double,
+    ) {
         val letzter = letzterZeitpunkt
         if (letzter != null && zeitMs - letzter > maxLueckeMs) {
             fenster.clear()
@@ -76,12 +79,13 @@ class KalibrierErkennung(
         return werte.all { it in plateauMinDb..plateauMaxDb } && (werte.max() - werte.min()) <= maxSpannDb
     }
 
-    fun anzeige() = KalibrierAnzeige(
-        pegelDb = aktuell,
-        abweichungVorherDb = vorher,
-        abweichungNachherDb = nachher,
-        endeErkannt = endeErkannt,
-    )
+    fun anzeige() =
+        KalibrierAnzeige(
+            pegelDb = aktuell,
+            abweichungVorherDb = vorher,
+            abweichungNachherDb = nachher,
+            endeErkannt = endeErkannt,
+        )
 }
 
 /** Stand der Kalibrier-Erkennung fuer die Oberflaeche; Abweichungen sind Pegel minus Sollwert. */

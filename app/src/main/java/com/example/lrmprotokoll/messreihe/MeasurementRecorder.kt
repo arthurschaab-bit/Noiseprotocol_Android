@@ -348,7 +348,11 @@ class MeasurementRecorder(
         }
     }
 
-    private suspend fun meldeSession(nachricht: String, sessionId: Long?, uebernommenerMessvorgang: Long?) {
+    private suspend fun meldeSession(
+        nachricht: String,
+        sessionId: Long?,
+        uebernommenerMessvorgang: Long?,
+    ) {
         val messvorgang = sessionId?.let { runCatching { sessionDao.byId(it)?.messvorgangId }.getOrNull() }
         runCatching {
             onBreadcrumb?.invoke(

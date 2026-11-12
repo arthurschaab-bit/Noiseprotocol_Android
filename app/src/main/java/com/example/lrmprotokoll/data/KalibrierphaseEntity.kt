@@ -65,5 +65,8 @@ interface KalibrierphaseDao {
     suspend fun byId(id: Long): KalibrierphaseEntity?
 
     @Query("SELECT * FROM kalibrierphasen WHERE startedAt >= :von AND startedAt < :bis ORDER BY startedAt")
-    suspend fun zwischen(von: Long, bis: Long): List<KalibrierphaseEntity>
+    suspend fun zwischen(
+        von: Long,
+        bis: Long,
+    ): List<KalibrierphaseEntity>
 }
