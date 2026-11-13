@@ -109,7 +109,7 @@ class ConnectionSupervisorTest {
         failedRetryInterval: Duration = Duration.ofMinutes(15),
         dienstAktiv: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow(),
         failedRetryIntervalLeerlauf: Duration = Duration.ofHours(1),
-        failedRetryIntervalAktiv: Duration? = null,
+        kaskadeBeiAktivemDienstFortsetzen: Boolean = false,
     ): ConnectionSupervisor {
         val clock = InstantSource { Instant.EPOCH.plusMillis(testScheduler.currentTime) }
         return ConnectionSupervisor(
@@ -129,7 +129,7 @@ class ConnectionSupervisorTest {
             diagnosticsReporter = diagnosticsReporter,
             dienstAktiv = dienstAktiv,
             failedRetryIntervalLeerlauf = failedRetryIntervalLeerlauf,
-            failedRetryIntervalAktiv = failedRetryIntervalAktiv,
+            kaskadeBeiAktivemDienstFortsetzen = kaskadeBeiAktivemDienstFortsetzen,
         )
     }
 
@@ -304,8 +304,9 @@ class ConnectionSupervisorTest {
     @Test
     fun backoffFolgtDefinierterSequenzMitJitter() = runTest {
         val transport = NeverStreamingTransport(testScheduler)
-        // maxAttempts = 9: durchlaeuft alle 7 Backoff-Stufen (100ms ... 10s) plus eine weitere im
-        // konstanten 10s-Takt, ohne vorher FAILED zu erreichen - liefert 8 messbare Luecken.
+        // maxAttempts = 9: durchlaeuft die ersten 8 Backoff-Stufen (100ms ... 30s), ohne vorher
+        // FAILED zu erreichen - liefert 8 messbare Luecken. Die langen Stufen bis 1 h prueft
+        // kaskadeReichtBisEineStundeUndBleibtDanachKonstant.
         val supervisor = newSupervisor(
             transport,
             staleAfter = Duration.ofMillis(1),
@@ -314,14 +315,14 @@ class ConnectionSupervisorTest {
 
         supervisor.start(device)
         runCurrent()
-        // Obergrenze fuer 8 Luecken (0,1+0,2+0,5+1+2+5+10+10=28,8s) mit max. +20% Jitter, plus Puffer.
-        advanceTimeBy(40_000)
+        // Obergrenze fuer 8 Luecken (0,1+0,2+0,5+1+2+5+10+30=48,8s) mit max. +20% Jitter, plus Puffer.
+        advanceTimeBy(70_000)
         runCurrent()
 
         val timestamps = transport.connectTimestampsMillis
         assertEquals(9, timestamps.size)
         val gaps = timestamps.zipWithNext { a, b -> b - a }
-        val expectedMillis = longArrayOf(100, 200, 500, 1_000, 2_000, 5_000, 10_000, 10_000)
+        val expectedMillis = longArrayOf(100, 200, 500, 1_000, 2_000, 5_000, 10_000, 30_000)
         gaps.forEachIndexed { index, gap ->
             assertBackoffGap(expectedMillis[index], gap, "Luecke #${index + 1}")
         }
@@ -376,12 +377,11 @@ class ConnectionSupervisorTest {
     }
 
     /**
-     * Owner-Vorgabe 12.11.2026: Laeuft der Messdienst, wartet die App nach FAILED nur
-     * [failedRetryIntervalAktiv] - wer das Geraete-Bluetooth fuer die Kalibrierung aus- und wieder
-     * einschaltet, muss binnen Sekunden verbunden sein, nicht erst nach 15 Minuten.
+     * Owner-Vorgabe 12.11./13.11.2026: Laeuft der Messdienst, setzt die App die Kaskade nach FAILED
+     * fort (naechste Stufe statt 15 min) und beginnt NICHT bei 100 ms von vorn.
      */
     @Test
-    fun beiLaufendemDienstFuehrtFailedNachKurzerWartezeitZuEinemNeuenAnlauf() = runTest {
+    fun beiLaufendemDienstLaeuftDieKaskadeNachFailedWeiterStattNeuZuBeginnen() = runTest {
         val transport = NeverStreamingTransport(testScheduler)
         val supervisor =
             newSupervisor(
@@ -389,23 +389,47 @@ class ConnectionSupervisorTest {
                 staleAfter = Duration.ofMillis(1),
                 maxAttempts = 3,
                 failedRetryInterval = Duration.ofHours(1),
-                failedRetryIntervalAktiv = Duration.ofSeconds(10),
+                kaskadeBeiAktivemDienstFortsetzen = true,
             )
 
         supervisor.start(device)
         runCurrent()
-        advanceTimeBy(5_000)
-        runCurrent()
-        assertEquals(ConnectionState.FAILED, supervisor.state.value)
-        val nachErstemAnlauf = transport.connectTimestampsMillis.size
-
-        advanceTimeBy(11_000) // weit unter failedRetryInterval (1 h), aber ueber den 10 s
+        advanceTimeBy(20_000)
         runCurrent()
 
-        assertTrue(
-            "Bei laufendem Dienst muss der neue Anlauf nach ~10 s kommen, nicht erst nach 1 h",
-            transport.connectTimestampsMillis.size > nachErstemAnlauf,
-        )
+        val luecken = transport.connectTimestampsMillis.zipWithNext { a, b -> b - a }
+        assertTrue("Mehr als eine Runde erwartet, waren ${luecken.size + 1} Versuche", luecken.size >= 5)
+        // 100, 200 (bis FAILED nach dem 3. Versuch), dann geht es mit 500, 1000, 2000 weiter -
+        // mit Neubeginn waeren es 100, 200, 100, 200 gewesen.
+        val erwartetMillis = longArrayOf(100, 200, 500, 1_000, 2_000)
+        erwartetMillis.forEachIndexed { i, soll -> assertBackoffGap(soll, luecken[i], "Luecke #${i + 1}") }
+    }
+
+    /** Die Kaskade reicht bis 1 h und bleibt danach konstant bei 1 h (Owner-Vorgabe 13.11.2026). */
+    @Test
+    fun kaskadeReichtBisEineStundeUndBleibtDanachKonstant() = runTest {
+        val transport = NeverStreamingTransport(testScheduler)
+        val supervisor =
+            newSupervisor(
+                transport,
+                staleAfter = Duration.ofMillis(1),
+                maxAttempts = 30, // keine FAILED-Runde, nur die reine Kaskade
+            )
+
+        supervisor.start(device)
+        runCurrent()
+        // Summe der 15 Luecken ~ 0,1+0,2+0,5+1+2+5+10+30+60+120+300+600+1800+3600+3600 s = ~10.130 s
+        advanceTimeBy(13_000_000)
+        runCurrent()
+
+        val luecken = transport.connectTimestampsMillis.zipWithNext { a, b -> b - a }
+        val erwartetMillis =
+            longArrayOf(
+                100, 200, 500, 1_000, 2_000, 5_000, 10_000, 30_000, 60_000, 120_000,
+                300_000, 600_000, 1_800_000, 3_600_000, 3_600_000,
+            )
+        assertTrue("Erwartet mindestens ${erwartetMillis.size} Luecken, waren ${luecken.size}", luecken.size >= erwartetMillis.size)
+        erwartetMillis.forEachIndexed { i, soll -> assertBackoffGap(soll, luecken[i], "Luecke #${i + 1}") }
     }
 
     /** F-03: Der Anstoss aus der UI (jedes ON_RESUME) holt den Anlauf sofort. */

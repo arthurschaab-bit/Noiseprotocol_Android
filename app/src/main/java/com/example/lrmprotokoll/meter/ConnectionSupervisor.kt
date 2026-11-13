@@ -38,8 +38,26 @@ fun interface InstantSource {
 // Owner-Vorgabe 12.11.2026: feine Kaskade statt 1/2/4/8/16/30/60 s. Das Messgeraet-Bluetooth wird fuer
 // die Kalibrierung bewusst ausgeschaltet; nach dem Wiedereinschalten soll die Verbindung binnen
 // Sekunden stehen, nicht nach bis zu 58 s Wartezeit (Support-Bundles 10.-12.11.2026).
-private val BACKOFF_STEPS_MILLIS = longArrayOf(100, 200, 500, 1_000, 2_000, 5_000, 10_000)
-private const val BACKOFF_CONSTANT_MILLIS = 10_000L
+// Owner-Vorgabe 13.11.2026: die Kaskade reicht bis 1 h - 100 ms, 200 ms, 500 ms, 1 s, 2 s, 5 s, 10 s,
+// 30 s, 1 min, 2 min, 5 min, 10 min, 30 min, 1 h, danach konstant 1 h.
+private val BACKOFF_STEPS_MILLIS =
+    longArrayOf(
+        100,
+        200,
+        500,
+        1_000,
+        2_000,
+        5_000,
+        10_000,
+        30_000,
+        60_000,
+        120_000,
+        300_000,
+        600_000,
+        1_800_000,
+        3_600_000,
+    )
+private const val BACKOFF_CONSTANT_MILLIS = 3_600_000L
 private const val BACKOFF_JITTER_FRACTION = 0.2
 private const val MIN_SAMPLES_FOR_ERROR_RATE = 5
 
@@ -116,15 +134,18 @@ class ConnectionSupervisor(
      */
     private val failedRetryInterval: Duration = Duration.ofMinutes(15),
     /**
-     * Abstand zwischen zwei Anlaeufen nach [ConnectionState.FAILED], solange der Messdienst
-     * laeuft ([dienstAktiv]). `null` (Default) nimmt [failedRetryInterval].
+     * Setzt die Backoff-Kaskade nach [ConnectionState.FAILED] fort, solange der Messdienst
+     * laeuft ([dienstAktiv]): Die Wartezeit bis zum naechsten Anlauf ist dann die naechste Stufe
+     * der Kaskade (bis 1 h) statt [failedRetryInterval], und der Fehlschlagszaehler beginnt NICHT
+     * von vorn - sonst finge die Kaskade nach jeder Runde bei 100 ms neu an und erreichte die
+     * langen Stufen nie. Nur ein erfolgreicher Strom, ein eingeschaltetes Bluetooth oder ein
+     * Nutzer-Anstoss ([erneutVersuchen]) setzen sie zurueck. `false` (Default) behaelt das
+     * bisherige Verhalten ([failedRetryInterval], danach Neubeginn).
      *
-     * Owner-Vorgabe 12.11.2026: Waehrend einer laufenden Messung darf die App nicht 15 Minuten
-     * lang aufgeben - wer das Geraete-Bluetooth fuer die Kalibrierung ausschaltet und wieder
-     * einschaltet, muss binnen Sekunden verbunden sein. Der Leerlauf ([dienstAktiv] = false)
-     * behaelt die langen Abstaende ([failedRetryInterval], [failedRetryIntervalLeerlauf]).
+     * Owner-Vorgabe 12.11./13.11.2026. Der Leerlauf ([dienstAktiv] = false) behaelt die langen
+     * Abstaende ([failedRetryInterval], [failedRetryIntervalLeerlauf]).
      */
-    private val failedRetryIntervalAktiv: Duration? = null,
+    private val kaskadeBeiAktivemDienstFortsetzen: Boolean = false,
     /**
      * Stream-Plausibilisierung als Spoofing-Erkennung (Plan Abschnitt 6): `null` (Default)
      * schaltet die Pruefung ab - ohne eine geraetespezifische Erwartung (nur AppContainer kennt
@@ -362,14 +383,19 @@ class ConnectionSupervisor(
                             // die Wartezeit verstrichen ist, jemand [erneutVersuchen] ruft oder
                             // der Dienst gestartet wird - was immer zuerst kommt.
                             consecutiveFailedRounds++
-                            val warteDauer = if (dienstAktiv.value) {
-                                consecutiveFailedRounds = 0
-                                failedRetryIntervalAktiv ?: failedRetryInterval
-                            } else {
-                                val multiplikator = 1 shl (consecutiveFailedRounds - 1).coerceIn(0, 2)
-                                val dauer = failedRetryInterval.multipliedBy(multiplikator.toLong())
-                                if (dauer > failedRetryIntervalLeerlauf) failedRetryIntervalLeerlauf else dauer
-                            }
+                            val kaskadeFortsetzen = dienstAktiv.value && kaskadeBeiAktivemDienstFortsetzen
+                            val warteDauer =
+                                if (kaskadeFortsetzen) {
+                                    consecutiveFailedRounds = 0
+                                    Duration.ofMillis(backoffDelayMillis(consecutiveFailures))
+                                } else if (dienstAktiv.value) {
+                                    consecutiveFailedRounds = 0
+                                    failedRetryInterval
+                                } else {
+                                    val multiplikator = 1 shl (consecutiveFailedRounds - 1).coerceIn(0, 2)
+                                    val dauer = failedRetryInterval.multipliedBy(multiplikator.toLong())
+                                    if (dauer > failedRetryIntervalLeerlauf) failedRetryIntervalLeerlauf else dauer
+                                }
                             val aufgewacht =
                                 withTimeoutOrNull(warteDauer.toMillis()) {
                                     if (!dienstAktiv.value) {
@@ -394,7 +420,8 @@ class ConnectionSupervisor(
                                     }
                                 },
                             )
-                            consecutiveFailures = 0
+                            // Ein Nutzer-Anstoss beginnt die Kaskade neu; sonst laeuft sie weiter.
+                            if (!kaskadeFortsetzen || angestossen) consecutiveFailures = 0
                             isFirstAttempt = true // kein Backoff vor dem ersten Versuch des neuen Anlaufs
                         }
                     }
