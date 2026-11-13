@@ -661,6 +661,37 @@ class MeasurementRecorderTest {
     }
 
     @Test
+    fun waehrendDerPhaseOeffnetSTREAMINGKeineMessgeraetSessionUndNachDerPhaseWirdSieNachgeholt() =
+        runTest(UnconfinedTestDispatcher()) {
+            // Review-Befund (13.11.2026): Nur onFrame war gesperrt; der Zustand STREAMING schloss
+            // die Mikrofon-Session und eroeffnete mitten in der Kalibrierung eine Geraete-Session.
+            val pausiert = kotlinx.coroutines.flow.MutableStateFlow(true)
+            val recorder = MeasurementRecorder(
+                zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+                scope = backgroundScope, now = uhr, erfassungPausiert = pausiert,
+            )
+            recorder.starteMikrofonMessung()
+            runCurrent()
+            recorder.start(device)
+            runCurrent()
+
+            zustaende.value = ConnectionState.STREAMING
+            runCurrent()
+
+            val mikrofon = sessionDao.zeilen.values.single()
+            assertNull("Die Mikrofon-Session laeuft weiter", mikrofon.endedAt)
+            assertTrue("Keine Verbindungsereignisse waehrend der Phase", connectionEventDao.geschrieben.isEmpty())
+
+            pausiert.value = false
+            runCurrent()
+
+            val geraet = sessionDao.zeilen.values.single { it.deviceAddress == device.address }
+            assertEquals("Der Messvorgang wird von der Mikrofon-Session uebernommen", mikrofon.messvorgangId, geraet.messvorgangId)
+            assertNotNull("Die Mikrofon-Session ist jetzt geschlossen", sessionDao.zeilen[mikrofon.id]?.endedAt)
+            assertEquals(ConnectionEventType.CONNECTED, connectionEventDao.geschrieben.single().type)
+        }
+
+    @Test
     fun mikrofonPegelWirdAlsMesswertDerLaufendenSessionGeschrieben() = runTest(UnconfinedTestDispatcher()) {
         // Der Kern des Fehlers, den dieser Test absichert: Ohne Messwerte war die
         // Mikrofon-Session als juengste Session zwar die, die der Pegelverlauf auf der Startseite

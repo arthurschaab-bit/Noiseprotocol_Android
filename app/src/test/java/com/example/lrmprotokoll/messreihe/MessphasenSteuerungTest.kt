@@ -165,4 +165,13 @@ class MessphasenSteuerungTest {
         assertEquals(Messphase.KEINE, s.phase.value)
         assertTrue(dao.phasen.isEmpty())
     }
+
+    @Test
+    fun messgeraetWirdNurVerbundenWennAdresseTriggerQuelleUndRechtPassen() {
+        assertTrue(messgeraetWirdVerbunden("AA:BB", "MESSGERAET", true))
+        assertTrue(messgeraetWirdVerbunden("AA:BB", "BEIDE", true))
+        assertFalse("Rein Mikrofon: kein Messgeraet-Strom", messgeraetWirdVerbunden("AA:BB", "MIKROFON", true))
+        assertFalse("Ohne Adresse", messgeraetWirdVerbunden(null, "MESSGERAET", true))
+        assertFalse("Ohne Bluetooth-Recht", messgeraetWirdVerbunden("AA:BB", "MESSGERAET", false))
+    }
 }

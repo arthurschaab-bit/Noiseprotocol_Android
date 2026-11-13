@@ -29,6 +29,19 @@ enum class Messphase {
 }
 
 /**
+ * Ob der Messdienst ueberhaupt einen Messgeraet-Strom aufbaut - nur dann gibt es etwas zu
+ * kalibrieren. Spiegelt die Bedingungen in `AudioRecordingService.ensureMeterMonitoringStarted`:
+ * Bei der Trigger-Quelle `MIKROFON` oder ohne Bluetooth-Berechtigung wird das Messgeraet gar
+ * nicht verbunden. Eine bloss gespeicherte Adresse genuegt nicht - sonst blieben im reinen
+ * Mikrofonbetrieb Proben und Trigger bis zum Ablauf der Kalibrierphase unterdrueckt.
+ */
+fun messgeraetWirdVerbunden(
+    meterAdresse: String?,
+    triggerQuelle: String,
+    hatBluetoothRecht: Boolean,
+): Boolean = meterAdresse != null && triggerQuelle != "MIKROFON" && hatBluetoothRecht
+
+/**
  * Steuert Kalibrier- und Aufbauphase am manuellen Messstart.
  *
  * **Solange [phase] nicht [Messphase.KEINE] ist, ist [erfassungPausiert] `true`** - die
