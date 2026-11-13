@@ -55,6 +55,13 @@ import kotlin.math.abs
 fun MessvorbereitungHost(
     aufbauBearbeiten: Boolean,
     onAufbauBearbeitenEnde: () -> Unit,
+    /**
+     * `true`, solange ein anderes Foto- oder Konfigurations-Sheet offen ist. Ein [AlertDialog] ist
+     * ein eigenes Fenster und liegt ueber jedem Sheet - er wuerde es verdecken, sodass sich darin
+     * nichts mehr bedienen laesst (Meldung vom 13.11.2026: Kalibrierdialog ueber dem Foto-Popup).
+     * Der Dialog wird dann ausgeblendet; seine Eingaben bleiben erhalten.
+     */
+    fremdesSheetOffen: Boolean = false,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -62,9 +69,12 @@ fun MessvorbereitungHost(
     val phase by steuerung.phase.collectAsState()
     val anzeige by steuerung.anzeige.collectAsState()
     when (phase) {
-        Messphase.KALIBRIERUNG -> KalibrierDialog(steuerung, anzeige)
-        Messphase.AUFBAU -> AufbauDialog(phaseModus = true, onEnde = { })
-        Messphase.KEINE -> if (aufbauBearbeiten) AufbauDialog(phaseModus = false, onEnde = onAufbauBearbeitenEnde)
+        Messphase.KALIBRIERUNG -> KalibrierDialog(steuerung, anzeige, sichtbar = !fremdesSheetOffen)
+        Messphase.AUFBAU -> AufbauDialog(phaseModus = true, onEnde = { }, fremdesSheetOffen = fremdesSheetOffen)
+        Messphase.KEINE ->
+            if (aufbauBearbeiten) {
+                AufbauDialog(phaseModus = false, onEnde = onAufbauBearbeitenEnde, fremdesSheetOffen = fremdesSheetOffen)
+            }
     }
 }
 
@@ -77,6 +87,7 @@ internal fun leseDb(text: String): Double? = text.trim().replace(',', '.').toDou
 private fun KalibrierDialog(
     steuerung: MessphasenSteuerung,
     anzeige: KalibrierAnzeige,
+    sichtbar: Boolean,
 ) {
     var vorherText by rememberSaveable { mutableStateOf("") }
     var nachherText by rememberSaveable { mutableStateOf("") }
@@ -96,6 +107,9 @@ private fun KalibrierDialog(
         a: Double?,
         b: Double?,
     ) = (a == null) != (b == null) || (a != null && b != null && abs(a - b) > 0.05)
+
+    // Eingaben (oben) bleiben erhalten, nur das Fenster verschwindet, solange ein Sheet offen ist.
+    if (!sichtbar) return
 
     AlertDialog(
         onDismissRequest = { },
@@ -189,6 +203,7 @@ private enum class AufbauSheet { KONFIGURATION, FOTOS }
 private fun AufbauDialog(
     phaseModus: Boolean,
     onEnde: () -> Unit,
+    fremdesSheetOffen: Boolean,
 ) {
     val context = LocalContext.current
     val container = remember { (context.applicationContext as LaermprotokollApp).container }
@@ -278,6 +293,10 @@ private fun AufbauDialog(
             }
         }
     }
+
+    // Das eigene Foto-/Konfigurations-Sheet und fremde Sheets duerfen nicht unter diesem
+    // Dialogfenster liegen: ausblenden, solange eines offen ist.
+    if (offenesSheet != null || fremdesSheetOffen) return
 
     AlertDialog(
         onDismissRequest = { if (!phaseModus) onEnde() },

@@ -1,6 +1,10 @@
 package com.example.lrmprotokoll.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -109,6 +113,59 @@ class MessvorbereitungDialogTest {
         assertEquals(0.1, phase!!.abweichungNachherDb!!, 0.0001)
         assertTrue("Ohne erkannte Werte ist jeder Eintrag eine Korrektur", phase!!.abweichungKorrigiert)
         assertEquals(com.example.lrmprotokoll.data.KalibrierEnde.MANUELL, phase!!.endeGrund)
+    }
+
+    @Test
+    fun einOffenesSheetBlendetDenKalibrierdialogAusUndDieEingabenBleibenErhalten() {
+        // Meldung vom 13.11.2026: Der Kalibrierdialog (eigenes Fenster) lag ueber dem Foto-Popup,
+        // Fotos liessen sich nicht aufnehmen.
+        var sheetOffen by mutableStateOf(false)
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = true) {
+                MessvorbereitungHost(
+                    aufbauBearbeiten = false,
+                    onAufbauBearbeitenEnde = { },
+                    fremdesSheetOffen = sheetOffen,
+                )
+            }
+        }
+        app.container.messphasen.startManuell(messgeraetErwartet = true)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("input_kalibrierung_vorher").performTextInput("-0,4")
+
+        sheetOffen = true
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dialog_kalibrierung").assertDoesNotExistCompat()
+
+        sheetOffen = false
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dialog_kalibrierung").assertIsDisplayed()
+        composeRule.onNodeWithTag("input_kalibrierung_vorher").assertTextContains("-0,4")
+    }
+
+    @Test
+    fun einOffenesSheetBlendetAuchDenAufbaudialogAus() {
+        var sheetOffen by mutableStateOf(false)
+        composeRule.setContent {
+            LaermprotokollTheme(darkTheme = true) {
+                MessvorbereitungHost(
+                    aufbauBearbeiten = false,
+                    onAufbauBearbeitenEnde = { },
+                    fremdesSheetOffen = sheetOffen,
+                )
+            }
+        }
+        app.container.messphasen.startManuell(messgeraetErwartet = false)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dialog_aufbau").assertIsDisplayed()
+
+        sheetOffen = true
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dialog_aufbau").assertDoesNotExistCompat()
+
+        sheetOffen = false
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dialog_aufbau").assertIsDisplayed()
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDoesNotExistCompat() {

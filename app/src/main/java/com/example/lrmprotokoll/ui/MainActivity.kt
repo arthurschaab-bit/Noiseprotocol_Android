@@ -541,7 +541,10 @@ fun NoiseProtocolApp(
                     "hatFoto" to hatFoto,
                 ),
             )
-            if (!bereitsAbgeschlossen && !hatFoto) {
+            // Die Phase kann waehrend der Abfragen oben begonnen haben (der Wert oben ist veraltet):
+            // dann darf das Popup nicht mehr aufgehen - der Vorbereitungsdialog fragt selbst.
+            val phaseJetztKeine = container.messphasen.phase.value == com.example.lrmprotokoll.messreihe.Messphase.KEINE
+            if (!bereitsAbgeschlossen && !hatFoto && phaseJetztKeine) {
                 fotoSheetFuerSession = session.id
                 fotoSheetFuerMessvorgang = messvorgangId
             }
@@ -651,7 +654,8 @@ fun NoiseProtocolApp(
                     "sheetBereitsFuerTag" to (stammdatenSheetTagStart == von),
                 ),
             )
-            if (stammdatenNoetig) {
+            val phaseJetztKeine = container.messphasen.phase.value == com.example.lrmprotokoll.messreihe.Messphase.KEINE
+            if (stammdatenNoetig && phaseJetztKeine) {
                 stammdatenSheetFuerSession = session.id
                 stammdatenSheetFuerMessvorgang = messvorgangId
                 stammdatenSheetTagStart = von
@@ -683,6 +687,8 @@ fun NoiseProtocolApp(
     MessvorbereitungHost(
         aufbauBearbeiten = aufbauBearbeiten,
         onAufbauBearbeitenEnde = { aufbauBearbeiten = false },
+        fremdesSheetOffen =
+            fotoSheetFuerSession != null || stammdatenSheetFuerSession != null || korrekturZiel != null,
     )
     korrekturZiel?.let { (sessionId, messvorgangId, messtag) ->
         GesamtberichtStammdatenSheet(
