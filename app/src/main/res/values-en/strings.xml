@@ -827,4 +827,33 @@
     <string name="totmann_warnung_nicht_geplant">Dead man\'s switch configured, but not active. Restart measurement.</string>
     <string name="totmann_warnung_sendet_nicht">Dead man\'s switch is not sending (network?)</string>
     <string name="totmann_aktion_einrichten">Set up</string>
+
+    <!-- Kalibrier- und Aufbauphase (12.11.2026) -->
+    <string name="kalib_titel">Calibration</string>
+    <string name="kalib_hinweis">Place the calibrator (PCE-SC 43, 94 dB) on the meter. These values do not count for the measurement.</string>
+    <string name="kalib_warte_geraet">Waiting for the meter …</string>
+    <string name="kalib_pegel">Current level: %1$s dB</string>
+    <string name="kalib_werte_hinweis">Detected deviation from the calibrator level – correct if needed.</string>
+    <string name="kalib_vorher">Deviation before (dB)</string>
+    <string name="kalib_nachher">Deviation after (dB)</string>
+    <string name="kalib_ende_erkannt">Calibration finished? The level has dropped.</string>
+    <string name="kalib_ungueltig">Please enter a number, e.g. -0.4</string>
+    <string name="kalib_btn_beendet">Calibration finished</string>
+    <string name="kalib_btn_ja_beendet">Yes, finished</string>
+    <string name="kalib_btn_ueberspringen">Continue without calibration</string>
+    <string name="aufbau_titel">Measurement setup</string>
+    <string name="aufbau_hinweis_phase">The measurement only starts with “Start measurement”.</string>
+    <string name="aufbau_hinweis_bearbeiten">Check or change today’s entries. The measurement keeps running.</string>
+    <string name="aufbau_konfig">Configuration</string>
+    <string name="aufbau_fotos">Photos (setup, calibration)</string>
+    <string name="aufbau_erfasst">recorded today</string>
+    <string name="aufbau_fotos_anzahl">%1$d photo(s) today</string>
+    <string name="aufbau_offen">still open</string>
+    <string name="aufbau_btn_erfassen">Record</string>
+    <string name="aufbau_btn_aendern">Change</string>
+    <string name="aufbau_btn_start">Start measurement</string>
+    <string name="aufbau_btn_fertig">Done</string>
+    <string name="aufbau_ohne_sitzung">Configuration and photos follow after the start.</string>
+    <string name="aufbau_uebernommen">Today’s setup applied</string>
+    <string name="menu_aufbau_aendern">Change configuration &amp; photos</string>
 </resources>

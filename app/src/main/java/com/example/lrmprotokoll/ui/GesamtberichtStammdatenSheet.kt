@@ -45,6 +45,7 @@ import androidx.core.content.ContextCompat
 import com.example.lrmprotokoll.LaermprotokollApp
 import com.example.lrmprotokoll.R
 import com.example.lrmprotokoll.data.StammdatenVerlaufEntity
+import com.example.lrmprotokoll.messreihe.kalibrierBerichtText
 import com.example.lrmprotokoll.report.GesamtberichtStammdaten
 import com.example.lrmprotokoll.report.lokalerMesstag
 import com.example.lrmprotokoll.report.messtagGrenzen
@@ -155,6 +156,15 @@ fun GesamtberichtStammdatenSheet(
                     wetter = ""
                     datenqualitaetHinweis = ""
                 }
+            }
+            // Ergebnis der Kalibrierphase von heute vorschlagen, solange das Feld noch leer ist.
+            if (geraetKalibrierung.isBlank()) {
+                val phasen =
+                    withContext(Dispatchers.IO) {
+                        container.database.kalibrierphaseDao().zwischen(von, bis)
+                    }
+                val vorschlag = phasen.mapNotNull { kalibrierBerichtText(it) }.lastOrNull()
+                if (vorschlag != null) geraetKalibrierung = vorschlag
             }
             bereitsInitialisiert = true
         }

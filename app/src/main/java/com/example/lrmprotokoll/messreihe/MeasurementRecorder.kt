@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -68,6 +69,14 @@ class MeasurementRecorder(
     private val mikrofonAktiv: Flow<Boolean>? = null,
     private val lebenszeichenIntervall: Duration = Duration.ofMinutes(15),
     private val onLebenszeichen: ((Long) -> Unit)? = null,
+    /** Analysehilfe (Support-Bundle): wann welche Session mit welchem Messvorgang entsteht. */
+    private val onBreadcrumb: ((String, Map<String, Any?>) -> Unit)? = null,
+    /**
+     * `true`, solange Kalibrier- oder Aufbauphase laufen ([MessphasenSteuerung]): Dann werden
+     * weder Messgeraet- noch Mikrofonwerte in die Messreihe geschrieben. `null` (Default) laesst
+     * bestehende Aufrufer und Tests unveraendert.
+     */
+    private val erfassungPausiert: StateFlow<Boolean>? = null,
 ) {
 
     private val pufferMutex = Mutex()
@@ -75,6 +84,9 @@ class MeasurementRecorder(
 
     // Volatile: stop() setzt es ohne Sperre zurueck, die Flush-Schleife liest es auf einem IO-Thread.
     @Volatile private var letztesLebenszeichenAt: Long = 0L
+
+    /** Zuletzt gesehener Verbindungszustand - wird nach einer Kalibrier-/Aufbauphase nachgeholt. */
+    @Volatile private var letzterZustand: ConnectionState? = null
 
     /**
      * Serialisiert alles, was Sessions eroeffnet oder schliesst.
@@ -171,6 +183,19 @@ class MeasurementRecorder(
             coroutineScope {
                 launch { states.collect { onState(it) } }
                 launch { frames.collect { onFrame(it) } }
+                // Endet die Phase, ohne dass sich der Verbindungszustand aendert (STREAMING bleibt
+                // STREAMING), kaeme kein neues Zustandsereignis - die Session und das CONNECTED-
+                // Ereignis der Messgeraet-Messung wuerden fehlen. Deshalb den letzten Zustand
+                // jetzt nachholen.
+                erfassungPausiert?.let { pausiert ->
+                    launch {
+                        var warPausiert = pausiert.value
+                        pausiert.collect { jetztPausiert ->
+                            if (warPausiert && !jetztPausiert) letzterZustand?.let { onState(it) }
+                            warPausiert = jetztPausiert
+                        }
+                    }
+                }
                 launch {
                     while (isActive) {
                         delay(flushInterval.toMillis())
@@ -232,6 +257,7 @@ class MeasurementRecorder(
                 )
                 aktiveSessionIstMikrofon = true
                 letztesLebenszeichenAt = now.now().toEpochMilli()
+                meldeSession("Mikrofon-Session eroeffnet", aktiveSessionId, null)
             }
             warMikrofonJeAktiv = false
             zuletztMikrofonImAusfall = false
@@ -277,6 +303,7 @@ class MeasurementRecorder(
      * Messgeraet-Session: Deren kalibrierte Messreihe darf keine unkalibrierten Werte enthalten.
      */
     fun mikrofonPegel(dbWert: Double) {
+        if (erfassungPausiert?.value == true) return
         if (!aktiveSessionIstMikrofon) return
         val sessionId = aktiveSessionId ?: return
         val jetzt = now.now().toEpochMilli()
@@ -306,6 +333,11 @@ class MeasurementRecorder(
      * Reconnect ist kein neuer Messvorgang, er erzeugt ein [ConnectionEventEntity].
      */
     private suspend fun eroeffneMessgeraetSession() {
+        // Kalibrier-/Aufbauphase: Weder ein Frame noch der Zustand STREAMING darf die laufende
+        // Mikrofon-Session schliessen oder eine Messgeraet-Session eroeffnen - sonst gehoerten
+        // Sitzungs- und Verbindungsereignisse der Vorbereitung zu einem Messvorgang, der noch
+        // gar nicht begonnen hat. Nach der Phase holt [start] den Zustand nach.
+        if (erfassungPausiert?.value == true) return
         val geraet = ueberwachtesGeraet ?: return
         sessionMutex.withLock {
             if (aktiveSessionId != null && !aktiveSessionIstMikrofon) return
@@ -333,6 +365,25 @@ class MeasurementRecorder(
                 bestehenderMessvorgangId = messvorgangId,
             )
             letztesLebenszeichenAt = now.now().toEpochMilli()
+            meldeSession("Messgeraet-Session eroeffnet", aktiveSessionId, messvorgangId)
+        }
+    }
+
+    private suspend fun meldeSession(
+        nachricht: String,
+        sessionId: Long?,
+        uebernommenerMessvorgang: Long?,
+    ) {
+        val messvorgang = sessionId?.let { runCatching { sessionDao.byId(it)?.messvorgangId }.getOrNull() }
+        runCatching {
+            onBreadcrumb?.invoke(
+                nachricht,
+                mapOf(
+                    "sessionId" to sessionId,
+                    "messvorgangId" to messvorgang,
+                    "messvorgangVonMikrofonUebernommen" to (uebernommenerMessvorgang != null),
+                ),
+            )
         }
     }
 
@@ -458,6 +509,9 @@ class MeasurementRecorder(
     }
 
     private suspend fun onFrame(frame: MeterFrame) {
+        // Kalibrier-/Aufbauphase: Frames gehoeren nicht in die Messreihe und eroeffnen noch keine
+        // Session - sie entsteht mit dem ersten Frame nach der Phase.
+        if (erfassungPausiert?.value == true) return
         // Wie in [onState]: Ein eintreffender Frame IST der Beleg, dass das Geraet liefert.
         eroeffneMessgeraetSession()
         val sessionId = aktiveSessionId ?: return
@@ -524,6 +578,7 @@ class MeasurementRecorder(
     }
 
     private suspend fun onState(zustand: ConnectionState) {
+        letzterZustand = zustand
         // Erst wenn Daten fliessen, entsteht die Messgeraet-Session. Vorher gibt es nichts zu
         // protokollieren: Ausfaelle einer Verbindung, die nie zustande kam, gehoeren zu keinem
         // Messvorgang.

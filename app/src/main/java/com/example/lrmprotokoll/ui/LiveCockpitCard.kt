@@ -45,6 +45,7 @@ import com.example.lrmprotokoll.data.MinuteAggregateEntity
 import com.example.lrmprotokoll.data.NoiseRecord
 import com.example.lrmprotokoll.data.SessionEntity
 import com.example.lrmprotokoll.messreihe.*
+import com.example.lrmprotokoll.meter.ble.BluetoothPermissions
 import com.example.lrmprotokoll.messreihe.formatiereBytes
 import com.example.lrmprotokoll.messreihe.freierSpeicherBytes
 import com.example.lrmprotokoll.messreihe.sollVorSpeicherplatzWarnen
@@ -938,6 +939,15 @@ fun LiveCockpitCard(
                             val frei = freierSpeicherBytes(context)?.let { formatiereBytes(it) } ?: "?"
                             onShowSnackbar?.invoke(context.getString(R.string.cockpit_speicher_knapp, frei))
                         }
+                        // Nur der manuelle Start oeffnet Kalibrier-/Aufbauphase; Wiederaufnahmen nach
+                        // Absturz oder Neustart (kein Mensch am Display) messen sofort.
+                        val messgeraetErwartet =
+                            messgeraetWirdVerbunden(
+                                meterAdresse = settings.meterDeviceAddress,
+                                triggerQuelle = settings.audioTriggerQuelle,
+                                hatBluetoothRecht = BluetoothPermissions.hasConnectPermission(context),
+                            )
+                        container.messphasen.startManuell(messgeraetErwartet)
                         val intent = Intent(context, AudioRecordingService::class.java).apply {
                             putExtra(EXTRA_START_AUDIO_MONITORING, true)
                         }

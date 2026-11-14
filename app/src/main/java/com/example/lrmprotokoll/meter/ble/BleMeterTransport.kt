@@ -51,6 +51,12 @@ private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b3
 class BleMeterTransport(
     private val context: Context,
     private val now: InstantSource = InstantSource.System,
+    /**
+     * Analysehilfe (Support-Bundle): meldet GATT-Status und Dauer jedes Verbindungsaufbaus. Ohne
+     * diese Zeilen war in den Bundles nur "Verbindungsaufbau gescheitert" zu sehen, nie warum.
+     * `null` (Default) laesst bestehende Aufrufer und Tests unveraendert.
+     */
+    private val onBreadcrumb: ((String, Map<String, Any?>) -> Unit)? = null,
 ) : MeterTransport {
 
     private val _state = MutableStateFlow(ConnectionState.IDLE)
@@ -73,9 +79,19 @@ class BleMeterTransport(
     private var droppedFrameCount = 0L
     private var debugNotificationCount = 0
     private var debugFrameCount = 0
+    private var verbindungsStartMs = 0L
+
+    private fun meldeGatt(
+        nachricht: String,
+        daten: Map<String, Any?> = emptyMap(),
+    ) {
+        val dauer = if (verbindungsStartMs > 0) System.currentTimeMillis() - verbindungsStartMs else null
+        runCatching { onBreadcrumb?.invoke(nachricht, daten + ("seitVerbindungsstartMs" to dauer)) }
+    }
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            meldeGatt("GATT-Zustandswechsel", mapOf("status" to status, "neuerZustand" to newState))
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     connecting?.complete(status == BluetoothGatt.GATT_SUCCESS)
@@ -100,6 +116,7 @@ class BleMeterTransport(
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            meldeGatt("GATT-Dienste entdeckt", mapOf("status" to status))
             gattQueue.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
@@ -148,11 +165,18 @@ class BleMeterTransport(
 
             val connectedDeferred = CompletableDeferred<Boolean>()
             connecting = connectedDeferred
+            verbindungsStartMs = System.currentTimeMillis()
+            meldeGatt("connectGatt gestartet", mapOf("adapterAn" to adapter.isEnabled, "autoConnect" to false))
             gatt = remote.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
 
-            val connected = withTimeoutOrNull(CONNECT_TIMEOUT_MS) { connectedDeferred.await() } ?: false
+            val antwort = withTimeoutOrNull(CONNECT_TIMEOUT_MS) { connectedDeferred.await() }
+            val connected = antwort ?: false
             connecting = null
             if (!connected) {
+                meldeGatt(
+                    "Verbindungsaufbau ohne Erfolg",
+                    mapOf("grund" to if (antwort == null) "TIMEOUT_${CONNECT_TIMEOUT_MS}ms" else "ABGELEHNT"),
+                )
                 _state.value = ConnectionState.FAILED
                 return
             }

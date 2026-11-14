@@ -616,6 +616,82 @@ class MeasurementRecorderTest {
     }
 
     @Test
+    fun mikrofonSessionMeldetEinenBreadcrumbMitMessvorgangId() = runTest(UnconfinedTestDispatcher()) {
+        // Analysehilfe: In den Support-Bundles war nicht zu sehen, wann welcher Messvorgang
+        // entsteht - und damit nicht, warum ein Popup zweimal oder verspaetet kam.
+        val meldungen = mutableListOf<Pair<String, Map<String, Any?>>>()
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr,
+            onBreadcrumb = { text, daten -> meldungen += text to daten },
+        )
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        val (text, daten) = meldungen.single()
+        val session = sessionDao.zeilen.values.single()
+        assertEquals("Mikrofon-Session eroeffnet", text)
+        assertEquals(session.id, daten["sessionId"])
+        assertEquals(session.messvorgangId, daten["messvorgangId"])
+        assertEquals(false, daten["messvorgangVonMikrofonUebernommen"])
+    }
+
+    @Test
+    fun waehrendDerKalibrierphaseWerdenWederMikrofonNochGeraetewerteGespeichert() = runTest(UnconfinedTestDispatcher()) {
+        // Der Kalibrierton darf nicht in der Messreihe landen (Owner-Auftrag 12.11.2026).
+        val pausiert = kotlinx.coroutines.flow.MutableStateFlow(true)
+        val recorder = MeasurementRecorder(
+            zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+            scope = backgroundScope, now = uhr, erfassungPausiert = pausiert,
+        )
+        recorder.starteMikrofonMessung()
+        runCurrent()
+
+        recorder.mikrofonPegel(94.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+        assertTrue("Waehrend der Phase wird nichts geschrieben", measurementDao.geschrieben.isEmpty())
+
+        pausiert.value = false
+        uhr.vor(Duration.ofSeconds(2))
+        recorder.mikrofonPegel(55.0)
+        advanceTimeBy(5_100)
+        runCurrent()
+        assertEquals(55.0, measurementDao.geschrieben.single().levelDb, 0.001)
+    }
+
+    @Test
+    fun waehrendDerPhaseOeffnetSTREAMINGKeineMessgeraetSessionUndNachDerPhaseWirdSieNachgeholt() =
+        runTest(UnconfinedTestDispatcher()) {
+            // Review-Befund (13.11.2026): Nur onFrame war gesperrt; der Zustand STREAMING schloss
+            // die Mikrofon-Session und eroeffnete mitten in der Kalibrierung eine Geraete-Session.
+            val pausiert = kotlinx.coroutines.flow.MutableStateFlow(true)
+            val recorder = MeasurementRecorder(
+                zustaende, frames, sessionDao, measurementDao, connectionEventDao,
+                scope = backgroundScope, now = uhr, erfassungPausiert = pausiert,
+            )
+            recorder.starteMikrofonMessung()
+            runCurrent()
+            recorder.start(device)
+            runCurrent()
+
+            zustaende.value = ConnectionState.STREAMING
+            runCurrent()
+
+            val mikrofon = sessionDao.zeilen.values.single()
+            assertNull("Die Mikrofon-Session laeuft weiter", mikrofon.endedAt)
+            assertTrue("Keine Verbindungsereignisse waehrend der Phase", connectionEventDao.geschrieben.isEmpty())
+
+            pausiert.value = false
+            runCurrent()
+
+            val geraet = sessionDao.zeilen.values.single { it.deviceAddress == device.address }
+            assertEquals("Der Messvorgang wird von der Mikrofon-Session uebernommen", mikrofon.messvorgangId, geraet.messvorgangId)
+            assertNotNull("Die Mikrofon-Session ist jetzt geschlossen", sessionDao.zeilen[mikrofon.id]?.endedAt)
+            assertEquals(ConnectionEventType.CONNECTED, connectionEventDao.geschrieben.single().type)
+        }
+
+    @Test
     fun mikrofonPegelWirdAlsMesswertDerLaufendenSessionGeschrieben() = runTest(UnconfinedTestDispatcher()) {
         // Der Kern des Fehlers, den dieser Test absichert: Ohne Messwerte war die
         // Mikrofon-Session als juengste Session zwar die, die der Pegelverlauf auf der Startseite
