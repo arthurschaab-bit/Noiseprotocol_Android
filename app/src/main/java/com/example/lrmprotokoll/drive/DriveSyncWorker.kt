@@ -41,9 +41,26 @@ class DriveSyncWorker @JvmOverloads constructor(
     override suspend fun doWork(): Result {
         val container = (applicationContext as LaermprotokollApp).container
         val coordinator = coordinatorOverride ?: container.driveSyncCoordinator
+        val retryTyp = inputData.getString(RETRY_TYP)
+        // Schonfrist nach dem Dienststart (nicht fuer das gezielte Wiederholen einer Datei, das der
+        // Nutzer selbst angestossen hat): erst die Session entstehen lassen, dann synchronisieren.
+        if (retryTyp == null) {
+            val rest =
+                SyncStartVerzoegerung.restMs(
+                    dienstLaeuft = com.example.lrmprotokoll.audio.AudioRecordingService.laeuft.value,
+                    dienstGestartetAmMs = com.example.lrmprotokoll.audio.AudioRecordingService.dienstGestartetAmMs,
+                    jetztMs = System.currentTimeMillis(),
+                )
+            if (rest > 0L) {
+                container.diagnosticsReporter.breadcrumb(
+                    "DriveSync",
+                    "Drive-Sync wartet ${rest}ms (Schonfrist nach Dienststart)",
+                )
+                kotlinx.coroutines.delay(rest)
+            }
+        }
         val startZeit = System.currentTimeMillis()
         container.diagnosticsReporter.breadcrumb("DriveSync", "Drive-Sync-Zyklus gestartet")
-        val retryTyp = inputData.getString(RETRY_TYP)
         try {
             val ergebnis = if (retryTyp == null) {
                 coordinator.syncEinenZyklus()

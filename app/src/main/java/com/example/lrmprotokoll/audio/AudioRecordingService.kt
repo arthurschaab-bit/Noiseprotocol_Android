@@ -98,6 +98,14 @@ class AudioRecordingService : LifecycleService() {
             _laeuft.value = wert
         }
 
+        /**
+         * Zeitpunkt, zu dem der Dienst zuletzt als laufend gemeldet wurde (`0`: nie). Der
+         * Drive-Sync wartet danach eine Schonfrist ([com.example.lrmprotokoll.drive.SyncStartVerzoegerung]).
+         */
+        @Volatile
+        var dienstGestartetAmMs: Long = 0L
+            private set
+
         internal fun testSetzeAudioAufnahmeAktiv(wert: Boolean) {
             _audioAufnahmeAktiv.value = wert
         }
@@ -510,6 +518,7 @@ class AudioRecordingService : LifecycleService() {
             }
             isForegroundActive = true
             settingsManager.monitoringWasActive = true
+            if (!_laeuft.value) dienstGestartetAmMs = System.currentTimeMillis()
             _laeuft.value = true
             aktualisiereLetztenZustand(sauberBeendet = false)
         }
